@@ -1,0 +1,551 @@
+{
+ "fetched": "2026-11-08T23:05:54.937Z",
+ "source": {
+  "torrentio": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt9603208.json",
+  "cinemeta": "https://v3-cinemeta.strem.io/meta/movie/tt9603208.json"
+ },
+ "id": "tt9603208",
+ "type": "movie",
+ "meta": {
+  "name": "Mission: Impossible - The Final Reckoning",
+  "year": "2025",
+  "runtime": "170 min",
+  "genres": [
+   "Action",
+   "Adventure",
+   "Thriller"
+  ]
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Mission Impossible The Final Reckoning 2025.IMAX 2160p HDR WEBRip x265 HEVC-PSA\n👤 49 💾 4.59 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "c90c93241458831b3f758b80661ee1346cce4927",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|hevc|HDR",
+    "filename": "Mission.Impossible.The.Final.Reckoning.2025.IMAX.2160p.HDR10Plus.DV.WEBRip.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Mission.Impossible.The.Final.Reckoning.2025.bluray.hdr.2160p.av1.7.1.opus.subs.vmaf95-Dust\n👤 10 💾 9.41 GB ⚙️ 1337x",
+   "infoHash": "abb424299f20aa3aafc2256b64b2291a7a640293",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+    "filename": "Mission.Impossible.The.Final.Reckoning.2025.bluray.hdr.2160p.av1.7.1.opus.subs.vmaf95-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Mission: Impossible - The Final Reckoning 2025 2160p WEBRip\n👤 155 💾 7.57 GB ⚙️ YTS\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "f3e8c0a13f27edf0364e7cecfea57b774aaa4223",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "Mission.Impossible.-.The.Final.Reckoning.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Mission Impossible The Final Reckoning 2025 [10Bit SDR] [2160p.W…\nMission Impossible The Final Reckoning 2025 [10Bit SDR] [2160p.WEB-DL.H265.EAC3.5.1-AS76-FT] [ENG-Lektor PL] [Alusia].mkv\n👤 5 💾 10.22 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇵🇱",
+   "infoHash": "c82e26272fb152340156b95ffd0813cedd017f69",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|h265|10bit",
+    "filename": "Mission Impossible The Final Reckoning 2025 [10Bit SDR] [2160p.WEB-DL.H265.EAC3.5.1-AS76-FT] [ENG-Lektor PL] [Alusia].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Mission.Impossible.Final.Reckoning.2025.1080p.UHD.HDR10.IMAX.WEBRip.AMZN.10bit.AV1.DDP5.1-Eng.ViTOENCODES\n👤 15 💾 3.95 GB ⚙️ 1337x",
+   "infoHash": "b0d45548228e7a20ebdf7b1f959bf0a0e8011ab2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|av1|10bit|HDR",
+    "filename": "Mission.Impossible.Final.Reckoning.2025.1080p.UHD.HDR10.IMAX.WEBRip.AMZN.10bit.AV1.DDP5.1-Eng.ViTO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Mission Impossible The Final Reckoning 2025 IMAX UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737\n👤 13 💾 10.56 GB ⚙️ ThePirateBay",
+   "infoHash": "652b2597950e242b98425e1785579e2700bd8031",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Mission Impossible The Final Reckoning 2025 IMAX UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible The Final Reckoning 2025 IMAX 1080p WEB-DL HEVC x265-RMTeam\n👤 880 💾 2.87 GB ⚙️ 1337x",
+   "infoHash": "0a57c0c6293e4b59317851a728f35325d9417b88",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+    "filename": "Mission Impossible The Final Reckoning 2025 IMAX 1080p WEB-DL HEVC x265-RMTeam.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission: Impossible - The Final Reckoning 2025 1080p WEBRip\n👤 208 💾 3.18 GB ⚙️ YTS",
+   "infoHash": "6b0a5af26a154f4959ed27ce31b34fe0a2b99982",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Mission.Impossible.-.The.Final.Reckoning.2025.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission: Impossible - The Final Reckoning 2025 1080p WEBRip\n👤 151 💾 2.88 GB ⚙️ YTS",
+   "infoHash": "39e04d57708ffd8a6fc80875ac5cd81c1fc42707",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Mission.Impossible.-.The.Final.Reckoning.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible The Final Reckoning 2025 IMAX 1080p AMZN WEB-DL DDP5 1 H 264-WADU\n👤 75 💾 11.79 GB ⚙️ ThePirateBay",
+   "infoHash": "917e3bcf7052f7807feb40dd3f75caf7629b910d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Mission Impossible The Final Reckoning 2025 IMAX 1080p AMZN WEB-DL DDP5 1 H 264-WADU.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible The Final Reckoning 2025 IMAX 1080p 10bit BluRay 8CH X265 HEVC-PSA\n👤 70 💾 3.5 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "16a164041a90f91b64e30a8b6370695ab7491a8d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Mission Impossible The Final Reckoning 2025 IMAX 1080p 10bit BluRay 8CH X265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible The Final Reckoning (2025) Eng 1080p WEBRip x264 DD 5.1 ESub\n👤 61 💾 2.89 GB ⚙️ 1337x",
+   "infoHash": "38159390421be999973901b3dc994f49afa1ab4e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Mission Impossible The Final Reckoning (2025) Eng 1080p  WEBRip x264 DD 5.1 ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission: Impossible - The Final Reckoning 2025 1080p BluRay\n👤 57 💾 3.13 GB ⚙️ YTS",
+   "infoHash": "155a9fb85c34de9149b422fcd63d03a5248f92b4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Mission.Impossible.-.The.Final.Reckoning.2025.HYBRID.IMAX.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission.Impossible.The.Final.Reckoning.2025.1080p.IMAX.WEBRip.DDP5.1.x265-NeoNoir\n👤 50 💾 2.8 GB ⚙️ 1337x",
+   "infoHash": "f9e902f4d1b711fb775c3973ebdcb1e6f6ec5b05",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Mission.Impossible.The.Final.Reckoning.2025.1080p.WEBRip.DDP5.1.x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission.Impossible.The.Final.Reckoning.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta\n👤 44 💾 2.35 GB ⚙️ 1337x",
+   "infoHash": "d184769b635dcd7a81fd74e12293deeeafa84210",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Mission.Impossible.The.Final.Reckoning.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible: The Final Reckoning (2025) (1080p AMZN WEB-DL x265 10bit EAC3 Atmos 5.1 Ghost) [QxR]\n👤 39 💾 7.43 GB ⚙️ 1337x",
+   "infoHash": "f6a1808cfb63c2ed74ef1ee1ac3078ea9ed706a5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+    "filename": "Mission Impossible꞉ The Final Reckoning (2025) (1080p AMZN WEB-DL x265 Ghost).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible: The Final Reckoning (2025) (1080p BluRay x265 10bit EAC3 Atmos 7.1 Ghost) [QxR]\nMission Impossible꞉ The Final Reckoning (2025) (1080p BluRay x265 Ghost).mkv\n👤 22 💾 11.99 GB ⚙️ 1337x",
+   "infoHash": "447aa6c5c44a535f3239e2d25a79665f9a3c92eb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Mission Impossible꞉ The Final Reckoning (2025) (1080p BluRay x265 Ghost).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible The Final Reckoning 2025 IMAX 1080p BluRay X265 DDP 7 1-Chivaman\n👤 18 💾 8.78 GB ⚙️ ThePirateBay",
+   "infoHash": "815ffda8cad7c8fc152d513ed8ba3b2e6f61d6a6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Mission Impossible The Final Reckoning 2025 IMAX 1080p BluRay X265 DDP 7 1-Chivaman.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible The Final Reckoning 2025 1080p AMZN WEB-DL Multi DD 5 1 H 265-CPTN5DW\n👤 17 💾 2.91 GB ⚙️ ThePirateBay\nMulti Audio / 🇬🇧 / 🇮🇳",
+   "infoHash": "7fab7a9d4aadca9152616c520591ad7493ab2bf8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+    "filename": "Mission Impossible The Final Reckoning 2025 1080p AMZN WEB-DL Multi DD 5 1 H 265-CPTN5DW.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission.Impossible.The.Final.Reckoning.2025.1080p.ENG.ITA.H264-TheBlackKing.mkv\n👤 17 💾 12.57 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹",
+   "infoHash": "fa79cd47570f6eddbd271a51b9b3e142d161a235",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h264",
+    "filename": "Mission.Impossible.The.Final.Reckoning.2025.1080p.ENG.ITA.H264-TheBlackKing.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission.Impossible.The.Final.Reckoning.2025.bluray.sdr.1080p.av1.5.1.opus.subs-Zap\n👤 16 💾 1.8 GB ⚙️ 1337x",
+   "infoHash": "2048763d0d256ef39567e3ac414d738bb4ccd27b",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Mission.Impossible.The.Final.Reckoning.2025.bluray.sdr.1080p.av1.5.1.opus.subs-Zap.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission.Impossible.The.Final.Reckoning.2025.IMAX.1080p.AMZN.WEB-DL.DDP5.1.H264.D\n👤 13 💾 5.57 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "65d0e3dfa15d5413a3ce5791465468bb08295cd0",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Mission.Impossible.The.Final.Reckoning.2025.IMAX.1080p.AMZN.WEB-DL.DDP5.1.H264.Dual YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible The Final Reckoning 2025 StarzPlay 1080p Web-Dl H264-TEEFA\n👤 12 💾 5.06 GB ⚙️ 1337x",
+   "infoHash": "24a8bfbc261abedc2b0457a24ee2b7cca2b0190e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Mission Impossible - The Final Reckoning.2025.1080p.StarzPlay.Web-Dl.TEEFA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible The Final Reckoning 2025 1080p Blu-Ray HEVC x265 10Bit DDP5.1 Subs KINGDOM\n👤 12 💾 8.2 GB ⚙️ 1337x",
+   "infoHash": "f5270ee8d15468e1d163da7e668cd28598def6ee",
+   "fileIdx": 5,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Mission Impossible The Final Reckoning 2025 1080p Blu-Ray HEVC x265 10Bit DDP5.1 Subs KINGDOM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible The Final Reckoning 2025 1080p WEBRip x265-DH\n👤 12 💾 5.58 GB ⚙️ ThePirateBay",
+   "infoHash": "d65c404c6e43778c3132589b83fcbd61d0a452ac",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Mission Impossible The Final Reckoning 2025 1080p WEBRip x265-DH.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible the Final Reckoning 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 11 💾 11.93 GB ⚙️ ThePirateBay",
+   "infoHash": "7fa6d974324201277d88a2c443bfbeeddd167c6a",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Mission Impossible the Final Reckoning 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible - The Final Reckoning (2025) 1080p WEBRip 5.1-LAMA\n👤 10 💾 3.18 GB ⚙️ ThePirateBay",
+   "infoHash": "c19fb02b22351a6bb4b7cef3b137a39d9ff6df2b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Mission.Impossible.-.The.Final.Reckoning.2025.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible - The Final Reckoning 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 10 💾 11.93 GB ⚙️ ThePirateBay",
+   "infoHash": "1390f0e00ec009380133aa83d2a09b4dfe46a1c8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Mission Impossible - The Final Reckoning 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission.Impossible.The.Final.Reckoning.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust\n👤 9 💾 1.81 GB ⚙️ 1337x",
+   "infoHash": "a372a2c207fc093093863061bee1ddf15ef22d14",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Mission.Impossible.The.Final.Reckoning.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission.Impossible.The.Final.Reckoning.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv\n👤 9 💾 12.7 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "ff33e2a9128cf1ddfbcfa2cb7f81b5d78dcd36c7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Mission.Impossible.The.Final.Reckoning.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission: Impossible - Poslední zúčtování / Mission: Impossible - The Final Reckoning (2025)(CZ/EN)[1080p][WEB-DL]\n👤 8 💾 12.38 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+   "infoHash": "432c7890bbf19db9cb31a3653d5f9071c3799c92",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL",
+    "filename": "Mission.Impossible.The.Final.Reckoning.2025.1080p.WEB-DL.CZ.EN.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible The Final Reckoning 2025 IMAX 1080p BluRay x265 DDP5 1-B3YG1R\n👤 7 💾 3.46 GB ⚙️ ThePirateBay",
+   "infoHash": "54c8cf71ed071f40bdf2734723d155cd84b797d2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Mission Impossible The Final Reckoning 2025 IMAX 1080p BluRay x265 DDP5 1-B3YG1R.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Amazing Films 13 - Mp4 x264 AC3 1080p\nMI8 Mission Impossible The Final Reckoning (2025) 1080p Surround.mp4\n👤 7 💾 4.87 GB ⚙️ 1337x",
+   "infoHash": "1cd4535f03f1035b0e20bd2196a99c62df1d7e45",
+   "fileIdx": 39,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "MI8 Mission Impossible The Final Reckoning (2025) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission.Impossible.The.Final.Reckoning.2025.1080p.WEBRip.DS4K.AV1.DDP.5.1-dAV1nci\n👤 7 💾 2.65 GB ⚙️ 1337x",
+   "infoHash": "948a7632a916a67d7ac9159e18541b24d11b7377",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|av1",
+    "filename": "Mission.Impossible.The.Final.Reckoning.2025.1080p.WEBRip.DS4K.AV1.DDP.5.1-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission.Impossible.The.Final.Reckoning.2025.1080p.DS4K.WEBRip.10Bit.DDP5.1.x265-NeoNoir\n👤 7 💾 4.04 GB ⚙️ 1337x",
+   "infoHash": "2de488bbb3016660dfef090567fa3cd9389c050d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Mission.Impossible.The.Final.Reckoning.2025.1080p.DS4K.WEBRip.10Bit.DDP5.1.x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible - The Final Reckoning [2025] 1080p WEBRip x265 HEVC 10Bit DDP5 1 (UKBandit)\n👤 7 💾 4.76 GB ⚙️ 1337x",
+   "infoHash": "c664d93014bcdec6559e99004f9700b68daa8f0d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "Mission Impossible The Final Reckoning [2025].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission.Impossible.The.Final.Reckoning.2025.1080p.IMAX.BluRay.x265.Dual.YG⭐\n👤 6 💾 3.76 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "5e68e04114050873f802919c6c65fa5d82321d9f",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Mission.Impossible.The.Final.Reckoning.2025.1080p.IMAX.BluRay.x265.Dual YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission.Impossible-The.Final.Reckoning.2025.1080p.10bit.DS4K.IMAX.WEBRip.[Org.DDP5.1-Hindi DDPA5.1-English].ESub.HEVC-The.PunisheR\n👤 6 💾 6.28 GB ⚙️ 1337x\n🇬🇧 / 🇷🇺 / 🇮🇳",
+   "infoHash": "a8ec7260cdfab4d4c07c22a7fe89b028279dc074",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "Mission.Impossible-The.Final.Reckoning.2025.1080p.10bit.DS4K.IMAX.WEBRip.[Org.DDP5.1-Hindi+DDPA5.1-English].ESub.HEVC-The.PunisheR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible The Final Reckoning (2025) IMAX iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv\n👤 6 💾 4.36 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "14c4848fe6a9928c1cc1805d3109a45305608aa9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Mission Impossible The Final Reckoning (2025) IMAX iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Dead.Souls.2018.1080p.WEB-DL.AAC.2.0.x264-ZTR\n👤 5 💾 5.68 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇨🇳 / 🇫🇷",
+   "infoHash": "633609aa6f484980f208bedc5440bf669546d395",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Dead.Souls.Part.2.2018.1080p.WEB-DL.AAC2.0.x264-ZTR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission.Impossible.The.Final.Reckoning.2025.IMAX.1080p.WEBRip.x265-KONTRAST\n👤 5 💾 3.89 GB ⚙️ 1337x",
+   "infoHash": "d88ce740d3829f0e48c552dda3c10189f221872e",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Mission.Impossible.The.Final.Reckoning.2025.IMAX.1080p.WEBRip.x265-KONTRAST.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission Impossible The Final Reckoning 2025 1080p WEB-DL HEVC x265 10Bit DDP5.1 Subs KINGDOM\n👤 5 💾 7.91 GB ⚙️ 1337x",
+   "infoHash": "c3a6bec95b71cc9b870bf4188baeee95f13a09c2",
+   "fileIdx": 6,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc|10bit",
+    "filename": "Mission Impossible The Final Reckoning 2025 1080p WEB-DL HEVC x265 10Bit DDP5.1 Subs KINGDOM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission.Impossible.The.Final.Reckoning.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv\n👤 5 💾 14.11 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "79f638382f68ab122db382d2bf471bffe94dcd6f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Mission.Impossible.The.Final.Reckoning.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mission.Impossible.-.The.Final.Reckoning.1080p.iT.WEB-DL.H.264.DDP5.1.Atmos-PrimeFix\n👤 5 💾 12.8 GB ⚙️ 1337x",
+   "infoHash": "8f78135fe8a991faa483e9a9aa9861a903e75759",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Mission.Impossible.-.The.Final.Reckoning.1080p.iT.WEB-DL.H.264.DDP5.1.Atmos-PrimeFix.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mission: Impossible - The Final Reckoning 2025 720p WEBRip\n👤 116 💾 1.55 GB ⚙️ YTS",
+   "infoHash": "bb57473142214e1d9c8e4625e74e21340ec5bef4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Mission.Impossible.-.The.Final.Reckoning.2025.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mission: Impossible - The Final Reckoning 2025 720p BluRay\n👤 29 💾 1.52 GB ⚙️ YTS",
+   "infoHash": "4577c940508dbe8e4476aa0529efb45630a5b601",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Mission.Impossible.-.The.Final.Reckoning.2025.HYBRID.IMAX.720p.BluRay.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mission Impossible The Final Reckoning (2025) 720p WEBDL x265 DD 5.1 ESub\n👤 18 💾 1.19 GB ⚙️ 1337x",
+   "infoHash": "bb454aa1fcf95c2cb4466dd80ceedb0e86394e33",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB-DL|x265",
+    "filename": "Mission.Impossible The Final Reckoning (2025) 720p WEBRip x265 DD 5.1 ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mission: Impossible – The Final Reckoning 2025 (720p IMAX WEB-DL (English Hindi AAC 2.0) DEVA\n👤 17 💾 1.16 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "050e76390c367f7a48d72387b3f3b02fbef15975",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB-DL",
+    "filename": "Mission Impossible – The Final Reckoning 2025 (720p IMAX WEB-DL (English + Hindi AAC 2.0) DEVA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mission Impossible - The Final Reckoning (2025) 720p WEBRip-LAMA\n👤 13 💾 1.55 GB ⚙️ ThePirateBay",
+   "infoHash": "b85423426f300196cac9cf25ff75b71170ce9dcb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Mission.Impossible.-.The.Final.Reckoning.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mission Impossible The Final Reckoning 2025 IMAX 720p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 8 💾 1.28 GB ⚙️ ThePirateBay",
+   "infoHash": "7c9527c352e105280ea3bfec3e16001f0f2c0604",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|hevc|10bit",
+    "filename": "Mission Impossible The Final Reckoning 2025 IMAX 720p 10bit WEBRip 6CH x265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mission.Impossible.The.Final.Reckoning.2025.720p.BluRay.x264-KNiVES\n👤 7 💾 10.36 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇪🇸 / 🇩🇪 / 🇵🇱 / 🇹🇷",
+   "infoHash": "7eeb0b3d52db646823524f0d7d266cd1ae51b6b5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "mission.impossible.the.final.reckoning.2025.720p.bluray.x264-knives.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n576p",
+   "title": "Mission Impossible The Final Reckoning 2025 576p WEBRip x265-SSN\n👤 8 💾 1.93 GB ⚙️ ThePirateBay",
+   "infoHash": "830c15c9eb361bcc88b4d6b3d605fbc76f165094",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|576p|WEBRip|x265",
+    "filename": "Mission Impossible The Final Reckoning 2025 576p WEBRip x265-SSN.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nDVDRip",
+   "title": "Mission: Impossible - Poslední zúATtování / Mission: Impossible - The Final Reckoning (2025)(CZ/EN)[DVDRip]\n👤 5 💾 3.37 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+   "infoHash": "1e5e5fe2ceea924abea7e85604472a4312cb3f48",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVDRip",
+    "filename": "Mission Impossible - The Final Reckoning. 2025.DVDRip.CZ.EN.mkv"
+   }
+  }
+ ]
+}

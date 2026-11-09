@@ -1,0 +1,516 @@
+{
+ "fetched": "2026-11-08T23:16:50.514Z",
+ "id": "tt4158110",
+ "season": 1,
+ "episode": 1,
+ "type": "series",
+ "sources": {
+  "meta": "https://v3-cinemeta.strem.io/meta/series/tt4158110.json",
+  "streams": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/series/tt4158110:1:1.json"
+ },
+ "meta": {
+  "name": "Mr. Robot",
+  "year": "2015–2019",
+  "runtime": "50 min",
+  "genres": [
+   "Crime",
+   "Drama",
+   "Thriller"
+  ],
+  "country": "United States",
+  "episodeTitle": "eps1.0_hellofriend.mov",
+  "episodeReleased": "2015-06-25T06:00:00.000Z"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr.Robot.SEASON.01.S01.COMPLETE.1080p.10bit.BluRay.6CH.x265.HEVC\nMr.Robot.S01E01.eps1.0_hellofriend.mov.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv\n👤 556 💾 862.6 MB ⚙️ ThePirateBay",
+   "infoHash": "718cf91776e36449afb49f4efc4c2c2eebc59ce1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|718cf91776e36449afb49f4efc4c2c2eebc59ce1",
+    "filename": "Mr.Robot.S01E01.eps1.0_hellofriend.mov.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr Robot (2015) Complete Series S01-S04 (1080p BluRay x265 HEVC 10bit AAC 5.1 Vyndros)\nSeason 1/Mr.Robot.S01E01.eps1.0.hellofriend.mov.1080p.10bit.BluRay.AAC5.1.HEVC-Vyndros.mkv\n👤 334 💾 1.57 GB ⚙️ TorrentGalaxy",
+   "infoHash": "1ab3a02732c96720c710c54282f7cde22e7e39fc",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1ab3a02732c96720c710c54282f7cde22e7e39fc",
+    "filename": "Mr.Robot.S01E01.eps1.0.hellofriend.mov.1080p.10bit.BluRay.AAC5.1.HEVC-Vyndros.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr.Robot.Season.1-4.S01-04.COMPLETE.1080p.BluRay.WEB.10bit.DD5.1.x265-POIASD\nMr.Robot.S01.1080p.BluRay.10bit.DD5.1.x265-POIASD/Mr.Robot.S01E01.1080p.BluRay.10bit.DD5.1.x265-POIASD.mkv\n👤 244 💾 1.27 GB ⚙️ 1337x",
+   "infoHash": "711ea7c37aeaa53b4b8511ec14c6b2da477af37b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|711ea7c37aeaa53b4b8511ec14c6b2da477af37b",
+    "filename": "Mr.Robot.S01E01.1080p.BluRay.10bit.DD5.1.x265-POIASD.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr.Robot.COMPLETE.1080p.BluRay.AV1.DDP.5.1-dAV1nci\nMr.Robot.S01.1080p.BluRay.AV1.DDP.5.1-dAV1nci/Mr.Robot.S01E01.1080p.BluRay.AV1.DDP.5.1-dAV1nci.mkv\n👤 39 💾 1.1 GB ⚙️ 1337x",
+   "infoHash": "7373437326b55f8f7baba32cb269dd0b87fa8b6a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|7373437326b55f8f7baba32cb269dd0b87fa8b6a",
+    "filename": "Mr.Robot.S01E01.1080p.BluRay.AV1.DDP.5.1-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr. Robot (2015) Season 1 S01 + Extras (1080p BluRay X265 HEVC 10bit AAC 5.1 RCVR) [QxR]\nMr. Robot (2015) - S01E01 - eps1.0_hellofriend.mov (1080p BluRay x265 RCVR).mkv\n👤 37 💾 2.8 GB ⚙️ MagnetDL",
+   "infoHash": "268fbd1edde0f201d034518e1a7628773d0c5b29",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|268fbd1edde0f201d034518e1a7628773d0c5b29",
+    "filename": "Mr. Robot (2015) - S01E01 - eps1.0_hellofriend.mov (1080p BluRay x265 RCVR).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr. Robot - Season 01 [2015] COMPLETE 1080p BDRip x265 DTS-HD MA 5.1 Kira [SEV]\nMr. Robot - eps1.1_ones-and-zer0es.mpeg 1080p BDRip x265 DTS-HD MA 5.1 Kira [SEV].mkv\n👤 36 💾 4.17 GB ⚙️ ThePirateBay",
+   "infoHash": "3c00e4d19ef7def3d212cb67b1eb5db35fcb5251",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|3c00e4d19ef7def3d212cb67b1eb5db35fcb5251",
+    "filename": "Mr. Robot - eps1.1_ones-and-zer0es.mpeg 1080p BDRip x265 DTS-HD MA 5.1 Kira [SEV].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr. Robot (2015) Season 01 S01 (1080p Bluray X265 HEVC 10bit AAC 5.1 Joy) [UTR]\nMr. Robot S01E01 eps1.0_hellofriend.mov (1080p x265 10bit Joy).mkv\n👤 30 💾 513.9 MB ⚙️ MagnetDL",
+   "infoHash": "fa1d772103b52abff5fa1a8376742444dc901298",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|fa1d772103b52abff5fa1a8376742444dc901298",
+    "filename": "Mr. Robot S01E01 eps1.0_hellofriend.mov (1080p x265 10bit Joy).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr.Robot.S01.1080p.BluRay.x265-RARBG\nMr.Robot.S01E01.1080p.BluRay.x265-RARBG.mp4\n👤 28 💾 1.01 GB ⚙️ MagnetDL",
+   "infoHash": "63f67d08f3ed97959fbd146c9059a3acef5a5c50",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|63f67d08f3ed97959fbd146c9059a3acef5a5c50",
+    "filename": "Mr.Robot.S01E01.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr Robot (2015 - 2019) All Seasons - AV1 1080p 7RIP\nSeason 1 - AV1 1080p 7RIP/eps1.1_ones-and-zer0es.mpeg - AV1 1080p 7RIP.mkv\n👤 27 💾 148.82 MB ⚙️ 1337x",
+   "infoHash": "4130f91443e7687cdcef205163342e9d29505f87",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4130f91443e7687cdcef205163342e9d29505f87",
+    "filename": "eps1.1_ones-and-zer0es.mpeg - AV1 1080p 7RIP.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr Robot S01 Season 1 Complete 1080p 5.1 AC3 AAC WEB-DL x265 HEV\nMr. Robot S01E01.mkv\n👤 14 💾 736.75 MB ⚙️ ThePirateBay",
+   "infoHash": "2fb1efe7dec4647e014a97baf528ef411d1e3702",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|2fb1efe7dec4647e014a97baf528ef411d1e3702",
+    "filename": "Mr. Robot S01E01.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr. Robot S01E01 1080p Web-DL x265 HEVC - zsewdc\n👤 13 💾 1.42 GB ⚙️ ThePirateBay",
+   "infoHash": "6680571283687df1d1425802b1bb23d84ef12424",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|zsewdc"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "L.Enigma.Di.Eirik.Jense.Mr.Good.Cop.Or.Crook.S01E01-04.DLMux.1080p.E-AC3-AC3.ITA.ENG.NOR.SUBS\nMr. Good Cop or Crook S01E01 Un poliziotto vecchia scuola DLMux 1080p E-AC3+AC3 ITA ENG NOR SUBS.mkv\n👤 10 💾 3.26 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹 / 🇳🇴",
+   "infoHash": "55a911dace3f5dbe4c0f443c51019360dd82f09b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|55a911dace3f5dbe4c0f443c51019360dd82f09b",
+    "filename": "Mr. Good Cop or Crook S01E01 Un poliziotto vecchia scuola DLMux 1080p E-AC3+AC3 ITA ENG NOR SUBS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr.Robot Season 1-4 S04 Complete 1080p BluRay x265 HEVC 10Bit 6CH Pahein\nMr.Robot.S01.1080p.BluRay.x265.10Bit.6CH-Pahe.in/Mr.Robot.S01E01.1080p.BluRay.x265.10Bit.6CH-Pahe.in.mkv\n👤 10 💾 686.78 MB ⚙️ 1337x",
+   "infoHash": "8130f30bc98f680d683b53cda91928ad4a84a9be",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|8130f30bc98f680d683b53cda91928ad4a84a9be",
+    "filename": "Mr.Robot.S01E01.1080p.BluRay.x265.10Bit.6CH-Pahe.in.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr.Robot.S01-S04.WEB-DL.1080p.LAT.ENG\nMr.Robot.S01.WEB-DL.1080p.LAT.ENG/Mr.Robot.S01E01.WEB-DL.1080p.LAT.ENG.mkv\n👤 9 💾 3.35 GB ⚙️ EXT\n🇬🇧 / 🇲🇽",
+   "infoHash": "f6130f0427a918ac2dab3bbf68ad7a8c5f663b4d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|f6130f0427a918ac2dab3bbf68ad7a8c5f663b4d",
+    "filename": "Mr.Robot.S01E01.WEB-DL.1080p.LAT.ENG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr.Robot.S01-S04.1080p.BRRip.AC3.x264-LESS\nMr.Robot.S01.COMPLETE.1080p.BRRip.AC3.x264-LESS/Mr.Robot.S01E01.eps1.0_hellofriend.mov.1080p.BRRip.AC3.x264-LESS.mkv\n👤 8 💾 1.43 GB ⚙️ ThePirateBay",
+   "infoHash": "7a6175da6338136517539bb7d305e7a71092185f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|7a6175da6338136517539bb7d305e7a71092185f",
+    "filename": "Mr.Robot.S01E01.eps1.0_hellofriend.mov.1080p.BRRip.AC3.x264-LESS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr.Robot.S01.1080p.BluRay.x265-RARBG\nMr.Robot.S01E01.1080p.BluRay.x265-RARBG.mp4\n👤 7 💾 1.01 GB ⚙️ RARBG",
+   "infoHash": "9f173e7eac557e8abee13db05fa4dff319d9dc98",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|9f173e7eac557e8abee13db05fa4dff319d9dc98",
+    "filename": "Mr.Robot.S01E01.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr Robot - Season 1 to 3 - Mp4 x264 AC3 1080p\nMr Robot S01E01.mp4\n👤 5 💾 1.9 GB ⚙️ ThePirateBay",
+   "infoHash": "2b12a632de457cd69fa55a214e5bfc556b7435fc",
+   "fileIdx": 11,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|2b12a632de457cd69fa55a214e5bfc556b7435fc",
+    "filename": "Mr Robot S01E01.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr Robot S01E01 1080p BluRay X265 HEVC AAC 5.1 Condo\n👤 5 💾 514.45 MB ⚙️ MagnetDL",
+   "infoHash": "4b796a4acd527383fb2442bd857146244b71059f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p",
+    "filename": "Mr.Robot.S01E01.1080p.BluRay.x265.HEVC.AAC.5.1.Condo.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr.Robot.SEASON.1-4.S01-04.1080p.BluRay.x265\nMr.Robot.S01.1080p.BluRay.x265-RARBG/Mr.Robot.S01E01.1080p.BluRay.x265-RARBG.mp4\n👤 3 💾 1.01 GB ⚙️ 1337x",
+   "infoHash": "b8ff6104e20e1ee2c829500da2a1628d7b4a367c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|b8ff6104e20e1ee2c829500da2a1628d7b4a367c",
+    "filename": "Mr.Robot.S01E01.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr.Robot.S01-S04.COMPLETE.1080p.10bit.BluRay.WEBRip.6CH.x265-PSA\nMr.Robot.SEASON.01.S01.COMPLETE.1080p.10bit.BluRay.6CH.x265.HEVC-PSA/Mr.Robot.S01E01.eps1.0_hellofriend.mov.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv\n👤 3 💾 862.6 MB ⚙️ ThePirateBay",
+   "infoHash": "e1e037a12967ee777d975567f1e5e9211e18dd87",
+   "fileIdx": 13,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|e1e037a12967ee777d975567f1e5e9211e18dd87",
+    "filename": "Mr.Robot.S01E01.eps1.0_hellofriend.mov.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr.Robot.S01.S02.S03.Complete.1080p.AMZN.WEB-DL.Hin.Eng.DD+5.1.H.264-Telly\nMr.Robot.S01.E01-10.Complete..1080p.AMZN.WEB-DL.Hin.Eng.DD+5.1.H.264-Telly/Mr.Robot.S01E01.eps1.0_hellofriend.mov.1080p.AMZN.WEB-DL.DD+5.1.H.264-Telly.mkv\n👤 3 💾 4.49 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇳",
+   "infoHash": "1eeeb1cc1c11438ebfc7e57af32849797c7e6006",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1eeeb1cc1c11438ebfc7e57af32849797c7e6006",
+    "filename": "Mr.Robot.S01E01.eps1.0_hellofriend.mov.1080p.AMZN.WEB-DL.DD+5.1.H.264-Telly.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr Robot S01 Season 1 1080p BluRay X264 5.1 AAC: NicK\nMr.Robot.S01E01.1080p.BluRay.5.1Ch.x264-NicK.mkv\n👤 3 💾 1.11 GB ⚙️ MagnetDL",
+   "infoHash": "f0a441586ccac81c0b9941e5fe545a7f6aab73f3",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|f0a441586ccac81c0b9941e5fe545a7f6aab73f3",
+    "filename": "Mr.Robot.S01E01.1080p.BluRay.5.1Ch.x264-NicK.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr.Robot.S01E01.eps1.0.hellofriend.mov.1080p.WEB-DL.DD5.1.H.264-NTb[rartv]\n👤 2 💾 2.39 GB ⚙️ RARBG",
+   "infoHash": "c8c773a8f9b2574ce4eebeb2da8accb0c21ae030",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|NTb",
+    "filename": "Mr.Robot.S01E01.eps1.0.hellofriend.mov.1080p.WEB-DL.DD5.1.H.264-NTb.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr.Robot.S01.1080p.Bluray.x265-HiQVE\nMr.Robot.S01E01.1080p.Bluray.x265-HiQVE.mkv\n👤 1 💾 1.6 GB ⚙️ 1337x",
+   "infoHash": "3fe7959d94d74d0729e8e0d9bf4b63fcc8bdec26",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|3fe7959d94d74d0729e8e0d9bf4b63fcc8bdec26",
+    "filename": "Mr.Robot.S01E01.1080p.Bluray.x265-HiQVE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr.Robot.Complete.Series.Seasons.1-4.1080p\nSeason 1/Mr Robot S01E01.mp4\n👤 1 💾 1.87 GB ⚙️ ThePirateBay",
+   "infoHash": "354588063a99387a3bd643f8137d5d808c82adb9",
+   "fileIdx": 40,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|354588063a99387a3bd643f8137d5d808c82adb9",
+    "filename": "Mr Robot S01E01.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr. Robot 2015 Season 1 S01 1080p BluRay 5.1 X265 HEVC-StarLord [UTR]\nMr.Robot.S01E01.eps1.0_hellofriend.mov.1080p.BluRay.5.1.x265.HEVC-StarLord[UTR].mkv\n👤 1 💾 3.12 GB ⚙️ MagnetDL",
+   "infoHash": "a73fa9038c28f8eae3b1ff34f841bb04129e75d6",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|a73fa9038c28f8eae3b1ff34f841bb04129e75d6",
+    "filename": "Mr.Robot.S01E01.eps1.0_hellofriend.mov.1080p.BluRay.5.1.x265.HEVC-StarLord[UTR].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr Robot Season 1 Complete 720p WEB-DL EN-SUB x264-[MULVAcoded]\nMr.Robot.S01E01.hellofriend.mov.720p.WEBdl.EN-SUB.x264-[MULVAcoded].mkv\n👤 42 💾 410.52 MB ⚙️ ThePirateBay",
+   "infoHash": "a7b6e4674974facea0e83b29b4a21142c05a2cc7",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|a7b6e4674974facea0e83b29b4a21142c05a2cc7",
+    "filename": "Mr.Robot.S01E01.hellofriend.mov.720p.WEBdl.EN-SUB.x264-[MULVAcoded].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr. Robot S01 Season 1 Complete 720p HDTV x265 AAC E-Subs [GWC]\nMr. Robot S01E01 HDTV 720p x265 AAC E-Subs [GWC].mkv\n👤 16 💾 171.99 MB ⚙️ ThePirateBay",
+   "infoHash": "ba411a4b7d1eaff10ebe4d2ebabd90552bea3907",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|ba411a4b7d1eaff10ebe4d2ebabd90552bea3907",
+    "filename": "Mr. Robot S01E01 HDTV 720p x265 AAC E-Subs [GWC].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr Robot S01E01 eps1 0hellofriend mov 720p AMZN WEB-DL DDP5 1 H 264-FLUX\n👤 13 💾 1.81 GB ⚙️ EZTV",
+   "infoHash": "3409bac74cf4e5ce494d1399c026da85ecb1658b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|FLUX",
+    "filename": "Mr Robot S01E01 eps1 0hellofriend mov 720p AMZN WEB-DL DDP5 1 H 264-FLUX[EZTVx.to].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr.Robot.2015.COMPLETE.SERIES.720p.AMZN.WEBRip.x264-GalaxyTV\nS01.BluRay/Mr.Robot.S01E01.720p.BluRay.x264-GalaxyTV.mkv\n👤 11 💾 322.88 MB ⚙️ TorrentGalaxy",
+   "infoHash": "9a872443fca36d3cfc98c982a9b464666394ea32",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|9a872443fca36d3cfc98c982a9b464666394ea32",
+    "filename": "Mr.Robot.S01E01.720p.BluRay.x264-GalaxyTV.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr.Robot.SEASON.01.S01.COMPLETE.720p.10bit.BluRay.2CH.x265.HEVC-\nMr.Robot.S01E01.eps1.0_hellofriend.mov.720p.10bit.BluRay.2CH.x265.HEVC-PSA.mkv\n👤 11 💾 395.85 MB ⚙️ ThePirateBay",
+   "infoHash": "f0efe1533e8fa05c427ba2ffa53ffa56864a9d80",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|f0efe1533e8fa05c427ba2ffa53ffa56864a9d80",
+    "filename": "Mr.Robot.S01E01.eps1.0_hellofriend.mov.720p.10bit.BluRay.2CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr Robot S01E01 eps1 0hellofriend mov 720p AMZN WEB-DL DDP5 1 H …\n👤 10 💾 1.81 GB ⚙️ TorrentGalaxy",
+   "infoHash": "5c853379f0a3861d0539bf845f43a341aa0c74a4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|FLUX",
+    "filename": "Mr Robot S01E01 eps1 0hellofriend mov 720p AMZN WEB-DL DDP5 1 H 264-FLUX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr Robot Season 1 Complete 720p WEB-DL x264 [i_c]\nMr. Robot S01E01 eps1.0_hellofriend.mov.mkv\n👤 10 💾 634.91 MB ⚙️ ThePirateBay",
+   "infoHash": "0f87ccda1f6c88112f6fc85e3dfae44f0bc733cc",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|0f87ccda1f6c88112f6fc85e3dfae44f0bc733cc",
+    "filename": "Mr. Robot S01E01 eps1.0_hellofriend.mov.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr. Robot COMPLETE S01 S02 S03 S04 720p.10bit.BluRay.x265-budgetbits\nMr.Robot.S01.720p.10bit.BluRay.x265-budgetbits/Mr.Robot.S01E01.eps1.0_hellofriend.mov.720p.10bit.BluRay.x265-budgetbits.mkv\n👤 5 💾 296.9 MB ⚙️ 1337x",
+   "infoHash": "8a9368c383b9777e803f1e7b6a685049edb2edd7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|8a9368c383b9777e803f1e7b6a685049edb2edd7",
+    "filename": "Mr.Robot.S01E01.eps1.0_hellofriend.mov.720p.10bit.BluRay.x265-budgetbits.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr. Robot SEASON 1-4 S01-S04 COMPLETE 720p 10bit BluRay WEBRip 2CH x265 HEVC-PSA\nSEASON 1/Mr.Robot.S01E01.eps1.0_hellofriend.mov.720p.10bit.BluRay.2CH.x265.HEVC-PSA.mkv\n👤 5 💾 395.85 MB ⚙️ 1337x",
+   "infoHash": "7d6f312ce283e0aba12fb3fc9b7119f40eaaffb4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|7d6f312ce283e0aba12fb3fc9b7119f40eaaffb4",
+    "filename": "Mr.Robot.S01E01.eps1.0_hellofriend.mov.720p.10bit.BluRay.2CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr.Robot Ep.01 720p PT-BR\n👤 3 💾 1017.21 MB ⚙️ ThePirateBay\n🇵🇹",
+   "infoHash": "f674e76d2e1f79d2b16df865c8a3e781a14fe99b",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr Robot S01 Season 1 720p 5.1Ch Web-DL ReEnc-DeeJayAhmed\nMr.Robot.S01E01.720p.5.1Ch.Web-DL.ReEnc-DeeJayAhmed.mkv\n👤 3 💾 526.77 MB ⚙️ MagnetDL",
+   "infoHash": "cd720d877564c2cb03149c5dad96170cfa4fbae5",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|cd720d877564c2cb03149c5dad96170cfa4fbae5",
+    "filename": "Mr.Robot.S01E01.720p.5.1Ch.Web-DL.ReEnc-DeeJayAhmed.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr Robot S01 720p 10bit AMZN WEBRip x265 HEVC [Hindi AAC 2.0 English AAC 2.0] ESub ~ Immortal\nMr Robot S01E01 720p 10bit AMZN WEBRip x265 HEVC [Hindi AAC 2.0 + English AAC 2.0] ESub ~ Immortal.mkv\n👤 2 💾 380.44 MB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "9ee673604b095f0a07b13e5833cc2eef36d4487d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|9ee673604b095f0a07b13e5833cc2eef36d4487d",
+    "filename": "Mr Robot S01E01 720p 10bit AMZN WEBRip x265 HEVC [Hindi AAC 2.0 + English AAC 2.0] ESub ~ Immortal.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr. Robot S01E01 720p WEB-DL x265 HEVC 250MB - ShAaNiG\n👤 2 💾 259.61 MB ⚙️ ThePirateBay",
+   "infoHash": "c7d0512dc00d364839ca59ef40b741aaff054f6f",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|ShAaNiG"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr. Robot S01 S02 S03 Complete WebRip 720p Hindi English AAC 5.1 x264 ESub - mkvCinemas [Telly]\nMr. Robot S01 E01-10 WebRip 720p Hindi English AAC 5.1 x264 ESub - mkvCinemas [Telly]/Mr. Robot S01 E01 WebRip 720p Hindi English AAC 5.1 x264 ESub - mkvCinemas.mkv\n👤 1 💾 666.14 MB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇳",
+   "infoHash": "d05b14ad069c3259f2723bbafe5f65462d7f8da2",
+   "fileIdx": 13,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|d05b14ad069c3259f2723bbafe5f65462d7f8da2",
+    "filename": "Mr. Robot S01 E01 WebRip 720p Hindi English AAC 5.1 x264 ESub - mkvCinemas.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr Robot Season 1 Complete 720p WEB-DL EN-SUB X264- [MULVAcoded] S01\nMr.Robot.S01E01.hellofriend.mov.720p.WEB-DL.x264-[MULVAcoded].mkv\n👤 1 💾 410.52 MB ⚙️ MagnetDL",
+   "infoHash": "40e4bb12a56102cd6978583cb81668e58ce7015d",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|40e4bb12a56102cd6978583cb81668e58ce7015d",
+    "filename": "Mr.Robot.S01E01.hellofriend.mov.720p.WEB-DL.x264-[MULVAcoded].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr Robot S01e01 [BDMux: 720p: H264: Ita Eng Ac3: Sub Ita Eng] By GiuseppeTnT: Littlelinx\n👤 1 💾 2.84 GB ⚙️ MagnetDL\n🇬🇧 / 🇮🇹",
+   "infoHash": "1a847e706ef165a1e473ee9524cef904282be6b1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|Speranzah",
+    "filename": "Mr.Robot.1x01.Ciao.Amico.ITA.ENG.720p.BDMux.x264-Speranzah.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mr. Robot - S01E01 - 720P - SweSub.mp4\n👤 1 💾 749.49 MB ⚙️ ThePirateBay\n🇸🇪",
+   "infoHash": "992d21e628e308a7afced6b98b28fe53cf68a0b7",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|SweSub"
+   }
+  },
+  {
+   "name": "Torrentio\n480p",
+   "title": "Mr Robot S01 480p WEB-DL X264-FUM [ettv]\nMr.Robot.S01E01.480p.WEB-DL.x264-FUM.mp4\n👤 3 💾 344.4 MB ⚙️ MagnetDL",
+   "infoHash": "21d3eb27d214efa793df7ae0834002b9563d0834",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|21d3eb27d214efa793df7ae0834002b9563d0834",
+    "filename": "Mr.Robot.S01E01.480p.WEB-DL.x264-FUM.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n360p",
+   "title": "Mr. Robot Season 1 2 3 - threesixtyp\nMr. Robot S01 (360p re-blurip)/Mr. Robot S01E01 eps1.0_hellofriend.mov.mp4\n👤 1 💾 168.02 MB ⚙️ ThePirateBay",
+   "infoHash": "16e7544bc2e62091c48fe9bc886c464b7234d73c",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|16e7544bc2e62091c48fe9bc886c464b7234d73c",
+    "filename": "Mr. Robot S01E01 eps1.0_hellofriend.mov.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\nHDTV",
+   "title": "Mr.Robot.S01E01.HDTV.x264.PROPER-LOL[ettv]\n👤 4 💾 315.92 MB ⚙️ ThePirateBay",
+   "infoHash": "047ff81821554c169ab769a2730aedddb4465f34",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|HDTV|LOL"
+   }
+  },
+  {
+   "name": "Torrentio\nHDTV",
+   "title": "Mr Robot S01 Season Complet HDTV X264 TM\nMr Robot 1x01.mp4\n👤 1 💾 345.27 MB ⚙️ MagnetDL",
+   "infoHash": "43eff20410ed555b538602647a39c0af4f0a39d1",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|43eff20410ed555b538602647a39c0af4f0a39d1",
+    "filename": "Mr Robot 1x01.mp4"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Mr. Robot Temporada Season 1 Audio Español (+Eng +Subs)\n1x01 - Mr. Robot.mkv\n👤 3 💾 1.17 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸",
+   "infoHash": "75065381509a217364f5186c483698c552e8ec7e",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|75065381509a217364f5186c483698c552e8ec7e",
+    "filename": "1x01 - Mr. Robot.mkv"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Mechander Robot S01e01-35 [H264 - Ita Aac] completa\n01 - La minaccia.mp4\n👤 3 💾 123.58 MB ⚙️ ThePirateBay\n🇮🇹",
+   "infoHash": "cf2d6d6c4270f6987c32ba0e8b87ff79941fab9d",
+   "fileIdx": 24,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|cf2d6d6c4270f6987c32ba0e8b87ff79941fab9d",
+    "filename": "01 - La minaccia.mp4"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Mr Robot All Seasons S01 S02 S03 S04\nS01/Mr.Robot.S01E01.mkv\n👤 1 💾 410.52 MB ⚙️ ThePirateBay",
+   "infoHash": "05e76a8ce89a146a99f2afffb5820477401a2b3a",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|05e76a8ce89a146a99f2afffb5820477401a2b3a",
+    "filename": "Mr.Robot.S01E01.mkv"
+   }
+  }
+ ]
+}

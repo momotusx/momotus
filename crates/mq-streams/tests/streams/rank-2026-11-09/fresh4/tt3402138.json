@@ -1,0 +1,507 @@
+{
+ "fetched": "2026-11-08T23:52:55.182Z",
+ "id": "tt3402138",
+ "type": "movie",
+ "meta": {
+  "name": "The Naked Gun",
+  "year": "2025",
+  "runtime": "85 min"
+ },
+ "streamUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt3402138.json",
+ "streams": [
+  {
+   "name": "Torrentio\n4k DV | HDR",
+   "title": "The Naked Gun (2025) (2160p UHD BluRay x265 10bit DV HDR10 TrueHD Atmos 7.1 English Czech French German Hungarian Italian Japanese Polish Spanish Thai r00t) [QxR]\nThe Naked Gun (2025) (2160p UHD BluRay x265 10bit DV HDR10+ r00t).mkv\n👤 25 💾 14.63 GB ⚙️ 1337x\n🇬🇧 / 🇯🇵 / 🇮🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇹🇭",
+   "infoHash": "682ddcd77cf801f3074f82af604e882eefe35253",
+   "fileIdx": 23,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|DV|HDR",
+    "filename": "The Naked Gun (2025) (2160p UHD BluRay x265 10bit DV HDR10+ r00t).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR10+",
+   "title": "The Naked Gun 2025 2160p HDR10Plus DV WEBRip 6CH x265 HEVC-PSA\n👤 20 💾 2.14 GB ⚙️ ThePirateBay\n🇬🇧 / 🇫🇷",
+   "infoHash": "610e9e6832d051fec589abaee37629b1eb705e8e",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|hevc|DV|HDR10+",
+    "filename": "The.Naked.Gun.2025.2160p.HDR10Plus.DV.WEBRip.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "The.Naked.Gun.2025.bluray.hdr.2160p.av1.7.1.opus.subs-Dust\n👤 8 💾 4.79 GB ⚙️ 1337x",
+   "infoHash": "ea84565c74ad1601f934b46d15bef6edb9589818",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+    "filename": "The.Naked.Gun.2025.bluray.hdr.2160p.av1.7.1.opus.subs-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR",
+   "title": "The Naked Gun 2025 WEB-DL 2160p HDR10 DV HEVC DDP Atmos 5.1 x265-E\n👤 7 💾 12.45 GB ⚙️ 1337x",
+   "infoHash": "c628767cfbaa9dec511052225a07016e78ad266c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|hevc|10bit|DV|HDR",
+    "filename": "The Naked Gun-2025.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "The Naked Gun 2025 2160p WEBRip\n👤 101 💾 3.85 GB ⚙️ YTS\n🇬🇧 / 🇫🇷",
+   "infoHash": "7a1829a5c562096b0fc02c51d27643c7b0f184fb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "The.Naked.Gun.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "The.Naked.Gun.2025.2160p.WEB-DL.DDP5.1.Atmos.SDR.H265-AOC\n👤 16 💾 9.35 GB ⚙️ ThePirateBay",
+   "infoHash": "bf18fa71ad2e6bdb3f6edc6167e2b29b49d8527a",
+   "fileIdx": 8,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|h265",
+    "filename": "The.Naked.Gun.2025.2160p.WEB-DL.DDP5.1.Atmos.SDR.H265-AOC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "The Naked Gun 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737\n👤 3 💾 4.75 GB ⚙️ ThePirateBay",
+   "infoHash": "28a901018007302c3933d00eb5b0608f1bd6817e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "The Naked Gun 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10  x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun 2025 1080p WEBRip\n👤 601 💾 1.57 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+   "infoHash": "94941321a2d383ddf0b276f94c889b980715c072",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "The.Naked.Gun.2025.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun 2025 1080p WEB-DL HEVC x265 5.1 BONE\n👤 430 💾 1.27 GB ⚙️ 1337x",
+   "infoHash": "4fb01da791bb199b89e03919a857fdd3fe96c4e9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+    "filename": "The Naked Gun 2025 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Naked.Gun.2025.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir\n👤 152 💾 1.58 GB ⚙️ 1337x",
+   "infoHash": "ff804e8264947f972c462f35f80255875095dd20",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "The.Naked.Gun.2025.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun 2025 1080p WEBRip\n👤 125 💾 1.42 GB ⚙️ YTS",
+   "infoHash": "3317f1134577f825971ac1460f1d03434b938829",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "The.Naked.Gun.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 91 💾 5.86 GB ⚙️ ThePirateBay",
+   "infoHash": "53272cbb3684d26dc93e6be08670e58d14b5e369",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "The Naked Gun 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun (2025) (1080p BluRay x265 10bit EAC3 7.1 Silence) [QxR]\nThe Naked Gun (2025) (1080p BluRay x265 EAC3 Silence).mkv\n👤 68 💾 4.13 GB ⚙️ 1337x",
+   "infoHash": "15827fb073a0ca70c0592a9d3fc503e028afc194",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "The Naked Gun (2025) (1080p BluRay x265 EAC3 Silence).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Naked.Gun.2025.1080p.WEB.h264-ETHEL\n👤 62 💾 4.4 GB ⚙️ ThePirateBay\n🇬🇧 / 🇫🇷",
+   "infoHash": "862eec9ca82e01a6abf01a132662058b1cd9a900",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264",
+    "filename": "The.Naked.Gun.2025.1080p.WEB.h264-ETHEL.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun 2025 1080p BluRay\n👤 60 💾 1.57 GB ⚙️ YTS",
+   "infoHash": "1ad7112be6b62d342aed447d8e306b7a680a00b2",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "The.Naked.Gun.2025.HYBRID.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun 2025 BluRay 1080p DDP Atmos 5 1 x264-hallowed\n👤 39 💾 6.61 GB ⚙️ ThePirateBay",
+   "infoHash": "40105be8504a22c580f436349f00293e674f254b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "The Naked Gun 2025 BluRay 1080p DDP Atmos 5 1 x264-hallowed.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun 2025 1080p BluRay X265 DDP Atmos 7 1-Chivaman\n👤 32 💾 3.91 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇮🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇹🇭",
+   "infoHash": "f4f4c57b7faee370e1d5795ebaabf90aeb8f00f2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "The Naked Gun 2025 1080p BluRay X265 DDP Atmos 7 1-Chivaman.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun (2025)\n👤 22 💾 5.86 GB ⚙️ ThePirateBay",
+   "infoHash": "0a7337470ac116ab4b991663bd47e7dcd42eda18",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "The Naked Gun (2025) {tmdb-1035259} [AMZN][WEBDL-1080p][EAC3 Atmos 5.1][h264]-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun 2025 1080p WEBRip x265-DH\n👤 16 💾 2.55 GB ⚙️ ThePirateBay",
+   "infoHash": "58ef33aab6a0cea54d2938e00c85adce0552d60c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "The Naked Gun 2025 1080p WEBRip x265-DH.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Naked.Gun.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust\n👤 13 💾 1.79 GB ⚙️ 1337x",
+   "infoHash": "bb2a2654077762f53231b6d81cd2496c01c1abb8",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "The.Naked.Gun.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Naked.Gun.2025.1080p.WEBRip.x265-KONTRAST\n👤 13 💾 1.94 GB ⚙️ 1337x",
+   "infoHash": "adaf14ae17b5d4eea481a8af011f2667cf457668",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "The.Naked.Gun.2025.1080p.WEBRip.x265-KONTRAST.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun (2025) [1080p] [WEBRip] [5.1] [YTS.MX]\n👤 10 💾 1.51 GB ⚙️ ThePirateBay",
+   "infoHash": "87ce5167b9ca71485877d5a9c4af3e051d09562a",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip",
+    "filename": "The Naked Gun (2025) [1080p] [WEBRip] [5.1] [YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun.2025.1080p.WEB-DL.AAC.x264-skyflickz\n👤 9 💾 1.12 GB ⚙️ 1337x",
+   "infoHash": "795c9a5b957f835908606a7d81756ce6824a0fe3",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "The Naked Gun.2025.1080p.WEB-DL.AAC.x264-skyflickz.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Naked.Gun.2025.1080p.WEBRip.AV1.DDP.5.1-dAV1nci\n👤 9 💾 1.39 GB ⚙️ 1337x",
+   "infoHash": "597c15fb60f7d52818c962cac7bfd7c5073d37b6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|av1",
+    "filename": "The.Naked.Gun.2025.1080p.WEBRip.AV1.DDP.5.1-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun 2025 1080p WEB-DL HEVC x265 10Bit DDP5.1 Subs KINGDOM\n👤 9 💾 4.32 GB ⚙️ 1337x",
+   "infoHash": "ba21a9e2af633e565cfb7b99cc16a5440daff584",
+   "fileIdx": 7,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc|10bit",
+    "filename": "The Naked Gun 2025 1080p WEB-DL HEVC x265 10Bit DDP5.1 Subs KINGDOM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Una.Pallottola.Spuntata.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv\n👤 8 💾 6.26 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "004a867f999ffe5d694d24060d9d500551f2479a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Una.Pallottola.Spuntata.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bláznivá střela / The Naked Gun (2025)[1080p][WEB-DL]\n👤 8 💾 4.4 GB ⚙️ EXT\n🇬🇧 / 🇫🇷 / 🇨🇿",
+   "infoHash": "92c79c659ad55bcf61e3a7aef97912ca8f17ea86",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "The.Naked.Gun.2025.1080p.WEB.h264-ETHEL.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun [2025] 1080p WEBRip x265 HEVC 10Bit DDP5 1 Atmos (UKBandit)\n👤 8 💾 3.7 GB ⚙️ 1337x",
+   "infoHash": "d28f601fb81513e5b94f9d58d7209b945efac6c0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "The Naked Gun [2025].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Naked.Gun.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta\n👤 8 💾 991.17 MB ⚙️ 1337x",
+   "infoHash": "e9a35d9e427072433f9d7505e3c0c53efa04abe2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "The.Naked.Gun.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Naked.Gun.2025.1080p.BluRay.x264.DUAL-GeneMige\n👤 7 💾 6.79 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "058123b81d8d920e73758aac5bd8dc352b01a2ee",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "The.Naked.Gun.2025.1080p.BluRay.x264.DUAL-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Una.Pallottola.Spuntata.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv\n👤 7 💾 7.63 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "f1b99f571af961332ed3a0c4c459b5126c181861",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Una.Pallottola.Spuntata.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Una Pallottola Spuntata (2025) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv\n👤 7 💾 2.57 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "10db4bd7e7db93edd7034496fce77b0dc6f380c0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Una Pallottola Spuntata (2025) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Naked.Gun.2025.MULTI.1080p.WEB.H264-LOST\n👤 7 💾 4.63 GB ⚙️ ThePirateBay\nMulti Audio / 🇬🇧 / 🇫🇷",
+   "infoHash": "378665c9de84874aeee5681b41dd4fafcbad96bb",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264",
+    "filename": "The.Naked.Gun.2025.MULTI.1080p.WEB.H264-LOST.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun 2025 1080p TOD WEB-DL H264 DUAL AAC TSRG\n👤 5 💾 1.93 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "2f9dc18719a83e7dac95ed015ab79bcbbdfade60",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "The Naked Gun 2025 1080p TOD WEB-DL H264 DUAL AAC TSRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun 2025 1080p AMZN WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 5 💾 5.8 GB ⚙️ ThePirateBay",
+   "infoHash": "e9635cbc6659463f06b740461984f75ebd7e6910",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "The Naked Gun 2025 1080p AMZN WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun 2025 1080p BluRay x264-OFT\n👤 5 💾 3.69 GB ⚙️ ThePirateBay",
+   "infoHash": "cdda1c780bf6d023e5999fb9fc4946624ceac006",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "The Naked Gun 2025 1080p BluRay x264-OFT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun (2025) [1080p] [WEBRip] [5.1] [YTS.MX]\n👤 5 💾 1.22 GB ⚙️ ThePirateBay",
+   "infoHash": "4fa40c49f6c38b3a78b35fb3e971835040ad9fd0",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun (2025) [1080p] [WEBRip] [5.1] [YTS.MX]\n👤 5 💾 1.22 GB ⚙️ ThePirateBay",
+   "infoHash": "1b9bd70f371caf0ef6b700d0a406901cb1d4f016",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun (2025) [1080p] [WEBRip] [5.1] [YTS.MX]\n👤 4 💾 1.34 GB ⚙️ ThePirateBay",
+   "infoHash": "d09c1ceba19933c2aa67782e53ae32b84ae547a1",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun (2025) [1080p] [WEBRip] [5.1] [YTS.MX]\n👤 4 💾 1.51 GB ⚙️ ThePirateBay",
+   "infoHash": "fb16e55525a1a43d0122db70535748ab855a3ca0",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip",
+    "filename": "The Naked Gun (2025) [1080p] [WEBRip] [5.1] [YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Naked Gun 2025 1080p BluRay x265-YAWNTiC\n👤 3 💾 5.38 GB ⚙️ TorrentGalaxy",
+   "infoHash": "a32d7931374296f40239682cb64f995b3b36a1db",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "The Naked Gun 2025 1080p BluRay x265-YAWNTiC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Naked Gun 2025 720p WEBRip\n👤 127 💾 783.43 MB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+   "infoHash": "72c110b8e044186dce78b1d45b3b331c87045a5c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "The.Naked.Gun.2025.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Naked Gun 2025 720p BluRay\n👤 19 💾 783.44 MB ⚙️ YTS",
+   "infoHash": "0d83e406354585f1df8ff29f387212215b50e203",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "The.Naked.Gun.2025.HYBRID.720p.BluRay.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Naked Gun (2025) 720p WEBRip-LAMA\n👤 9 💾 783.43 MB ⚙️ ThePirateBay",
+   "infoHash": "536626f9ff668b9f089919cebe035d4edf98b9c0",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "The.Naked.Gun.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Naked Gun 2025 720p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 8 💾 3.34 GB ⚙️ ThePirateBay",
+   "infoHash": "1bd116397b52e2f7dbd94976425d242dfe2f13c5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB-DL|h264",
+    "filename": "The Naked Gun 2025 720p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The.Naked.Gun.2025.720p.BluRay.x264-KNiVES\n👤 7 💾 4.98 GB ⚙️ ThePirateBay",
+   "infoHash": "deb7b0a78df7998b61386a2daa9a8a9b990e257a",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "the.naked.gun.2025.720p.bluray.x264-knives.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Naked Gun 2025 720p 10bit WEBRip 6CH X265 HEVC-PSA\n👤 6 💾 701.37 MB ⚙️ ThePirateBay",
+   "infoHash": "f3b9e71a573715e099826676a24907931cf26c23",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|hevc|10bit",
+    "filename": "The Naked Gun 2025 720p 10bit WEBRip 6CH X265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Naked Gun (2025) 720p WEBRip x264 AAC [ Hin Eng ] ESub\n👤 5 💾 856.59 MB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "8b67a848841d1b0dfac84027e749dc41b09f39e7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "The Naked Gun (2025) 720p WEBRip x264 AAC [ Hin, Eng ] ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n576p",
+   "title": "The Naked Gun 2025 576p WEBRip x265 AAC-SSN\n👤 71 💾 993.75 MB ⚙️ ThePirateBay",
+   "infoHash": "1217b75f5a089afaf8f1717392606ffc90fd714e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|576p|WEBRip|x265",
+    "filename": "The Naked Gun 2025 576p WEBRip x265 AAC-SSN.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nBluRay",
+   "title": "The Naked Gun (2025) [Liam Neeson] BluRay H264 DolbyD 5.1 + nickarad\n👤 3 💾 1.72 GB ⚙️ ThePirateBay",
+   "infoHash": "a0054550a95b345c35ccfb92b8018c64e08efdaf",
+   "fileIdx": 11,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BluRay|h264",
+    "filename": "The Naked Gun (2025) BluRay H264 DolbyD 5.1 + nickarad.mp4"
+   }
+  }
+ ]
+}

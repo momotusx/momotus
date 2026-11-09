@@ -315,12 +315,14 @@ async fn a_pick_after_a_failed_hand_pick_teaches_nothing() {
 }
 
 /// Learning (3.9): two 1080p torrents, R small and well seeded (the
-/// recommendation), C three times its size.
+/// recommendation), C five times its size, over the 5 GB default limit (in
+/// it, the bigger file of the same source is the pick,
+/// plans/stream-ranking.md 4.9 rule 3).
 fn sizes() -> String {
     serde_json::json!({ "streams": [
         { "name": "Torrentio\n1080p", "title": "Show.S01E01.1080p.WEB-DL.x264-SMALL\n👤 900 💾 1.2 GB",
           "infoHash": HASH_A, "fileIdx": 0 },
-        { "name": "Torrentio\n1080p", "title": "Show.S01E01.1080p.WEB-DL.x264-LARGE\n👤 300 💾 4.0 GB",
+        { "name": "Torrentio\n1080p", "title": "Show.S01E01.1080p.WEB-DL.x264-LARGE\n👤 300 💾 6.0 GB",
           "infoHash": HASH_B, "fileIdx": 0 },
     ]})
     .to_string()
@@ -502,7 +504,7 @@ async fn a_limit_the_user_set_is_named_as_chosen() {
     };
     core.set_prefs(&serde_json::json!({ "streams": { "sizeLimitBytes": 2147483648u64 } }))
         .unwrap();
-    // A long episode, so the 4 GB file keeps up and its size is the news.
+    // A long episode, so the 6 GB file keeps up and its size is the news.
     let facts = TitleFacts::read(Some("120 min"), Some("2019-"), Some("2019-05-01"), Some(2));
     let view = VersionsView::open(
         &core,
@@ -1404,6 +1406,97 @@ async fn a_jump_is_not_playback() {
         .find(|r| r.key == keys[0])
         .unwrap();
     assert_eq!(row.line, mq_streams::ReasonLine::DidNotPlay);
+}
+
+/// plans/stream-ranking.md 4.6: a speed measured while the view is open
+/// (a play that stalled) ranks the rows again when the view relearns.
+#[tokio::test]
+async fn relearn_ranks_with_a_speed_measured_since_the_view_opened() {
+    let (core, _server, keys) = direct_rows(vec![
+        (
+            "Show.S01E01.1080p.WEB-DL.x264-ONE\n💾 2.9 GB",
+            media_fixture("h264.mp4"),
+        ),
+        (
+            "Show.S01E01.720p.WEB-DL.x264-TWO\n💾 0.3 GB",
+            media_fixture("h264.mp4"),
+        ),
+    ])
+    .await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    // Unmeasured: 8 Mbit/s is under the 15 Mbit/s ceiling.
+    assert_eq!(view.snapshot().recommended.unwrap().key, keys[0]);
+    let sample = mq_runtime::speed::Sample {
+        kind: mq_runtime::speed::Kind::Http,
+        bytes: 5_000_000,
+        busy: Duration::from_secs(20),
+        seeders: None,
+    };
+    let now = mq_library::hlc::now_ms();
+    assert!(mq_runtime::speed::record(
+        core.library(),
+        core.network(),
+        &sample,
+        50,
+        now
+    ));
+    // A play's handle relearns, as a stall or failure does (playback.rs).
+    view.pick(&keys[1]).handle.relearn();
+    // 2 Mbit/s measured: the 8 Mbit/s 1080p cannot keep up, the 720p can.
+    assert_eq!(view.snapshot().recommended.unwrap().key, keys[1]);
+}
+
+/// plans/stream-ranking.md 4.5 and 4.6, torrents: the line is the higher of
+/// the last two p2p samples, so one slow torrent play (40 then 1 Mbit/s)
+/// leaves the pick where it is (that swarm is kept back by the failure
+/// memory, not the line); a second slow play moves it.
+#[cfg(feature = "torrent")]
+#[tokio::test]
+async fn relearn_after_one_slow_torrent_play_keeps_the_line() {
+    let streams = serde_json::json!({ "streams": [
+        { "name": "Torrentio\n1080p", "title": "Show.S01E01.1080p.WEB-DL.x264-ONE\n👤 900 💾 3.0 GB",
+          "infoHash": HASH_A, "fileIdx": 0 },
+        { "name": "Torrentio\n720p", "title": "Show.S01E01.720p.WEB-DL.x264-TWO\n👤 600 💾 0.5 GB",
+          "infoHash": HASH_B, "fileIdx": 0 },
+    ]});
+    let server = Server::start(vec![
+        route(
+            "GET",
+            "/stream/series/tt1%3A1%3A1.json",
+            200,
+            &streams.to_string(),
+        ),
+        route("GET", "/meta/series/tt1.json", 200, &meta()),
+    ])
+    .await;
+    let core = core_with(&server);
+    let (one, two) = (format!("bt:{HASH_A}:0"), format!("bt:{HASH_B}:0"));
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    // Unmeasured: 7.7 Mbit/s is under the 15 Mbit/s ceiling.
+    assert_eq!(view.snapshot().recommended.unwrap().key, one);
+    let play_at = |mbps: u64| {
+        let sample = mq_runtime::speed::Sample {
+            kind: mq_runtime::speed::Kind::P2p,
+            // 60 s, so a 1 Mbit/s play still moves the 4 MiB a sample needs.
+            bytes: mbps * 60 * 1_000_000 / 8,
+            busy: Duration::from_secs(60),
+            seeders: Some(900),
+        };
+        let now = mq_library::hlc::now_ms();
+        assert!(mq_runtime::speed::record(
+            core.library(),
+            core.network(),
+            &sample,
+            50,
+            now
+        ));
+        view.pick(&two).handle.relearn();
+        view.snapshot().recommended.unwrap().key
+    };
+    assert_eq!(play_at(40), one, "40 Mbit/s measured");
+    assert_eq!(play_at(1), one, "40 then 1: the line is still 40");
+    // 1 and 1: the line is 1, the 1080p cannot keep up, the 720p pauses least.
+    assert_eq!(play_at(1), two, "a second slow play");
 }
 
 /// Code review 2026-10-20 r2 P3-3: a torrent file that is not the version

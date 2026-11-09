@@ -1,0 +1,509 @@
+{
+ "fetched": "2026-11-08T23:06:05.156Z",
+ "source": {
+  "torrentio": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt0482571.json",
+  "cinemeta": "https://v3-cinemeta.strem.io/meta/movie/tt0482571.json"
+ },
+ "id": "tt0482571",
+ "type": "movie",
+ "meta": {
+  "name": "The Prestige",
+  "year": "2006",
+  "runtime": "131 min",
+  "genres": [
+   "Drama",
+   "Mystery",
+   "Sci-Fi"
+  ]
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Le Prestige (2006) MULTi VFF 2160p 10bit 4KLight HDR BluRay x265 HE-AAC 5.1 - QTZ (The Prestige)\n👤 7 💾 4.18 GB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇫🇷",
+   "infoHash": "845827da420e43944688a1bc190f8281e66d0c3f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|HDR",
+    "filename": "Le Prestige (2006) MULTi VFF 2160p 10bit 4KLight HDR BluRay x265 HE-AAC 5.1 - QTZ (The Prestige).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "The.Prestige.2006.2160p.UHD.BluRay.10bit.HDR.x265-HazMatt.mkv\n👤 6 💾 2.53 GB ⚙️ 1337x",
+   "infoHash": "70c98b7a5b8f54f49d5945f2bef844420c4c2b46",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|HDR",
+    "filename": "The.Prestige.2006.2160p.UHD.BluRay.10bit.HDR.x265-HazMatt.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "The.Prestige.2006.2160p.UHD.BluRay.x265.10bit.HDR.DDP5.1-RARBG\n👤 4 💾 7.88 GB ⚙️ TorrentGalaxy",
+   "infoHash": "4c0f2d1b008f1689c48b8b127bd76d27c3096e11",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|HDR",
+    "filename": "The.Prestige.2006.2160p.UHD.BluRay.x265.10bit.HDR.DDP5.1-RARBG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "The.Prestige.2006.2160p.UHD.BluRay.x265.10bit.HDR.DTS-HD.MA.5.1-RARBG\n👤 2 💾 10.97 GB ⚙️ TorrentGalaxy",
+   "infoHash": "b281f94ba49b0645eba1ca8caf4e7bed98417cbd",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|HDR",
+    "filename": "The.Prestige.2006.2160p.UHD.BluRay.x265.10bit.HDR.DTS-HD.MA.5.1-RARBG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "The Prestige 2006 2160p BluRay\n👤 64 💾 6.54 GB ⚙️ YTS",
+   "infoHash": "fc7e254478403001cb3a19f53b479c9aeaf8cd22",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit",
+    "filename": "The.Prestige.2006.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "The Prestige 2006 REPACK UHD BluRay 1080p DDP 5 1 DoVi HDR10 x265-SM737\n👤 38 💾 8.26 GB ⚙️ ThePirateBay",
+   "infoHash": "549d75fed297d528d5531839b9ee62fd53b110ad",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "The Prestige 2006 REPACK UHD BluRay 1080p DDP 5 1 DoVi HDR10  x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "The Prestige (2006) 1080p UHD BRrip HEVC HDR10 DDP 5.1 PoOlLa\n👤 29 💾 1.33 GB ⚙️ 1337x",
+   "infoHash": "219787e5f0cf2899caaf84de88108a6d86b6623d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|hevc|10bit|HDR",
+    "filename": "The Prestige (2006) 1080p UHD BRrip HEVC HDR10 DDP 5.1 PoOlLa.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV",
+   "title": "The Prestige 2006 1080p BluRay DoVi HDR10P DTS-HD MA 5 1 x265-GeneMige\n👤 18 💾 6.6 GB ⚙️ ThePirateBay\n🇬🇧 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇷🇸   / 🇭🇷 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "5f633911f285c731b101ba7023b3c529beefbb57",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|DV",
+    "filename": "The Prestige 2006 1080p BluRay DoVi HDR10P DTS-HD MA 5 1 x265-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige 2006 1080p BluRay X264 AC3: Ozlem\n👤 536 💾 1.92 GB ⚙️ MagnetDL",
+   "infoHash": "da8d4ffd356f6373adac769cdb7736660c04c418",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "The Prestige 2006 1080p BluRay x264 AC3 - Ozlem.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige 2006 1080p BluRay\n👤 243 💾 2.09 GB ⚙️ YTS",
+   "infoHash": "aaa47382b2e6834cd487d0858bcd502d40145f7e",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "The.Prestige.2006.1080p.BluRay.x264-[YTS.AM].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Prestige.2006.1080p.BluRay.DD.5.1.x265-edge2020\n👤 55 💾 3.01 GB ⚙️ MagnetDL",
+   "infoHash": "bdac66208ee3d589fa6ca2c80c4a4246ce7a9d8c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "The.Prestige.2006.1080p.BluRay.DDP.5.1.x265-EDGE2020.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Prestige.2006.1080p.BluRay.DTS.x264-ETRG\n👤 30 💾 4.79 GB ⚙️ ThePirateBay",
+   "infoHash": "437799ddf2c3c3d481d7a2cf4b671b57857fdf49",
+   "fileIdx": 22,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "The.Prestige.2006.1080p.BluRay.DTS.x264-ETRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige 2006 1080p PCOK WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 28 💾 6.17 GB ⚙️ ThePirateBay",
+   "infoHash": "08a2a7c3f1338e167df1fb1c8d4790360ff09ffd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "The Prestige 2006 1080p PCOK WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige 2006 1080p AV1 10Bit DKong\n👤 28 💾 791.92 MB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇱",
+   "infoHash": "01b7b65428749c78f54b99c1aedbb5070157f3cb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|av1|10bit",
+    "filename": "The Prestige 2006 1080p AV1 10Bit DKong.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige 2006 1080p BluRay DDP 5 1 10bit H 265-iVy\n👤 27 💾 2.85 GB ⚙️ ThePirateBay",
+   "infoHash": "5f31da7075587ed6fffa298fcf0f3f840e388f47",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h265|10bit",
+    "filename": "The Prestige 2006 1080p BluRay DDP 5 1 10bit H 265-iVy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige (2006) (1080p BluRay x265 10bit AAC 5.1 afm72) [QxR]\n👤 27 💾 4.97 GB ⚙️ 1337x",
+   "infoHash": "0849e0b3b02558b5f5ea0cc3cc18723eef9d1dce",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "The Prestige (2006) (1080p BluRay x265 afm72).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Prestige.2006.1080p.BluRay.x265-LAMA[TGx]\n👤 26 💾 2.03 GB ⚙️ ThePirateBay",
+   "infoHash": "61b4e26227fac8f1fe1bd19521d35af13f2c75c8",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "The.Prestige.2006.1080p.BluRay.x265-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Prestige.2006.1080p.BluRay.x265-RARBG\n👤 15 💾 2.03 GB ⚙️ RARBG",
+   "infoHash": "0ac818e71c352accc7828b4b8dafe01209f69da1",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "The.Prestige.2006.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige (2006) AC3 5.1 ITA.ENG 1080p H265 sub ita.eng Sp33dy94 MIRCrew\n👤 14 💾 2.71 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "1f0f62f39a3663f6a1883ce58d35f2dda0c08be0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h265",
+    "filename": "The Prestige (2006) AC3 5.1 ITA.ENG 1080p H265 sub ita.eng Sp33dy94-MIRCrew.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige (2006) 1080p BluRay AV1 Opus 5.1 [Retr0]\n👤 12 💾 1.82 GB ⚙️ TorrentGalaxy",
+   "infoHash": "406af6a9bbbacb2fcc99d9ff609564cda9561c33",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "The.Prestige.2006.1080p.BluRay.AV1.Opus.5.1-Retr0.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige 2006 1080p 10bit DS4K MA WEBRip Org DDP2 0 Hindi DD\n👤 11 💾 4.63 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇳",
+   "infoHash": "78753c4e8a7598b6e47891b958034ebb130bd50a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "The.Prestige.2006.1080p.10bit.DS4K.MA.WEBRip.[Org.DDP2.0-Hindi+DDP5.1-English].ESub.HEVC-The.PunisheR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige 2006 1080p DUAL NF WEB-DL x264 EAC3 5 1 - HdT\n👤 10 💾 5.63 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇹🇷",
+   "infoHash": "7f847fced1822b60adbd5cc9c7ebdd436078bcfb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "The Prestige 2006 1080p DUAL NF WEB-DL x264 EAC3 5 1 - HdT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Prestige.2006.1080p.WEB-DL.ENG.LATINO.DDP5.1.MKV-BEN.THE.MEN\n👤 10 💾 7.56 GB ⚙️ ThePirateBay\n🇬🇧 / 🇲🇽",
+   "infoHash": "6312c33d3f4a798077ebabe5fcbd70714bc1b7bb",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL",
+    "filename": "The.Prestige.2006.1080p.WEB-DL.ENG.LATINO.DDP5.1.MKV-BEN.THE.MEN.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige (2006 ITA/ENG) [1080p x265] [Paso77]\n👤 10 💾 4.8 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "c0d16e4dc79122dd1efd7b6814ea23cfe2329b9b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|x265",
+    "filename": "The Prestige 2006 BDRip ITA ENG 1080p x265 Paso77.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "IMDB TOP 001-050 BluRay 1080p x265 10bit MNHD-FRDS\n049.致命魔术.The.Prestige.2006.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS/The.Prestige.2006.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv\n👤 8 💾 5.01 GB ⚙️ EXT",
+   "infoHash": "9351bcf9e7437f706549f8b60314c39259c420b4",
+   "fileIdx": 348,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "The.Prestige.2006.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Amazing Films 7 - Mp4 x264 AC3 1080p\nThe Prestige (2006) 1080p Surround.mp4\n👤 8 💾 2.96 GB ⚙️ 1337x",
+   "infoHash": "ff1642be296645df51a5dc58633c18ebd9e5c441",
+   "fileIdx": 66,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "The Prestige (2006) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige 2006 1080p HULU WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 7 💾 5.24 GB ⚙️ TorrentGalaxy",
+   "infoHash": "28ee3e8a23e9886e854db56d685b2c73a6b46706",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "The Prestige 2006 1080p HULU WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Prestige.2006.1080p.BluRay.10Bit.HEVC.EAC3.5.1-jmux\n👤 5 💾 8.74 GB ⚙️ 1337x",
+   "infoHash": "60c543a544d8aae022b5b07f9edce6bc3c852492",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "The.Prestige.2006.1080p.BluRay.10Bit.HEVC.EAC3.5.1-jmux.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Prestige.2006.1080p.BluRay.HEVC.x265-RiPRG\n👤 5 💾 2.58 GB ⚙️ ThePirateBay",
+   "infoHash": "07418f453e7e0156f7d92c717074c4269f228277",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "The.Prestige.2006.1080p.BluRay.HEVC.x265-RiPRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Prestige.2006.1080p.BrRip.x265.HEVCBay\n👤 5 💾 1.01 GB ⚙️ 1337x",
+   "infoHash": "eca8648b1c247afdf77504e065ff820b3cd66dc6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x265",
+    "filename": "The.Prestige.2006.1080p.BrRip.x265.HEVCBay.com.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Prestige.2006.1080p.BluRay.x264.anoXmous\n👤 5 💾 2.13 GB ⚙️ ThePirateBay",
+   "infoHash": "1acc87a84dccd7444c82d20ad3dfb71a7d76e210",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "The.Prestige.2006.1080p.BluRay.x264.anoXmous_.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige 2006 1080p BluRay x264 English Hindi ESub [MW]\n👤 4 💾 2.69 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇮🇳",
+   "infoHash": "2d61f36fd54aea90173df7700ed1c48f55fdd080",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "The Prestige 2006 1080p BluRay x264 Dual Audio [Hindi DD 2.0 - English DD 5.1] ESub [MW].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige 2006 (1080p Bluray x265 10bit AAC 5.1 EN Joy)[UTR]\n👤 4 💾 1.71 GB ⚙️ ThePirateBay",
+   "infoHash": "d2ee909e693499864ac0e17b9366a921545a5d00",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige (2006) 1080p 10bit Bluray x265 HEVC [Org DD 2.0 Hin…\n👤 3 💾 8.52 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇳",
+   "infoHash": "8fc9520365025fc56443fbd4d03fc44b4ad8cd27",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "The Prestige (2006) 1080p 10bit Bluray x265 HEVC [Org DD 2.0 Hindi + DDP 5.1 English] ESub ~ TombDoc.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige 2006 1080p BluRay x265-YAWNTiC\n👤 3 💾 5.67 GB ⚙️ ThePirateBay",
+   "infoHash": "bc84c6f4ab843e867559472326de1bc4ee6074bb",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "The Prestige 2006 1080p BluRay x265-YAWNTiC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Epic Films 9 - Mp4 x264 AC3 1080p\nThe Prestige (2006) 1080p Surround.mp4\n👤 3 💾 2.96 GB ⚙️ ThePirateBay",
+   "infoHash": "ee021d96c7d9b8a149d2f5f1ed7f55da2a1f1ed1",
+   "fileIdx": 58,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "The Prestige (2006) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "IMDB Top 250 - 2024 Edition - 1080p BluRay eSubs jZQ\n043 The Prestige (2006)/The.Prestige.2006.1080p.BluRay.DDP.5.1.x265-EDGE2020.mkv\n👤 2 💾 3.01 GB ⚙️ TorrentGalaxy",
+   "infoHash": "71fee293dc117c48487029c6dcb5038d974a0295",
+   "fileIdx": 464,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "The.Prestige.2006.1080p.BluRay.DDP.5.1.x265-EDGE2020.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Imdb top 263 movies hindi english gdrive\nThe.Prestige.2006.1080p.BluRay.x264-[YTS.AM].mp4\n👤 2 💾 2.09 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "66672b822002b6f19af478fb7c886787afee5f9f",
+   "fileIdx": 224,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "The.Prestige.2006.1080p.BluRay.x264-[YTS.AM].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Prestige (2006) [BluRay 1080p 10bit DD5.1 x265] - Thakur\n👤 2 💾 2.19 GB ⚙️ 1337x",
+   "infoHash": "eef6f957b9d16e96302799a0ef76ffd896900f18",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "The Prestige (2006) [BluRay 1080p 10bit DD5.1 x265].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Prestige (2006) m720p - x264 - 600MB - YIFY\n👤 81 💾 594.91 MB ⚙️ ThePirateBay",
+   "infoHash": "086c29d9f160b76f061011a2db08da1e2e393d6e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|x264",
+    "filename": "The.Prestige.2006.m720p.x264.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The.Prestige.2006.720p.BluRay.999MB.HQ.x265.10bit-GalaxyRG\n👤 11 💾 987.47 MB ⚙️ TorrentGalaxy",
+   "infoHash": "5c2e259c0b620d603a76b38a9518d2aef36b98e1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x265|10bit",
+    "filename": "The.Prestige.2006.720p.BluRay.999MB.HQ.x265.10bit-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Prestige 2006 {720p} - iAwesome\n👤 6 💾 594.91 MB ⚙️ ThePirateBay",
+   "infoHash": "f4f0c39b1bfa8912d13c0674b7054636224f5852",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Prestige (2006) 720p BluRay x264 [Dual Audio] [Hindi DD 2.0 - English DD 2.0] - LOKI - M2Tv\n👤 4 💾 1.3 GB ⚙️ 1337x\nDual Audio / 🇬🇧 / 🇮🇳",
+   "infoHash": "e5af8f37510ecb688c8d0991984ab25b20de1f79",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Prestige (2006) 720p BluRay X264 [MoviesFD]\n👤 3 💾 1.01 GB ⚙️ TorrentGalaxy",
+   "infoHash": "d7b7f1dd27208cb11ab1c858191602aa024b6d52",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "The.Prestige.2006.720P.Bluray.X264.[Moviesfd].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Prestige 2006 x264 720p Esub BluRay Dual Audio English Hindi THE GOPI SAHI\n👤 3 💾 1.01 GB ⚙️ 1337x\nDual Audio / 🇬🇧 / 🇮🇳",
+   "infoHash": "367251ebc3d0e9a1d39daed45e5296e0279e94c6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "The Prestige 2006 x264 720p Esub BluRay Dual Audio English Hindi THE GOPI SAHI.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Prestige 2006 720p BluRay x264 Dual Audio [Hindi DD 2.0 - English DD 2.0] ESub [MW]\n👤 3 💾 1.2 GB ⚙️ 1337x\nDual Audio / 🇬🇧 / 🇮🇳",
+   "infoHash": "d2e157322e0cf6f2dce18dd50f3f4789452c1909",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Prestige 2006 720p BluRay x264 Multisubs-BrRip.net\n👤 3 💾 6.56 GB ⚙️ ThePirateBay\nMulti Subs",
+   "infoHash": "e16d534f93716c84e69e1d3a3474064fac7d46ea",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\nDVDRip",
+   "title": "Official IMDb Top 250 Movies Collection 6/17/2011\nThe.Prestige.2006.DvDrip.Eng-aXXo.(www.USABIT.com).avi\n👤 8 💾 700.74 MB ⚙️ ThePirateBay",
+   "infoHash": "4986ace2ee7a564508e0d5cfdde2d9018b8af942",
+   "fileIdx": 648,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVDRip",
+    "filename": "The.Prestige.2006.DvDrip.Eng-aXXo.(www.USABIT.com).avi"
+   }
+  },
+  {
+   "name": "Torrentio\nDVDRip",
+   "title": "Le_Prestige_[The Prestige]_French_DvD-Rip\n👤 4 💾 698.32 MB ⚙️ ThePirateBay\n🇫🇷",
+   "infoHash": "a4b9fd22f8d0f399f5c53b02a01cafe454d01cd6",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVDRip"
+   }
+  },
+  {
+   "name": "Torrentio\nHDRip",
+   "title": "El truco final (El prestigio) (2006) HDrip XviD Castellano\n👤 3 💾 2.26 GB ⚙️ EXT\n🇪🇸",
+   "infoHash": "b21e89712beced7b404707b67cd8c267a88b2ac7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|HDRip|xvid",
+    "filename": "El truco final (El prestigio) (2006) HDrip XviD Castellano.avi"
+   }
+  }
+ ]
+}

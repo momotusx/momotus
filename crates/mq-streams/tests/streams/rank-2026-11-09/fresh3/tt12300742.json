@@ -1,0 +1,505 @@
+{
+ "fetched": "2026-11-08T23:16:49.952Z",
+ "id": "tt12300742",
+ "type": "movie",
+ "sources": {
+  "meta": "https://v3-cinemeta.strem.io/meta/movie/tt12300742.json",
+  "streams": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt12300742.json"
+ },
+ "meta": {
+  "name": "Bugonia",
+  "year": "2025",
+  "runtime": "119 min",
+  "genres": [
+   "Comedy",
+   "Crime",
+   "Sci-Fi"
+  ],
+  "country": "Ireland, United Kingdom, Canada, South Korea, United States"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k DV | HDR10+",
+   "title": "Bugonia.2025.2160p.iT.WEB-DL.DV.HDR10+.Multi.Dub.AC3.5.1.x265.Rus+Ukr-NOGRP\n👤 8 💾 8.95 GB ⚙️ ThePirateBay\nMulti Subs / 🇷🇺 / 🇺🇦",
+   "infoHash": "c964a69921f41f1f4980ad202d9d7aeabe5e035d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|x265|10bit|DV|HDR10+",
+    "filename": "Bugonia.2025.2160p.iT.WEB-DL.DV.HDR10+.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Bugonia 2025 2160p WEBRip\n👤 107 💾 5.28 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+   "infoHash": "fe15fc15a44bf4ab190f23f06c3798a01a8b4f85",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "Bugonia.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.LT].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Bugonia.2025.2160p.AMZN.WEB-DL.DDP5.1.H.265.mkv\n👤 9 💾 13.8 GB ⚙️ ThePirateBay",
+   "infoHash": "a50d5e8eca7116bc2da49470e775ac03f114fb11",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|h265",
+    "filename": "Bugonia.2025.2160p.AMZN.WEB-DL.DDP5.1.H.265.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Bugonia 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737\n👤 5 💾 5.48 GB ⚙️ TorrentGalaxy",
+   "infoHash": "acb45cbe16a14cae385928e1563b3061c05969e6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Bugonia 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10  x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Bugonia 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737\n👤 3 💾 5.48 GB ⚙️ TorrentGalaxy",
+   "infoHash": "e9280da2c8689665faa1fa3514e9f884bcf46596",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Bugonia 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p WEBRip\n👤 1153 💾 2.19 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+   "infoHash": "50ceff7bf61f016753cc5377f427dee8244d26d3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Bugonia.2025.1080p.WEBRip.x264.AAC5.1-[YTS.LT].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p WEB-DL HEVC x265 5.1 BONE\n👤 421 💾 1.8 GB ⚙️ 1337x",
+   "infoHash": "6f237e9ee8c32abdee0b33617d3daad5b2e9d949",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+    "filename": "Bugonia 2025 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p WEBRip\n👤 148 💾 1.99 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+   "infoHash": "1f08c8438102cf800eb3aa5ce25b58d835ee772f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Bugonia.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.LT].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia (2025) (1080p BluRay x265 10bit EAC3 Atmos 5.1 Silence) [QxR]\nBugonia (2025) (1080p BluRay x265 10bit Silence).mkv\n👤 135 💾 6.62 GB ⚙️ ThePirateBay",
+   "infoHash": "721db6e334bb075c95f9b42cb68512bec6209666",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Bugonia (2025) (1080p BluRay x265 10bit Silence).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p BluRay\n👤 85 💾 2.18 GB ⚙️ YTS",
+   "infoHash": "d5665efcd35bde5f840674344886291d38590625",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Bugonia.2025.1080p.BluRay.x264.AAC5.1-[YTS.LT].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia.2025.1080p.AMZN.WEB-DL.DD.5.1.H264.MP4-BTM\n👤 48 💾 2.19 GB ⚙️ ThePirateBay",
+   "infoHash": "0e154151eba985d81bed0ad567090016947fd33a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Bugonia.2025.1080p.AMZN.WEB-DL[Ben The Men].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia (2025) AV1 O5.1 1080p 7RIP\n👤 36 💾 522.07 MB ⚙️ 1337x",
+   "infoHash": "5dbca01bbc9f2ae42463fbfa7b397e1f67e50a24",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|av1",
+    "filename": "Bugonia (2025) AV1 O5.1 1080p 7RIP.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia (2025) 1080p BluRay 5.1-LAMA\n👤 33 💾 2.18 GB ⚙️ ThePirateBay",
+   "infoHash": "400ab945290cfe612ad8f5b4cb21bb703df664e4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Bugonia.2025.1080p.BluRay.x264.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia (2025) (1080p MA WEB-DL x265 10bit EAC3 5.1 Silence) [QxR]\n👤 28 💾 5.18 GB ⚙️ 1337x",
+   "infoHash": "11a16c6f0dca7f1a29fee1211ca83618cf6eb625",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+    "filename": "Bugonia (2025) (1080p MA WEB-DL x265 10bit Silence).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 BluRay 1080p DD 5 1 x264-BHDStudio\n👤 26 💾 6.73 GB ⚙️ TorrentGalaxy",
+   "infoHash": "5cf2798c04736e0e21fe9d6f6879722ffdd2a8ec",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Bugonia 2025 BluRay 1080p DD 5 1 x264-BHDStudio.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p 10bit BluRay 8CH x265 HEVC-PSA\n👤 19 💾 2.19 GB ⚙️ ThePirateBay",
+   "infoHash": "99675f51202196e845e15e02725722162dc8d2a0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Bugonia 2025 1080p 10bit BluRay 8CH x265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia.2025.1080p.BluRay.AV1.DDP.5.1-dAV1nci\n👤 18 💾 2.6 GB ⚙️ 1337x",
+   "infoHash": "f8ab6bbb218af5c2f3f38c3473e37c6faf764f7d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Bugonia.2025.1080p.BluRay.AV1.DDP.5.1-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia.2025.1080p.MA.WEB-DL.DDP5.1.Atmos.H.264-ASTRiD\n👤 18 💾 6.86 GB ⚙️ 1337x",
+   "infoHash": "dad15ad2b0751a192473c9e6ab5897c8cbde9b8f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Bugonia.2025.1080p.MA.WEB-DL.DDP5.1.Atmos.H.264-ASTRiD.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p ATV WEB-DL DDP5 1 Atmos H 265-WADU\n👤 18 💾 6.28 GB ⚙️ ThePirateBay",
+   "infoHash": "48af3172b3716cda3a4e192e418859a995474233",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+    "filename": "Bugonia 2025 1080p ATV WEB-DL DDP5 1 Atmos H 265-WADU.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p AMZN WEB-DL DDP5.1 Atmos H 264-FLUX\n👤 13 💾 8.04 GB ⚙️ ThePirateBay",
+   "infoHash": "9427010dff9de2d0273f297c839aebe2ab2f809e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Bugonia 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-FLUX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia.2025.1080p.BluRay.x264-WiKi\n👤 10 💾 12.79 GB ⚙️ ThePirateBay",
+   "infoHash": "bf30d63f5596fa93c36c84a48d2260cfd8a50e2f",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Bugonia.2025.1080p.BluRay.x264-WiKi.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia (2025) 1080p WEBRip 5.1-LAMA\n👤 10 💾 2.19 GB ⚙️ ThePirateBay",
+   "infoHash": "e0bf0834e203fa955673481f1b6c70e1507d861c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Bugonia.2025.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia (2025)(CZ/EN)[1080p][WEB-DL]\n👤 9 💾 4.34 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+   "infoHash": "7f9e73521766acab55bf297757dcee742326e5e3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL",
+    "filename": "Bugonia (2025).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia (2025)(1080p)(SK titulky)\n👤 9 💾 2 GB ⚙️ EXT\n🇸🇰",
+   "infoHash": "8d722a855cab4f9bbc9f13151bc88239e2790180",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p 10bit WEBRip 6CH X265 HEVC-PSA\n👤 9 💾 1.99 GB ⚙️ ThePirateBay",
+   "infoHash": "df20d1c2e2a602aee258b81c352a9c3bd29bd3a1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "Bugonia 2025 1080p 10bit WEBRip 6CH X265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p WEBRip x265-DH\n👤 8 💾 4.66 GB ⚙️ ThePirateBay",
+   "infoHash": "6566b0f91571d861cbaebc96b4006fad113261fa",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Bugonia 2025 1080p WEBRip x265-DH.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p WEB-DL HEVC x265 5.1 BONE\n👤 8 💾 1.04 GB ⚙️ ThePirateBay",
+   "infoHash": "2d9a08f23116d75a10fbc20925d9dafd78e4194b",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia.2025.1080p.WEBRip.x265-KONTRAST\n👤 6 💾 2.61 GB ⚙️ 1337x",
+   "infoHash": "f4892740eef5f692010a165943fe682754879d79",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Bugonia.2025.1080p.WEBRip.x265-KONTRAST.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia (2025)[WebRip][1080p]\n👤 5 💾 2.19 GB ⚙️ EXT\n🇨🇿",
+   "infoHash": "45c628aad01ba51c85958c42a13e0ddf3604c357",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Bugonia.2025.1080p.WEBRip.x264.AAC5.1-[YTS.LT].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p WEBRip DDP 5 1 Atmos 10bit H 265-iVy\n👤 3 💾 2.8 GB ⚙️ ThePirateBay",
+   "infoHash": "87a8cc855c6b256d7d093879195a5bc72041af7b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|h265|10bit",
+    "filename": "Bugonia 2025 1080p WEBRip DDP 5 1 Atmos 10bit H 265-iVy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia.2025.MULTi.TRUEFRENCH.1080p.WEB-DL.H265-Slay3R\n👤 3 💾 4.11 GB ⚙️ EXT\nMulti Audio / 🇫🇷",
+   "infoHash": "91cec8c6843e09c61082d19b8c6b6a05275431cc",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv\n👤 3 💾 10.94 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "8d538e1de9b4989252d1587d74fed0e2b67c42bc",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Bugonia.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia (2025) 1080p WEBRip x265 10bit 5.1-LAMA\n👤 3 💾 1.99 GB ⚙️ ThePirateBay",
+   "infoHash": "6329a6edcca426e9882cb17da10b5a69eae2a0d0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Bugonia.2025.1080p.WEBRip.x265.10bit.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p WEB-DL HEVC x265 5.1 BONE\n👤 3 💾 1.69 GB ⚙️ ThePirateBay",
+   "infoHash": "2729aececc7daf076f85cd8d62d08615f26076d1",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 REPACK 1080p BluRay DDP 5 1 10bit H 265-iVy\n👤 2 💾 2.81 GB ⚙️ EXT",
+   "infoHash": "eda3aaf5810ad97e7277f6d06cd0cce9e74da9d2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h265|10bit",
+    "filename": "Bugonia 2025 REPACK 1080p BluRay DDP 5 1 10bit H 265-iVy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia.2025.1080p.WEB-DL.H.264.Dual.YG⭐\n👤 2 💾 4.88 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "c83d0e2a7ca0f8367be5a6aac05a4453974dd7b1",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Bugonia.2025.1080p.WEB-DL.H.264.Dual YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p WEB-DL HEVC x265 5.1 BONE\n👤 2 💾 1.13 GB ⚙️ ThePirateBay",
+   "infoHash": "2a8eee28e0485c6bb1ba306a26c1318f396aa815",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 m1080p BluRay x264-GeneMige\n👤 1 💾 2.83 GB ⚙️ EXT",
+   "infoHash": "10f09e0f632c0e0a852e0cc0714fd6dc80807bb0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Bugonia 2025 m1080p BluRay x264-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p ATV WEB-DL DDP5 1 Atmos H 265-WADU\n👤 1 💾 6.28 GB ⚙️ EXT\n🇬🇧 / 🇪🇸 / 🇫🇷",
+   "infoHash": "33a3b29ad8cde47f38bf4e43c9942e1625c95ae2",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia (2025)(CZ)[1080p][WEB-DL]\n👤 1 💾 3.36 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+   "infoHash": "1c7ba48d3ace93e5d8cbe4f4bd5f44719732660b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL",
+    "filename": "Bugonia (2025).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p PCOK WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 1 💾 6.58 GB ⚙️ ThePirateBay",
+   "infoHash": "f84243b703e7791a6effaaaf60a9557c43410171",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Bugonia 2025 1080p PCOK WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bugonia 2025 1080p WebRip EAC3 5 1 x265-Lootera\n👤 1 💾 2.31 GB ⚙️ ThePirateBay",
+   "infoHash": "46de4dfb0042335fdcc33a0a85fe6bb2fe3b2f45",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Bugonia 2025 1080p WebRip EAC3 5 1 x265-Lootera.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Bugonia 2025 720p BluRay\n👤 35 💾 1.06 GB ⚙️ YTS",
+   "infoHash": "56f7d6a1bf162c513b0ca304155f7206fc60c9ee",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Bugonia.2025.720p.BluRay.x264.AAC-[YTS.LT].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Bugonia (2025) 720p WEBRip-LAMA\n👤 17 💾 1.07 GB ⚙️ ThePirateBay",
+   "infoHash": "508e9c6a6b224bb9b7347b581eabfa0ad62b9532",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Bugonia.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Bugonia 2025 720p 10bit WEBRip 6CH X265 HEVC-PSA\n👤 8 💾 862.83 MB ⚙️ ThePirateBay",
+   "infoHash": "ad5239e2e0189a30aaf816797102d47410487a41",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|hevc|10bit",
+    "filename": "Bugonia 2025 720p 10bit WEBRip 6CH X265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Bugonia 2025 720p BluRay x264-GeneMige\n👤 5 💾 4.79 GB ⚙️ EXT",
+   "infoHash": "8cf758933f30fc235d8aeb2b655ca2bedd303e32",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Bugonia 2025 720p BluRay x264-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Bugonia (2025) [PL] [AI] [720p] [WEB-DL] [XviD] [AC3-OzW] [Lektor PL]\n👤 5 💾 3.03 GB ⚙️ EXT\n🇵🇱",
+   "infoHash": "6458901deb392ef26b87f0863cc386c84d05aa93",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB-DL|xvid",
+    "filename": "Bugonia.2025.PL.AI.720p.WEB-DL.XviD.AC3-OzW.avi"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Bugonia 2025 m720p BluRay x264-GeneMige\n👤 1 💾 1.69 GB ⚙️ EXT",
+   "infoHash": "f23c0567de2c2ad30a2aa5f31c994b821ad9da08",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Bugonia 2025 m720p BluRay x264-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Bugonia 2025 720p AMZN WEB-DL H264-FLUX\n👤 1 💾 4.63 GB ⚙️ ThePirateBay",
+   "infoHash": "42dc1cfc8ee5e9c1d5b7d5bae32232e1d60d4ed7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB-DL|h264",
+    "filename": "Bugonia 2025 720p AMZN WEB-DL H264-FLUX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Bugonia.2025.NTSC.DVD9-AVS\n👤 3 💾 7.49 GB ⚙️ EXT",
+   "infoHash": "5287759aea9ead915b31ae3e4f81e2acbe0e36f7"
+  }
+ ]
+}

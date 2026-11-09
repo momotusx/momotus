@@ -1,0 +1,1288 @@
+{
+ "fetched": "2026-11-08T23:06:08.408Z",
+ "source": {
+  "torrentio": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt5311514.json",
+  "cinemeta": "https://v3-cinemeta.strem.io/meta/movie/tt5311514.json"
+ },
+ "id": "tt5311514",
+ "type": "movie",
+ "meta": {
+  "name": "Your Name.",
+  "year": "2017",
+  "runtime": "106 min",
+  "genres": [
+   "Animation",
+   "Drama",
+   "Fantasy"
+  ]
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Your.Name.2016.2160p.UHD.BluRay.x265.10bit.HDR.DTS-HD.MA.5.1-SWT\n👤 49 💾 9.62 GB ⚙️ ThePirateBay",
+   "infoHash": "6fec9cc4b2d67df00f59269cff0a733b3ed8fc0b",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|HDR",
+    "filename": "Your.Name.2016.2160p.BluRay.x265.10bit.HDR.DTS-HD.MA.5.1-SWTYBLZ.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "[Anime Land] Kimi no Na wa. (Your Name.) (Dual Audio) (BDRip 4K 2160p HEVC HDR10 DTS-HDx2) [2BCD73C2].mkv\n👤 19 💾 11.51 GB ⚙️ NyaaSi\nDubbed / Dual Audio",
+   "infoHash": "e811304a650c3a5a36882b5f870b2cefacfb643c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|HDR|Anime Land",
+    "filename": "[Anime Land] Kimi no Na wa. (Dual Audio) (BDRip 4K 2160p HEVC HDR10 DTS-HDx2) [2BCD73C2].mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:e811304a650c3a5a36882b5f870b2cefacfb643c"
+   ]
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "[NoobSubs] your name. 2016 (2160p 4k Ultra Blu-ray HDR10 Dual Audio)[0731BD8C].mkv\n👤 12 💾 13.87 GB ⚙️ NyaaSi\nDubbed / Dual Audio",
+   "infoHash": "6d232f1149361470ced0d77958df39d4a43ef424",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|HDR|NoobSubs",
+    "filename": "[NoobSubs] your name. 2016 (2160p 4k Ultra Blu-ray HDR10 Dual Audio)[0731BD8C].mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:6d232f1149361470ced0d77958df39d4a43ef424"
+   ]
+  },
+  {
+   "name": "Torrentio\n4k DV",
+   "title": "Your Name 2016 2160p HMAX WEB-DL DTS-HD MA 5 1 DV H 265-DRX\n👤 9 💾 13.01 GB ⚙️ NyaaSi\n🇬🇧 / 🇮🇹 / 🇪🇸 / 🇲🇽 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇩🇰 / 🇸🇪 / 🇳🇴",
+   "infoHash": "51d5e5a735a3301b5862be289a94a1239952f3f5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|DV|DRX",
+    "filename": "Your.Name.2016.2160p.HMAX.WEB-DL.DTS-HD.MA.5.1.DV.H.265-DRX.mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:51d5e5a735a3301b5862be289a94a1239952f3f5"
+   ]
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Your Name. (2016) (2160p x265 HEVC 10bit HDR UHD BluRay Dual Audio DTS-HD MA 5.1) [Prof]\n👤 5 💾 13.32 GB ⚙️ NyaaSi\nDubbed / Dual Audio / 🇬🇧",
+   "infoHash": "fa93befc84074aa1456b2d0ab9351cb9267b597e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k",
+    "filename": "Your Name. (2016).mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:fa93befc84074aa1456b2d0ab9351cb9267b597e"
+   ]
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "[Judas] Kimi no Na Wa. (Your Name.) [BD 2160p 4K UHD][HEVC x265 10bit][Dual-Audio][Multi-Subs]\n👤 300 💾 2.84 GB ⚙️ NyaaSi\nDubbed / Multi Subs / Dual Audio",
+   "infoHash": "4b37ff0e0edc511bd96448c0039c0f7a9913ac4e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|Judas",
+    "filename": "[Judas] Kimi no Na Wa. (Your Name.) [BD 2160p 4K UHD][HEVC x265 10bit][Dual-Audio][Multi-Subs].mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:4b37ff0e0edc511bd96448c0039c0f7a9913ac4e"
+   ]
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Your Name. 2016 2160p BluRay\n👤 40 💾 4.85 GB ⚙️ YTS",
+   "infoHash": "9d1452ec0d2b3a30d4a5e9696406795e01e66f7f",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit",
+    "filename": "Your.Name..2016.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "[BlackRabbit] Your Name. (2016) [Bluray-2160p][Opus 5.1][Dual Audio][AV1]\n👤 10 💾 1.58 GB ⚙️ nekoBT\nDubbed / Dual Audio / 🇬🇧 / 🇮🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇩🇰 / 🇸🇪 / 🇳🇴",
+   "infoHash": "9a9184ad18d627d53578ded3909dfa6082947d57",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BlackRabbit",
+    "filename": "Your Name. (2016) [Bluray-2160p][Opus 5.1][AV1]-BlackRabbit.mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:9a9184ad18d627d53578ded3909dfa6082947d57"
+   ]
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Your.Name.2016.2160p.UHD.BluRay.x265-VALiS[EtHD]\n👤 5 💾 9 GB ⚙️ 1337x",
+   "infoHash": "cda10635d4312c2bdffcd16ac1da00454cde143e",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Your Name. (2016) (1080p DS4K BluRay x265 10-bit HDR AAC 5.1 Dual-Audio) [WeSLeY]\n👤 26 💾 2.15 GB ⚙️ 1337x\nDubbed / Dual Audio / 🇬🇧",
+   "infoHash": "cf7375a5968d16bb4e24da0edfed669f411fc081",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|HDR",
+    "filename": "Your Name (2016) (1080p DS4K BluRay x265 10-bit HDR AAC 5.1 Dual-Audio) [WeSLeY].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your.Name.2016.1080p.BluRay.x264-HAiKU[EtHD]\n👤 248 💾 5.47 GB ⚙️ ThePirateBay",
+   "infoHash": "1f8c7e243b8d705ec09995ea92d1cccd9dadeaa4",
+   "fileIdx": 6,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "your.name.2016.1080p.bluray.x264-haiku[EtHD].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your Name 2016 1080p (DUAL) WEB-DL HEVC x265 5.1 BONE\n👤 169 💾 1.98 GB ⚙️ EXT\nDubbed / Dual Audio / 🇬🇧",
+   "infoHash": "9f37c362eea72351b9c4eb13974d1d37c4495626",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+    "filename": "Your Name 2016 1080p (DUAL) WEB-DL HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your.Name.2016.English.Dub.1080p.Bluray.x264-Rapta\n👤 134 💾 1.77 GB ⚙️ ThePirateBay\nDubbed / 🇬🇧",
+   "infoHash": "431ce21c850e35c316be019fc1724d4d5ead26ce",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Your.Name.2016.English.Dub.1080p.Bluray.x264-Rapta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "[MegaMTBB] Kimi no Na wa. (2016) (BD 1080p) | your name.\n👤 108 💾 13.39 GB ⚙️ NyaaSi",
+   "infoHash": "136456729270dcf8de3a8fb0300f51453109df98",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|MegaMTBB",
+    "filename": "[MegaMTBB] Kimi no Na wa. (2016) (BD 1080p) [CE49A996].mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:136456729270dcf8de3a8fb0300f51453109df98"
+   ]
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "[DB]Makoto Shinkai Movie Collection [Dual Audio 10bit BD1080p][HEVC-x265] (The Place Promised in Our Early Days 5 Centimeters per Second Children Who Chase Lost Voices The Garden of Words Your Name. Weathering with You Suzume)\nKimi no Na wa/[DB]Kimi no Na wa._-_(Dual Audio_10bit_BD1080p_x265).mkv\n👤 90 💾 4.07 GB ⚙️ 1337x\nDubbed / Dual Audio / 🇬🇧",
+   "infoHash": "eb1342fad1cf4f57c660b06cdd061f05d4e05587",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|eb1342fad1cf4f57c660b06cdd061f05d4e05587",
+    "filename": "[DB]Kimi no Na wa._-_(Dual Audio_10bit_BD1080p_x265).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your Name. (2016) [BD 1080p] [Dub - Japanese English Arabic] [Sub - English Arabic]\n👤 88 💾 1.73 GB ⚙️ NyaaSi\nDubbed / Dual Audio / 🇬🇧 / 🇸🇦",
+   "infoHash": "c66cb8d442e9de788ffda523c733239d08408cc1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p",
+    "filename": "Kimi No Na Wa 1080p BD Dual Audio.mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:c66cb8d442e9de788ffda523c733239d08408cc1"
+   ]
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your Name. 2016 1080p BluRay\n👤 73 💾 1.59 GB ⚙️ YTS",
+   "infoHash": "4dcddd6deb6fde94dae41f9991fe4223c30972e8",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Your.Name.2016.1080p.BluRay.x264-[YTS.AM].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "[Valenciano] Kimi no na wa (Your Name) (君の名は) [1080p][AV1 10bit][Opus 5.1][Multi-Audio][Multi-Sub]\n👤 51 💾 3.85 GB ⚙️ NyaaSi\nDubbed / Multi Audio / Multi Subs",
+   "infoHash": "956bcde2ab5b6ed3b3930063a37916ceee35fee8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|Valenciano",
+    "filename": "[Valenciano] Kimi no na wa (Your Name) (君の名は) [1080p][AV1 10bit][Opus 5.1][Multi-Audio][Multi-Sub].mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:956bcde2ab5b6ed3b3930063a37916ceee35fee8"
+   ]
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "[BlackRose] Your Name. (2016) (BD 1080p H.264 10-bit Opus) [Dual-Audio] | Kimi no Na wa.\n👤 40 💾 6.73 GB ⚙️ NyaaSi\nDubbed / Dual Audio / 🇬🇧",
+   "infoHash": "d71d2bae8fbc1e37113f81530105ce334a749f6a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BlackRose",
+    "filename": "Your Name.2016.1080p.BluRay.Dual-Audio.Opus5.1.x264-BlackRose.mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:d71d2bae8fbc1e37113f81530105ce334a749f6a"
+   ]
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your Name. (2016) MULTi-FRENCH/VOSTFR 1080p 10bits BluRay x265 AAC 5.1 v2 -Punisher694 (Kimi no Na wa.)\n👤 37 💾 3.71 GB ⚙️ nekoBT\nDubbed / Multi Audio / 🇫🇷",
+   "infoHash": "b3895ee214150098c549598ad4864c9600538041",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|Punisher694",
+    "filename": "Your Name. (2016) MULTi 1080p 10bits BluRay x265 AAC 5.1 v2 -Punisher694.mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:b3895ee214150098c549598ad4864c9600538041"
+   ]
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "[Judas] Kimi no Na wa (Your Name) [BD 1080p][HEVC x265 10bit][Dual-Audio][Multi-Subs] (Movie)\n👤 36 💾 2.28 GB ⚙️ NyaaSi\nDubbed / Multi Subs / Dual Audio",
+   "infoHash": "63a7e0b91f7d1af5f688b484b19212813506d2be",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|Judas",
+    "filename": "[Judas] Kimi no Na wa.mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:63a7e0b91f7d1af5f688b484b19212813506d2be"
+   ]
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "[BlackRose] Your Name. (2016) (BD 1080p HEVC 10-bit Opus) [Dual-Audio] | Kimi no Na wa.\n👤 34 💾 12.53 GB ⚙️ NyaaSi\nDubbed / Dual Audio / 🇬🇧",
+   "infoHash": "097a34e5d0cf1bb9637945398b4d2189579ea7f3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BlackRose",
+    "filename": "Your Name.2016.1080p.BluRay.Dual-Audio.Opus5.1.x265-BlackRose.mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:097a34e5d0cf1bb9637945398b4d2189579ea7f3"
+   ]
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "[NSDAB] your name. [BD 1080p Opus]\n👤 34 💾 6.35 GB ⚙️ NyaaSi",
+   "infoHash": "16b36f0485715cd39ba6cda2fa18b9a3fd2561b4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|NSDAB",
+    "filename": "[NSDAB] your name. [BD 1080p Opus] [C34C181B].mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:16b36f0485715cd39ba6cda2fa18b9a3fd2561b4"
+   ]
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your.Name.2016.1080p.Bluray.Multi-Audio.10bit.DTS-HD.MA.5.1.x265.[HashMiner]\n👤 28 💾 9.52 GB ⚙️ TorrentGalaxy\nDubbed / Multi Audio / 🇬🇧 / 🇮🇳",
+   "infoHash": "ed3b258ee7f1bfea73ad22e309ea81a65051942f",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Your.Name.2016.1080p.Bluray.Multi-Audio.10bit.DTS-HD.MA.5.1.x265.[HashMiner].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "[VCB-Studio] Kimi no Na wa. / 君の名は。 10-bit 1080p HEVC BDRip [Fin]\n[VCB-Studio] Kimi no Na wa. -your name.- [Ma10p_1080p][x265_flac].mkv\n👤 27 💾 5.79 GB ⚙️ NyaaSi",
+   "infoHash": "c01039a063775b5f64779a9230e47e03ba54fa14",
+   "fileIdx": 201,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|c01039a063775b5f64779a9230e47e03ba54fa14",
+    "filename": "[VCB-Studio] Kimi no Na wa. -your name.- [Ma10p_1080p][x265_flac].mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:c01039a063775b5f64779a9230e47e03ba54fa14"
+   ]
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "[MiniMTBB] Kimi no Na wa. (2016) (BD 1080p) | your name.\n👤 26 💾 1.53 GB ⚙️ NyaaSi",
+   "infoHash": "a9643d96a257df6ae639261a18db295a1cacb39a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|MiniMTBB",
+    "filename": "[MiniMTBB] Kimi no Na wa. (2016) (v2) (BD 1080p) [EEB45FD2].mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:a9643d96a257df6ae639261a18db295a1cacb39a"
+   ]
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "[DB] Kimi no Na wa. | Your Name. [Dual Audio 10bit BD1080p][HEVC-x265]\n👤 26 💾 4.07 GB ⚙️ NyaaSi\nDubbed / Dual Audio / 🇬🇧",
+   "infoHash": "00ee122b7d446577327a5f3a21a77ef72a55f84b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|DB",
+    "filename": "[DB]Kimi no Na wa._-_(Dual Audio_10bit_BD1080p_x265).mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:00ee122b7d446577327a5f3a21a77ef72a55f84b"
+   ]
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your Name (2016) 1080p BluRay x264 English AC3 5.1 - MeGUiL\n👤 25 💾 2.19 GB ⚙️ 1337x",
+   "infoHash": "bad654d8e76e7ca0cf0aec729decfc941c7ded30",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Your Name (2016) 1080p BluRay x264 English AC3 5.1 - MeGUiL.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your.Name.2016.1080p.Blu-Ray.10-Bit.Dual-Audio.DTS-HD.x265-iAHD.mkv\n👤 22 💾 12.07 GB ⚙️ AniDex\nDubbed / Dual Audio",
+   "infoHash": "b78d480552dbd455d79c96ff5b6cbdf0ef50f548",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|iAHD",
+    "filename": "Your.Name.2016.1080p.Blu-Ray.10-Bit.Dual-Audio.DTS-HD.x265-iAHD.mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:b78d480552dbd455d79c96ff5b6cbdf0ef50f548"
+   ]
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your Name (2016) MULTi 1080p DSNP WEB-DL DDP5.1 H.264-Tsundere-R…\n👤 20 💾 3.94 GB ⚙️ TorrentGalaxy\nDubbed / Multi Audio / 🇫🇷",
+   "infoHash": "2d4d9e36280c2cbb895edd5aff02473bccbda2d7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|Raws",
+    "filename": "Your Name 2016 MULTi 1080p DSNP WEB-DL DDP5.1 H.264-Tsundere-Raws.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your Name. (2016) Extras (1080p BluRay x265 HEVC 10bit AAC 5.1 Japanese RZeroX)/Your Name. (2016) Extras (1080p BluRay x265 HEVC 10bit AAC 5.1 Japanese RZeroX) [QxR]\nYour Name. (2016) (1080p BluRay x265 RZeroX).mkv\n👤 19 💾 4.06 GB ⚙️ 1337x",
+   "infoHash": "962eb46eb6628a8a7f5fd447eb3f57215d7f506a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Your Name. (2016) (1080p BluRay x265 RZeroX).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "[bonkai77] Your Name (Kimi no Na wa) [BD-1080p] [DUAL-AUDIO] [x265] [HEVC] [AAC] [10bit]\n👤 18 💾 2.39 GB ⚙️ NyaaSi\nDubbed / Dual Audio",
+   "infoHash": "fc9702103fc5926357f5e64afd262096eda5b9db",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|bonkai77",
+    "filename": "[bonkai77] Your Name (Kimi no Na wa)  [BD-1080p] [DUAL-AUDIO] [x265] [HEVC] [AAC] [10bit].mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:fc9702103fc5926357f5e64afd262096eda5b9db"
+   ]
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "[YURI] Your Name (Kimi No Na Wa) [BD 1080p Flac][Dual Audio]\n👤 13 💾 9 GB ⚙️ NyaaSi\nDubbed / Dual Audio",
+   "infoHash": "353927dd74dd97d4b3960bc14e1b95a29563ca49",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|YURI",
+    "filename": "[YURI] Your Name (Kimi No Na Wa) [BD 1080p Flac].mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:353927dd74dd97d4b3960bc14e1b95a29563ca49"
+   ]
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your.Name.2016.English.Dubbed.1080p.BluRay.x264.[1.5GB].[MP4]\n👤 10 💾 1.51 GB ⚙️ ThePirateBay\nDubbed / 🇬🇧",
+   "infoHash": "d25c019fef45c41cd3f0bef647078cb443d07545",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "[TorrentCounter.to].Your.Name.2016.English.Dubbed.[Kimi.no.Na.wa].1080p.BluRay.x264.[1.5GB].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "IMDB TOP 051-100 BluRay 1080p x265 10bit MNHD-FRDS\n078.你的名字.Your.Name.2016.BluRay.1080p.x265.10bit.MNHD-FRDS/Your.Name.2016.BluRay.1080p.x265.10bit.MNHD-FRDS.mkv\n👤 9 💾 4.56 GB ⚙️ EXT",
+   "infoHash": "e6d934fd7e96efcb009c3372198360262bca2b65",
+   "fileIdx": 185,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Your.Name.2016.BluRay.1080p.x265.10bit.MNHD-FRDS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "[Beatrice-Raws] Kimi no Na wa (Your Name) [DCPrip 1922x1080 HEVC…\n[Beatrice-Raws] Kimi no Na wa (Your Name) [DCPrip bt709 ver 1922x1080 HEVC TrueHD].mkv\n👤 9 💾 8.9 GB ⚙️ TorrentGalaxy",
+   "infoHash": "7a3d701ad0aeae4f0140a430f9c1b2fc56f53551",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|7a3d701ad0aeae4f0140a430f9c1b2fc56f53551",
+    "filename": "[Beatrice-Raws] Kimi no Na wa (Your Name) [DCPrip bt709 ver 1922x1080 HEVC TrueHD].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "[Beatrice-Raws] Kimi no Na wa (Your Name) [DCPrip 1922x1080 HEVC…\n[Beatrice-Raws] Kimi no Na wa (Your Name) [DCPrip bt2020 ver 1922x1080 HEVC TrueHD].mkv\n👤 9 💾 8.32 GB ⚙️ TorrentGalaxy",
+   "infoHash": "7a3d701ad0aeae4f0140a430f9c1b2fc56f53551",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|7a3d701ad0aeae4f0140a430f9c1b2fc56f53551",
+    "filename": "[Beatrice-Raws] Kimi no Na wa (Your Name) [DCPrip bt2020 ver 1922x1080 HEVC TrueHD].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Kimi.no.na.wa.A.K.A.Your.Name.2016.JAPANESE.1080p.10bit.BluRay.6\n👤 9 💾 749.95 MB ⚙️ ThePirateBay",
+   "infoHash": "b9ba4870e4878c5ff10c2280772a9c19542a611c",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Kimi.no.na.wa.A.K.A.Your.Name.2016.JAPANESE.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your Name. (2016) + Special Features [1080p x265 HEVC 10bit BluRay Dual Audio AAC 5.1] [Prof]\nYour Name. (2016) [1080p x265 HEVC 10bit BluRay Dual Audio AAC 5.1] [Prof].mkv\n👤 7 💾 4.51 GB ⚙️ TorrentGalaxy\nDubbed / Dual Audio",
+   "infoHash": "26efe2548ee758195791172c43293a230a289a1d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|26efe2548ee758195791172c43293a230a289a1d",
+    "filename": "Your Name. (2016) [1080p x265 HEVC 10bit BluRay Dual Audio AAC 5.1] [Prof].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your Name (Kimi no Na wa) (2016) [BD 1080p Hi10P 5.1 AAC dual-audio][kuchikirukia]v4\n👤 7 💾 5.32 GB ⚙️ NyaaSi\nDubbed / Dual Audio",
+   "infoHash": "187df23b9ba218cbe18e625756831c674a7a5ea1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p",
+    "filename": "Your Name (Kimi no Na wa) (2016) [BD 1080p Hi10P 5.1 AAC dual-audio][kuchikirukia]v4.mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:187df23b9ba218cbe18e625756831c674a7a5ea1"
+   ]
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your.Name.2016.Bluray.1080p.DTS-HD.x264-Grym\n👤 7 💾 13.16 GB ⚙️ ThePirateBay",
+   "infoHash": "efbb9da767e7cca25209aa9c44498a294bd0cd20",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Your.Name.2016.Bluray.1080p.DTS-HD.x264-Grym.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Kimi.No.Na.Wa.2016.JAPANESE.BluRay.1080p.x264.AAC.5.1.-.Hon3y\n👤 7 💾 2.5 GB ⚙️ ThePirateBay",
+   "infoHash": "89f142e5a30d32d7a1616cc8db9009070f465adc",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Your Name 2016 [Kimi No Na Wa] ESubs 1080p BluRay x264 [TorrentCounter]\n👤 6 💾 1.6 GB ⚙️ 1337x",
+   "infoHash": "926357213cdf4e4ba05dc53606a4dfc3969d42ff",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "[TorrentCounter.cc].Your.Name.2016.ESubs.1080p.BluRay.x264.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Your Name (Kimi No Na wa) 2016 Japanese HDRip HC 720p\n👤 19 💾 1 GB ⚙️ ThePirateBay",
+   "infoHash": "8706e867c4a23e025e28c15613acf0ef7d1d8a4f",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|HDRip",
+    "filename": "Your Name (Kimi No Na wa) 2016 Japanese HDRip HC 720p.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Your Name. 2016 720p BluRay\n👤 17 💾 866.85 MB ⚙️ YTS",
+   "infoHash": "daf91144f7d11ac2acf76c43e2f97716582ec509",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Your.Name.2016.720p.BluRay.x264-[YTS.AM].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Your Name 2016 720p BluRay x264-GeneMige\n👤 9 💾 4.46 GB ⚙️ ThePirateBay",
+   "infoHash": "ce80f954c7caf2cf74e96b4ee7208fbc87eb6d89",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Your Name 2016 720p BluRay x264-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nBDRip HDR",
+   "title": "[The-Nut] Kimi no Na wa | Your Name [BD UHD AV1 HDR Opus]\n👤 7 💾 1.49 GB ⚙️ NyaaSi",
+   "infoHash": "4314e2cfc8dc2fd5fff646c918ced9ec3dc12afd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BDRip|HDR|The-Nut",
+    "filename": "[The-Nut] Kimi no Na wa | Your Name [BD UHD AV1 HDR Opus].mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:4314e2cfc8dc2fd5fff646c918ced9ec3dc12afd"
+   ]
+  },
+  {
+   "name": "Torrentio\nBDRip",
+   "title": "Your.Name.2016.BDRip.x264-HAiKU\n👤 5 💾 551.2 MB ⚙️ 1337x",
+   "infoHash": "e9b04752944470bba3c0992d5fa76c4f869d3710",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BDRip|x264"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "[2023-03-18] Creditless Anime Openings and Endings | OPED | OP | ED\nYour Name/Your Name. (2016) - Zenzenzense.mkv\n👤 8 💾 446.43 MB ⚙️ NyaaSi",
+   "infoHash": "4fa71b1b226ee20f3c4c321c8872b88f0956615f",
+   "fileIdx": 441,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4fa71b1b226ee20f3c4c321c8872b88f0956615f",
+    "filename": "Your Name. (2016) - Zenzenzense.mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:4fa71b1b226ee20f3c4c321c8872b88f0956615f"
+   ]
+  },
+  {
+   "name": "Torrentio",
+   "title": "[2023-03-18] Creditless Anime Openings and Endings | OPED | OP | ED\nYour Name/Your Name. (2016) - Sparkle - Your name. Music Video edition by RADWIMPS.mkv\n👤 8 💾 1.03 GB ⚙️ NyaaSi",
+   "infoHash": "4fa71b1b226ee20f3c4c321c8872b88f0956615f",
+   "fileIdx": 440,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4fa71b1b226ee20f3c4c321c8872b88f0956615f",
+    "filename": "Your Name. (2016) - Sparkle - Your name. Music Video edition by RADWIMPS.mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:4fa71b1b226ee20f3c4c321c8872b88f0956615f"
+   ]
+  },
+  {
+   "name": "Torrentio",
+   "title": "[2023-03-18] Creditless Anime Openings and Endings | OPED | OP | ED\nYour Name/Your Name. (2016) - Dream Lantern.mkv\n👤 8 💾 497.95 MB ⚙️ NyaaSi",
+   "infoHash": "4fa71b1b226ee20f3c4c321c8872b88f0956615f",
+   "fileIdx": 439,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4fa71b1b226ee20f3c4c321c8872b88f0956615f",
+    "filename": "Your Name. (2016) - Dream Lantern.mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:4fa71b1b226ee20f3c4c321c8872b88f0956615f"
+   ]
+  },
+  {
+   "name": "Torrentio",
+   "title": "[Superyu] Your Name - Kimi No Na Wa [AV1-Opus EnRyu]\n👤 5 💾 1.63 GB ⚙️ NyaaSi",
+   "infoHash": "54e964c9e1a423554e3530831ba8954db68e663a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "filename": "Your Name [AV1-Opus EnRyu].webm"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:54e964c9e1a423554e3530831ba8954db68e663a"
+   ]
+  }
+ ]
+}

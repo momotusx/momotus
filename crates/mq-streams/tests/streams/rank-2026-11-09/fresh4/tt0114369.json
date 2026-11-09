@@ -1,0 +1,499 @@
+{
+ "fetched": "2026-11-08T23:53:07.378Z",
+ "id": "tt0114369",
+ "type": "movie",
+ "meta": {
+  "name": "Seven",
+  "year": "1995",
+  "runtime": "127 min"
+ },
+ "streamUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt0114369.json",
+ "streams": [
+  {
+   "name": "Torrentio\n4k",
+   "title": "Se7en.1995.2160p.BluRay.x265.10bit.AAC5.1 [YTS]\n👤 79 💾 5.69 GB ⚙️ TorrentGalaxy",
+   "infoHash": "5b9c8362251a2d7f07b598fdfca744dbf807b6ed",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit",
+    "filename": "Se7en.1995.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Se7en (1995) Featurettes (2160p BluRay x265 HEVC AI 10bit AAC 7.1 Joy) [UTR]\nSe7en (1995)  [2160p x265 10bit FS99 Joy].mkv\n👤 43 💾 6.25 GB ⚙️ 1337x",
+   "infoHash": "d8e7634059f58f788a11dbd50f927dbc26b1344d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|hevc|10bit",
+    "filename": "Se7en (1995)  [2160p x265 10bit FS99 Joy].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Se7en 1995 1080p DS4K BluRay x265 10 bit HDR AAC 7 1 WeSLeY\n👤 16 💾 8.51 GB ⚙️ TorrentGalaxy",
+   "infoHash": "b3e7a492637cf15c79725b3a3bbd18dd7477db13",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|HDR",
+    "filename": "Se7en (1995) (1080p DS4K BluRay x265 10-bit HDR AAC 7.1) [WeSLeY].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Se7en 1995 1080p DS4K BluRay x265 10 bit HDR AAC 7 1 WeSLeY\n👤 4 💾 7.37 GB ⚙️ TorrentGalaxy",
+   "infoHash": "f0c222c30b3db80ac62bdd7913d26e453f75ce77",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|HDR",
+    "filename": "Se7en (1995) (1080p DS4K BluRay x265 10-bit HDR AAC 7.1) [WeSLeY].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en ( 1995 ) 1080p BrRip x264 - 1GB - YIFY\n👤 288 💾 1022.94 MB ⚙️ ThePirateBay",
+   "infoHash": "c62db96f2940fffc47a76c82c88857a68e27a235",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x264",
+    "filename": "Se7en(1995)1080p.BrRip.x264.YIFY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en.1995.REMASTERED.1080p.BluRay.x264.MkvCage Seven [GoodFilms\n👤 245 💾 2.9 GB ⚙️ ThePirateBay",
+   "infoHash": "fc3983ccf7c372a50f89230e1366e97de4d8680a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Se7en.1995.Remastered.1080p.BluRay.6CH.2.9GB.MkvCage.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en 1995 Remastered REPACK 1080p BluRay DD 7 1 X265-Ralphy\n👤 122 💾 5.38 GB ⚙️ ThePirateBay",
+   "infoHash": "3d4de8b3446a32fb8e6ebfbd3292be52dbc2be55",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Se7en 1995 Remastered REPACK 1080p BluRay DD  7 1 X265-Ralphy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en.1995.REMASTERED.1080p.BluRay.x265-RBG\n👤 84 💾 1.98 GB ⚙️ ThePirateBay",
+   "infoHash": "66ebbbcd9b663b1043f43f2035c8dc2bd0651f37",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Se7en.1995.REMASTERED.1080p.BluRay.x265-RBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en (1995) Open Matte (1080p BluRay x265 HEVC 10bit EAC3 5.1 Silence) [QxR]\n👤 42 💾 6.33 GB ⚙️ 1337x",
+   "infoHash": "968dd411e4f75e06fcbba4ff148613506b50c7ed",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Se7en (1995) Open Matte (1080p BluRay x265 Silence).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en 1995 Remastered 1080p (DUAL) BluRay HEVC x265 5.1 BONE\n👤 25 💾 2.01 GB ⚙️ 1337x\nDual Audio / 🇬🇧",
+   "infoHash": "637fb203a3f245c0f6befb5624479e2b5988a211",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "Se7en 1995 Remastered 1080p (DUAL) BluRay HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en (1995) (1080p BluRay x265 HEVC 10bit AAC 7.1 Tigole) [QxR]\n👤 25 💾 5.8 GB ⚙️ 1337x",
+   "infoHash": "32172711e9dfda7f8f1f392418db5a5ffab1568c",
+   "fileIdx": 12,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Se7en (1995) (1080p BluRay x265 10bit Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "SE7EN 1995 Blu-ray 1080p DD 5 1 x264-BHDStudio\n👤 24 💾 7.6 GB ⚙️ ThePirateBay",
+   "infoHash": "2128b1daf22c81d07f2f247733f30b6907ec2ba8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "SE7EN 1995 Blu-ray 1080p DD 5 1 x264-BHDStudio.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en.1995.REMASTERED.1080p.BluRay.x265-RARBG\n👤 17 💾 1.98 GB ⚙️ RARBG",
+   "infoHash": "d15dac9b88c098dc9476ba949225cd00b73dc2da",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Se7en.1995.REMASTERED.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "SE7EN (1995) 1080p Bluray AV1 Opus Multi5 [dAV1nci]\n👤 16 💾 2.92 GB ⚙️ TorrentGalaxy",
+   "infoHash": "39284dab80ad3101823eebb33ae403ebdb566ede",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Se7en.1995.1080p.Bluray.AV1.Opus.Multi5-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Jackie Chan Collection (1976-1997) BDRip 1080p\n32.1995.Rumble.In.The.Bronx.1920x800.BDRip.x264.DTS-HD.MA.mkv\n👤 15 💾 12.19 GB ⚙️ ThePirateBay",
+   "infoHash": "f67582fe74beb5d691584605caf29a099058fc44",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|x264",
+    "filename": "32.1995.Rumble.In.The.Bronx.1920x800.BDRip.x264.DTS-HD.MA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en.1995.REMASTERED.1080p.BluRay.H264.AAC.[Seven.7]\n👤 14 💾 2.42 GB ⚙️ ThePirateBay",
+   "infoHash": "5c41a2636a6cfdc4a63b989e668f09a52da0bf36",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264",
+    "filename": "Se7en.1995.REMASTERED.1080p.BluRay.H264.AAC-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en 1995 1080p HMAX WEB-DL DDP5 1 H 264-BLOOM\n👤 12 💾 4.18 GB ⚙️ ThePirateBay",
+   "infoHash": "a95a584074d4fb1ea197996d2705e1135587c25d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Se7en 1995 1080p HMAX WEB-DL DDP5 1 H 264-BLOOM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Seven 1995 1080p NF WEB-DL AAC2 0 AV1-ViSTA\n👤 11 💾 2.85 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇳",
+   "infoHash": "5149a4ab146317a02884d6a035f3a280aef22089",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|av1",
+    "filename": "Seven 1995 1080p NF WEB-DL AAC2 0 AV1-ViSTA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en 1995 Bluray 1080p AV1 EN/FR OPUS 7.1-UH [UserHEVC]\n👤 10 💾 5.51 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇫🇷",
+   "infoHash": "07c1d13d3ff3e4ff5ac8e75a0550755128159055",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Se7en.1995.Bluray.1080p.AV1.OPUS.7.1-UH.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en (1995) Featurettes (1080p BluRay x265 HEVC AI 10bit AAC 7.1 Q22 Joy) [UTR]\nSe7en (1995)  [1080p x265 q22 FS96 Joy].mkv\n👤 10 💾 2.6 GB ⚙️ 1337x",
+   "infoHash": "fcf9b99713fb9a931d30f2ee5ea695d664ffaddd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Se7en (1995)  [1080p x265 q22 FS96 Joy].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en 1995 1080p BluRay x264-OFT\n👤 9 💾 5.5 GB ⚙️ ThePirateBay",
+   "infoHash": "968d2158025e36ea64d23cb171ed5ac84fc64e87",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Se7en 1995 1080p BluRay x264-OFT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en.1995.1080p.35mm.BluRay.x265.10Bit.HEVC.Eng DD 2.0.VITOENCODES\n👤 9 💾 3.28 GB ⚙️ 1337x",
+   "infoHash": "80e7a3baae460b6a7e3c81cec3733dd4f8c3ae8e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Se7en.1995.1080p.35mm.BluRayx265.10Bit.HEVC.Eng DD 2.0.VITOENCODES.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "IMDB TOP 001-050 BluRay 1080p x265 10bit MNHD-FRDS\n021.七宗罪.Se7en.1995.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS/Se7en.1995.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv\n👤 8 💾 6.17 GB ⚙️ EXT",
+   "infoHash": "9351bcf9e7437f706549f8b60314c39259c420b4",
+   "fileIdx": 148,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Se7en.1995.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en 1995 1080p PCOK WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 8 💾 6.54 GB ⚙️ ThePirateBay",
+   "infoHash": "7af6966212fa34083a46efe087c1c81883135425",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Se7en 1995 1080p PCOK WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en.1995.REMASTERED.1080p.BluRay.x264-SADPANDA\n👤 8 💾 12.02 GB ⚙️ RARBG",
+   "infoHash": "4f4d45691e2b6f6f99c59b07dcd103fc8aad439b",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Se7en.1995.REMASTERED.1080p.BluRay.x264-SADPANDA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7ven - Seven (1995) ITA ENG Ac3 5.1 sub Ita BDRip 1080p H264 [ArMor]\n👤 6 💾 3.65 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "d02dad0bd1abe686baae7025e692693aaf90ac2a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|h264",
+    "filename": "Se7ven - Seven (1995) ITA ENG Ac3 5.1 sub Ita BDRip 1080p H264 [ArMor].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en 1995 Remastered 1080p BluRay DD 7.1 x265-edge2020\n👤 6 💾 4.32 GB ⚙️ 1337x",
+   "infoHash": "eb65a380bc8c5534abf2496ca91945445b70e391",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Se7en.1995.Remastered.1080p.BluRay.DDP.7.1.x265-EDGE2020.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Seven 1995 1080p NF WEB-DL DUAL DDP5 1 H 264-TURG\n👤 4 💾 7.15 GB ⚙️ EXT\nDual Audio / 🇬🇧 / 🇹🇷",
+   "infoHash": "163a12e132eee7ef39ddafc5c60d0a278c346217",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Seven 1995 1080p NF WEB-DL DUAL DDP5 1 H 264-TURG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en.1995.BDRip.1080p.x264.DD5.1.gerald99\n👤 4 💾 8.84 GB ⚙️ TorrentGalaxy",
+   "infoHash": "618641d179d9a97dab3172d50c8d5a5afa16181f",
+   "fileIdx": 5,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|x264",
+    "filename": "Se7en.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en (1995) Remastered Edition 1080p 10bit Bluray x265 HEVC [Org DD 2.0 Hindi DD 5.1 English] ESub ~ TombDoc\n👤 4 💾 4.15 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "b83561903aefc818e9abbc335ccc9ea8e0735f90",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Se7en (1995) Remastered Edition 1080p 10bit Bluray x265 HEVC [Org DD 2.0 Hindi + DD 5.1 English] ESub ~ TombDoc.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en 1995 REMASTERED 1080p BluRay x265-YAWNTiC\n👤 3 💾 6.44 GB ⚙️ ThePirateBay",
+   "infoHash": "d9fd77d87e60254259d0f18a4ba2b34b0cf08dd9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Se7en 1995 REMASTERED 1080p BluRay x265-YAWNTiC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en.1995.1080p.HQ.[AI-REMASTERED]OPEN-MATTE.BluRay.x265.10Bit.HEVC.(Eng DD 5.1-Hin DD 2.0).VITOENCODES\n👤 3 💾 4.58 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇳",
+   "infoHash": "86800e73ed7696db29c25f74985939dfb70b70ea",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Se7en.1995.1080p.OPEN-MATTE.BluRay.x265.10Bit.HEVC.(Eng DD 5.1-Hin DD 2.0).VITOENCODES.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en 1995 Remastered REPACK 1080p BluRay DD7 1 X265-Ralphy\n👤 3 💾 5.38 GB ⚙️ ThePirateBay",
+   "infoHash": "b064ad9c89c1e9a04f4fdcc773ce9484590c9ca4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Se7en 1995 Remastered REPACK 1080p BluRay DD7 1 X265-Ralphy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en (1995) (1080p BluRay x265 HEVC AI 10bit AAC 7.1 Joy) [UTR]\n👤 3 💾 1.89 GB ⚙️ 1337x",
+   "infoHash": "0fb10b1aeb46c146f6d0e37d96692fcaac758784",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Se7en (1995)  [1080p x265 10bit S92 Joy].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Se7en 1995 BDRip 1080p Eng Fra Ger Hun Ita Spa multisub [mkvonly\n👤 3 💾 6.3 GB ⚙️ ThePirateBay\nMulti Subs / 🇬🇧 / 🇮🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇭🇺",
+   "infoHash": "de4142b3c22b7a0c889ac9bb8fa32d1bf0058d3f",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Police-Giallo-Crime-Thriller Movies Collection (1080p.AV1.AC3 encoded.muxed by VerbaL) (2026) [50 Movies]\nSeven (Se7en) (1995) [1080p] [tmdb-807] [imdb-tt0114369].mkv\n👤 2 💾 2.54 GB ⚙️ EXT\n🇬🇧 / 🇮🇹 / 🇪🇸",
+   "infoHash": "a5eef7779e55d424f1b0f0056ce01bc92e4df9ca",
+   "fileIdx": 504,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|av1",
+    "filename": "Seven (Se7en) (1995) [1080p] [tmdb-807] [imdb-tt0114369].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Se7en (1995) 720p BrRip x264 - 700MB - YIFY\n👤 59 💾 695.78 MB ⚙️ ThePirateBay",
+   "infoHash": "3d1ade5e738aee2aca577b9d922b0e2903159be7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BRRip|x264",
+    "filename": "se7en.1995.remastered.720p.bluray.x264.YIFY.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Se7en.1995.720p.BluRay.x264-NeZu\n👤 8 💾 1.36 GB ⚙️ ThePirateBay",
+   "infoHash": "f0242dc11f837a59bf094b0195694b5328f37709",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "se7en.1995.720p.bluray.x264-nezu.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Se7en.1995.Remastered.720p.BluRay.x264.DTS-WiKi\n👤 6 💾 6.56 GB ⚙️ EXT",
+   "infoHash": "eb1948a0c16b707314fbc0ab0be13a4b4b2b4a3b",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Se7en.1995.Remastered.720p.BluRay.x264.DTS-WiKi.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Se7en 1995 REMASTERED 720p BluRay x264 BONE\n👤 6 💾 898.32 MB ⚙️ ThePirateBay",
+   "infoHash": "f8dced8a78b700210ed60304624903578dcc6f02",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Se7en 1995 REMASTERED 720p BluRay x264 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Se7en.1995.720p.BluRay.999MB.HQ.x265.10bit-GalaxyRG ⭐\n👤 5 💾 998.09 MB ⚙️ 1337x",
+   "infoHash": "af5ce7c3872808f74f843f4be8cfc2519b76b18b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x265|10bit",
+    "filename": "Se7en.1995.720p.BluRay.999MB.HQ.x265.10bit-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Se7en (Seven).1995.REMASTERED.720p.BluRay.x264.DTS-KiNGS\n👤 4 💾 6.6 GB ⚙️ ThePirateBay",
+   "infoHash": "1567ab9298ffbd52a467a5f8c3a40665dd79476e",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Se7en (1995) BDRip 720p MP4 x264 2CH AAC-IG3N\n👤 3 💾 2.6 GB ⚙️ 1337x",
+   "infoHash": "7802923e824a1e3286366ee22de7c3cb16a337ea",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BDRip|x264"
+   }
+  },
+  {
+   "name": "Torrentio\nDVDRip",
+   "title": "Seven.[1995].DVDRip.Xvid.Blood.avi\n👤 9 💾 704.9 MB ⚙️ ThePirateBay",
+   "infoHash": "d00db9137f4c252345d31757223052d163999875",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVDRip|xvid",
+    "filename": "Seven.[1995].DVDRip.Xvid.Blood.avi"
+   }
+  },
+  {
+   "name": "Torrentio\nBluRay",
+   "title": "Se7en (1995) [Brad Pitt] BluRay H264 DolbyD 5.1 + nickarad\n👤 5 💾 1.48 GB ⚙️ ThePirateBay",
+   "infoHash": "eb8735627ae3a3ccca4daae2c615f6369fca7fb2",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BluRay|h264",
+    "filename": "Se7en (1995) BluRay H264 DolbyD 5.1 + nickarad.mp4"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Official IMDb Top 250 Movies Collection 6/17/2011\nSe7en[1995]DvDrip[Eng]-Stealthmaster.avi\n👤 8 💾 704.9 MB ⚙️ ThePirateBay",
+   "infoHash": "4986ace2ee7a564508e0d5cfdde2d9018b8af942",
+   "fileIdx": 60,
+   "behaviorHints": {
+    "filename": "Se7en[1995]DvDrip[Eng]-Stealthmaster.avi"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Full TV series John Doe\njohn.doe.118.save.as.john.doe.pdtv.xvid-fov.avi\n👤 4 💾 352.19 MB ⚙️ ThePirateBay",
+   "infoHash": "b53660d876b0986ad6870aa421f69b7d2426e036",
+   "fileIdx": 17,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|b53660d876b0986ad6870aa421f69b7d2426e036",
+    "filename": "john.doe.118.save.as.john.doe.pdtv.xvid-fov.avi"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Looney Tunes\n1995/S1995E02 another froggy evening.mp4\n👤 3 💾 24.73 MB ⚙️ ThePirateBay",
+   "infoHash": "8ee0d4f275666fcf0d14054859a8f9cd09303299",
+   "fileIdx": 654,
+   "behaviorHints": {
+    "filename": "S1995E02 another froggy evening.mp4"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Looney Tunes\n1995/S1995E01 Carrot Blanca.mp4\n👤 3 💾 24.04 MB ⚙️ ThePirateBay",
+   "infoHash": "8ee0d4f275666fcf0d14054859a8f9cd09303299",
+   "fileIdx": 675,
+   "behaviorHints": {
+    "filename": "S1995E01 Carrot Blanca.mp4"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Seven (1995) m-HD - 500MB - scOrp\n👤 3 💾 498.86 MB ⚙️ ThePirateBay",
+   "infoHash": "78e5437f1599dfaf33d329b9fa00d47a4ca8c131"
+  }
+ ]
+}

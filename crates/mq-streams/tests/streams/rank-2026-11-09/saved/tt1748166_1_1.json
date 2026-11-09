@@ -1,0 +1,134 @@
+{
+  "id": "tt1748166:1:1",
+  "type": "series",
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "Pioneer One",
+    "year": "2010–2011",
+    "releaseInfo": "2010–2011",
+    "runtime": null,
+    "episodeReleased": "2010-06-16T08:00:00.000Z",
+    "episodesInSeason": 6
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pioneer.One.2010.S01E01.1080p.WEB-DL.H264-SubsGateTestA\n👤 17 💾 160 MB ⚙️ EXT",
+          "infoHash": "0e1acbbb54b123bc1cf4fa37b4c6533e4a52e89b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|SubsGateTestA",
+            "filename": "Pioneer.One.2010.S01E01.1080p.WEB-DL.H264-SubsGateTestA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pioneer.One.2010.S01E01.1080p.BluRay.H264-SubsGateTestB\n👤 1 💾 160 MB ⚙️ EXT",
+          "infoHash": "b950287a76bd05e2d1330a207a7445e04a3c8f02",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|SubsGateTestB",
+            "filename": "Pioneer.One.2010.S01E01.1080p.BluRay.H264-SubsGateTestB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pioneer.One.2010.S01E01.1080p.BluRay.REMUX.H264-SubsGateTestFailOpen\n👤 1 💾 160 MB ⚙️ EXT",
+          "infoHash": "5ccedf2db1dc0fa91c18f9f2531555b19f151774",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|SubsGateTestFailOpen",
+            "filename": "Pioneer.One.2010.S01E01.1080p.BluRay.REMUX.H264-SubsGateTestFailOpen.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Pioneer One 2010 Season 1 Complete REDUX 720p x264 [i c]\nPioneer One - S01E01 - Earthfall.mkv\n👤 9 💾 414.25 MB ⚙️ TorrentGalaxy",
+          "infoHash": "91b0ef3800459497247cb9173c643a60aa12c9b9",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|91b0ef3800459497247cb9173c643a60aa12c9b9",
+            "filename": "Pioneer One - S01E01 - Earthfall.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Pioneer One S01E01 720p x264 VODO\n👤 8 💾 1.12 GB ⚙️ ThePirateBay",
+          "infoHash": "07a9de9750158471c3302e4e95edb1107f980fa6",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "Pioneer.One.S01E01.IA.Derived.ebb277967645aec191c42f559dba90b9\n👤 2 💾 172.62 MB ⚙️ EXT",
+          "infoHash": "f53156c03c667e0d5e26a3ab49d43076df8bed91"
+        },
+        {
+          "name": "Torrentio",
+          "title": "Pioneer.One.S01E01.Xvid-VODO\n👤 2 💾 356.47 MB ⚙️ ThePirateBay",
+          "infoHash": "234b743a0444d92ac3683f28cc220ab0ded36ef0",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|VODO"
+          }
+        }
+      ]
+    },
+    "torrentio-owner": {
+      "url": "https://torrentio.strem.fun/language=turkish|qualityfilter=threed,480p,scr,cam,unknown",
+      "streams": [
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pioneer.One.2010.S01E01.1080p.WEB-DL.H264-SubsGateTestA\n👤 17 💾 160 MB ⚙️ EXT",
+          "infoHash": "0e1acbbb54b123bc1cf4fa37b4c6533e4a52e89b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|SubsGateTestA",
+            "filename": "Pioneer.One.2010.S01E01.1080p.WEB-DL.H264-SubsGateTestA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pioneer.One.2010.S01E01.1080p.BluRay.H264-SubsGateTestB\n👤 1 💾 160 MB ⚙️ EXT",
+          "infoHash": "b950287a76bd05e2d1330a207a7445e04a3c8f02",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|SubsGateTestB",
+            "filename": "Pioneer.One.2010.S01E01.1080p.BluRay.H264-SubsGateTestB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pioneer.One.2010.S01E01.1080p.BluRay.REMUX.H264-SubsGateTestFailOpen\n👤 1 💾 160 MB ⚙️ EXT",
+          "infoHash": "5ccedf2db1dc0fa91c18f9f2531555b19f151774",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|SubsGateTestFailOpen",
+            "filename": "Pioneer.One.2010.S01E01.1080p.BluRay.REMUX.H264-SubsGateTestFailOpen.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Pioneer One 2010 Season 1 Complete REDUX 720p x264 [i c]\nPioneer One - S01E01 - Earthfall.mkv\n👤 9 💾 414.25 MB ⚙️ TorrentGalaxy",
+          "infoHash": "91b0ef3800459497247cb9173c643a60aa12c9b9",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|91b0ef3800459497247cb9173c643a60aa12c9b9",
+            "filename": "Pioneer One - S01E01 - Earthfall.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Pioneer One S01E01 720p x264 VODO\n👤 8 💾 1.12 GB ⚙️ ThePirateBay",
+          "infoHash": "07a9de9750158471c3302e4e95edb1107f980fa6",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p"
+          }
+        }
+      ]
+    }
+  }
+}

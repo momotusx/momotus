@@ -1,0 +1,513 @@
+{
+ "fetched": "2026-11-08T23:52:56.879Z",
+ "id": "tt12299608",
+ "type": "movie",
+ "meta": {
+  "name": "Mickey 17",
+  "year": "2025",
+  "runtime": "137 min"
+ },
+ "streamUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt12299608.json",
+ "streams": [
+  {
+   "name": "Torrentio\n4k DV | HDR10+",
+   "title": "Mickey.17.2025.2160p.HDR10Plus.DV.WEBRip.DDP5 1.Atmos.X265.HEVC-PSA\n👤 122 💾 3.43 GB ⚙️ 1337x",
+   "infoHash": "8bca89c5c7a1e22ef8f18afcb56ff1b2887369f0",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|hevc|DV|HDR10+",
+    "filename": "Mickey.17.2025.2160p.HDR10Plus.DV.WEBRip.DDP5 1.Atmos.X265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Mickey.17.2025.bluray.hdr.2160p.av1.5.1.eac3-Dust\n👤 25 💾 5.71 GB ⚙️ 1337x",
+   "infoHash": "121ed5a08d6481aedf16e4e3ebd04576aeee10b9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+    "filename": "Mickey.17.2025.bluray.hdr.2160p.av1.5.1.eac3-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Mickey 17 2025 2160p WEBRip\n👤 100 💾 6.11 GB ⚙️ YTS",
+   "infoHash": "60c90e4a9a6092ee3eb0e9c2b046269f6f49de1b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "Mickey.17.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Mickey 17 2025 4K WebRip X265 PANTHER RiPS\n👤 16 💾 6.69 GB ⚙️ 1337x",
+   "infoHash": "d72c336e1ae543a8c0841ad0c06d6d325e536df6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265",
+    "filename": "Mickey 17 2025 4K WebRip X265 PANTHER RiPS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Mickey.17.2025.2160p.WEB-DL.DDP5.1.Atmos.SDR.H265-AOC\n👤 15 💾 12.19 GB ⚙️ 1337x",
+   "infoHash": "dd8e277a75ab775c9af5802b9ea34009dd2a46f0",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|h265",
+    "filename": "Mickey.17.2025.2160p.WEB-DL.DDP5.1.Atmos.SDR.H265-AOC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Mickey.17.2025.bluray.sdr.1080p.x265.5.1.eac3.subs-Dust\n👤 8 💾 4.74 GB ⚙️ 1337x",
+   "infoHash": "ae4e6ba33b13a0e686808cf868dfcb1163a3ca20",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|HDR",
+    "filename": "Mickey.17.2025.bluray.hdr.1080p.av1.5.1.eac3.subs-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Mickey 17 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737\n👤 4 💾 7.5 GB ⚙️ EXT",
+   "infoHash": "fa33661181a1e940f74ed8055bcd5ab886293654",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Mickey 17 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10  x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 2025 1080p WEB-DL HEVC x265 5.1 BONE\n👤 674 💾 1.99 GB ⚙️ 1337x",
+   "infoHash": "73251bf306360c749e93d4ddec1cfa88f8f31af0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+    "filename": "Mickey 17 2025 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 (2025) [BLURAY] [1080p] [BluRay] [5.1] [YTS.MX]\n👤 100 💾 2.52 GB ⚙️ ThePirateBay",
+   "infoHash": "00db94dae0259ef3a64f1e04b3eec5de040d5103",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Mickey.17.2025.BLURAY.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 2025 1080p WEBRip\n👤 100 💾 2.29 GB ⚙️ YTS",
+   "infoHash": "209f1161578d097d52df5084652b7e3e7ebe0beb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Mickey.17.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 2025 1080p WEBRip\n👤 100 💾 2.52 GB ⚙️ YTS",
+   "infoHash": "6a5e4373b2a3f06aa394d9a4bba705d7f5de0cf6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Mickey.17.2025.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey.17.2025.1080p.WebRip.X264.COLLECTiVE\n👤 69 💾 4 GB ⚙️ 1337x",
+   "infoHash": "85c2e92442ab3d51470c3d59341b8472da83cae8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Mickey.17.2025.1080p.WebRip.X264.COLLECTiVE.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 (2025) (1080p AMZN WEB-DL x265 10bit EAC3 5.1 Silence) [QxR]\n👤 58 💾 6 GB ⚙️ 1337x",
+   "infoHash": "fe318543d62b28d3828fd52c84d07793bcc1f2ea",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+    "filename": "Mickey 17 (2025) (1080p AMZN WEB-DL x265 10bit Silence).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 (2025) (1080p BluRay AV1 Opus 7.1) - Edlyn\n👤 35 💾 2.05 GB ⚙️ EXT",
+   "infoHash": "04f1c0bb9a9874d4342b225640efe5bcd8904973",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Mickey 17 (2025) (1080p BluRay AV1 Opus 7.1) - Edlyn.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 (2025) (1080p BluRay x265 10bit EAC3 5.1 Silence) [QxR]\nMickey 17 (2025) (1080p BluRay x265 10bit Silence).mkv\n👤 30 💾 7.79 GB ⚙️ 1337x",
+   "infoHash": "37a2587793f16b064383fcdf67ac786fde4e60d1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Mickey 17 (2025) (1080p BluRay x265 10bit Silence).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 2025 1080p HDRip HEVC x265-RMTeam\n👤 27 💾 1.26 GB ⚙️ 1337x",
+   "infoHash": "7f07bbd75d6e7c035e45ac6f1769b09d267d59cb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|HDRip|hevc",
+    "filename": "Mickey 17 2025 1080p HDRip HEVC x265-RMTeam.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Star Trek Complete Series in Stardate Watch Order - 1080p x265 - updated 20250608\n08 - TNG (2364-70)  1 ENT (2370)  DS9 (2369-75)  VOY (2371-78)  MOV - TNG (2371-79)/517 - 1996-11-27 - VOY S03 E11 - The Q And The Grey.mkv\n👤 24 💾 453.12 MB ⚙️ 1337x",
+   "infoHash": "9c820a5037707b3c83ec927aa094f2bcfc2df5e1",
+   "fileIdx": 596,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|9c820a5037707b3c83ec927aa094f2bcfc2df5e1",
+    "filename": "517 - 1996-11-27 - VOY S03 E11 - The Q And The Grey.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey.17.2025.1080p.DS4K.WEB-DL.DDP5.1.x265-NeoNoir\n👤 19 💾 2.23 GB ⚙️ 1337x",
+   "infoHash": "afaa889330afa096c0580114976887bbe50d4e4f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265",
+    "filename": "Mickey.17.2025.1080p.DS4K.WEB-DL.DDP5.1.x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 2025 BluRay 1080p DDP 5 1 x264-hallowed\n👤 18 💾 10.22 GB ⚙️ ThePirateBay",
+   "infoHash": "59d7df1c92e721328cbe3443b24fe0cabac43ff0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Mickey 17 2025 BluRay 1080p DDP 5 1 x264-hallowed.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey.17.2025.1080p.WEBRip.AAC5.1.10bits.AV1-Rapta\n👤 16 💾 988.38 MB ⚙️ 1337x",
+   "infoHash": "82235bb2e46f54c2b0b9b2d6dfbd2bfffb08083c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|av1|10bit",
+    "filename": "Mickey.17.2025.1080p.WEBRip.AAC5.1.10bits.AV1-Rapta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey.17.2025.1080p.WebRip.X264.COLLECTiVE\n👤 14 💾 4 GB ⚙️ ThePirateBay",
+   "infoHash": "39390714166cf6ae2bc0c80f7776d0acaa5c20cf",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Mickey.17.2025.1080p.WebRip.X264.COLLECTiVE.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 11 💾 8.23 GB ⚙️ ThePirateBay",
+   "infoHash": "ea9c9f546dfa540017163bc968ccff44c71b9c39",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Mickey 17 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 (2025) AV1 1080p 7RIP\n👤 10 💾 432.92 MB ⚙️ 1337x",
+   "infoHash": "b39d973996a1a5eb9c5da2b7ddb6651d6a1d14c6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|av1",
+    "filename": "Mickey 17 (2025) AV1 1080p 7RIP.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 2025 1080p BluRay x265-YAWNTiC\n👤 9 💾 7.61 GB ⚙️ ThePirateBay",
+   "infoHash": "868c3af85e96c7c1bd90e91a4d691f07f46d8c7f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Mickey 17 2025 1080p BluRay x265-YAWNTiC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey.17.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta\n👤 9 💾 1.5 GB ⚙️ 1337x",
+   "infoHash": "1218afc493f2bcd1de60f7cfb9654b7ff883014b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Mickey.17.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey.17.2025.1080p.WEB-DL.H.264.Dual.YG⭐\n👤 9 💾 7.71 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "7e94f6e06faf7d2ec11b0acc74694237a9602cef",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Mickey.17.2025.1080p.WEB-DL.H.264.Dual YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Úsvit atomového věku (2025)(CZ)[1080p][WEB-DL]\n17 - Užitečný génius.mkv\n👤 8 💾 170 MB ⚙️ TorrentGalaxy\n🇨🇿",
+   "infoHash": "88b6dd7e2dc3d89647b10e506a9c5f6752a30d39",
+   "fileIdx": 16,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL",
+    "filename": "17 - Užitečný génius.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey.17.2025.bluray.sdr.1080p.av1.5.1.eac3-Dust\n👤 8 💾 3.51 GB ⚙️ 1337x",
+   "infoHash": "d74136a828124579e88a24e8fff53023727c59e3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Mickey.17.2025.bluray.sdr.1080p.av1.5.1.eac3-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 (2025) BLURAY 1080p BluRay 5.1-LAMA\n👤 8 💾 2.52 GB ⚙️ ThePirateBay",
+   "infoHash": "b33842b76092f8f8414fa72d4d068db41cf60c5f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Mickey.17.2025.BLURAY.1080p.BluRay.x264.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey.17.2025.1080p.WEBRip.x265-KONTRAST\n👤 8 💾 2.84 GB ⚙️ 1337x",
+   "infoHash": "18df203f04d38a118655e01bbecd6e32516f11c9",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Mickey.17.2025.1080p.WEBRip.x265-KONTRAST.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey.17.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv\n👤 8 💾 11.5 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "fa2a88129f0e455547585981ca812dce00484b1f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Mickey.17.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Amazing Films 13 - Mp4 x264 AC3 1080p\nMickey 17 (2025) 1080p Surround.mp4\n👤 7 💾 3.85 GB ⚙️ 1337x",
+   "infoHash": "1cd4535f03f1035b0e20bd2196a99c62df1d7e45",
+   "fileIdx": 40,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Mickey 17 (2025) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 2025 1080p BluRay Eco-Bitrate HEVC 10-bit Opus 5 1-MrTentsaw\n👤 6 💾 3.8 GB ⚙️ ThePirateBay",
+   "infoHash": "9ecb1eb27b0ac38e1312167198a275f782d76ca3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Mickey 17 2025 1080p BluRay Eco-Bitrate HEVC 10-bit Opus 5 1-MrTentsaw.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey.17.2025.1080p.WEBRip.x264.AAC5.1-LAMA\n👤 6 💾 2.52 GB ⚙️ 1337x",
+   "infoHash": "f3eefa763ee63ee1c5bca9d11178addde7bb3944",
+   "fileIdx": 10,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Mickey.17.2025.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 2025 1080p DUAL NF WEB-DL x264 EAC3 5 1-MiRA\n👤 5 💾 7.96 GB ⚙️ EXT\nDual Audio / 🇬🇧 / 🇹🇷",
+   "infoHash": "b2eadcfc782f31f82cf1f9432ae45f7811156cb2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Mickey 17 2025 1080p DUAL NF WEB-DL x264 EAC3 5.1-MiRA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey.17.2025.1080p.WEB-dl.H264.Dual.YG⭐\n👤 5 💾 10.64 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "dd5885d98cfe13ed2706188df4533d7a90157491",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Mickey.17.2025.1080p.WEB-dl.H264.Dual YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 2025 1080p BluRay DDP 5 1 10bit H 265-iVy\n👤 4 💾 2.45 GB ⚙️ ThePirateBay",
+   "infoHash": "b82feb023c4ec05d1ae0dcb729348f5c275d674d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h265|10bit",
+    "filename": "Mickey 17 2025 1080p BluRay DDP 5 1 10bit H 265-iVy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 (2025) DS4K 1080p MA WEBRip AV1 Opus 5.1 [RAV1NE]\n👤 4 💾 2.82 GB ⚙️ 1337x",
+   "infoHash": "889a8263f1aa7222a1989b8552a8543eade87483",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|av1",
+    "filename": "Mickey.17.2025.DS4K.1080p.MA.WEBRip.AV1.Opus.5.1-RAV1NE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey.17.2025.1080p.WebRip.HEVC.X265-RMT\n👤 4 💾 1.26 GB ⚙️ ThePirateBay",
+   "infoHash": "3a10071d947e6832f7b1e4c1b0b47707db94d54c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc",
+    "filename": "Mickey.17.2025.1080p.WebRip.HEVC.X265-RMT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey 17 2025 1080p DS4K iT WEBRip DD5 1 Atmos X265-Ralphy\n👤 3 💾 5.04 GB ⚙️ ThePirateBay",
+   "infoHash": "f44623919a2bc5b809c66379adc94f0976f96b83",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Mickey 17 2025 1080p DS4K iT WEBRip DD5 1 Atmos X265-Ralphy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey.17.2025.1080p.WEB.AAC2.0.AV1.ReEnc-LUMI\n👤 3 💾 3.06 GB ⚙️ 1337x",
+   "infoHash": "efd0c795ad1c39fe104d93c7a64d45669fd80561",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|av1",
+    "filename": "Mickey.17.2025.1080p.WEB.AAC2.0.AV1.ReEnc-LUMI.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mickey.17.2025.MULTi.VF2.1080p.WEBRip.EAC3.5.1.H264-LiHDL.mkv\n👤 3 💾 4.09 GB ⚙️ ThePirateBay\nMulti Audio",
+   "infoHash": "b122020185e000ba2146a423b1af93779bbf8a8e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|h264",
+    "filename": "Mickey.17.2025.MULTi.VF2.1080p.WEBRip.EAC3.5.1.H264-LiHDL.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mickey 17 2025 720p WEBRip\n👤 59 💾 1.23 GB ⚙️ YTS",
+   "infoHash": "c858904171f145b0b70a4ca79de995959ac8bcbd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Mickey.17.2025.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mickey 17 (2025) [BLURAY] [720p] [BluRay] [YTS.MX]\n👤 42 💾 1.23 GB ⚙️ ThePirateBay",
+   "infoHash": "37559dc9b56cfeff09f5b6ac0ad403d4df25fadc",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Mickey.17.2025.BLURAY.720p.BluRay.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mickey.17.2025.720p.WEBRip.x264.AAC-LAMA\n👤 15 💾 1.23 GB ⚙️ ThePirateBay",
+   "infoHash": "67ba718f2c8a5d6e11bf2d5d036ac4a984fec24c",
+   "fileIdx": 10,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Mickey.17.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mickey 17 2025 720p WEB-DL x265 10Bit-Pahe in\n👤 8 💾 835.76 MB ⚙️ ThePirateBay",
+   "infoHash": "f2c9a37de997645c67c0529c6815799cbfd91fe2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB-DL|x265|10bit",
+    "filename": "Mickey 17 2025 720p WEB-DL x265 10Bit-Pahe in.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mickey.17.2025.PROPER.720p.BluRay.x264-PiGNUS\n👤 6 💾 6.91 GB ⚙️ ThePirateBay",
+   "infoHash": "bf2250eabaed2c0837718032c3473488aeaa8228",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "mickey.17.2025.proper.720p.bluray.x264-pignus.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mickey 17 2025 TRUEFRENCH 720p WEB H264-SUPPLY\n👤 3 💾 4.4 GB ⚙️ ThePirateBay\n🇫🇷",
+   "infoHash": "4c6201962b4721098c346ca4f468a85f52475847",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB|h264",
+    "filename": "Mickey 17 2025 TRUEFRENCH 720p WEB H264-SUPPLY.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mickey 17 2025 720p 10bit WEBRip 6CH X265 HEVC-PSA\n👤 3 💾 1011.39 MB ⚙️ ThePirateBay",
+   "infoHash": "9ee03ba6774462382d1b1b6943f7fb0e3ae40128",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|hevc|10bit",
+    "filename": "Mickey 17 2025 720p 10bit WEBRip 6CH X265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nWEBRip",
+   "title": "Mickey 17 2025 WEBRip DD5 1 x264-playSD\n👤 3 💾 2.01 GB ⚙️ ThePirateBay",
+   "infoHash": "6c57c03b6aa2d9a3a41d642817de825bd82bd44f",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|WEBRip|x264",
+    "filename": "Mickey 17 2025 WEBRip DD5 1 x264-playSD.mkv"
+   }
+  }
+ ]
+}

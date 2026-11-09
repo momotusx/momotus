@@ -1,0 +1,172 @@
+{
+ "fetched": "2026-11-08T23:16:50.640Z",
+ "id": "tt14544192",
+ "type": "movie",
+ "sources": {
+  "meta": "https://v3-cinemeta.strem.io/meta/movie/tt14544192.json",
+  "streams": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt14544192.json"
+ },
+ "meta": {
+  "name": "Bo Burnham: Inside",
+  "year": "2021",
+  "runtime": "88 min",
+  "genres": [
+   "Documentary",
+   "Comedy",
+   "Drama"
+  ],
+  "country": "United States"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k",
+   "title": "Inside 2021 2160p WEBRip\n👤 31 💾 3.91 GB ⚙️ YTS",
+   "infoHash": "c400e2d8fe82f599ca2216b19ffc45a921213f2b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "Inside.2021.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Bo.Burnham.Inside.2021.2160p.NF.WEB-DL.x265.10bit.SDR.DDP5.1-SKiZOiD\n👤 13 💾 7.53 GB ⚙️ RARBG",
+   "infoHash": "89702fe10e36fc1957408c5516603dee9cb9b8f8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|x265|10bit",
+    "filename": "Bo.Burnham.Inside.2021.2160p.NF.WEB-DL.DDP5.1.HEVC-SKiZOiD.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bo Burnham: Inside 2021 1080p NF WEBRip DD+ 5.1 x265-EDGE2020\n👤 136 💾 1.32 GB ⚙️ TorrentGalaxy",
+   "infoHash": "8356f0da22b4eb3cc4670de3b2b9cb1b0ed0f45e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Bo.Burnham.Inside.2021.1080p.NF.WEBRip.DDP.5.1.H.265-EDGE2020.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bo Burnham꞉ Inside (2021) Extras (1080p NF WEB-DL x265 HEVC 10bit EAC3 5.1 Bandi) [QxR]\nBo Burnham꞉ Inside (2021) (1080p NF WEB-DL x265 Bandi).mkv\n👤 59 💾 2.85 GB ⚙️ 1337x",
+   "infoHash": "7d83ddb712f4465ea836233d1a70bcb808aaa64f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc|10bit",
+    "filename": "Bo Burnham꞉ Inside (2021) (1080p NF WEB-DL x265 Bandi).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bo Burnham: Inside 2021 1080p WEBRip\n👤 25 💾 1.62 GB ⚙️ YTS",
+   "infoHash": "734b7e20496c6d6da380f595bc0fffa5ed9f0bb0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Bo.Burnham.Inside.2021.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bo Burnham Inside 2021 web netflix sdr 1080p av1 5 1 eac3-Rosy\n👤 16 💾 1.18 GB ⚙️ ThePirateBay",
+   "infoHash": "72a61ee004a011c0a2ae02c2f7c95a9b2e9ade64",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|av1",
+    "filename": "Bo Burnham Inside 2021 web netflix sdr 1080p av1 5 1 eac3-Rosy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bo.Burnham.Inside.2021.1080p.WEBRip.x264-RARBG\n👤 4 💾 1.67 GB ⚙️ RARBG",
+   "infoHash": "32d5a1aa7dca88e8449b669b8251f5a14a173482",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Bo.Burnham.Inside.2021.1080p.WEBRip.x264-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bo.Burnham.Inside.2021.web.netflix.sdr.1080p.av1.5.1.eac3-Rosy\n👤 3 💾 1.18 GB ⚙️ TorrentGalaxy",
+   "infoHash": "093e18d0f091197e087ad5374b7896e77b58bea8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|av1",
+    "filename": "Bo.Burnham.Inside.2021.web.netflix.sdr.1080p.av1.5.1.eac3-Rosy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "This is Bo Burnham - All Specials & Filmography (1080p HEVC 10bit x265-deef)\nYoutube/2021 04 12 bo burnham interview moments (24mb 1920x1080 30fps 612kbps x265 deef).mkv\n👤 3 💾 23.17 MB ⚙️ TorrentGalaxy",
+   "infoHash": "d187614cf3b97dcafa278ae5a17b6ac958ef9dbd",
+   "fileIdx": 424,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|hevc|10bit",
+    "filename": "2021 04 12 bo burnham interview moments (24mb 1920x1080 30fps 612kbps x265 deef).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "This is Bo Burnham - All Specials & Filmography (1080p HEVC 10bit x265-deef)\nNetflix Specials/Bo Burnham - Inside (2021) (1080p NF WEB-DL HEVC 10bit AC3 5.1 x265-deef)/Bo Burnham Inside (719mb 1920x1078 23.976fps 1118kbps x265 deef).mkv\n👤 3 💾 718.15 MB ⚙️ TorrentGalaxy",
+   "infoHash": "d187614cf3b97dcafa278ae5a17b6ac958ef9dbd",
+   "fileIdx": 287,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc|10bit",
+    "filename": "Bo Burnham Inside (719mb 1920x1078 23.976fps 1118kbps x265 deef).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bo.Burnham.Inside.2021.1080p.WEBRip.x265-RARBG\n👤 3 💾 1.36 GB ⚙️ RARBG",
+   "infoHash": "7feb45b08e80c17fded2f9ef2667db9d84977f5d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Bo.Burnham.Inside.2021.1080p.WEBRip.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bo.Burnham.The.Complete.Collection.2010-2021\nBo.Burnham.Inside.2021.1080p.WEBRip.x265.mkv\n👤 2 💾 709.61 MB ⚙️ ThePirateBay",
+   "infoHash": "dd1c3e9199d90a6ccc3c4a59e08b1758e44e9827",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Bo.Burnham.Inside.2021.1080p.WEBRip.x265.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Bo.Burnham.Inside.2021.1080p.WEB.H264-NAISU\n👤 1 💾 3.92 GB ⚙️ RARBG",
+   "infoHash": "cb0e6db4c1aa059e10c35c72a2f900406032fcc1",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264",
+    "filename": "bo.burnham.inside.2021.1080p.web.h264-naisu.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Bo Burnham: Inside 2021 720p WEBRip\n👤 1 💾 804.13 MB ⚙️ YTS",
+   "infoHash": "89bc787e422f80e846243a81d160137060485650",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Bo.Burnham.Inside.2021.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Bo.Burnham.Inside.2021.720p.WEB.H264-NAISU\n👤 1 💾 2.22 GB ⚙️ RARBG",
+   "infoHash": "29407aacfd30e22cafec84b622316f3caa5db1ef",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB|h264",
+    "filename": "bo.burnham.inside.2021.720p.web.h264-naisu.mkv"
+   }
+  }
+ ]
+}

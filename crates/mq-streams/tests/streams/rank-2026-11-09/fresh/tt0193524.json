@@ -1,0 +1,209 @@
+{
+  "id": "tt0193524",
+  "type": "movie",
+  "season": null,
+  "episode": null,
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "The Star Wars Holiday Special",
+    "year": "1978",
+    "releaseInfo": "1978",
+    "runtime": "97 min",
+    "country": "United States",
+    "language": null,
+    "episodeTitle": null,
+    "episodeReleased": null
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "The STAR WARS HOLIDAY SPECIAL REMASTERED with 1978 Commercials - x265 HDR 2160p\n👤 28 💾 13.3 GB ⚙️ 1337x",
+          "infoHash": "43c2dfa27bfa2b17841c98b03aca0b374001caa1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|x265|HDR",
+            "filename": "THE.STAR.WARS.HOLIDAY.SPECIAL.x265.HDR.2160p.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Rifftrax - The Star Wars Holiday Special (1978) 2160p HDR Ai Upscale MKV -Mesc\n👤 4 💾 6.91 GB ⚙️ ThePirateBay",
+          "infoHash": "9fc636da3ccebfe8b1079f8d05916fad570b1496",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|HDR",
+            "filename": "Rifftrax - The Star Wars Holiday Special (1978) 2160p HDR Ai Upscale -Mesc.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Star Wars Holiday Special Boba Fett Animation 1080p BluRay REMUX\n👤 4 💾 546.74 MB ⚙️ ThePirateBay",
+          "infoHash": "afc045c4579779c41116cdffef13759d133a553d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay REMUX",
+            "filename": "Star.Wars.Holiday.Special.Boba.Fett.Animation.1978.1080p.BluRay.REMUX-00605.m2ts.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Star Wars Holiday Special Boba Fett Animation 1080p BluRay x265\n👤 2 💾 235.65 MB ⚙️ ThePirateBay",
+          "infoHash": "6a4d17bfe22f42fabc9c892279b1a98875646b9e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Star.Wars.Holiday.Special.Boba.Fett.Animation.1978.1080p.BluRay.x265.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Star Wars Holiday Special Boba Fett Animation 1080p BluRay x264\n👤 1 💾 370.67 MB ⚙️ ThePirateBay",
+          "infoHash": "aabee11bb442dac683f99242406326c5854a0b9a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Star.Wars.Holiday.Special.Boba.Fett.Animation.1978.1080p.BluRay.x264.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n480p",
+          "title": "The Star Wars Holiday Special SWHS (1978) 480p Rifftrax 2ch v2\n👤 31 💾 892.63 MB ⚙️ ThePirateBay",
+          "infoHash": "55a46abdb78b885510fc438546f2246130f0291a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|480p",
+            "filename": "Star.Wars.Holiday.Special.1978.480p.Rifftrax.2ch.v2.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n480p",
+          "title": "The Star Wars Holiday Special 1978 480p BluRay\n👤 26 💾 859.49 MB ⚙️ YTS",
+          "infoHash": "8fec9f3f6fa669e6701d738cfc7628d430018bea",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|480p|BluRay|x264",
+            "filename": "The.Star.Wars.Holiday.Special.1978.480p.DVDRip.x264.AAC-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n480p",
+          "title": "Star Wars Holiday Special (1978) 480p x264 Phun Psyz\n👤 17 💾 1.1 GB ⚙️ TorrentGalaxy",
+          "infoHash": "3e9a56308f1f3d80eab5c9160dd2aca8676339bf",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|480p|x264",
+            "filename": "Star Wars Holiday Special (1978) 480p x264 Phun Psyz.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n480p",
+          "title": "The Star Wars Holiday Special (1978) RiffTrax dual audio 480p.10bit.DVDRip.x265-budgetbits\n👤 8 💾 889.7 MB ⚙️ 1337x\nDual Audio / 🇬🇧",
+          "infoHash": "0cb6a66e758c1775183986dd19bc7156582d1cdd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|480p|DVDRip|x265|10bit",
+            "filename": "The Star Wars Holiday Special (1978) RiffTrax dual audio 480p.10bit.DVDRip.x265-budgetbits.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n480p",
+          "title": "The Star Wars Holiday Special (1978) 480p Rifftrax 2ch\n👤 1 💾 867.02 MB ⚙️ MagnetDL",
+          "infoHash": "e73ed81e84feb26a74e8304196c6f6ef166fbb8e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|480p",
+            "filename": "Star.Wars.Holiday.Special.1978.480p.Rifftrax.2ch.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n360p",
+          "title": "Star Wars 14 Movie Collection 1977-2019 - threesixtyp\nXtras/Star Wars M01X01 Holiday Special [WHIO broadcast] (1978 360p re-vhsrip).mp4\n👤 37 💾 244.62 MB ⚙️ ThePirateBay",
+          "infoHash": "dbf183e581a068b2685eff5abaf17339168f2c98",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|360p|DVDRip",
+            "filename": "Star Wars M01X01 Holiday Special [WHIO broadcast] (1978 360p re-vhsrip).mp4"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Magic schoolbus DVDRIP all episodes PC\nD6E4 Holiday Special.mkv\n👤 12 💾 220.15 MB ⚙️ ThePirateBay",
+          "infoHash": "65190e2a7b87863bb5b20a100fb0de66b4321a3c",
+          "fileIdx": 51,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|65190e2a7b87863bb5b20a100fb0de66b4321a3c",
+            "filename": "D6E4 Holiday Special.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "The.Star.Wars.Holiday.Special.1978.VHSRip.XviD-DaPOO\n👤 10 💾 799.44 MB ⚙️ ThePirateBay",
+          "infoHash": "6334ce489c9614de289eadc7aa20307b694b890d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip|xvid",
+            "filename": "The.Star.Wars.Holiday.Special.1978.VHSRip.XviD.avi"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "Star Wars Holiday Special 1978 Christmas Complete\n👤 16 💾 334.48 MB ⚙️ ThePirateBay",
+          "infoHash": "eb1ce30de169de2ccb1c1331f1ebf8bd07f9807d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "filename": "Star_Wars_Christmas_Special-Complete_1978.MP4"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "The Star Wars Holiday Special 1978 Best Quality Rip\n👤 6 💾 1.36 GB ⚙️ ThePirateBay",
+          "infoHash": "d14cdbb218fc23293b6e354f7caddc186016c12b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "filename": "The Star Wars Holiday Special (1978).mkv"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "The Star Wars Holiday Special (1978) MP4\n👤 5 💾 5.61 GB ⚙️ ThePirateBay",
+          "infoHash": "50a9c3c3005ce96804415b7e4f8faf1b7c6dd592",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "filename": "The Star Wars Holiday Special (1978).mp4"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "Rifftrax - The Star Wars Holiday Special (1978)\n👤 4 💾 2.2 GB ⚙️ TorrentGalaxy",
+          "infoHash": "7c3d14f8c5776b591dd8d9890646c1fe063df8c8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "filename": "Rifftrax - TheStarWarsHolidaySpecial_highTV - Mesc.mp4"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "The Star Wars Holiday Special - Zion Hybrid Edition\n👤 3 💾 4.29 GB ⚙️ ThePirateBay",
+          "infoHash": "4e96bec613d39c825ce49a12ff1d85716eb3a3a0"
+        },
+        {
+          "name": "Torrentio",
+          "title": "Star Wars Holiday Special: Boba Fett\n👤 1 💾 1.04 GB ⚙️ MagnetDL",
+          "infoHash": "0a38985dfbc86a879befca42125b63188c63a7c1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "filename": "Star Wars Holiday Special - Boba Fett.mp4"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "Starwars Holiday Special WHIO Remaster.mp4\n👤 1 💾 695.75 MB ⚙️ ThePirateBay",
+          "infoHash": "c510f5c9c7e38a938ff94023f912c779278f90c7"
+        }
+      ]
+    }
+  }
+}

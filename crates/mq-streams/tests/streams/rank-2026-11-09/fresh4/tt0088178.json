@@ -1,0 +1,126 @@
+{
+ "fetched": "2026-11-08T23:53:15.616Z",
+ "id": "tt0088178",
+ "type": "movie",
+ "meta": {
+  "name": "Stop Making Sense",
+  "year": "1985",
+  "runtime": "88 min"
+ },
+ "streamUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt0088178.json",
+ "streams": [
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Stop Making Sense (1984) 1080p BrRip x264 - YIFY\n👤 125 💾 1.24 GB ⚙️ ThePirateBay",
+   "infoHash": "fac3137ae583c4370c546e405b3f2153f6b2f66b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x264",
+    "filename": "Stop.Making.Sense.1984.1080p.BluRay.x264.YIFY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Stop Making Sense (1984) RM4K 1080p UHD BluRay x265 HEVC TrueHD ATMOS-SARTRE\nStop.Making.Sense.1984.RM4K.1080p.UHD.BluRay.x265.HEVC.TrueHD.ATMOS-SARTRE.mkv\n👤 19 💾 14.38 GB ⚙️ 1337x",
+   "infoHash": "e004c5115a392705df8c622cdfc12e13d5fb18c1",
+   "fileIdx": 12,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "Stop.Making.Sense.1984.RM4K.1080p.UHD.BluRay.x265.HEVC.TrueHD.ATMOS-SARTRE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Talking.Heads.Stop.Making.Sense.1984.RESTORED.1080p.BluRay.x265-RARBG\n👤 9 💾 1.37 GB ⚙️ RARBG",
+   "infoHash": "e6b16366714b73bbe3f055063eea1d39d40dd157",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Talking.Heads.Stop.Making.Sense.1984.RESTORED.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Stop.Making.Sense.1984.1080p.WEB.H264-RVKD\n👤 7 💾 5.78 GB ⚙️ ThePirateBay",
+   "infoHash": "abdeaf89a0b6227f1136bfd60de4884add40374f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264",
+    "filename": "rvkd-stop.making.sense.1984.1080p.web.h264.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Stop Making Sense 1984 1080p BluRay x265 DD 5 1-Pahe in\n👤 4 💾 2.34 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸",
+   "infoHash": "40205941512d88c8793b0546ec60c43978d3d9f4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Stop Making Sense 1984 1080p BluRay x265 DD 5 1-Pahe in.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Stop Making Sense 1984 1080p BluRay x264-OFT\n👤 4 💾 3.94 GB ⚙️ TorrentGalaxy",
+   "infoHash": "ea5352a142a869c0df5c0f17de456c59d3a3dd7e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Stop Making Sense 1984 1080p BluRay x264-OFT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Talking.Heads.Stop.Making.Sense.1984.RESTORED.1080p.BluRay.H264.AAC-RARBG\n👤 3 💾 1.68 GB ⚙️ RARBG",
+   "infoHash": "20ff2f3e50b64b33253510ed0d8f8ddb0854dd6b",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264",
+    "filename": "Talking.Heads.Stop.Making.Sense.1984.RESTORED.1080p.BluRay.H264.AAC-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Talking.Heads.Stop.Making.Sense.1984.720p.BluRay.DTS.x264-EbP [P\n👤 12 💾 4.37 GB ⚙️ ThePirateBay",
+   "infoHash": "cd0b59de72424b13eb946ca80fa473c56f566a7c",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Stop.Making.Sense.1984.720p.WEB.H264-RVKD\n👤 2 💾 1.95 GB ⚙️ ThePirateBay",
+   "infoHash": "4b0f8d84e0f30dfbe985f89d93a8d16aee747fbe",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB|h264",
+    "filename": "rvkd-stop.making.sense.1984.720p.web.h264.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Stop Making Sense 1984 720p BluRay\n👤 2 💾 767.72 MB ⚙️ YTS",
+   "infoHash": "2d05028c328cd7062e49e942fc918753660a8803",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Stop.Making.Sense.1984.720p.BluRay.x264-[YTS.AM].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Threads.1984.720p.BDRip.x264.AAC-PoNg\n👤 1 💾 768.32 MB ⚙️ ThePirateBay",
+   "infoHash": "92adcefbbdd9a2fa5d0cbc7bf4c49ce81aa1ca86",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BDRip|x264",
+    "filename": "Threads.1984.720p.BDRip.x264.AAC-.mp4"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "TRUE STORIES (Talking Heads) - Widescreen. Dolby Digital.Stereo\n👤 1 💾 3.4 GB ⚙️ ThePirateBay",
+   "infoHash": "50e7084f42ab82554de170a0dd2c6b1fbc9014b1"
+  }
+ ]
+}

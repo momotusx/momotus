@@ -1,0 +1,115 @@
+{
+ "fetched": "2026-11-08T23:16:50.929Z",
+ "id": "tt1137462",
+ "season": 1,
+ "episode": 1,
+ "type": "series",
+ "sources": {
+  "meta": "https://v3-cinemeta.strem.io/meta/series/tt1137462.json",
+  "streams": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/series/tt1137462:1:1.json"
+ },
+ "meta": {
+  "name": "Kings",
+  "year": "2009",
+  "runtime": "60 min",
+  "genres": [
+   "Drama",
+   "Sci-Fi"
+  ],
+  "country": "United States",
+  "episodeTitle": "Goliath (Part 1)",
+  "episodeReleased": "2009-03-15T00:00:00.000Z"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n720p",
+   "title": "Kings.S01.720.HDTV.x264-TvT\nKings.S01E01E02.720p.HDTV.x264-DIMENSION/Kings.S01E01E02.720p.HDTV.X264-DIMENSION.mkv\n👤 3 💾 2.19 GB ⚙️ ThePirateBay",
+   "infoHash": "b8d96ff4c195fbad628df73d417d936c8fab7d4d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|b8d96ff4c195fbad628df73d417d936c8fab7d4d",
+    "filename": "Kings.S01E01E02.720p.HDTV.X264-DIMENSION.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The.Kings.S01.COMPLETE.720p.WEBRip.x264-GalaxyTV\nThe.Kings.S01E01.720p.WEBRip.x264-GalaxyTV.mkv\n👤 2 💾 939.19 MB ⚙️ ThePirateBay",
+   "infoHash": "0e6586bff769f151fe3b290bf055f6f0accad051",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|0e6586bff769f151fe3b290bf055f6f0accad051",
+    "filename": "The.Kings.S01E01.720p.WEBRip.x264-GalaxyTV.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Kings.Tv-Mini.(2009).720p.WEB-DL.x264.Jassy\nEpisode 1-2 - Goliath.mkv\n👤 2 💾 766.73 MB ⚙️ TorrentGalaxy",
+   "infoHash": "39da5ee15016a5d3fca087ed0526252690cf2259",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|39da5ee15016a5d3fca087ed0526252690cf2259",
+    "filename": "Episode 1-2 - Goliath.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Kings.S01.720p.AMZN.WEBRip.DDP5.1.x264-TEPES[rartv]\nKings.S01E01E02.720p.AMZN.WEB-DL.DDP5.1.H.264-TEPES.mkv\n👤 1 💾 3.77 GB ⚙️ RARBG",
+   "infoHash": "0e33e942eb669679e9f24fd294ddd3a6ae87f855",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|0e33e942eb669679e9f24fd294ddd3a6ae87f855",
+    "filename": "Kings.S01E01E02.720p.AMZN.WEB-DL.DDP5.1.H.264-TEPES.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n480p",
+   "title": "Kings (2009) The Complete Series DVD 480p x264\nSeason 01/Kings (2009) - S01e01 - Goliath-1.m4v\n👤 3 💾 929.11 MB ⚙️ TorrentGalaxy",
+   "infoHash": "0ebe8f524eddeecb12ebb485f60cf8c7a5975625",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|0ebe8f524eddeecb12ebb485f60cf8c7a5975625",
+    "filename": "Kings (2009) - S01e01 - Goliath-1.m4v"
+   }
+  },
+  {
+   "name": "Torrentio\nHDTV",
+   "title": "Kings: 2009- Complete Series\nKings.S01E01E02.HDTV.XviD-LOL.avi\n👤 13 💾 698.44 MB ⚙️ MagnetDL",
+   "infoHash": "d22c3586fe58188a340ba2c6ab37085503b9cd97",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|d22c3586fe58188a340ba2c6ab37085503b9cd97",
+    "filename": "Kings.S01E01E02.HDTV.XviD-LOL.avi"
+   }
+  },
+  {
+   "name": "Torrentio\nXviD",
+   "title": "The Kings S01E01 XviD-AFG\n👤 2 💾 1.05 GB ⚙️ ThePirateBay",
+   "infoHash": "8b79bd7329a8fc9ceead2f61e7c2402a35fa6dd4",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|XviD|AFG",
+    "filename": "The.Kings.S01E01.XviD-AFG.avi"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "The Wire S01E01-S05E10\nKings (2009)/S01/Kings - S01E01-E02 - Goliath - Part One & Goliath - Part Two.mp4\n👤 5 💾 806.2 MB ⚙️ EXT",
+   "infoHash": "47902c003f254ef385c42e8314a0fcf111388971",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|47902c003f254ef385c42e8314a0fcf111388971",
+    "filename": "Kings - S01E01-E02 - Goliath - Part One & Goliath - Part Two.mp4"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Kings - NBC Mini Series Complete Season (2009)\nKings.S01E01E02.avi\n👤 4 💾 698.44 MB ⚙️ ThePirateBay",
+   "infoHash": "6bde53c4a9a3ff20cbe4bc47b83de97aad922057",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|6bde53c4a9a3ff20cbe4bc47b83de97aad922057",
+    "filename": "Kings.S01E01E02.avi"
+   }
+  }
+ ]
+}

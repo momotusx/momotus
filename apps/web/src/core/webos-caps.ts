@@ -6,8 +6,8 @@ import { chromeMajor, isWebOS, luna } from "../lib/webos";
 import type { DeviceCaps } from "./client";
 
 const SYSTEM_INFO = "luna://com.webos.service.tv.systemproperty/getSystemInfo";
-// webOS 22 is Chrome 87: below it (webOS 6, Chrome 79) LG lists only H.264 and HEVC at 2160p.
-const FOUR_K_VP9_AV1 = 87;
+// webOS 22 is Chrome 87: below it (webOS 6, Chrome 79) LG lists only H.264 and HEVC at 2160p, and AV1 at no size.
+const VP9_4K_AND_AV1 = 87;
 
 /** The panel is 4K: false until the system says so (or for good when it never answers). */
 let uhd = false;
@@ -20,12 +20,14 @@ export function probeSystem(bridgeClass?: Parameters<typeof luna>[3]) {
 
 /** Caps for a TV with this panel and Chrome major. Order matters where the core reads it: HEVC before VP9 and AV1. */
 export function webosCaps(panelIsUhd: boolean, chrome: number, language: string): DeviceCaps {
-  const decoders = ["h264", "h265", "vp9", "av1"];
+  const old = chrome < VP9_4K_AND_AV1;
+  // AV1 from Chrome 87 on any panel; VP9 at 1080p always, at 2160p from Chrome 87.
+  const decoders = ["h264", "h265", "vp9", "av1"].filter((c) => !old || (c !== "av1" && !(c === "vp9" && panelIsUhd)));
   return {
     displayHeight: panelIsUhd ? 2160 : 1080,
     // HDR10 on a 4K panel; Dolby Vision stays off until a real TV has played one.
     hdr: panelIsUhd ? ["hdr10"] : [],
-    decoders: panelIsUhd && chrome < FOUR_K_VP9_AV1 ? decoders.filter((c) => c !== "vp9" && c !== "av1") : decoders,
+    decoders,
     tenBitHevc: true,
     // DTS, DTS-HD and TrueHD are off; these three are also the only audio at 2160p.
     audioDecoders: ["aac", "ac3", "eac3"],

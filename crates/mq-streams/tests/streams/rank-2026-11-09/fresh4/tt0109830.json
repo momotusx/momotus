@@ -1,0 +1,502 @@
+{
+ "fetched": "2026-11-08T23:53:03.467Z",
+ "id": "tt0109830",
+ "type": "movie",
+ "meta": {
+  "name": "Forrest Gump",
+  "year": "1994",
+  "runtime": "142 min"
+ },
+ "streamUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt0109830.json",
+ "streams": [
+  {
+   "name": "Torrentio\n4k DV | HDR10+",
+   "title": "Forrest Gump (1994) 2160p H265 BluRay Rip 10 bit DV HDR10+ ita eng AC3 5.1 sub ita eng Licdom\n👤 9 💾 6.86 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "8632092488b59a1ca7d37f87c83e8c7927667940",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BRRip|h265|10bit|DV|HDR10+",
+    "filename": "Forrest Gump (1994) 2160p H265 10 bit DV HDR10+ ita eng AC3 5.1 sub ita eng Licdom.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Forrest Gump.1994.2160p.HDR10.BRRip.OPUS7.1.AV1.BluBit\n👤 4 💾 5.46 GB ⚙️ EXT",
+   "infoHash": "0b2f5bd2417d1dd403d6ad3f9808926c2da6dc25",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BRRip|av1|10bit|HDR",
+    "filename": "Forrest Gump (1994).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Forrest.Gump.1994.2160p.UHD.BluRay.x265.10bit.HDR.DDP5.1-RARBG\n👤 3 💾 8.6 GB ⚙️ TorrentGalaxy",
+   "infoHash": "b3527718aacefbacd30853b310f51974cedb4a7a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|HDR",
+    "filename": "Forrest.Gump.1994.2160p.UHD.BluRay.x265.10bit.HDR.DDP5.1-RARBG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Forrest.Gump.1994.2160p.UHD.BluRay.10bit.HDR.x26-HazMatt.mkv\n👤 3 💾 3.8 GB ⚙️ 1337x",
+   "infoHash": "e4f9df97b5f5be7bdc9305bbc7ea077ca3928565",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|10bit|HDR",
+    "filename": "Forrest.Gump.1994.2160p.UHD.BluRay.10bit.HDR.x26-HazMatt.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Forrest Gump 1994 2160p BluRay\n👤 98 💾 6.75 GB ⚙️ YTS",
+   "infoHash": "08c79ebf2ca84cbf00b217e8c93eb001a9bc6099",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit",
+    "filename": "Forrest.Gump.1994.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Forrest Gump 1994 1080p NF WEB-DL DDP5 1 HDR AV1-Saon\n👤 15 💾 4.88 GB ⚙️ EXT\n🇬🇧 / 🇫🇷 / 🇮🇳 / 🇵🇱 / 🇺🇦 / 🇸🇦",
+   "infoHash": "73f04cfdfc29b00c720b6ec358c6d7746338f3d9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|av1|HDR",
+    "filename": "Forrest Gump 1994 1080p NF WEB-DL DDP5 1 HDR AV1-Saon.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Forrest Gump 1994 1080p BluRay DoVi HDR10 TrueHD Atmos 7 1 x265-GeneMige\n👤 14 💾 7.43 GB ⚙️ ThePirateBay",
+   "infoHash": "5f1dc637ff3580c997e5805ffdc475db2fc64c45",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Forrest Gump 1994 1080p BluRay DoVi HDR10 TrueHD Atmos 7 1 x265-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Forrest Gump 1994 1080p NF WEB-DL DDP5 1 HDR HEVC-Saon\n👤 8 💾 2.92 GB ⚙️ ThePirateBay\n🇬🇧 / 🇫🇷 / 🇮🇳 / 🇵🇱 / 🇺🇦 / 🇸🇦",
+   "infoHash": "614cc16ed19ea8186f8bbc354c68a68efa3f293d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc|HDR",
+    "filename": "Forrest Gump 1994 1080p NF WEB-DL DDP5 1 HDR HEVC-Saon.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump (1994) 1080p BrRip x264 - 1.90GB - YIFY\n👤 445 💾 1.9 GB ⚙️ ThePirateBay",
+   "infoHash": "fee625a78cb2057ce7845aa66e95f60d43ea8ab0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x264",
+    "filename": "Forrest.Gump.1994.1080p.BrRip.x264.YIFY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump 1994 REMASTERED 1080p BluRay HEVC x265 5.1 BONE\n👤 184 💾 1.99 GB ⚙️ TorrentGalaxy",
+   "infoHash": "6fc86a3f021396e47fd389521d3c86c2a750e938",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "Forrest Gump 1994 REMASTERED 1080p BluRay HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest.Gump.1994.1080p.BluRay.10bit.HEVC.6CH-MkvCage [Forest]\n👤 160 💾 3.31 GB ⚙️ ThePirateBay",
+   "infoHash": "692252836b392af07bb878cd8d0bee04cd24fba4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Forrest.Gump.1994.1080p.BluRay.10bit.HEVC.6CH.MkvCage.ws.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump (1994) Bluray 1080p x264 [FLAC-7.1-English/AC3-5.1-English/French] [FrankVjecy]\n👤 31 💾 8.74 GB ⚙️ 1337x\nMulti Audio / 🇬🇧 / 🇫🇷",
+   "infoHash": "02480e1bd28aa329ffa7a8ea7c9cbc15f3f45acf",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Forrest.Gump.1994.Bluray.1080p.x264.Multi.FLAC.7.1.English.AC3.5.1.English.French.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Tom Hanks Movie Collection\nForrest.Gump.1994.1080p.BrRip.x264.SNOY.mp4\n👤 30 💾 1.9 GB ⚙️ MagnetDL",
+   "infoHash": "6c7eabb814d4678e7174e71ac2bbf2b969d2c28f",
+   "fileIdx": 30,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x264",
+    "filename": "Forrest.Gump.1994.1080p.BrRip.x264.SNOY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump 1994 REPACK 1080p MGMP WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 22 💾 7.35 GB ⚙️ ThePirateBay",
+   "infoHash": "fa25fa646824822bf710ca8c8bdec554ff2eb979",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Forrest Gump 1994 REPACK 1080p MGMP WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump (1994) (1080p BluRay x265 HEVC 10bit AAC 5.1 Tigole) [QxR]\nForrest Gump (1994) (1080p BluRay x265 10bit Tigole).mkv\n👤 20 💾 5.52 GB ⚙️ 1337x",
+   "infoHash": "2a2b342532b1b99422a3a228518779e57c3cf7e5",
+   "fileIdx": 14,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Forrest Gump (1994) (1080p BluRay x265 10bit Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump 1994 1080p ATVP WEB-DL DD 5 1 H 264-PiRaTeS\n👤 18 💾 10.18 GB ⚙️ ThePirateBay",
+   "infoHash": "52bc3d6912261598d42b3b6cefa51fbb2264ade2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Forrest Gump 1994 1080p ATVP WEB-DL DD 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest.Gump.1994.REMASTERED.1080p.BluRay.x265-RARBG\n👤 18 💾 2.21 GB ⚙️ RARBG",
+   "infoHash": "48a130f8ffe7ceff740c0cfd7c770c60dbf45f08",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Forrest.Gump.1994.REMASTERED.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump (1994) RM4K Extras (1080p BluRay x265 HEVC 10bit AAC 7.1 afm72) [QxR]\nForrest Gump (1994) RM4K (1080p BluRay x265 afm72).mkv\n👤 17 💾 7.18 GB ⚙️ 1337x",
+   "infoHash": "cce423a52156a9f5888f8e23d57eebbe3fa23496",
+   "fileIdx": 14,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Forrest Gump (1994) RM4K (1080p BluRay x265 afm72).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest.Gump.1994.1080p.BluRay.x264.DTS-ETRG\nForest.Gump.1994.1080p.BluRay.x264.DTS-ETRG.mkv\n👤 16 💾 4.86 GB ⚙️ ThePirateBay",
+   "infoHash": "3fc3d7579c16af1428784520bc2d319120de4177",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Forest.Gump.1994.1080p.BluRay.x264.DTS-ETRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump (1994) 1080p MULTI VFF BluRay x264 AC3 5.1 Pop .mkv\n👤 13 💾 2.28 GB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇫🇷",
+   "infoHash": "97779a60846bf600751714ddb7b585b7dd27b597",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump 1994 REMASTERED 1080p BluRay x265-YAWNTiC\n👤 12 💾 7.49 GB ⚙️ ThePirateBay",
+   "infoHash": "39fe5e9d06731be82bc264df05cf0302b003d582",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Forrest Gump 1994 REMASTERED 1080p BluRay x265-YAWNTiC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump 1994 1080p MGMP WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 12 💾 7.35 GB ⚙️ ThePirateBay",
+   "infoHash": "dbe796a6d1bcb5b18397a74bf3279bed0c0d99dd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Forrest Gump 1994 1080p MGMP WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump 1994 1080p NF WEB-DL DDP2 0 H 264 DUAL-NoUs3r\n👤 12 💾 5.73 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "5d4e4ad957f7c32ccb0723b89fabb83f3bbc6802",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Forrest.Gump.1994.1080p.NF.WEB-DL.DDP2.0.H.264.DUAL-NoUs3r.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "IMDB TOP 001-050 BluRay 1080p x265 10bit MNHD-FRDS\n012.阿甘正传.Forrest.Gump.1994.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS/Forrest.Gump.1994.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv\n👤 11 💾 7.26 GB ⚙️ EXT",
+   "infoHash": "9351bcf9e7437f706549f8b60314c39259c420b4",
+   "fileIdx": 83,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Forrest.Gump.1994.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump (1994) 1080p H265 BluRay Rip ita eng AC3 5.1 sub ita eng Licdom\n👤 10 💾 3.17 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "577d3ca22980ca51626c0b5158d681a098eb6c48",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|h265",
+    "filename": "Forrest Gump (1994) 1080p H265 ita eng AC3 5.1 sub ita eng Licdom.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump.1994.1080p.BluRay.x264-CiNEFiLE\n👤 7 💾 11.01 GB ⚙️ ThePirateBay",
+   "infoHash": "c5e17ca9fc436ddf3ee157b7a9b4eb5b76241b37",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump 1994 1080p BluRay DD+ 7.1 x265-edge2020\n👤 6 💾 5.46 GB ⚙️ TorrentGalaxy",
+   "infoHash": "a323faf04dd328c652e6529005b4dc963ce27d1a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Forrest.Gump.1994.1080p.BluRay.DDP.7.1.H.265-EDGE2020.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest.Gump.1994.REMASTERED.1080p.V2.BrRip.x265.HEVCBay\n👤 6 💾 1.53 GB ⚙️ 1337x",
+   "infoHash": "6eb44279373db207d43c720c79113cc0adaf39ef",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x265",
+    "filename": "Forrest.Gump.1994.REMASTERED.1080p.V2.BrRip.x265.HEVCBay.com.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump 1994 1080p ATVP WEB-DL H264-PiRaTeS\n👤 5 💾 2.15 GB ⚙️ ThePirateBay",
+   "infoHash": "51c1be138b762f12a0d6cb9497e32279763b4d48",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Forrest Gump 1994 1080p ATVP WEB-DL H264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump (1994) Bluray 1080p x264 [AC3-5.1-English/French] [FrankVjecy]\n👤 5 💾 6.17 GB ⚙️ 1337x\nMulti Audio / 🇬🇧 / 🇫🇷",
+   "infoHash": "b2918f6746c515bb4db97ac497e1c5ef96a29012",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Forrest.Gump.1994.Bluray.1080p.x264.Multi.AC3.5.1.English.French.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Amazing Films 4 - Mp4 x264 AC3 1080p\nForrest Gump (1994) 1080p Surround.mp4\n👤 5 💾 3.16 GB ⚙️ ThePirateBay",
+   "infoHash": "4e20131a166cee7614ce583330e0c0d2405bbce7",
+   "fileIdx": 18,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Forrest Gump (1994) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump (1994) (1080p BDRip x265 10bit TrueHD 7.1 Atmos - ArcX)[TAoE].mkv\n👤 5 💾 10.85 GB ⚙️ 1337x",
+   "infoHash": "d36af85dce7ab46d4223a14ced4e78d6b3bc3242",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|x265|10bit",
+    "filename": "Forrest Gump (1994) (1080p BDRip x265 10bit TrueHD 7.1 Atmos - ArcX)[TAoE].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump (1994).1080p.H264.ita.eng.Ac3-5.1.sub.ita.eng-MIRCrew\n👤 5 💾 3.79 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "41a9624b161ee63129365a0002ce8fd236bca604",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h264",
+    "filename": "Forrest Gump (1994).ita.eng.sub.ita.eng-MIRCrew MIRCrew.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump (1994) 1080p Dual Audio Español Latino Ingl\n👤 5 💾 3.51 GB ⚙️ ThePirateBay\nDual Audio / 🇪🇸 / 🇲🇽",
+   "infoHash": "ec4535df512599a5e0c7e0595b1691074a1b8c25",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p",
+    "filename": "Forrest Gump 1994 1080p.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest.Gump.1994.BluRay.1080p.AC3.ITA.AAC.ENG.x264-Wiggaz\n👤 4 💾 7.96 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "faf1532f85e15c059301ed18dad0297d00c06251",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Forrest.Gump.1994.BluRay.1080p.AC3.ITA.AAC.ENG.x264-Wiggaz.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest.Gump.1994.1080p.ATVP.WEB-DL.DD.5.1.H.264-PiRaTeS\n👤 4 💾 10.18 GB ⚙️ 1337x",
+   "infoHash": "bf411577bc136ac95f8afcdf53cd2be468b04055",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Forrest.Gump.1994.1080p.ATVP.WEB-DL.DD.5.1.H.264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump (1994) ITA ENG Ac3 5.1 sub Ita BDRip 1080p H264 [ArMor]\n👤 4 💾 3.62 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "83c09b3f351dfe45257d0fdccb69a553303ca119",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|h264",
+    "filename": "Forrest Gump (1994) ITA ENG Ac3 5.1 sub Ita BDRip 1080p H264 [ArMor].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest.Gump.1994.REMASTERED.1080p.BluRay.HEVC.x265-RiPRG\n👤 4 💾 2.86 GB ⚙️ ThePirateBay",
+   "infoHash": "7d198251b288ae675a14109cc980124b6c7cb92b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "Forrest.Gump.1994.REMASTERED.1080p.BluRay.HEVC.x265-RiPRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump (1994) [1080p x265 HEVC 10bit BluRay Atmos TrueHD 7.1] [Prof]\n👤 4 💾 14.54 GB ⚙️ 1337x",
+   "infoHash": "ae229176074ff96ac7e4d764e6a0521307a966e3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Forrest Gump (1994) [1080p x265 HEVC 10bit BluRay Atmos TrueHD 7.1] [Prof].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump 1994 1080p ITV WEB-DL AAC 2 0 H 264-PiRaTeS\n👤 3 💾 6.61 GB ⚙️ ThePirateBay",
+   "infoHash": "37a0e839f2262b5867518b7ac692bc2c2246c2b9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Forrest Gump 1994 1080p ITV WEB-DL AAC 2 0 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Epic Films 9 - Mp4 x264 AC3 1080p\nForrest Gump (1994) 1080p Surround.mp4\n👤 3 💾 3.16 GB ⚙️ ThePirateBay",
+   "infoHash": "ee021d96c7d9b8a149d2f5f1ed7f55da2a1f1ed1",
+   "fileIdx": 21,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Forrest Gump (1994) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump (1994) REMASTERED 1080p BDRip x264 Dual Audio Hindi English AC3 5.1 - MeGUiL\n👤 3 💾 2.93 GB ⚙️ 1337x\nDual Audio / 🇬🇧 / 🇮🇳",
+   "infoHash": "52b392bcb8ecaef433317e31e8fadb842cc376e0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|x264",
+    "filename": "Forrest Gump (1994) REMASTERED 1080p BDRip x264 Dual Audio Hindi English AC3 5.1 - MeGUiL.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Forrest Gump 1994 Complete (1080p Bluray X265 10bit AAC 5.1 Joy) [UTR]\n👤 3 💾 2.3 GB ⚙️ 1337x",
+   "infoHash": "b0582bde6c4d2be54bbd62bebbca337e529d8027",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Forrest Gump (1994) 720p BrRip x264 - 850MB - YIFY\n👤 46 💾 852.02 MB ⚙️ ThePirateBay",
+   "infoHash": "9bfb78f3cdd5e7cfc3fd2a5cdddb1e86da43d345",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BRRip|x264",
+    "filename": "Forrest.Gump.1994.720p.BrRip.x264.YIFY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Academy Awards Best Pictures (1927 - 2020)\n1994 - Forrest Gump - 720p.mp4\n👤 28 💾 852.02 MB ⚙️ ThePirateBay",
+   "infoHash": "c9cf60639e51947f0906f8545e6b9bc3d84a37d9",
+   "fileIdx": 66,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p",
+    "filename": "1994 - Forrest Gump - 720p.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Forrest Gump: O Contador De Historias (1994) 720p Dublado Pt Br\n👤 23 💾 885.93 MB ⚙️ ThePirateBay\n🇵🇹",
+   "infoHash": "ca2835dafd152b9880cc21bd9375d7a7db8d9518",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p",
+    "filename": "Forrest_Gump_O_Contador_De_Histórias_1994_720p_210GJI.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Forrest Gump [Dublado PT-BR] [MP4] (720p]\n👤 4 💾 886.04 MB ⚙️ ThePirateBay\n🇵🇹",
+   "infoHash": "3686b0f0d9a4f691a5014f45c59a62129547a616",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p"
+   }
+  },
+  {
+   "name": "Torrentio\nDVDRip",
+   "title": "Forest.Gump.1994.DVDRip\n👤 8 💾 697.36 MB ⚙️ MagnetDL",
+   "infoHash": "b46495432636e6b1dd00e7e495031a6115e94314",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVDRip",
+    "filename": "Forest.Gump.1994.DVDRip.avi"
+   }
+  },
+  {
+   "name": "Torrentio\nDVD",
+   "title": "Forrest Gump (1994). DVD-9.Nordic. DK-NO-EN-FI-IS-SE-IT\n👤 4 💾 7.11 GB ⚙️ ThePirateBay\n🇬🇧 / 🇩🇰 / 🇫🇮 / 🇸🇪 / 🇳🇴",
+   "infoHash": "1f8432d6e3771d6df8c5e9b68f05a329a71f1413",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVD"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Official IMDb Top 250 Movies Collection 6/17/2011\nForrest Gump[1994]DvDrip[Eng]-Zuzuu.avi\n👤 8 💾 1.18 GB ⚙️ ThePirateBay",
+   "infoHash": "4986ace2ee7a564508e0d5cfdde2d9018b8af942",
+   "fileIdx": 70,
+   "behaviorHints": {
+    "filename": "Forrest Gump[1994]DvDrip[Eng]-Zuzuu.avi"
+   }
+  }
+ ]
+}

@@ -1,0 +1,500 @@
+{
+ "fetched": "2026-11-08T23:06:01.567Z",
+ "source": {
+  "torrentio": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt0113277.json",
+  "cinemeta": "https://v3-cinemeta.strem.io/meta/movie/tt0113277.json"
+ },
+ "id": "tt0113277",
+ "type": "movie",
+ "meta": {
+  "name": "Heat",
+  "year": "1995",
+  "runtime": "170 min",
+  "genres": [
+   "Action",
+   "Crime",
+   "Drama"
+  ]
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k",
+   "title": "Heat 1995 2160p WEBRip\n👤 68 💾 7.6 GB ⚙️ YTS",
+   "infoHash": "2789dd0006b2c5ff9e9777059024c27ac0f105a8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "Heat.1995.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Heat.1995.2160p.WEBRip.3999MB.DDP5.1.x264-GalaxyRG\n👤 10 💾 4 GB ⚙️ ThePirateBay",
+   "infoHash": "a63543d919814605b283a758d4bdfede652ec542",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x264",
+    "filename": "Heat.1995.2160p.WEBRip.3999MB.DDP5.1.x264-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Heat (1995) (UHD BDRip 1080p HEVC HDR10 EAC3) [OEP][E47384F6].mkv\n👤 14 💾 7.98 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇮🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇸🇦",
+   "infoHash": "a42756f4d9efb02e74b5ace6aae5ec9a9dd156db",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|hevc|10bit|HDR",
+    "filename": "Heat (1995) (UHD BDRip 1080p HEVC HDR10 EAC3) [OEP][E47384F6].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Heat 1995 UHD BluRay 1080p DDP 5 1 DoVi HDR10 x265-SM737\n👤 11 💾 6.93 GB ⚙️ ThePirateBay",
+   "infoHash": "8ff7708cf16eb051779b59a1f5a600297af89b4a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Heat 1995 UHD BluRay 1080p DDP 5 1 DoVi HDR10 x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Heat 1995 1080p UHD BluRay DD 5 1 HDR x265-SQS\n👤 7 💾 9.15 GB ⚙️ ThePirateBay",
+   "infoHash": "69e86fb21f8e24ea2ea830fda442259d7dd78258",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|HDR",
+    "filename": "Heat 1995 1080p UHD BluRay DD  5 1 HDR x265-SQS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Heat 1995 1080p UHD BluRay DD5 1 HDR x265-SQS\n👤 3 💾 9.15 GB ⚙️ ThePirateBay",
+   "infoHash": "2d1d81a7f039887db0f7075b52f5c8eb173999c7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|HDR",
+    "filename": "Heat 1995 1080p UHD BluRay DD5 1 HDR x265-SQS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat (1995) 1080p BrRip x264 - YIFY\n👤 563 💾 2.1 GB ⚙️ ThePirateBay",
+   "infoHash": "447f32a80b66a52f044e4bb953357a334bed399a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x264",
+    "filename": "Heat.1995.1080p.BRrip.x264.YIFY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Essential Films 4: MP4 X264 AC3 720p 1080p\nHeat (1995) 1080p Surround.mp4\n👤 223 💾 3.79 GB ⚙️ MagnetDL",
+   "infoHash": "cd7908a91847c63f191fe529447221e9b013c494",
+   "fileIdx": 14,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Heat (1995) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat 1995 Directors Cut Remastered BluRay 1080p HEVC x265 5.1 BONE\n👤 123 💾 1.98 GB ⚙️ 1337x",
+   "infoHash": "74cd358d23fca24a811114f734edf5f5fb081af3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "Heat 1995 Directors Cut Remastered BluRay 1080p HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat 1995 REPACK Directors Definitive Edition 4K REMASTERED 1080p BluRay x265-YAWNTiC\n👤 89 💾 8.76 GB ⚙️ ThePirateBay",
+   "infoHash": "666188c8d7e153020c3eb8b5a2d1de9c91698242",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Heat 1995 REPACK Directors Definitive Edition 4K REMASTERED 1080p BluRay x265-YAWNTiC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat.1995.REMASTERED.1080p.BluRay.x264.AAC 5.1\n👤 27 💾 3.25 GB ⚙️ TorrentGalaxy",
+   "infoHash": "8f76b3c624d4ea9ab4c2985b490e1f4bb4df0ef1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Heat.1995.REMASTERED.1080p.BluRay.x264.AAC 5.1-VXT.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat.1995.Director's.Definitive.Edition.HQ.REGRADED.UHD.BluRay.1080p.x265.10Bit.HEVC.Eng.DDP.5.1.ViTO\n👤 22 💾 6.96 GB ⚙️ 1337x",
+   "infoHash": "481f67d6e5decb87b0dd8d75570258187419a777",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Heat.1995.Director's.Definitve.Edition.HQ.REGRADED.UHD.BluRay.1080p.x265.10Bit.HEVC.Eng.DDP.5.1.ViTO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat.1995.REMASTERED.1080p.BluRay.x265-RARBG\n👤 20 💾 2.65 GB ⚙️ RARBG",
+   "infoHash": "a2129dcd84c2f2a54886d2765e762d54a690acd9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Heat.1995.REMASTERED.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat.1995.1080p.WEBRip.1600MB.DD5.1.x264-GalaxyRG\n👤 14 💾 1.6 GB ⚙️ ThePirateBay",
+   "infoHash": "071b63c9adfee12f48b2720a53cd2c0fe680ff46",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Heat.1995.1080p.WEBRip.1600MB.DD5.1.x264-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat 1995 Directors Cut Remastered BluRay 1080p HEVC x265 5.1 [CheerfulTomato]\n👤 11 💾 1.98 GB ⚙️ 1337x",
+   "infoHash": "b1c0dae6e4e6d40d5f5f2cb1bc6922e4c391ec7d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "Heat 1995 Directors Cut Remastered BluRay 1080p HEVC x265 5.1.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fogo Contra Fogo (1996) BluRay 1080p Dublado\n👤 11 💾 2.21 GB ⚙️ ThePirateBay\n🇵🇹",
+   "infoHash": "7ce2c9d82ddcc03bf7f8108e49af5c5856c54bad",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "IMDB TOP 101-150 BluRay 1080p x265 10bit MNHD-FRDS\n124.盗火线.Heat.1995.BluRay.1080p.x265.10bit.3Audio.MNHD-FRDS/Heat.1995.BluRay.1080p.x265.10bit.3Audio.MNHD-FRDS.mkv\n👤 9 💾 8.42 GB ⚙️ EXT",
+   "infoHash": "08079cb5f524683e3a8da9e31f53ab81663b2501",
+   "fileIdx": 163,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Heat.1995.BluRay.1080p.x265.10bit.3Audio.MNHD-FRDS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat 1995 1080p DUAL BluRay x264 AC3 5 1 - HdT\n👤 9 💾 5.54 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇹🇷",
+   "infoHash": "1a11dec54e7cf605da32edc64b9e9bd6ca877d86",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Heat 1995 1080p DUAL BluRay x264 AC3 5 1 - HdT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat-La sfida (1995) ITA-ENG Ac3 5.1 BDRip 1080p H264 [ArMor]\n👤 7 💾 5.85 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "3ef16d008cb8a5bac40658ce9793119cd151a27f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|h264",
+    "filename": "Heat-La sfida (1995) ITA-ENG Ac3 5.1 BDRip 1080p H264 [ArMor].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat (1995) 1080p BluRay AV1 Opus Multi4 [dAV1nci]\n👤 5 💾 3.5 GB ⚙️ 1337x",
+   "infoHash": "5838ab63bae7212da83c0bff9ecb5a17551004d7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Heat.1995.1080p.BluRay.AV1.Opus.Multi4-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Amazing Films 4 - Mp4 x264 AC3 1080p\nHeat (1995) 1080p Surround.mp4\n👤 5 💾 3.79 GB ⚙️ ThePirateBay",
+   "infoHash": "4e20131a166cee7614ce583330e0c0d2405bbce7",
+   "fileIdx": 21,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Heat (1995) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat 1995 1080p WebRip EAC3 5 1 x265-Lootera\n👤 4 💾 3 GB ⚙️ ThePirateBay",
+   "infoHash": "da955aaa89b0dccdc564d074784444bc8e2d6637",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Heat 1995 1080p WebRip EAC3 5 1 x265-Lootera.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat 1995 Bonus BR EAC3 VFF VFQ ENG 1080p x265 10Bits T0M (Tension)\nHeat 1995 Bonus - 2016 Academy of Motion Pictures and Sciences Panel VOSTFR.mkv\n👤 4 💾 815 MB ⚙️ TorrentGalaxy\n🇬🇧 / 🇫🇷",
+   "infoHash": "d9d59f68e20d22a052e99a4d19774c13e129d0ee",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x265|10bit",
+    "filename": "Heat 1995 Bonus - 2016 Academy of Motion Pictures and Sciences Panel VOSTFR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat 1995 Bonus BR EAC3 VFF VFQ ENG 1080p x265 10Bits T0M (Tension)\nHeat 1995 BR EAC3 VFF VFQ ENG 1080p x265 10Bits T0M.mkv\n👤 4 💾 5.87 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇫🇷",
+   "infoHash": "d9d59f68e20d22a052e99a4d19774c13e129d0ee",
+   "fileIdx": 11,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x265|10bit",
+    "filename": "Heat 1995 BR EAC3 VFF VFQ ENG 1080p x265 10Bits T0M.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat (1995) Remastered 1080p BluRay x265 HEVC EAC3-SARTRE\n👤 4 💾 7 GB ⚙️ 1337x",
+   "infoHash": "900983fc2a00fa05ecedd014c349116d416606b0",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "Heat.1995.Remastered.1080p.BluRay.x265.HEVC.EAC3-SARTRE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat.1995.1080p.BluRay.x264.anoXmous\n👤 4 💾 2.94 GB ⚙️ ThePirateBay",
+   "infoHash": "c67d97f76d3df9ea7195193afb752109ad91c84b",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat 1995 1080p BluRay x264 DuaL-TURKO\n👤 3 💾 5.54 GB ⚙️ EXT\nDual Audio",
+   "infoHash": "5edc2c0ef2011bc5693c36a932e8c11a3e626285",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Heat 1995 1080p BluRay x264 DuaL-TURKO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Police-Giallo-Crime-Thriller Movies Collection (1080p.AV1.AC3 encoded.muxed by VerbaL) (2026) [50 Movies]\nHeat - La Sfida (Heat) (1995) [1080p] [tmdb-949] [imdb-tt0113277].mkv\n👤 2 💾 3.27 GB ⚙️ EXT\n🇬🇧 / 🇮🇹 / 🇪🇸",
+   "infoHash": "a5eef7779e55d424f1b0f0056ce01bc92e4df9ca",
+   "fileIdx": 148,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|av1",
+    "filename": "Heat - La Sfida (Heat) (1995) [1080p] [tmdb-949] [imdb-tt0113277].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "IMDB Top 250 - 2024 Edition - 1080p BluRay eSubs jZQ\n108 Heat (1995)/Heat.1995.REMASTERED.1080p.BluRay.x265-RARBG.mp4\n👤 2 💾 2.65 GB ⚙️ TorrentGalaxy",
+   "infoHash": "71fee293dc117c48487029c6dcb5038d974a0295",
+   "fileIdx": 784,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Heat.1995.REMASTERED.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat (1995) [Geneon Transfer] 1080p BluRay AV1 Opus [dAV1nci]\n👤 2 💾 3.96 GB ⚙️ TorrentGalaxy",
+   "infoHash": "c04e1aa7e044dc5b7598b2ae31288c9ab41663e5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Heat.1995.Geneon.1080p.BluRay.AV1.Opus.Multi4-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat 1995 1995 REMASTERED 1080p BluRay x265-Omikron\n👤 2 💾 1.92 GB ⚙️ ThePirateBay",
+   "infoHash": "35790ebd4e7dad24736be461e2ec3ef10a45df4d",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Heat 1995 1995 REMASTERED 1080p BluRay x265-Omikron.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat (1995) [BDrip 1080p - H264 - Ita Eng Ac3 5.1 - Sub Ita Eng] by Fratposa\n👤 2 💾 9 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "6364a4c7616f7270af6a6ef44a628844de6a0b4b",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|h264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat.1995.1080p.BluRay.DTS.x264-HiDt\n👤 2 💾 14.02 GB ⚙️ ThePirateBay",
+   "infoHash": "a50d5dccdc2170c6eb3f91832a049e7ae70ea28e",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat 1995 1080p BluRay x264-OFT\n👤 1 💾 7.92 GB ⚙️ ThePirateBay",
+   "infoHash": "930a69734bc0ada936fa0bbbb35a079d8e859e3e",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Heat 1995 1080p BluRay x264-OFT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Heat 1995 1080p Bluray OPUS 5 1 AV1-WhiskeyJack\n👤 1 💾 2.53 GB ⚙️ ThePirateBay",
+   "infoHash": "f8fe9ad483e7e31ea6597559dff53ba48545a292",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Heat 1995 1080p Bluray OPUS 5 1 AV1-WhiskeyJack.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Epic Films 4 - Mp4 x264 AC3 1080p\nHeat (1995) 1080p Surround.mp4\n👤 1 💾 3.79 GB ⚙️ ThePirateBay",
+   "infoHash": "2a8f6fb4563f22198fdaddec430904c246f231fc",
+   "fileIdx": 17,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Heat (1995) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Great Films 4 - Mp4 x264 AC3 1080p\nHeat (1995) 1080p Surround.mp4\n👤 1 💾 3.79 GB ⚙️ KickassTorrents",
+   "infoHash": "47a8e50e3b4f1b6ddbd52bc847f301f2b8339004",
+   "fileIdx": 20,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Heat (1995) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Heat (1995) 720p BrRip x264 - 850MB - YIFY\n👤 55 💾 849.94 MB ⚙️ ThePirateBay",
+   "infoHash": "21520ea90c877272c5639c136d5e6a1327486837",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BRRip|x264",
+    "filename": "Heat.1995.BrRip.720p.x264.YIFY.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Heat 1995 720p TUBI WEB-DL AAC 2 0 H 264-PiRaTeS\n👤 5 💾 3.03 GB ⚙️ ThePirateBay",
+   "infoHash": "c51c893daab7301d1d4205ac6d1ee8c9a7c84740",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB-DL|h264",
+    "filename": "Heat 1995 720p TUBI WEB-DL AAC 2 0 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Heat.1995.720p.BluRay.x264.MultiSubs-HDEVO\n👤 3 💾 6.58 GB ⚙️ ThePirateBay\nMulti Subs",
+   "infoHash": "8e8787a92036c8525cc95ea49f925869ebf8601f",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Heat 1995 720p BluRay x264 DuaL-TURKO\n👤 2 💾 1.1 GB ⚙️ EXT\nDual Audio / 🇬🇧 / 🇹🇷",
+   "infoHash": "068678f40ba559d63b5cb5dbd1588acd54663aea",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Imdb top 263 movies hindi english gdrive\nHeat.1995.BrRip.720p.x264.YIFY.mkv\n👤 2 💾 849.94 MB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "66672b822002b6f19af478fb7c886787afee5f9f",
+   "fileIdx": 83,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BRRip|x264",
+    "filename": "Heat.1995.BrRip.720p.x264.YIFY.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Heat [1995] 720p BRRiP x264 AC3 - ExtraTorrentRG\n👤 2 💾 3.05 GB ⚙️ ThePirateBay",
+   "infoHash": "2969482436800f29dabd4a8d823161194ef0f0d5",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BRRip|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Heat 1995 Remastered 720p BluRay HEVC H265 BONE\n👤 1 💾 700.83 MB ⚙️ 1337x",
+   "infoHash": "9bb095c17f567ecc53438ec32a834ddc7df8e610",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|hevc",
+    "filename": "Heat 1995 Remastered 720p BluRay HEVC H265 BONE.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Heat (1995) REMASTERED 720p BRRip 1.5GB - MkvCage\n👤 1 💾 1.5 GB ⚙️ 1337x",
+   "infoHash": "bccbc5ae24f6811252eacf2923e3ea621a02dedc",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BRRip"
+   }
+  },
+  {
+   "name": "Torrentio\nDVDRip",
+   "title": "Heat 1995 DvDrip[Eng]-greenbud1969\n👤 4 💾 899.92 MB ⚙️ ThePirateBay",
+   "infoHash": "99201d0d3f620e91601f7e94c01fb78ceafc3a20",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVDRip"
+   }
+  },
+  {
+   "name": "Torrentio\nBluRay",
+   "title": "Heat (1995) [Al Pacino] BluRay H264 DolbyD 5.1 + nickarad\n👤 2 💾 2.75 GB ⚙️ ThePirateBay",
+   "infoHash": "98ac65635e8f6c7dfecc607191782b8a1b9df8d9",
+   "fileIdx": 14,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BluRay|h264",
+    "filename": "Heat (1995) BluRay H264 DolbyD 5.1 + nickarad.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\nDVDRip",
+   "title": "Heat 1995 DVDRip X264 Ac3 Multisub Mkv\n👤 2 💾 2.05 GB ⚙️ MagnetDL\nMulti Subs",
+   "infoHash": "c0de3cbaead700095df4b1a05cc787289238fd39",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVDRip|x264",
+    "filename": "heat.1995.DVDRip.x264.ac3.multisub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nDVDRip",
+   "title": "Heat [1995] Eng Ger Sp + Multisub DVDrip\n👤 1 💾 4.38 GB ⚙️ MagnetDL\nMulti Subs / 🇬🇧 / 🇩🇪",
+   "infoHash": "c225480115f675f2dd583a51b2aa3ca24e05fd26",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVDRip"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Official IMDb Top 250 Movies Collection 6/17/2011\nHeat [1995][Lemavik].avi\n👤 8 💾 700.77 MB ⚙️ ThePirateBay",
+   "infoHash": "4986ace2ee7a564508e0d5cfdde2d9018b8af942",
+   "fileIdx": 177,
+   "behaviorHints": {
+    "filename": "Heat [1995][Lemavik].avi"
+   }
+  }
+ ]
+}

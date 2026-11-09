@@ -1,0 +1,512 @@
+{
+ "fetched": "2026-11-08T23:53:09.019Z",
+ "id": "tt26443597",
+ "type": "movie",
+ "meta": {
+  "name": "Zootopia 2",
+  "year": "2025",
+  "runtime": "108 min"
+ },
+ "streamUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt26443597.json",
+ "streams": [
+  {
+   "name": "Torrentio\n4k DV | HDR",
+   "title": "Zootopia 2 2025 2160p UHD BluRay x265 10bit DV HDR TrueHD Atmo\nZootopia 2 (2025) (2160p UHD BluRay x265 10bit DV HDR r00t).mkv\n👤 29 💾 10.22 GB ⚙️ TorrentGalaxy",
+   "infoHash": "e2993bd600ec8be8e3de4a01a4a1a9d9c0b22e30",
+   "fileIdx": 8,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|DV|HDR",
+    "filename": "Zootopia 2 (2025) (2160p UHD BluRay x265 10bit DV HDR r00t).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR",
+   "title": "Zootopia 2 2025 WEB-DL 2160p HDR10 DV HEVC DDPA 5.1 x265-E\n👤 19 💾 13.63 GB ⚙️ 1337x",
+   "infoHash": "75f11347051e0dcc9d1edb61923beec92986be9e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|hevc|10bit|DV|HDR",
+    "filename": "Zootopia 2 2025.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Zootopia 2 2025 2160p HDR10 BDRip DDP5 1 x265 BluBit\n👤 5 💾 6.58 GB ⚙️ TorrentGalaxy",
+   "infoHash": "6d3553a89c38bc1d8bd45ab603a25a97041b5e7b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BDRip|x265|10bit|HDR",
+    "filename": "Zootopia 2 (2025).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR",
+   "title": "Zootropolis.2.2025.2160p.DSNP.WEB-DL.DUAL.DDP5.1.DV.HDR.H.265-PiPi MultiDUB CRO.ENG\n👤 4 💾 10.29 GB ⚙️ EXT\nMulti Subs / Dual Audio / 🇬🇧",
+   "infoHash": "43f1a9a5ac8b4127d5242f3f44ccecbf544eaa5a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|h265|DV|HDR",
+    "filename": "Zootropolis.2.2025.2160p.DSNP.WEB-DL.DUAL.DDP5.1.DV.HDR.H.265-PiPi.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Zootopia 2 2025 2160p WEBRip\n👤 100 💾 4.8 GB ⚙️ YTS\n🇬🇧 / 🇪🇸",
+   "infoHash": "def97aba09335e3d450c5bac0c6f80f8c263e427",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "Zootopia.2.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.BZ].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Zootopia 2 (2025) (1080p DS4K WEB-DL x265 10-bit HDR AAC 5.1) [WeSLeY]\n👤 10 💾 4.6 GB ⚙️ 1337x",
+   "infoHash": "9e3629bb55ba8032aadc911f706cb9e507de2e80",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit|HDR",
+    "filename": "Zootopia 2 (2025) (1080p DS4K WEB-DL x265 10-bit HDR AAC 5.1) [WeSLeY].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Zootopia 2 2025 1080p Hybrid DCP DV HDR10 HDR10 H265 LiNE-Robo29\n👤 10 💾 4.1 GB ⚙️ ThePirateBay",
+   "infoHash": "86e911f3074a8840843071be31f0c0cd51b3deb4",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h265|10bit|DV|HDR",
+    "filename": "Zootopia 2 2025 1080p Hybrid DCP DV, HDR10 , HDR10 H265 LiNE-Robo29.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p Multi READNFO HEVC x265-RMTeam\n👤 621 💾 1.69 GB ⚙️ ThePirateBay\nMulti Audio / 🇬🇧",
+   "infoHash": "d745d479e6cd56d5f7ddb2f35970ef7fe1311788",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|hevc",
+    "filename": "Z00topia.2.2025.1080p.hevc.x265.RMTeam.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p WEB-DL HEVC x265 5.1 BONE\n👤 191 💾 1.63 GB ⚙️ ThePirateBay",
+   "infoHash": "9f640b813e95f3b4ded986f6ab54fe40b4a6701c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+    "filename": "Zootopia 2 2025 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p WEBRip\n👤 100 💾 1.8 GB ⚙️ YTS",
+   "infoHash": "2074db647cb1eb99049519653f80c43a9de88f05",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Zootopia.2.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.BZ].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p WEBRip\n👤 100 💾 1.99 GB ⚙️ YTS",
+   "infoHash": "36a7522598abf7cab88eedff4bd3209adf1cb8d6",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Zootopia.2.2025.1080p.WEBRip.x264.AAC5.1-[YTS.BZ].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p BluRay\n👤 87 💾 1.99 GB ⚙️ YTS",
+   "infoHash": "9e4b80be60fab2c6708cccaac1d7a33d0d4d8b58",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Zootopia.2.2025.HYBRID.1080p.BluRay.x264.AAC5.1-[YTS.BZ].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 BluRay 1080p DDP 5 1 x264-hallowed\n👤 77 💾 6.54 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱",
+   "infoHash": "046059eefed0895d3cc155132138c0ab72999eb8",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Zootopia 2 2025 BluRay 1080p DDP 5 1 x264-hallowed.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia.2.2025.1080p.DCPRip.x265.Dual.YG⭐\n👤 67 💾 6.03 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "be6253374f7ce94a2468de8d172cc48c879eb211",
+   "fileIdx": 7,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x265",
+    "filename": "Zootopia.2.2025.1080p.DCPRip.x265.Dual YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 53 💾 6.54 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸",
+   "infoHash": "8cb299dd11bc0ca05216ad3d33008232ee52bf03",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Zootopia 2 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 (2025) (1080p BluRay x265 10bit EAC3 7.1 Celdra) [QxR]\nZootopia 2 (2025) (1080p BluRay x265 Celdra).mkv\n👤 52 💾 4.65 GB ⚙️ 1337x",
+   "infoHash": "03ee57fbc35268adc5008181c05f17f6d4a66248",
+   "fileIdx": 8,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Zootopia 2 (2025) (1080p BluRay x265 Celdra).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p WEBRip x265-DH\n👤 47 💾 2.39 GB ⚙️ ThePirateBay",
+   "infoHash": "243b9e23433f08d4173ca9066b6e9ce0252622cb",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Zootopia 2 2025 1080p WEBRip x265-DH.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 42 💾 5.61 GB ⚙️ ThePirateBay",
+   "infoHash": "7cd1d76a1d9e92f4ab49c54d09f733a4a9c99fae",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Zootopia 2 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p EN\ndat/video.mkv\n👤 29 💾 232 MB ⚙️ ThePirateBay",
+   "infoHash": "3659f20cd76f174480e7f9f0d7acdb32c9c77229",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p",
+    "filename": "video.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 (2025) HYBRID 1080p BluRay 5.1-LAMA\n👤 27 💾 1.99 GB ⚙️ ThePirateBay",
+   "infoHash": "4860d2426a4da85e94fcfecf71745b9ac9e5f92c",
+   "fileIdx": 41,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Zootopia.2.2025.HYBRID.1080p.BluRay.x264.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia.2.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta\n👤 22 💾 1.61 GB ⚙️ ThePirateBay",
+   "infoHash": "4e76a1bd212475685d21a1e15ab284d7468c3dc0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Zootopia.2.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p BluRay x265 8 bit AAC 7 1 WeSLeY\n👤 21 💾 3.4 GB ⚙️ TorrentGalaxy",
+   "infoHash": "a12bd98042caf466ec960720c7d37d5a7eabef2e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|8bit",
+    "filename": "Zootopia 2 (2025) (1080p BluRay x265 8-bit AAC 7.1) [WeSLeY].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia.2.2025.DCP.ProRes.1080p.LATINO.YG⭐\n👤 21 💾 4.48 GB ⚙️ ThePirateBay\n🇲🇽",
+   "infoHash": "a8ac0478ed9d034636c5756bf175c2ea28048935",
+   "fileIdx": 7,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p",
+    "filename": "Zootopia.2.2025.DCP.ProRes.1080p.LATINO YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia.2.2025.1080p.WEBRip.AV1.DDP5.1-dAV1nci\n👤 20 💾 1.62 GB ⚙️ 1337x",
+   "infoHash": "5407ceaa23ac4ef87ec4843cf12d972d976ac0ce",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|av1",
+    "filename": "Zootopia.2.2025.1080p.WEBRip.AV1.DDP5.1-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia.2.2025.1080p.WEBRip.x265-KONTRAST\n👤 17 💾 2.47 GB ⚙️ 1337x",
+   "infoHash": "56a196469bf004e7b3614c0d7aefac174971ab3f",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Zootopia.2.2025.1080p.WEBRip.x265-KONTRAST.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p BluRay x264 DTS-WiKi\n👤 16 💾 7.6 GB ⚙️ ThePirateBay\n🇬🇧 / 🇨🇳",
+   "infoHash": "202a049069792816ee139923623d89b1b548429b",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Zootopia 2 2025 1080p BluRay x264 DTS-WiKi.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 bluray sdr 1080p av1 5 1 opus subs 1900mb Dust\n👤 10 💾 1.81 GB ⚙️ TorrentGalaxy",
+   "infoHash": "40275bdea8920caca7b4a7dc94c402044c612558",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Zootopia.2.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p BluRay x265 10bit DTS-WiKi\n👤 9 💾 6.32 GB ⚙️ ThePirateBay\n🇬🇧 / 🇨🇳",
+   "infoHash": "87632e0088596e007fa98aba1b202a059d2b7cbe",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Zootopia 2 2025 1080p BluRay x265 10bit DTS-WiKi.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p DSNP WEB-DL DDP5 1 Atmos H 265 3Audio-HDSWEB\n👤 9 💾 3.79 GB ⚙️ ThePirateBay",
+   "infoHash": "a50c472eec8c268fead842d755a122fd7275fe56",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+    "filename": "Zootopia 2 2025 1080p DSNP WEB-DL DDP5 1 Atmos H 265 3Audio-HDSWEB.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p BluRay x264-OFT\n👤 9 💾 4.67 GB ⚙️ ThePirateBay",
+   "infoHash": "f4dabf8781bd68b09978f4ea6f0f41574488d043",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Zootopia 2 2025 1080p BluRay x264-OFT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootropola.2.(2025).1080p.x265.4Mbps.2CH.256.crtani.film.hrvatski.sink\n👤 9 💾 3.42 GB ⚙️ 1337x\n🇭🇷",
+   "infoHash": "62c1d4e8f6a58209597b4198447544fb3cdcc96d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x265",
+    "filename": "Zootropola 2 - Zootopia 2 (2025).mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootropolis.2.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv\n👤 9 💾 10.11 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "812eb91a3b7e732ff4862f7526e9ed55e171350d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Zootropolis.2.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p WebRip EAC3 5 1 x265-Lootera\n👤 8 💾 2.27 GB ⚙️ ThePirateBay",
+   "infoHash": "4c926e05cb94f2e1cc9349d1a3f50c65cdb80405",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Zootopia 2 2025 1080p WebRip EAC3 5 1 x265-Lootera.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia.2.2025.1080p.WEB.h264-ETHEL\n👤 8 💾 7.85 GB ⚙️ ThePirateBay",
+   "infoHash": "6edb5abc38dedac10cf50ddaec060d769c342cbd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264",
+    "filename": "Zootopia.2.2025.1080p.WEB.h264-ETHEL.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p DSNP WEB-DL H264 EAC3 TSRG\n👤 7 💾 4.81 GB ⚙️ ThePirateBay",
+   "infoHash": "dd1cae9fe85c7ff14abc99f3e10ba806290995c7",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Zootopia 2 2025 1080p DSNP WEB-DL H264 EAC3 TSRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 (2025) 1080p WEBRip x265 10bit 5.1-LAMA\n👤 7 💾 1.8 GB ⚙️ ThePirateBay",
+   "infoHash": "afcafd1bfe8a7eb41faa45918096f5900a211672",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Zootopia.2.2025.1080p.WEBRip.x265.10bit.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia.2.2025.1080p.AMZN.WEB-DL.DDP5.1.H.264-GTM\n👤 7 💾 5.51 GB ⚙️ ThePirateBay",
+   "infoHash": "ec40c7cda66f7feef765a180d2a5848e6b5a853d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Zootopia.2.2025.1080p.AMZN.WEB-DL.DDP5.1.H.264-GTM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p 10bit BluRay Org DDP5 1 Hindi DDP7 1 Engli\n👤 6 💾 4.55 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇳",
+   "infoHash": "1e77b37331a63d14ec12bbfcfd69aea59fb251ee",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Zootopia.2.2025.1080p.10bit.BluRay.[Org.DDP5.1-Hindi+DDP7.1-English].ESub.HEVC-The.PunisheR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootropolis - Zootopia Saga (2016-2025) 1080p H265 AC3 5.1 ITA ENG sub ita eng Ph4nt0mX\nZootropolis 2 - Zootopia 2 (2025) 1080p H265 AC3 5.1 ITA ENG sub ita eng Ph4nt0mX.mkv\n👤 5 💾 2.3 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+   "infoHash": "64b326203aeaf47b482fe3d39ac31254edff7c2f",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h265",
+    "filename": "Zootropolis 2 - Zootopia 2 (2025) 1080p H265 AC3 5.1 ITA ENG sub ita eng Ph4nt0mX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootropolis 2 2025 iTA ENG Bluray 1080p x264 CYBER mkv\n👤 5 💾 7.8 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "cde130602204c0963ec480e94e76ecb1d71ac017",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Zootropolis.2.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 2025 1080p 10bit BluRay DDP7 1 ESub HEVC The PunisheR\n👤 5 💾 4.4 GB ⚙️ TorrentGalaxy",
+   "infoHash": "0479232c7f085de7ff9cf2e2579723ef338c6c63",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Zootopia.2.2025.1080p.10bit.BluRay.DDP7.1.ESub.HEVC-The.PunisheR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "2025 Motocross of Nations Ironman 1080p x264\n2_2025 Motocross of Nations Ironman Race 1 MXGP_MX2 1080p x264.mp4\n👤 5 💾 1.36 GB ⚙️ EXT",
+   "infoHash": "57175342c2c8529eefae40e967f1440ef0e95540",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "2_2025 Motocross of Nations Ironman Race 1 MXGP_MX2 1080p x264.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Zootopia 2 (2025) 1080p I T Web Dl Ddp 5 1 Atmos\n👤 4 💾 2.23 GB ⚙️ EXT",
+   "infoHash": "bb1a4bbca41050e786a6aef282dd839a2bc92bed",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL",
+    "filename": "Zootopia 2 2025 1080p iT WEB DL DDP5 1 Atmos.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Zootopia 2 2025 720p WEBRip\n👤 100 💾 992.18 MB ⚙️ YTS",
+   "infoHash": "9b9918a913741ef109930bd45cfbc4abd7a0fc7b",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Zootopia.2.2025.720p.WEBRip.x264.AAC-[YTS.BZ].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Zootopia 2 2025 720p BluRay\n👤 50 💾 990.82 MB ⚙️ YTS",
+   "infoHash": "5828a8b94c2a81ed1e20df4e321dc284bd0f1a63",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Zootopia.2.2025.HYBRID.720p.BluRay.x264.AAC-[YTS.BZ].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Zootopia.2.2025.720p.BluRay.x264-KNiVES\n👤 13 💾 6.89 GB ⚙️ ThePirateBay",
+   "infoHash": "107f7a757111f2be3f43c366991c30f601ae9e84",
+   "fileIdx": 5,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "zootopia.2.2025.720p.bluray.x264-knives.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Zootopia 2 (2025) 720p WEBRip-LAMA\n👤 10 💾 992.18 MB ⚙️ ThePirateBay",
+   "infoHash": "325767ea224459f5916b0c9538e19890d67258e6",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Zootopia.2.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\nBluRay",
+   "title": "Zootopia 2 (2025) [Cartoon] BluRay H264 DolbyD 5.1 + nickarad\n👤 28 💾 3.12 GB ⚙️ ThePirateBay",
+   "infoHash": "576eecd42a3ed7d859077076c60539adff58a766",
+   "fileIdx": 13,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BluRay|h264",
+    "filename": "Zootopia 2 (2025) [Cartoon] BluRay H264 DolbyD 5.1 + nickarad.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\nWEBRip",
+   "title": "Zootopia.2.2025.WEBRip.x264.AC3.BGAUDiO-SiSO\n👤 4 💾 1.01 GB ⚙️ EXT",
+   "infoHash": "132cf269a2ddc3bbeafaf1a5a28a659a942efc11",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|WEBRip|x264",
+    "filename": "Zootopia.2.2025.WEBRip.x264.AC3.BGAUDiO-SiSO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Paczka filmow nr.12 na Telegram | 1900 - 2026 | Dubbing Lektor\nZootopia.2.2025.Dubbing.mp4\n👤 26 💾 1.63 GB ⚙️ EXT\nDubbed",
+   "infoHash": "29bc0f7d1519bd6659224df6ac044681385d9385",
+   "fileIdx": 106,
+   "behaviorHints": {
+    "filename": "Zootopia.2.2025.Dubbing.mp4"
+   }
+  }
+ ]
+}

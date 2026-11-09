@@ -1,0 +1,504 @@
+{
+ "fetched": "2026-11-08T23:53:01.720Z",
+ "id": "tt0088763",
+ "type": "movie",
+ "meta": {
+  "name": "Back to the Future",
+  "year": "1985",
+  "runtime": "116 min"
+ },
+ "streamUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt0088763.json",
+ "streams": [
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Back to the Future (1985) (2160p BluRay x265 HEVC 10bit HDR AAC 7.1 Tigole) [QxR]\nBack to the Future (1985) (2160p BluRay x265 10bit HDR Tigole).mkv\n👤 25 💾 14.93 GB ⚙️ 1337x",
+   "infoHash": "80c7620846502f8676bc05038f7c2529a3807e71",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|hevc|10bit|HDR",
+    "filename": "Back to the Future (1985) (2160p BluRay x265 10bit HDR Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Back.to.the.Future.1985.2160p.UHD.HDR.BluRay.x265.10bit.TRUEHD.ATMOS.[WMAN-LorD]\n👤 14 💾 10.54 GB ⚙️ 1337x",
+   "infoHash": "5e9e9999cc4afb81ae19867306567001dbf558df",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|HDR",
+    "filename": "Back.to.the.Future.1985.2160p.UHD.HDR.BluRay.x265.10bit.TRUEHD.ATMOS.[WMAN-LorD].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR10+",
+   "title": "Ritorno al futuro Back to the Future 1985 2160p H265 BluRay R\n👤 9 💾 6.4 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "3d7df0e53cde428802b06181a1e3c9a8184d65db",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|h265|10bit|DV|HDR10+",
+    "filename": "Ritorno al Futuro - Back to the Future (1985) 2160p H265 60 fps 10 bit DV HDR10+ ita eng AC3 5.1 sub ita eng NUeng-Licdom.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Back.to.the.Future.1985.2160p.UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-RARBG\n👤 9 💾 10.28 GB ⚙️ RARBG",
+   "infoHash": "bd5671164312aab3f6d23f4c7bd95c40a26543c3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|HDR",
+    "filename": "Back.to.the.Future.1985.2160p.UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-RARBG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Ritorno al Futuro - Back to the Future (1985) 2160p H265 BluRay Rip 10 bit HDR10 Plus ita eng AC3 5.1 sub ita eng Licdom\n👤 7 💾 5.43 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "e54e8168ebc74d5b8826c985c4e44d5ab744521c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BRRip|h265|10bit|HDR",
+    "filename": "Ritorno al Futuro - Back to the Future (1985) 2160p H265 10 bit HDR10+ ita eng AC3 5.1 sub ita eng Licdom.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Back to the Future 1985 2160p BluRay\n👤 82 💾 5.88 GB ⚙️ YTS",
+   "infoHash": "2ad6d2aa7ec4c7b1d1e9af9aa89a64fe24c67785",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit",
+    "filename": "Back.To.The.Future.1985.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Back to the Future (1985) Featurettes (2160p BluRay x265 HEVC AI 10bit AAC 5.1 Joy) [UTR]\nBack to the Future (1985)  [2160p x265 10bit FS90 Joy].mkv\n👤 16 💾 5.37 GB ⚙️ 1337x",
+   "infoHash": "4de4bc8a1ed6f1b60c898627d95dc6bd8c88ef43",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|hevc|10bit",
+    "filename": "Back to the Future (1985)  [2160p x265 10bit FS90 Joy].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Back to the Future.Film Trilogy.1985-1990.2160p.5.1 AAC.H265.10bit-Zero00\nBack.To.The.Future.1985.2160p.5.1 AAC.H265.10bit-Zero00/Back.To.The.Future.1985.2160p.5.1 AAC.H265.10bit-Zero00.mp4\n👤 4 💾 2.5 GB ⚙️ TorrentGalaxy",
+   "infoHash": "371275f171a83ed5e6e444e85839e52dae8adff3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|h265|10bit",
+    "filename": "Back.To.The.Future.1985.2160p.5.1 AAC.H265.10bit-Zero00.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back To The Future Trilogy Remastered 1080p BluRay HEVC x265 5.1\nBack To The Future 1985 Remastered 1080p BluRay HEVC x265 5.1 BONE.mkv\n👤 301 💾 1.37 GB ⚙️ ThePirateBay",
+   "infoHash": "ec8d0b650bf0878ba195126639ef84e4f0eaf63f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "Back To The Future 1985 Remastered 1080p BluRay HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back to the Future (1985) 1080p BrRip x264 - YIFY\n👤 270 💾 1.49 GB ⚙️ ThePirateBay",
+   "infoHash": "fb94d1f636cf921a7cd37ba2ffbb3c7ffd680113",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x264",
+    "filename": "Back.to.the.Future.1985.1080p.Brrip.x264.Deceit.YIFY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back.to.the.Future.1985.1080p.10bit.BluRay.6CH.x265.HEVC\n👤 70 💾 2.68 GB ⚙️ EXT",
+   "infoHash": "302d81a513b4ec47fb7e04f33ab72887d64ec68c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Back.to.the.Future.1985.1080p.10bit.BluRay.6CH.x265.HEVC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back to the Future (1985) 1080p Bluray OPUS 7.1 AV1-WhiskeyJack\n👤 44 💾 6.07 GB ⚙️ 1337x",
+   "infoHash": "8b418254ba42c6145a7fb01048ea694c34ba900b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Back to the Future (1985) 1080p Bluray OPUS 7.1 AV1-WhiskeyJack.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back to the Future 1985 1080p BluRay DD+ 5.1 x265-EDGE2020\n👤 37 💾 8.91 GB ⚙️ ThePirateBay",
+   "infoHash": "4d523550e947dc5f81072584c8b8f9a8feb02f31",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Back.to.the.Future.1985.1080p.BluRay.DDP.5.1.H.265-EDGE2020.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back to the Future 1985 1080p FDNG WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 31 💾 6.2 GB ⚙️ ThePirateBay",
+   "infoHash": "d542ab8b823cfaf285a35a2010e975e1dbe81e82",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Back to the Future 1985 1080p FDNG WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Great Films 3: MP4 X264 AC3 1080p\nBack To The Future (1985) 1080p Surround.mp4\n👤 20 💾 3.3 GB ⚙️ MagnetDL",
+   "infoHash": "40f15e970e6f21466402a1ec4fbd059097ad587a",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Back To The Future (1985) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back.to.the.Future.30th.Anniversary.Edition.(1080p.BluRay.x265.HEVC.10bit.AAC.5.1.English.+Span..\nBack to the Future (1985)/Back to the Future (1985) (1080p BluRay x265 HEVC 10bit AAC 5.1 FreetheFish).mkv\n👤 19 💾 5.63 GB ⚙️ MagnetDL\n🇬🇧 / 🇪🇸 / 🇫🇷",
+   "infoHash": "1807964b42fb1c1423a3c8d4e733122156f4d5ed",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Back to the Future (1985) (1080p BluRay x265 HEVC 10bit AAC 5.1 FreetheFish).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back.To.The.Future.1.2.3.30th.Anni.Trilogy.1985-1990.Eng.Fre.Ita.Spa.Rus.Multi-Subs.1080p [H264..\nBack To The Future 1, 2, 3 - 30th Anni Trilogy 1985-1990 Eng Fre Ita Spa Rus Multi-Subs/01 Back to the Future - 1985 Eng Fre Ita Spa Rus Multi-Subs 1080p [H264-mp4].mp4\n👤 15 💾 2.91 GB ⚙️ MagnetDL\nMulti Audio / Multi Subs / 🇬🇧 / 🇷🇺 / 🇮🇹 / 🇪🇸 / 🇫🇷",
+   "infoHash": "10ea3a7b78e8ed6890dca9171ea50fd88192b148",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h264",
+    "filename": "01 Back to the Future - 1985 Eng Fre Ita Spa Rus Multi-Subs 1080p [H264-mp4].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Essential Films 2: MP4 X264 AC3 1080p\nBack To The Future (1985) 1080p Surround.mp4\n👤 13 💾 3.27 GB ⚙️ MagnetDL",
+   "infoHash": "bd15ea182a436a82cc37d2365b9cd5ac66fbf858",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Back To The Future (1985) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back.to.the.Future.1985.REMASTERED.1080p.10bit.BluRay.6CH.x265.HEVC-PSA\n👤 12 💾 2 GB ⚙️ 1337x",
+   "infoHash": "c671d319ea0544e94faa0392a97aa56c88dbbb01",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Back.to.the.Future.1985.REMASTERED.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back.to.the.Future.1985.REMASTERED.1080p.BluRay.x265-RARBG\n👤 12 💾 1.81 GB ⚙️ RARBG",
+   "infoHash": "284fe9effde49e93e9a1a68c6d4edea2c62c0ecd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Back.to.the.Future.1985.REMASTERED.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back To The Future I-II-III AV1 A5.1 1080p 7RIP\nBack To The Future (1985) AV1 A5.1 1080p 7RIP/Back To The Future (1985) AV1 A5.1 1080p 7RIP.mkv\n👤 11 💾 821.85 MB ⚙️ 1337x",
+   "infoHash": "a962237da667b7ad348c53470b669192afa157cb",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|av1",
+    "filename": "Back To The Future (1985) AV1 A5.1 1080p 7RIP.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Amazing Films 2 - Mp4 x264 AC3 1080p\nBF1 Back To The Future (1985) 1080p Surround.mp4\n👤 11 💾 3.27 GB ⚙️ ThePirateBay",
+   "infoHash": "d98427aa3ebdac78bc2a690ac3ec2139280b7af7",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "BF1 Back To The Future (1985) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back.to.the.Future.1985.iNTERNAL.1080p.BluRay.x264-iLLUSiON\n👤 11 💾 8.74 GB ⚙️ RARBG",
+   "infoHash": "6f53fd2643bc2bc77728fcdcd58af1cac83b382c",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "bttf-int-1080p-illsn.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back to the Future 1985 {edition-Remastered Edition} 1080p BluRay DDP 5 1 10bit H 265-iVy\n👤 10 💾 4.14 GB ⚙️ ThePirateBay",
+   "infoHash": "0f4cf32c9f5fd257df27cfdac65663b84b244f01",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h265|10bit",
+    "filename": "Back to the Future 1985 {edition-Remastered Edition} 1080p BluRay DDP 5 1 10bit H 265-iVy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "IMDB TOP 001-050 BluRay 1080p x265 10bit MNHD-FRDS\n042.回到未来.Back.to.the.Future.1985.BluRay.1080p.x265.10bit.3Audio.MNHD-FRDS/Back.to.the.Future.1985.BluRay.1080p.x265.10bit.3Audio.MNHD-FRDS.mkv\n👤 8 💾 7.83 GB ⚙️ EXT",
+   "infoHash": "9351bcf9e7437f706549f8b60314c39259c420b4",
+   "fileIdx": 298,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Back.to.the.Future.1985.BluRay.1080p.x265.10bit.3Audio.MNHD-FRDS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back to the Future 1985 1080p HULU WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 8 💾 5.68 GB ⚙️ ThePirateBay",
+   "infoHash": "804233e1764d727d9abaae843c418d7c608f7005",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Back to the Future 1985 1080p HULU WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back to the Future (1985) Featurettes (1080p BluRay x265 HEVC AI 10bit AAC 5.1 Q22 Joy) [UTR]\nBack to the Future (1985)  [1080p x265 q22 FS90 Joy].mkv\n👤 8 💾 4.67 GB ⚙️ 1337x",
+   "infoHash": "68984597178238059438b15110d0f7eb96fc8852",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Back to the Future (1985)  [1080p x265 q22 FS90 Joy].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Westworld (2016) Complete Collection Extra Featurettes S01 S02 S03 S04 1080p BluRay x265 ESub [BTv3 I2P]\nExtra Featurettes S01 [BTv3+I2P]/The Key to the Chords.mkv\n👤 7 💾 143.48 MB ⚙️ 1337x",
+   "infoHash": "7cb6719762cd63f2b0d176f4341eac977eef900a",
+   "fileIdx": 14,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|7cb6719762cd63f2b0d176f4341eac977eef900a",
+    "filename": "The Key to the Chords.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Ritorno al futuro Back to the Future 1985 1080p H265 BluRay R\n👤 7 💾 3.85 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "c301960b37684cdb0e48e809b72026e218fdef28",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h265",
+    "filename": "Ritorno al Futuro - Back to the Future (1985) 1080p H265 60 fps ita eng AC3 5.1 sub ita eng NUeng-Licdom.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back to the Future - Ritorno al futuro - Saga (1985/90) Bonus Disk.1080p.Italian.English.Ac3.5.1.sub.Ita.Eng-MIRCrew\nRitorno Al futuro 1 - Back To The Future 1.1080p.ita.eng.sub.ita.eng-MIRCrew/Ritorno Al futuro 1 - Back To The Future 1.1080p.ita.eng.sub.ita.mkv\n👤 7 💾 4.08 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "931ea8b3e57095851fe25a037305d8c9068a0833",
+   "fileIdx": 26,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p",
+    "filename": "Ritorno Al futuro 1 - Back To The Future 1.1080p.ita.eng.sub.ita.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back to the Future 1985 REMASTERED 1080p 10bit BluRay 6CH x265 HEVC-PSA\n👤 6 💾 2 GB ⚙️ EXT",
+   "infoHash": "b4eeb2730bc0e0636c240fdf3fcc35d5e74fa015",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Back to the Future 1985 REMASTERED 1080p 10bit BluRay 6CH x265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back To The Future 1985 1080p HULU WEB-DL H264-PiRaTeS\n👤 6 💾 5.68 GB ⚙️ ThePirateBay",
+   "infoHash": "f6d0a4676b5c281ef6d9ea838537b3e3f4d6489d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Back To The Future 1985 1080p HULU WEB-DL H264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back.To.The.Future.1985.1080p.BluRay.x265-RARBG\n👤 6 💾 1.81 GB ⚙️ RARBG",
+   "infoHash": "101c4117977350bf357095da91dcbaabfeb147b0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Back.To.The.Future.1985.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back to the Future (1985) 1080p (Esp.Latino)\n👤 6 💾 2.07 GB ⚙️ ThePirateBay\n🇪🇸 / 🇲🇽",
+   "infoHash": "f980f4efe7e40cf3cdc783a075a16f81866cd98d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p",
+    "filename": "Back.to.the.Future.(1985).molpol.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back to the Future 1985 Remastered 1080p BluRay x264-OFT\n👤 4 💾 5.03 GB ⚙️ ThePirateBay",
+   "infoHash": "d69cdec5023f589616427fb983797cda98287b04",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Back to the Future 1985 Remastered 1080p BluRay x264-OFT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back to the Future 1985 1080p PCOK WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 4 💾 6.48 GB ⚙️ ThePirateBay",
+   "infoHash": "380fd174aa89e24b80e85ed0066f9edffdf72797",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Back to the Future 1985 1080p PCOK WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back to the Future (1985) [1080p] x264 KK650 Regraded\n👤 4 💾 2.79 GB ⚙️ ThePirateBay",
+   "infoHash": "cd0585378d2f687a3c76adb9c0a3500214307270",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Back.To.The.Future.1985.KK650.Regraded.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back to the Future (1985) 1080p Bluray 10-bit x265 HEVC AC3 5.1 [XannyFamily]\n👤 4 💾 5.29 GB ⚙️ 1337x",
+   "infoHash": "67ae2829e454eb73ff9220dd7004a7dca13f8342",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Back to the Future (1985) 1080p Bluray 10-bit x265 HEVC AC3 5.1 [XannyFamily].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back.to.the.Future.1985.REMASTERED.1080p.BluRay.AC35.1.x265-GREP\n👤 4 💾 2.14 GB ⚙️ ThePirateBay",
+   "infoHash": "828afab399592366b02eb455a2681338b863cc31",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Back.to.the.Future.1985.REMASTERED.1080p.BluRay.AC35.1.x265-GREP.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Back to the Future 1 (1985) 1080p MKV x264 (NL sub) LD TBS\n👤 4 💾 9.41 GB ⚙️ ThePirateBay\n🇳🇱",
+   "infoHash": "60243d3d019929977d8e3ae157b1bf69132d6266",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Back to the Future (1985) 720p BrRip x264 - 700MB - YIFY\n👤 55 💾 699.65 MB ⚙️ ThePirateBay",
+   "infoHash": "0ce7772b55bef2da98c49aa1df608debbb20670f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BRRip|x264",
+    "filename": "Back.to.the.Future.1985.720p.BrRip.x264.YIFY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Back.to.the.Future.1985.REMASTERED.720p.BluRay.999MB.x265.10b\n👤 11 💾 988.69 MB ⚙️ ThePirateBay",
+   "infoHash": "ce5c922c142243596010cd0088658cd9b2e4b46f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x265|10bit",
+    "filename": "Back.to.the.Future.1985.REMASTERED.720p.BluRay.999MB.HQ.x265.10bit-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Back.to.the.Future.1985.720p.10bit.BluRay.6CH.x265.HEVC\n👤 5 💾 1.5 GB ⚙️ EXT",
+   "infoHash": "381b3c9e26c3aa14cab0726adc189f8f2023166f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|hevc|10bit",
+    "filename": "Back.to.the.Future.1985.720p.10bit.BluRay.6CH.x265.HEVC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nDVDRip",
+   "title": "Retour vers le futur III True french Dvdrip Xvid AC3-LKT[L-S79]\n👤 15 💾 1.49 GB ⚙️ ThePirateBay\n🇫🇷",
+   "infoHash": "1fbb74217b0abb5cb58cafe0d6c2f98c157667ea",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVDRip|xvid",
+    "filename": "Retour vers le futur III Truefrench Dvdrip Xvid AC3-LKT.avi"
+   }
+  },
+  {
+   "name": "Torrentio\nDVDRip",
+   "title": "Retour vers le futur II True french Dvdrip Xvid AC3-LKT[L-S79]\n👤 15 💾 1.36 GB ⚙️ ThePirateBay\n🇫🇷",
+   "infoHash": "a381e7f3ada8488c81a86e93686ed2bfcf924443",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVDRip|xvid"
+   }
+  },
+  {
+   "name": "Torrentio\nDVDRip",
+   "title": "De.Volta.Para.o.Futuro.Trilogia.DVDRip.XviD.[Dublagem.BKS]by.GmV\n👤 5 💾 4.69 GB ⚙️ ThePirateBay",
+   "infoHash": "6a3c4c5dfa8d777ea98ae9b37b022cf04f483247",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVDRip|xvid"
+   }
+  },
+  {
+   "name": "Torrentio\nDVDRip",
+   "title": "Volver al Futuro Trilogia[Dvdrip/Audio Latino]\nVolver.al.Futuro.Dvdrip.Audio.Latino.avi\n👤 4 💾 700.27 MB ⚙️ ThePirateBay\n🇲🇽",
+   "infoHash": "793aa003e021f166491219ded504a65534a99b09",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVDRip",
+    "filename": "Volver.al.Futuro.Dvdrip.Audio.Latino.avi"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Conspiracy Facts Collection\n021_the_simpsons_predicted_the_future.mkv\n👤 8 💾 24.47 MB ⚙️ 1337x",
+   "infoHash": "546131786a02639022d48a921b94d9dedabf73d1",
+   "fileIdx": 20,
+   "behaviorHints": {
+    "filename": "021_the_simpsons_predicted_the_future.mkv"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Official IMDb Top 250 Movies Collection 6/17/2011\nBack.To.The.Future[1985]DvDrip-aXXo.avi\n👤 8 💾 701.97 MB ⚙️ ThePirateBay",
+   "infoHash": "4986ace2ee7a564508e0d5cfdde2d9018b8af942",
+   "fileIdx": 645,
+   "behaviorHints": {
+    "filename": "Back.To.The.Future[1985]DvDrip-aXXo.avi"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "The Arrivals (2008)\n2.The Arrivals (Documentary)/The Arrivals pt.2 (mind control feat. George Carlin).mp4\n👤 6 💾 36.67 MB ⚙️ ThePirateBay",
+   "infoHash": "bc73f32f0aa298dabd541225386718e9e0fd46a9",
+   "fileIdx": 17,
+   "behaviorHints": {
+    "filename": "The Arrivals pt.2 (mind control feat. George Carlin).mp4"
+   }
+  }
+ ]
+}

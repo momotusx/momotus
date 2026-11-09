@@ -1,0 +1,333 @@
+{
+ "fetched": "2026-11-08T23:16:50.448Z",
+ "id": "tt0141842",
+ "season": 1,
+ "episode": 1,
+ "type": "series",
+ "sources": {
+  "meta": "https://v3-cinemeta.strem.io/meta/series/tt0141842.json",
+  "streams": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/series/tt0141842:1:1.json"
+ },
+ "meta": {
+  "name": "The Sopranos",
+  "year": "1999–2007",
+  "runtime": "54 min",
+  "genres": [
+   "Crime",
+   "Drama"
+  ],
+  "country": "United States",
+  "episodeTitle": "Pilot",
+  "episodeReleased": "1999-01-11T05:00:00.000Z"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k",
+   "title": "The Sopranos TV Series 2160p H.264 COMPLETE repost moviesbyrizzo\nThe Sopranos S01E01 2160p H.264 (moviesbyrizzoconv).mp4\n👤 5 💾 4.3 GB ⚙️ ThePirateBay",
+   "infoHash": "ab5fb54c7eab0eba5441feb047f87f7c7dc1bba1",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|ab5fb54c7eab0eba5441feb047f87f7c7dc1bba1",
+    "filename": "The Sopranos S01E01 2160p H.264 (moviesbyrizzoconv).mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "The Sopranos TV Series 2160p H.264 (moviesbyrizzo conversions)\nThe Sopranos S01E01 2160p H.264 (moviesbyrizzoconv).mp4\n👤 1 💾 4.3 GB ⚙️ ThePirateBay",
+   "infoHash": "b49eed0a61aee27b5d5e2e5dbe56942d4e169571",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|b49eed0a61aee27b5d5e2e5dbe56942d4e169571",
+    "filename": "The Sopranos S01E01 2160p H.264 (moviesbyrizzoconv).mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Sopranos.S01.1080p.BluRay.x265-RARBG\nThe.Sopranos.S01E01.1080p.BluRay.x265-RARBG.mp4\n👤 1098 💾 958.34 MB ⚙️ RARBG",
+   "infoHash": "87773a30994884f2d5abef7cf1360cf19e91a3e6",
+   "fileIdx": 27,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|87773a30994884f2d5abef7cf1360cf19e91a3e6",
+    "filename": "The.Sopranos.S01E01.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Sopranos (1999) Season 1-6 S01-S06 (1080p BluRay x265 HEVC 10bit AAC 5.1 ImE) [QxR]\nSeason 1/The Sopranos (1999) - S01E01 - The Sopranos (1080p BluRay x265 ImE).mkv\n👤 259 💾 2.13 GB ⚙️ 1337x",
+   "infoHash": "15d3c9a633cfcf74ddf4466b96c3a5e5d599a035",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|15d3c9a633cfcf74ddf4466b96c3a5e5d599a035",
+    "filename": "The Sopranos (1999) - S01E01 - The Sopranos (1080p BluRay x265 ImE).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Sopranos (1999) S01-S06 (1080p BluRay x265 10bit EAC3 5.1 Si…\nThe Sopranos (1999) S01/The Sopranos (1999) - S01E01 - Pilot (1080p BluRay x265 Silence).mkv\n👤 87 💾 2.69 GB ⚙️ TorrentGalaxy",
+   "infoHash": "3878ac06d0b810d3a78e961077bc707166612c96",
+   "fileIdx": 57,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|3878ac06d0b810d3a78e961077bc707166612c96",
+    "filename": "The Sopranos (1999) - S01E01 - Pilot (1080p BluRay x265 Silence).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Sopranos.Complete.1080p.Bluray.10bit.x265.AAC.51-HazMatt\nThe.Sopranos.S01E01.1080p.Bluray.10bit.x265.AAC.5.1-HazMatt.mkv\n👤 49 💾 1.02 GB ⚙️ ThePirateBay",
+   "infoHash": "14d1c52eba8fc73c394de80b10d04052c14279ce",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|14d1c52eba8fc73c394de80b10d04052c14279ce",
+    "filename": "The.Sopranos.S01E01.1080p.Bluray.10bit.x265.AAC.5.1-HazMatt.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Sopranos S01 Season 1 1080p 5.1Ch BluRay ReEnc-DeeJayAhmed\nThe.Sopranos.S01E01.1080p.5.1Ch.BluRay.ReEnc-DeeJayAhmed.mkv\n👤 39 💾 760.93 MB ⚙️ ThePirateBay",
+   "infoHash": "647459c478898a99e1807e742d8591846dadcca4",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|647459c478898a99e1807e742d8591846dadcca4",
+    "filename": "The.Sopranos.S01E01.1080p.5.1Ch.BluRay.ReEnc-DeeJayAhmed.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Sopranos 1999 S01E01 1080p AMZN WEB-DL H265 SDR DDP 2 0 English-HONE\n👤 21 💾 3.76 GB ⚙️ ThePirateBay",
+   "infoHash": "d4ae5a37fda5574e4e4ee57787c5ad7a6cc82c4c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|HONE",
+    "filename": "The Sopranos 1999 S01E01 1080p AMZN WEB-DL H265 SDR DDP 2 0 English-HONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Sopranos Complete Series (S01 - S06) 1080p 5.1 - 2.0 x264 Phun Psyz\nSeason 1/The Sopranos S01E01 The Sopranos.mp4\n👤 10 💾 1.27 GB ⚙️ TorrentGalaxy",
+   "infoHash": "9575de2befdc7b5e6921b97abca44f3b1c704dc9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|9575de2befdc7b5e6921b97abca44f3b1c704dc9",
+    "filename": "The Sopranos S01E01 The Sopranos.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Sopranos-Seasons 1-6 Complete-1080p.H265.AAC5.1\nThe Sopranos-season 1/The Sopranos S01E01 1080p.H265.AAC.mkv\n👤 7 💾 492.44 MB ⚙️ ThePirateBay",
+   "infoHash": "d94ba29df84c27c165857ec5f13b0ecf8bd9ce7d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|d94ba29df84c27c165857ec5f13b0ecf8bd9ce7d",
+    "filename": "The Sopranos S01E01 1080p.H265.AAC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Sopranos.S01.S02.S03.S04.S05.S06.1080p.BluRay.MP4.x265-RARBG[BTM]\nThe.Sopranos.S01.1080p.BluRay.x265-RARBG/The.Sopranos.S01E01.1080p.BluRay.x265-RARBG.mp4\n👤 6 💾 958.34 MB ⚙️ 1337x",
+   "infoHash": "b4c81e4574f3fd5163ff8c915c86ef26adc72e49",
+   "fileIdx": 52,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|b4c81e4574f3fd5163ff8c915c86ef26adc72e49",
+    "filename": "The.Sopranos.S01E01.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Sopranos 1999 Complete Bluray x265 HEVC 10bit LION [UTR]\nThe.Sopranos.S01E01.BluRay.1080p.x265.HEVC-LION[UTR].mkv\n👤 5 💾 1.22 GB ⚙️ ThePirateBay",
+   "infoHash": "3e4b0e268fca477ccd8dae476df7751d3e5f3569",
+   "fileIdx": 8,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|3e4b0e268fca477ccd8dae476df7751d3e5f3569",
+    "filename": "The.Sopranos.S01E01.BluRay.1080p.x265.HEVC-LION[UTR].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Sopranos (1999) - S01 (ITA) - DD-CREW\nThe Sopranos (1999) - S01E01 - The Sopranos (1080p BluRay x265 ImE).(ita.DD-CREW).mkv\n👤 3 💾 2.24 GB ⚙️ EXT\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇩🇰 / 🇸🇪 / 🇳🇴",
+   "infoHash": "d07efac411365bf00fab176b27edfb9425260603",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|d07efac411365bf00fab176b27edfb9425260603",
+    "filename": "The Sopranos (1999) - S01E01 - The Sopranos (1080p BluRay x265 ImE).(ita.DD-CREW).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Sopranos (Complete) Mr. James Gandolfini 1080p moviesbyrizzo\nThe Sopranos S01E01 1080p H.264 (moviesbyrizzo upl).mp4\n👤 3 💾 486.81 MB ⚙️ ThePirateBay",
+   "infoHash": "f7e387664558c647d9193edd73a9a552c3ce70ab",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|f7e387664558c647d9193edd73a9a552c3ce70ab",
+    "filename": "The Sopranos S01E01 1080p H.264 (moviesbyrizzo upl).mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Sopranos - Season 01\nThe.Sopranos.S01E01.1080p.BluRay.x265-RARBG.mp4\n👤 2 💾 958.34 MB ⚙️ EXT",
+   "infoHash": "1e1e69de4445fe4301bbc2af275acfb4d1f765cb",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1e1e69de4445fe4301bbc2af275acfb4d1f765cb",
+    "filename": "The.Sopranos.S01E01.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Sopranos Season 1 Complete 720p BluRay x264 [i_c]\nThe Sopranos S01E01 The Sopranos.mkv\n👤 72 💾 948.13 MB ⚙️ ThePirateBay",
+   "infoHash": "9e8cbe0fc04f2c6eced5896173bdedbeca846f4d",
+   "fileIdx": 8,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|9e8cbe0fc04f2c6eced5896173bdedbeca846f4d",
+    "filename": "The Sopranos S01E01 The Sopranos.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Sopranos Season 1 S01 720p HEVC x265 Crazy4ad\nThe.Sopranos.S01E01.720p.HEVC.x265.Crazy4ad.mkv\n👤 18 💾 379.93 MB ⚙️ ThePirateBay",
+   "infoHash": "370156b53abaef459a745f79883ab67141e92f84",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|370156b53abaef459a745f79883ab67141e92f84",
+    "filename": "The.Sopranos.S01E01.720p.HEVC.x265.Crazy4ad.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Sopranos Season 01 720p Bluray X265 HEVC-TangoAlpha\nThe.Sopranos.S01E01.Pilot.720p.Bluray.2CH.x265.HEVC-TangoAlpha.mkv\n👤 9 💾 365.51 MB ⚙️ MagnetDL",
+   "infoHash": "434a7b9ebdcdf200e4cb3bc6ecf141a809062d1d",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|434a7b9ebdcdf200e4cb3bc6ecf141a809062d1d",
+    "filename": "The.Sopranos.S01E01.Pilot.720p.Bluray.2CH.x265.HEVC-TangoAlpha.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The.Sopranos.I.Soprano.S01-S06.720p.ITA.x264.MaDHeX.[MaDTiA_]\nS01/I.Soprano.S01E01.720p.ITA.x264.MaDHeX.[MaDTiA_].mp4\n👤 7 💾 743.47 MB ⚙️ 1337x\n🇮🇹",
+   "infoHash": "2beafca3c153ee3a00227a9b94897ce8091199b5",
+   "fileIdx": 51,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|2beafca3c153ee3a00227a9b94897ce8091199b5",
+    "filename": "I.Soprano.S01E01.720p.ITA.x264.MaDHeX.[MaDTiA_].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Sopranos Season 1 Complete 720p\nThe.Sopranos.S01E01.720p.BluRay.x264-UNIT3D.mkv\n👤 4 💾 1.17 GB ⚙️ ThePirateBay",
+   "infoHash": "d6b2804dafed9533f8a723301aa8cf4405a30d5b",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|d6b2804dafed9533f8a723301aa8cf4405a30d5b",
+    "filename": "The.Sopranos.S01E01.720p.BluRay.x264-UNIT3D.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Sopranos Season 1 Complete 720p X265 HEVC AAC 2CH: UTR\nThe Sopranos S01E01 720p x265 HEVC AAC 2CH - UTM.mkv\n👤 1 💾 298.35 MB ⚙️ MagnetDL",
+   "infoHash": "e2d59939a416d572e8b0d1ef311d606600f1e703",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|e2d59939a416d572e8b0d1ef311d606600f1e703",
+    "filename": "The Sopranos S01E01 720p x265 HEVC AAC 2CH - UTM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Sopranos Complete | 720p Mkv Compression [mkvGOD]\nSeason 1/Episode 1 - The Sopranos.mkv\n👤 1 💾 356.25 MB ⚙️ MagnetDL",
+   "infoHash": "f8e2dd96832fe6001f9744d93f81a785e037b479",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|f8e2dd96832fe6001f9744d93f81a785e037b479",
+    "filename": "Episode 1 - The Sopranos.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Sopranos 480p Bluray x264 Complete Season 1\n[720pMkv.Com]_The.Sopranos.S01E01.480p.Bluray.x264-GAnGSteR.mp4\n👤 1 💾 268.07 MB ⚙️ ThePirateBay",
+   "infoHash": "4230202f06a2858ea7968b2ccbe35fd708928c48",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4230202f06a2858ea7968b2ccbe35fd708928c48",
+    "filename": "[720pMkv.Com]_The.Sopranos.S01E01.480p.Bluray.x264-GAnGSteR.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n400p",
+   "title": "The Sopranos (1999) - Complete - 720x400 - S06E15 & E20 fixed audio -Subtitles non-Eng parts\nS01E01 - The Sopranos (pilot).mkv\n👤 7 💾 509.55 MB ⚙️ 1337x",
+   "infoHash": "6bc61d5eb6c5a552e5804affdaa40bebaadcc5e6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|6bc61d5eb6c5a552e5804affdaa40bebaadcc5e6",
+    "filename": "S01E01 - The Sopranos (pilot).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n360p",
+   "title": "The Sopranos Season 1 2 3 4 5 6 - threesixtyp\nThe Sopranos S01 (360p re-blurip)/The Sopranos S01E01 Pilot.mp4\n👤 9 💾 275.57 MB ⚙️ ThePirateBay",
+   "infoHash": "aa461bfb4d1db938f198511b224ff70b0056784e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|aa461bfb4d1db938f198511b224ff70b0056784e",
+    "filename": "The Sopranos S01E01 Pilot.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\nBDRip",
+   "title": "The.Sopranos.S01E01.INTERNAL.BDRip.x264-ARCHiViST\n👤 4 💾 607.75 MB ⚙️ ThePirateBay",
+   "infoHash": "f99aab6e5623407970fe0cf28b1a33255f3af587",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BDRip|archivist",
+    "filename": "the.sopranos.s01e01.internal.bdrip.x264-archivist.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nTVRip",
+   "title": "The Sopranos - Season 1 Complete [TVrip ITA] TNT Village\nI Soprano - 1x01 - Affari di famiglia.avi\n👤 4 💾 349.96 MB ⚙️ ThePirateBay\n🇮🇹",
+   "infoHash": "512670202f4b677fc872d34527b27d6e2b7243fb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|512670202f4b677fc872d34527b27d6e2b7243fb",
+    "filename": "I Soprano - 1x01 - Affari di famiglia.avi"
+   }
+  },
+  {
+   "name": "Torrentio\nBDRip",
+   "title": "The.Sopranos.S01.BDRip.x265-ION265\nThe.Sopranos.S01E01.BDRip.x265-ION265.mp4\n👤 2 💾 401.79 MB ⚙️ RARBG",
+   "infoHash": "efa1d198aa594479923d355169fb8192baa05649",
+   "fileIdx": 27,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|efa1d198aa594479923d355169fb8192baa05649",
+    "filename": "The.Sopranos.S01E01.BDRip.x265-ION265.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\nHDTV",
+   "title": "The Sopranos - S01E01.HDTV.subtitulado.Esp.SC.avi\n👤 2 💾 625.17 MB ⚙️ ThePirateBay\n🇪🇸",
+   "infoHash": "b400229ae7e486e57e83db37884daccddcf792d4",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|HDTV"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "The Sopranos: The Complete Series (Season 1 2 3 4 5&6) + Extras\nSeason 1/The Sopranos Season 1 Episode 01 - Pilot.avi\n👤 151 💾 624.41 MB ⚙️ ThePirateBay",
+   "infoHash": "e2234e0317a4f6748b6ce90db924ca4a82751cfc",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|e2234e0317a4f6748b6ce90db924ca4a82751cfc",
+    "filename": "The Sopranos Season 1 Episode 01 - Pilot.avi"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Los Sopranos Temporadas 1 -6 Ingles Subtitulos EspaÃ&plus\ntemporada1/SopraT1E01.avi\n👤 1 💾 349.87 MB ⚙️ ThePirateBay",
+   "infoHash": "b8c36d2fdac72a6e92da0fe0ff5d7467ec8e03b7",
+   "fileIdx": 7,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|b8c36d2fdac72a6e92da0fe0ff5d7467ec8e03b7",
+    "filename": "SopraT1E01.avi"
+   }
+  }
+ ]
+}

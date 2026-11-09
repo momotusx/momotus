@@ -1,0 +1,512 @@
+{
+ "fetched": "2026-11-08T23:16:50.092Z",
+ "id": "tt0137523",
+ "type": "movie",
+ "sources": {
+  "meta": "https://v3-cinemeta.strem.io/meta/movie/tt0137523.json",
+  "streams": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt0137523.json"
+ },
+ "meta": {
+  "name": "Fight Club",
+  "year": "1999",
+  "runtime": "139 min",
+  "genres": [
+   "Crime",
+   "Drama",
+   "Thriller"
+  ],
+  "country": "United States, Germany"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k",
+   "title": "Fight Club (1999) [REPACK] [2160p] [BluRay] [x265] [10bit] [5.1]\n👤 76 💾 6.49 GB ⚙️ EXT\n🇬🇧 / 🇨🇳",
+   "infoHash": "7da52d5473e73707ea15a63019bb05563405cd5a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit",
+    "filename": "Fight.Club.1999.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Fight Club (1999) Featurettes (2160p BluRay x265 HEVC AI 10bit AAC 5.1 Joy) [UTR]\nFight Club (1999)  [2160p x265 10bit FS100 Joy].mkv\n👤 43 💾 6.83 GB ⚙️ 1337x",
+   "infoHash": "ccef817f7ee54f7c0a04197e31b56c4bcd901b29",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|hevc|10bit",
+    "filename": "Fight Club (1999)  [2160p x265 10bit FS100 Joy].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Fight Club 1999 UHD BluRay 1080p DDP 5 1 HDR10 x265-SM737\n👤 13 💾 8.33 GB ⚙️ ThePirateBay",
+   "infoHash": "8a377d65643b5917ff8b223811f6f90a56e7fc49",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|HDR",
+    "filename": "Fight Club 1999 UHD BluRay 1080p DDP 5 1 HDR10 x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club (1999) 1080p BrRip x264 - YIFY\n👤 611 💾 1.85 GB ⚙️ ThePirateBay",
+   "infoHash": "a086ce4afabbd8ab949662e30134a49e22d1f0c7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x264",
+    "filename": "Fight.Club.10th.Anniversary.Edition.1999.1080p.BrRip.x264.YIFY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight.Club.1999.REMASTERED.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265\n👤 252 💾 4.01 GB ⚙️ ThePirateBay",
+   "infoHash": "daa4df9eba1fa381bfa29b85d3d7580c22a1c386",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Fight.Club.1999.REMASTERED.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club (1999) RM4K (1080p BluRay x265 10bit EAC3 5.1 Celdra)\nNirvanna the Band the Show the Movie (2026) (1080p BluRay x265 10bit r00t).mkv\n👤 157 💾 6.44 GB ⚙️ ThePirateBay",
+   "infoHash": "6237e9349cb180a3143bbfffd1603bf0d132def4",
+   "fileIdx": 10,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Nirvanna the Band the Show the Movie (2026) (1080p BluRay x265 10bit r00t).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 REPACK 1080p BluRay DD5 1 X265-Ralphy\n👤 107 💾 8.44 GB ⚙️ ThePirateBay",
+   "infoHash": "d0699f2546433fe744ee6f840c40a31c665f6c5b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Fight Club 1999 REPACK 1080p BluRay DD5 1 X265-Ralphy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 1080p BluRay\n👤 86 💾 2.57 GB ⚙️ YTS",
+   "infoHash": "74a582111d327666ebcef3a5f904b06f8dafb3d8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Fight.Club.1999.REPACK.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club (1999) (1080p BluRay x265 HEVC 10bit AAC 5.1 Tigole) [QxR]\nFight Club (1999) (1080p BluRay x265 10bit Tigole).mkv\n👤 77 💾 6.05 GB ⚙️ 1337x\n🇬🇧 / 🇵🇹 / 🇪🇸 / 🇨🇳 / 🇫🇷 / 🇳🇱 / 🇩🇰 / 🇸🇪 / 🇳🇴",
+   "infoHash": "41f6fa669b79c9ef7ad515ba831188ea1c42c239",
+   "fileIdx": 29,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Fight Club (1999) (1080p BluRay x265 10bit Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 REMASTERED V2 1080p BluRay HEVC x265 5.1 BONE\n👤 57 💾 2.97 GB ⚙️ ThePirateBay",
+   "infoHash": "ce15d6802e66964bcb0d86e7cab13e0733ecd572",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "Fight Club 1999 REMASTERED V2 1080p BluRay HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club (1999) RM4K (1080p BluRay x265 10bit EAC3 5.1 Celdra) [QxR]\nFight Club (1999) (1080p BluRay x265 Celdra).mkv\n👤 37 💾 11.7 GB ⚙️ 1337x",
+   "infoHash": "608866858dab45c149a3733515b12b3bd3ca3ff8",
+   "fileIdx": 29,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Fight Club (1999) (1080p BluRay x265 Celdra).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 1080p 10th Ann Edt BluRay DTS x264 D-Z0N3\n👤 35 💾 12.87 GB ⚙️ ThePirateBay",
+   "infoHash": "4759632f94838be272667bf4709bc27bfba5c401",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight.Club.1999.REMASTERED.1080p.BluRay.x265-RARBG\n👤 26 💾 2.17 GB ⚙️ RARBG",
+   "infoHash": "5edd93240d65fc9e53d836f6d53aaab2caf9f19c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Fight.Club.1999.REMASTERED.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club (1999) - 1080p - BD AV1 Opus MULTi3 [V2] [dAV1nci]\n👤 22 💾 2.91 GB ⚙️ 1337x",
+   "infoHash": "74187b74f4d49e16459564f9cd8169271d745374",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|av1",
+    "filename": "Fight.Club.1999.1080p.BD.AV1.Opus.MULTi3.V2-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club (1999) (1080p YKW WEB-DL H265 SDR DDP 5 1 English - HONE)\n👤 16 💾 8.36 GB ⚙️ ThePirateBay",
+   "infoHash": "11318a1e44f9b3f0dc8eb50e9ed4178f6e096fe1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+    "filename": "Fight Club (1999) (1080p YKW WEB-DL H265 SDR DDP 5 1 English - HONE).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 1080p HBO Max WEBDL H264 DUAL EAC3 TSRG\n👤 15 💾 4.19 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "e7a70fe3476d97d78832eb2df1528664ce04dff2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Fight Club 1999 1080p HBO Max WEBDL H264 DUAL EAC3 TSRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 REPACK REMASTERED 1080p BluRay x265-YAWNTiC\n👤 14 💾 7.42 GB ⚙️ ThePirateBay",
+   "infoHash": "329ec8d9a356c90de8a6ca8981ca5474830a6b15",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Fight Club 1999 REPACK REMASTERED 1080p BluRay x265-YAWNTiC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 1080p HULU WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 14 💾 5.72 GB ⚙️ ThePirateBay",
+   "infoHash": "d41f22023e2b8585cd63342936023f1973771cde",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Fight Club 1999 1080p HULU WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 Remastered 1080p BluRay HEVC x265 5.1 BONE\n👤 14 💾 1.47 GB ⚙️ ThePirateBay",
+   "infoHash": "577e16d14ecb0c39a8846a8400b901704683576c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "Fight Club 1999 Remastered 1080p BluRay HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "IMDB TOP 001-050 BluRay 1080p x265 10bit MNHD-FRDS\n010.搏击俱乐部.Fight.Club.1999.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS/Fight.Club.1999.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv\n👤 11 💾 7.62 GB ⚙️ EXT",
+   "infoHash": "9351bcf9e7437f706549f8b60314c39259c420b4",
+   "fileIdx": 69,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Fight.Club.1999.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 1080p ITV WEB-DL AAC 2 0 H 264-PiRaTeS\n👤 10 💾 6.5 GB ⚙️ ThePirateBay",
+   "infoHash": "8234ac1e7dc2db0d31a12c349d54b51c25acd9b4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Fight Club 1999 1080p ITV WEB-DL AAC 2 0 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club (1999) 1080p Bluray AV1 Opus Multi4 [dAV1nci]\n👤 10 💾 3.46 GB ⚙️ 1337x",
+   "infoHash": "abf16c373b55b220b03026482773f8f294d821fe",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Fight.Club.1999.1080p.Bluray.AV1.Opus.Multi4-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club (1999) Featurettes (1080p BluRay x265 HEVC AI 10bit AAC 5.1 Q22 Joy) [UTR]\nFight Club (1999)  [1080p x265 q22 FS94 Joy].mkv\n👤 10 💾 2.46 GB ⚙️ 1337x",
+   "infoHash": "28437542b2adbd03742f96804e0b5dbf5c4febf6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Fight Club (1999)  [1080p x265 q22 FS94 Joy].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Amazing Films 5 - Mp4 x264 AC3 1080p\nFight Club (1999) 1080p Surround.mp4\n👤 9 💾 3.1 GB ⚙️ ThePirateBay",
+   "infoHash": "9d34b41369168c08bba185cadc7e45fc4156e86f",
+   "fileIdx": 19,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Fight Club (1999) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 1080p BluRay DD+ 5.1 x265-edge2020\n👤 8 💾 4.29 GB ⚙️ TorrentGalaxy",
+   "infoHash": "c953d7a509680a6b2f06bdc7d38e482d1b8369cc",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Fight.Club.1999.1080p.BluRay.DDP.5.1.H.265-EDGE2020.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club (1999) WEBRip 1080p HEVC AAC ITA ENG SUB ENG ITA - Lullozzo\n👤 7 💾 4.13 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "8baba9c4890513e32c8c246b4fd170fb87b2b3ab",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc",
+    "filename": "Fight Club (1999) WEBRip 1080p HEVC AAC ITA ENG SUB ENG ITA - Lullozzo.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 1080p AUBC WEB-DL AAC 2 0 H 264-PiRaTeS\n👤 6 💾 2.43 GB ⚙️ ThePirateBay",
+   "infoHash": "c49183abbe6e0adb269197bd541abdb0a6cbae4a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Fight Club 1999 1080p AUBC WEB-DL AAC 2 0 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 1080p BluRay x264-BestHD\n👤 6 💾 13.12 GB ⚙️ ThePirateBay",
+   "infoHash": "295892df94e39fb59269f3b248d1242c6cbff089",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "besthd-fclub-1080p.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 1080p MAX WEB-DL H265-PiRaTeS\n👤 6 💾 5.41 GB ⚙️ ThePirateBay",
+   "infoHash": "a75687cb69cf9eea9f3292cc9e8d6e1803c554cc",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+    "filename": "Fight Club 1999 1080p MAX WEB-DL H265-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 REMASTERED 1080p BluRay H264 AAC-RARBG\n👤 6 💾 2.65 GB ⚙️ MagnetDL",
+   "infoHash": "4440348ac5080e152de3b8a7d5720aa00b50d0d6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264",
+    "filename": "Fight.Club.1999.REMASTERED.1080p.BluRay.H264.AAC-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 10th Anniversary Edition 1999 1080p BluRay x264 DuaL-TURKO\n👤 5 💾 5.34 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "7701ee1705d202f560ca0a87b5aaad19ff712514",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Fight Club 10th Anniversary Edition 1999 1080p BluRay x264 DuaL-TURKO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight.Club.1999.1080p.BluRay.x264.AC3-ETRG\n👤 5 💾 3.99 GB ⚙️ ThePirateBay",
+   "infoHash": "5130566832cbfacbed2398c4ddc3e8fdf6d7d353",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Fight.Club.1999.1080p.BluRay.x264.AC3-ETRG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 1080p BluRay x265-YAWNTiC\n👤 4 💾 7.2 GB ⚙️ ThePirateBay",
+   "infoHash": "7404b4f669f7e76f82fbb066c5005f0cfc1b15c9",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Fight Club 1999 1080p BluRay x265-YAWNTiC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight.Club.1999.1080p.BluRay.H264.AAC-RARBG\n👤 4 💾 2.65 GB ⚙️ ThePirateBay",
+   "infoHash": "17d52c9a3795ac04914bdde9446c0517bc2bf435",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Clube De Luta (1999) BluRay 1080p Dublado\n👤 4 💾 1.29 GB ⚙️ ThePirateBay\n🇵🇹",
+   "infoHash": "549e268d2f738f9d48199019e044e1f9a3a0163a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay",
+    "filename": "Clube de Luta (1999) BluRay 1080p Dublado.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 REMASTERED V2 1080p BluRay HEVC x265 5 1-BONE\n👤 3 💾 2.97 GB ⚙️ ThePirateBay",
+   "infoHash": "240b85c65361cb6802596da85eba900ea1e6e1c9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "Fight Club 1999 REMASTERED V2 1080p BluRay HEVC x265 5 1-BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club (1999) 1080p 10bit BluRay [Org JC Hindi DDP2.0 English DDP5.1] x265 HEVC ESub - ANNi\n👤 3 💾 9.07 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "243889e2f4787a4d8770d77771072b78ab65e08c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Fight Club (1999) 1080p 10bit BluRay [Org JC Hindi DDP2.0 + English DDP5.1] x265 HEVC ESub - ANNi.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fight Club 1999 RePak 1080p Blu-Ray HEVC x265 10Bit DDP5.1 Subs KINGDOM\n👤 3 💾 6.27 GB ⚙️ 1337x",
+   "infoHash": "2a311b715c4d0dc30803ed93e408f03f2739b9c4",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Fight Club  1999 RePak 1080p Blu-Ray HEVC x265 10Bit Subs KINGDOM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Fight Club (1999) 720p BrRip x264 - YIFY\n👤 22 💾 1 GB ⚙️ ThePirateBay",
+   "infoHash": "4b37249e7f82f60d94c7a15b743a6b624e640372",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BRRip|x264",
+    "filename": "Fight.Club.10th.Anniversary.Edition.1999.720p.BrRip.x264.YIFY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Fight.Club.1999.REMASTERED.REPACK.720p.BluRay.999MB.x265.10bi\n👤 19 💾 996.71 MB ⚙️ ThePirateBay",
+   "infoHash": "19eb684c1110109ac8893f4f818eca94110f267a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x265|10bit",
+    "filename": "Fight.Club.1999.REMASTERED.REPACK.720p.BluRay.999MB.HQ.x265.10bit-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Fight Club 1999 10TH ANNIVERSARY EDITION 720p 10bit BluRay 6CH x265 HEVC-PSA\n👤 12 💾 867.04 MB ⚙️ ThePirateBay",
+   "infoHash": "6170d37e7e422883a6bf06a2aeb79b67ae5cebd2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|hevc|10bit",
+    "filename": "Fight Club 1999 10TH ANNIVERSARY EDITION 720p 10bit BluRay 6CH x265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Fight Club 1999 720p BluRay\n👤 8 💾 1.25 GB ⚙️ YTS",
+   "infoHash": "0facfb2d11c9a8f15281a909b45084e6425ef2f0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Fight.Club.1999.REPACK.720p.BluRay.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Fight.Club.1999.720p.BDRip.x264-SEPH1\n👤 5 💾 2.14 GB ⚙️ TorrentGalaxy",
+   "infoHash": "c0d72bfbd23406d3b1f98fa9ed22fa18a431b52f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BDRip|x264",
+    "filename": "Fight.Club.1999. 720p.BDRip.x264-SEPH1.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\nBDRip",
+   "title": "Fight Club [1999][Eng][Sub Arabic]BDRip XviD avi-ToZoon\n👤 4 💾 1.4 GB ⚙️ ThePirateBay\n🇬🇧 / 🇸🇦",
+   "infoHash": "36245334d124a1361f4284800e3085a9254737ad",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BDRip|xvid"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Paczka filmow nr.13 na Telegram | 1900 - 2026 | Dubbing Lektor\nFight.Club.1999.Lektor.mp4\n👤 16 💾 1.86 GB ⚙️ EXT\nDubbed",
+   "infoHash": "4b1a2e015f7783724fb1d6d43d47602d6471ef9a",
+   "fileIdx": 18,
+   "behaviorHints": {
+    "filename": "Fight.Club.1999.Lektor.mp4"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Official IMDb Top 250 Movies Collection 6/17/2011\nFight Club[1999]DvDrip[Eng]-Stealthmaster.avi\n👤 8 💾 700.05 MB ⚙️ ThePirateBay",
+   "infoHash": "4986ace2ee7a564508e0d5cfdde2d9018b8af942",
+   "fileIdx": 13,
+   "behaviorHints": {
+    "filename": "Fight Club[1999]DvDrip[Eng]-Stealthmaster.avi"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "My Super Sentai Collection\n34 Tensou Sentai Goseiger/[T-N]Tensou_Sentai_Goseiger/[T-N]Fight_-_Mayumi_Gojo_HD[7BB80D1F].mp4\n👤 4 💾 78.25 MB ⚙️ TorrentGalaxy",
+   "infoHash": "a3789d8ddb0aabd6580559148988b134cd630c6a",
+   "fileIdx": 1926,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|a3789d8ddb0aabd6580559148988b134cd630c6a",
+    "filename": "[T-N]Fight_-_Mayumi_Gojo_HD[7BB80D1F].mp4"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "My Super Sentai Collection\n34 Tensou Sentai Goseiger/[T-N]Tensou_Sentai_Goseiger/[T-N]Fight_-_Mayumi_Gojo_LongVer_HD[40F84F86].mp4\n👤 4 💾 100.24 MB ⚙️ TorrentGalaxy",
+   "infoHash": "a3789d8ddb0aabd6580559148988b134cd630c6a",
+   "fileIdx": 1927,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|a3789d8ddb0aabd6580559148988b134cd630c6a",
+    "filename": "[T-N]Fight_-_Mayumi_Gojo_LongVer_HD[40F84F86].mp4"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Fight Club (1999) AI UHD - 10th Anniversary Edition + Extras (PROPER) FIX\nDeleted scenes/Tyler quits smoking, Jack quits work.mkv\n👤 4 💾 163.35 MB ⚙️ TorrentGalaxy",
+   "infoHash": "1a1e4f9fc4c81bebc199aa143fc5b161321ef9be",
+   "fileIdx": 34,
+   "behaviorHints": {
+    "filename": "Tyler quits smoking, Jack quits work.mkv"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Fight Club (1999) AI UHD - 10th Anniversary Edition + Extras (PROPER) FIX\nInterviews/Angel Faces Beating.mkv\n👤 4 💾 216.16 MB ⚙️ TorrentGalaxy",
+   "infoHash": "1a1e4f9fc4c81bebc199aa143fc5b161321ef9be",
+   "fileIdx": 69,
+   "behaviorHints": {
+    "filename": "Angel Faces Beating.mkv"
+   }
+  }
+ ]
+}

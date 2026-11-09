@@ -1,0 +1,667 @@
+{
+ "fetched": "2026-11-08T23:52:58.450Z",
+ "id": "tt31227572",
+ "type": "movie",
+ "meta": {
+  "name": "Predator: Badlands",
+  "year": "2025",
+  "runtime": "107 min"
+ },
+ "streamUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt31227572.json",
+ "streams": [
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Predator Badlands 2025 WEB-DL 2160p HDR10 HEVC DDP 5.1 x265-E\n👤 50 💾 8.26 GB ⚙️ 1337x",
+   "infoHash": "d5cb42e3bc0a2affaf4613dd1f524c999fdcb9ee",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|hevc|10bit|HDR",
+    "filename": "Predator Badlands 2025.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR",
+   "title": "Predator: Badlands (2025) (2160p UHD BluRay x265 10bit DV HDR TrueHD Atmos 7.1 English French Spanish r00t) [QxR]\nPredator - Badlands (2025) (2160p UHD BluRay x265 10bit DV HDR r00t).mkv\n👤 36 💾 14.23 GB ⚙️ 1337x\n🇬🇧 / 🇪🇸 / 🇫🇷",
+   "infoHash": "f0dbc2c83e36febc6253f1062531ec8e9394894e",
+   "fileIdx": 5,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|DV|HDR",
+    "filename": "Predator - Badlands (2025) (2160p UHD BluRay x265 10bit DV HDR r00t).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR10+",
+   "title": "Predator.Badlands.2025.2160p.HDR10Plus.DV.WEBRip.6CH.x265.HEVC-PSA\n👤 20 💾 2.03 GB ⚙️ ThePirateBay",
+   "infoHash": "a8f731d34eeb18e6c82749d09ce4663dc01ca72d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|hevc|DV|HDR10+",
+    "filename": "Predator.Badlands.2025.2160p.HDR10Plus.DV.WEBRip.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR",
+   "title": "Predator.Badlands.2025.WEB-DL.2160p.HDR10 .DV.HEVC.DDPA 5.1.x265-E\n👤 14 💾 12.55 GB ⚙️ 1337x",
+   "infoHash": "4eb2da08723caf6ec8db9873b86dc6592df57a38",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|hevc|10bit|DV|HDR",
+    "filename": "Predator.Badlands.2025.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Predator.Badlands.2025.iTA-ENG.Bluray.2160p.HEVC.HDR.x265-CYBER.mkv\n👤 5 💾 7.15 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "7455f6cf45e7651b1d45aeebaf6f22ac54a0aad1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|hevc|HDR",
+    "filename": "Predator.Badlands.2025.iTA-ENG.Bluray.2160p.HEVC.HDR.x265-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Predator: Badlands 2025 2160p WEBRip\n👤 390 💾 4.82 GB ⚙️ YTS",
+   "infoHash": "c3be58c54784bdf7722cff7e12915000aaccbd8c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "Predator.Badlands.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.LT].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Predator.Badlands.2025.2160P.WEB.H265-POKE\n👤 36 💾 11.47 GB ⚙️ ThePirateBay",
+   "infoHash": "d01954ffe0029567ea4e125bbc7ccc0f02dfa8c0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB|h265",
+    "filename": "predator.badlands.2025.2160p.web.h265-poke.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Predator.Badlands.2025.2160p.WEBRip.10Bit.DDP5.1.Atmos.x265-NeoNoir\n👤 15 💾 4.85 GB ⚙️ ThePirateBay",
+   "infoHash": "aff82d95382b4763ec156a8c6e08cd748ec7f3d1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "Predator.Badlands.2025.2160p.WEBRip.10Bit.DDP5.1.Atmos.x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Predator.Badlands.2025.2160P.WEB.H265-POKE\n👤 6 💾 11.47 GB ⚙️ ThePirateBay",
+   "infoHash": "5a0117a2a0198e58b1e9d949ca5b2273a9a6a514",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB|h265",
+    "filename": "predator.badlands.2025.2160p.web.h265-poke.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Predator Badlands 2025 1080p BluRay DV HDR10 x265-GeneMige\n👤 26 💾 7.17 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇭🇷 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱",
+   "infoHash": "3fb17cf07a197a9b5ea9fa7c84ad9f841b6feda5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Predator Badlands 2025 1080p BluRay DV HDR10 x265-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Predator.Badlands.(2025)[ESP-ENG-FRE][HDR10 HEVC][Bluray 1080p]-…\n👤 19 💾 3.32 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇪🇸 / 🇫🇷",
+   "infoHash": "d3bb77f2f543a66ed097c1f34c6a3f5b9e718f03",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit|HDR",
+    "filename": "Predator.Badlands.(2025)[ESP-ENG-FRE][HDR10 HEVC][Bluray 1080p]-Mang0z4.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Kolekcja - Predator 1987-2025 [HLG HDR SDR] [1080p.BluRay.H264.AC3.AS76-FT] [Lektor PL] [Alusia]\nPredator Badlands 2026 [HLG HDR SDR] [1080p.WEB-DL.H264.AC3.AS76-FT] [Lektor PL AI] [Alusia].mkv\n👤 6 💾 4.92 GB ⚙️ EXT\n🇵🇱",
+   "infoHash": "47060604d26dd6277e094b725059576cbfb2253f",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264|HDR",
+    "filename": "Predator Badlands 2026 [HLG HDR SDR] [1080p.WEB-DL.H264.AC3.AS76-FT] [Lektor PL AI] [Alusia].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Kolekcja - Predator 1987-2025 [HLG HDR SDR] [1080p.BluRay.H264.AC3.5.1.AS76-FT] [Lektor PL] [Alusia]\nPredator Badlands 2025 [HLG HDR SDR] [1080p.BluRay.H264.AC3.5.1.AS76-FT] [ENG-Lektor PL] [Alusia].mkv\n👤 5 💾 4.92 GB ⚙️ EXT\n🇬🇧 / 🇵🇱",
+   "infoHash": "9058c63c3a5d466f33a29a5c2e72c0bcd57d25f8",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264|HDR",
+    "filename": "Predator Badlands 2025 [HLG HDR SDR] [1080p.BluRay.H264.AC3.5.1.AS76-FT] [ENG-Lektor PL] [Alusia].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands 2025 1080p HDRip HEVC x265 BONE\n👤 808 💾 1.45 GB ⚙️ ThePirateBay",
+   "infoHash": "ada06433856c8f5845feed8b65be0e72e1b1787a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|HDRip|hevc",
+    "filename": "Predator Badlands 2025 1080p HDRip HEVC x265 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator: Badlands 2025 1080p WEBRip\n👤 368 💾 1.79 GB ⚙️ YTS",
+   "infoHash": "ce25ee59735f9f971e1216fb467fa9578400997d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Predator.Badlands.2025.1080p.WEBRip.x264.AAC-[YTS.LT].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands 2025 1080p WEB-DL HEVC x265 5.1 BONE\n👤 227 💾 1.63 GB ⚙️ ThePirateBay",
+   "infoHash": "0d25b42cab381485b61267ddd6dd91003fa308ba",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+    "filename": "Predator Badlands 2025 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator: Badlands 2025 1080p BluRay\n👤 118 💾 1.98 GB ⚙️ YTS",
+   "infoHash": "002d8ea26e5257c6bf188957ae4b4d061969db30",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Predator.Badlands.2025.1080p.BluRay.x264.AAC5.1-[YTS.BZ].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator.Badlands.2025.V2.1080p.WEB-DL.LINE.AUDIO.H264-AOC\n👤 107 💾 5.82 GB ⚙️ ThePirateBay",
+   "infoHash": "8942913b3f9c9eb853fb72c709bc103e0d0ee830",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Predator.Badlands.2025.V2.1080p.WEB-DL.LINE.AUDIO.H264-AOC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator.Badlands.2025.1080p.HDRIP.x265.10Bit.HEVC.Eng.FLAC.2.0-Hin.MIC.ViTO\n👤 97 💾 2.32 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "f107eac91f598696bfa409fd44bec07650a63872",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|HDRip|hevc|10bit",
+    "filename": "Predator.Badlands.2025.1080p.REPACK.HDRIP.x265.10Bit.HEVC.Eng.FLAC.2.0+Hin.MIC.ViTO (1).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator: Badlands 2025 1080p WEBRip\n👤 66 💾 1.6 GB ⚙️ YTS",
+   "infoHash": "b7d346cd09177bd93066facf291de71bdfc5876e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Predator.Badlands.2025.1080p.WEBRip.x265.10bit.AAC-[YTS.LT].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator: Badlands 2025 1080p WEBRip\n👤 53 💾 1.98 GB ⚙️ YTS",
+   "infoHash": "f7033c69f245848a4c4e16a1b5f928a4f46a927d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Predator.Badlands.2025.1080p.WEBRip.x264.AAC5.1-[YTS.BZ].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator.Badlands.2025.PROPER.1080p.BluRay.x264-PiGNUS\n👤 43 💾 13.91 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸 / 🇫🇷",
+   "infoHash": "e2627163a82d229513364626ed44e7e1e21cd55d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "predator.badlands.2025.proper.1080p.bluray.x264-pignus.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator: Badlands (2025) (1080p BluRay x265 10bit EAC3 Atmos 7.1 Ghost) [QxR]\nPredator꞉ Badlands (2025) (1080p BluRay x265 Ghost).mkv\n👤 39 💾 5.82 GB ⚙️ 1337x",
+   "infoHash": "912704267fdcca735d70701143c8c1df951be70f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Predator꞉ Badlands (2025) (1080p BluRay x265 Ghost).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator: Badlands 2025 1080p BluRay\n👤 37 💾 1.79 GB ⚙️ YTS",
+   "infoHash": "a7ccb83733a2d32ca31a8801f225c6bae21e0222",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Predator.Badlands.2025.1080p.BluRay.x265.10bit.AAC5.1-[YTS.BZ].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator.Badlands.2025.V2.1080p.WEB-DL.LINE.AUDIO.H264-AOC\n👤 34 💾 5.82 GB ⚙️ ThePirateBay",
+   "infoHash": "f1116ae9f5f5b9faaf2c9b7b46fdd185b8140ff1",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Predator.Badlands.2025.V2.1080p.WEB-DL.LINE.AUDIO.H264-AOC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 29 💾 6.36 GB ⚙️ ThePirateBay",
+   "infoHash": "973b8268868ef83f56f4f86d6813c860c150783b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Predator Badlands 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands 2025.1080p.WEB.H264-SLOT\n👤 24 💾 1.51 GB ⚙️ ThePirateBay",
+   "infoHash": "c86f977d8c067028c9f8fe3bf54be7217532ed37",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator.Badlands.2025.1080P.WEB.H264-POKE\n👤 23 💾 5.57 GB ⚙️ ThePirateBay",
+   "infoHash": "5abb2d0456669061a5c0ae09c58b7836720a05bb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264",
+    "filename": "predator.badlands.2025.1080p.web.h264-poke.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator: Badlands (2025) (1080p MA WEB-DL x265 10bit EAC3 Atmos 5.1 Ghost) [QxR]\n👤 22 💾 4.33 GB ⚙️ 1337x",
+   "infoHash": "03ef0cdf2653e9bd7cdaabd7decf0fd23f2fea8a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+    "filename": "Predator꞉ Badlands (2025) (1080p MA WEB-DL x265 Ghost).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands 2025.1080p.WEB.H264-SLOT\n👤 21 💾 1.74 GB ⚙️ ThePirateBay",
+   "infoHash": "a9c62779f514fa73a9b2874db3527fbcb5cfb8e1",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator.Badlands.2025.1080p.WEB-DL.LINE.AUDIO.H264-AOC-SUBTITLESINCLUDEDVE\n👤 19 💾 5.82 GB ⚙️ ThePirateBay",
+   "infoHash": "861f97dd50f33885638fbf0b1997e734bd56b3d3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Predator.Badlands.2025.1080p.WEB-DL.LINE.AUDIO.H264-AOC-SUBTITLESINCLUDEDVERSION.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator.Badlands.2025.1080p.WEB-DL.LINE.AUDIO.H264-AOC\n👤 19 💾 5.82 GB ⚙️ ThePirateBay",
+   "infoHash": "35a8f5a019486a81d91129d5afe28c971eeb86f7",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Predator.Badlands.2025.1080p.WEB-DL.LINE.AUDIO.H264-AOC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands 2025 1080p Blu-Ray HEVC x265 10Bit DDP5.1 Subs KINGDOM\n👤 17 💾 5.33 GB ⚙️ 1337x",
+   "infoHash": "f4df5297fc77da324000725f918da44eb576d329",
+   "fileIdx": 7,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Predator Badlands 2025 1080p Blu-Ray  HEVC x265 10Bit Subs KINGDOM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands (2025) 1080p WEBRip 5.1-LAMA\n👤 16 💾 1.98 GB ⚙️ ThePirateBay",
+   "infoHash": "14f6afcb377b7a31e49982cb8544a558e1d03d23",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Predator.Badlands.2025.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator.Badlands.2025.1080p.MA.DS4K.WEBRip.10Bit.DDP5.1.x265-NeoNoir\n👤 16 💾 1.63 GB ⚙️ ThePirateBay",
+   "infoHash": "b223087a22f0f7232963dcb3006d8166ff009b5f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Predator.Badlands.2025.1080p.MA.DS4K.WEBRip.10Bit.DDP5.1.x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands (2025) Eng AMZN 1080p WEBRip x264 DDP 5.1 ESub\n👤 16 💾 2 GB ⚙️ 1337x",
+   "infoHash": "e364c0eb8da45012998aec1ff8787fb77087b025",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Predator Badlands (2025) Eng AMZN 1080p WEBRip x264 DDP 5.1 ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator.Badlands.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta\n👤 13 💾 1.07 GB ⚙️ ThePirateBay",
+   "infoHash": "4e1db4a35c4440af921b6a34bd1ddbf40334eeb3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Predator.Badlands.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator.Badlands.2025.1080p.WEBRip.x265-KONTRAST\n👤 12 💾 2.47 GB ⚙️ 1337x",
+   "infoHash": "7ecb02a80f27e36c1e6b0242a8e72c6dc7fb9796",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Predator.Badlands.2025.1080p.WEBRip.x265-KONTRAST.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands (2025) 1080p x264 (DD 5.1 640Kbps & AAC 2.0) ESub\n👤 12 💾 2.42 GB ⚙️ 1337x",
+   "infoHash": "69531ca17652922eb251a5ae6c3447046fca238b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|HDRip|x264",
+    "filename": "Predator Badlands (2025) English Proper HQ HDRip - 1080p - x264 - (DD+5.1 - 640Kbps & AAC 2.0) - 2.4GB - ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands 2025 1080p Blu-Ray HEVC x265 10Bit Subs KINGDOM\n👤 10 💾 5.33 GB ⚙️ ThePirateBay",
+   "infoHash": "a7837d927db9097906ee2d3cc435e79a8b90289a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Predator Badlands 2025 1080p Blu-Ray  HEVC x265 10Bit Subs KINGDOM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 10 💾 5.67 GB ⚙️ ThePirateBay",
+   "infoHash": "a7dc3d4d3de6703548ad6b3fcf7edd67591bbfe7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Predator Badlands 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands (2025) 1080p BRRip x264 DDP 5.1 [ Hin Eng ] Esub\n👤 9 💾 1.98 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "2f9d24fe3654109228eea8ac7ebe717354b2b060",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x264",
+    "filename": "Predator Badlands (2025) 1080p BRRip x264 DDP 5.1 [ Hin, Eng ] Esub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands 2025 1080p WEBRip Upscale DDP 5 1 10bit H 265-iVy\n👤 9 💾 1.72 GB ⚙️ ThePirateBay",
+   "infoHash": "0b3824000152054c861f8920a51bcba63a910f15",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|h265|10bit",
+    "filename": "Predator Badlands 2025 1080p WEBRip Upscale DDP 5 1 10bit H 265-iVy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predátor: Nebezpečné území / Predator: Badlands (2025)[1080p]\n👤 9 💾 5.82 GB ⚙️ EXT",
+   "infoHash": "8cb60c76a2f76a1972873c876e4e512f9730e874",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB",
+    "filename": "Predator - Badlands 2025 1080p WEB.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator-Badlands.2025.1080p.10bit.DS4K.iTunes.WEBRip.[Org.DDP5.1-Hindi DDPA5.1-English].ESub.HEVC-The.PunisheR\n👤 8 💾 3.14 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "202a8ead1616c85d7b018611db9bca08c7a34e6d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "Predator-Badlands.2025.1080p.10bit.DS4K.iTunes.WEBRip.[Org.DDP5.1-Hindi+DDPA5.1-English].ESub.HEVC-The.PunisheR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator.Badlands.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv\n👤 8 💾 10.14 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "9b4f9f0c08d93a76a51e9af7f3e2d9ec7c207be2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Predator.Badlands.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands 2025 1080p WEB-DL HEVC x265 10Bit DDP5.1 Subs KINGDOM\n👤 8 💾 5.09 GB ⚙️ 1337x",
+   "infoHash": "842505158ec75b6d3180fa91be2a634015e4a9e5",
+   "fileIdx": 6,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc|10bit",
+    "filename": "Predator Badlands 2025 1080p WEB-DL HEVC x265 10Bit DDP5.1 Subs KINGDOM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands 2025 1080p BluRay x265-YAWNTiC\n👤 7 💾 6.63 GB ⚙️ ThePirateBay",
+   "infoHash": "fcb89695d9de0789d98f5d953501f78549a23639",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Predator Badlands 2025 1080p BluRay x265-YAWNTiC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator.Badlands.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv\n👤 7 💾 8.62 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "f7370bd39d12016f46824396cfa48089c5288fa5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Predator.Badlands.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands 2025.1080p.WEB.H264-SLOT\n👤 7 💾 1.82 GB ⚙️ ThePirateBay",
+   "infoHash": "6c06583fa1d3dbda91c032c7373e0dd29ecd711c",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands 2025 1080p iT WEB-DL DDP5 1 Atmos H 264-WADU\n👤 7 💾 5.48 GB ⚙️ ThePirateBay",
+   "infoHash": "6f011e1efd4032dde638255e7c2d1957d272c6c3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Predator Badlands 2025 1080p iT WEB-DL DDP5 1 Atmos H 264-WADU.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator.Badlands.2025.1080p.WEB-DL.H264.Latino.YG⭐\n👤 7 💾 3.2 GB ⚙️ ThePirateBay\n🇲🇽",
+   "infoHash": "a303794ad4033d6c12004db6ae22c3936214e17e",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Predator.Badlands.2025.1080p.WEB-DL.H264.Latino YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands (2025) 1080p 10bit DS4K MA WEBRip English DDP5.1 x265 HEVC ESubs - ANNi\n👤 6 💾 3.54 GB ⚙️ 1337x",
+   "infoHash": "5fb4428a87f8cdc7307e2f24c773f6e1c25ce39f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "Predator Badlands (2025) 1080p 10bit DS4K MA WEBRip English DDP5.1 x265 HEVC ESubs - ANNi.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator.Badlands.2025.1080p.WEBRip.AV1.DDP.5.1-dAV1nci\n👤 6 💾 1.71 GB ⚙️ 1337x",
+   "infoHash": "66ed76ddbc5a6e5cfffb76a279263bed9ca3a447",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|av1",
+    "filename": "Predator.Badlands.2025.1080p.WEBRip.AV1.DDP.5.1-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands (2025) 1080p BluRay x265 10bit 5.1-LAMA\n👤 5 💾 1.79 GB ⚙️ ThePirateBay",
+   "infoHash": "7409863fcd8c24db4a5d2a8588a1fc04cc38da6c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Predator.Badlands.2025.1080p.BluRay.x265.10bit.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands 2025 1080p WEBRip x265-DH\n👤 5 💾 2.22 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇵🇹",
+   "infoHash": "8d810474d5e45c6f6b5e04bef20dd571e454accd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Predator Badlands 2025 1080p WEBRip x265-DH.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Predator Badlands (2025) 1080p WEBRip-LAMA\n👤 5 💾 1.79 GB ⚙️ ThePirateBay",
+   "infoHash": "176aaf350c2f7e8e9586760a22a3f0a72f083310",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Predator.Badlands.2025.1080p.WEBRip.x264.AAC-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Predator: Badlands 2025 720p BluRay\n👤 60 💾 987.69 MB ⚙️ YTS",
+   "infoHash": "d86bf06f5ed2a98cec6e774ad65a6530c423a129",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Predator.Badlands.2025.720p.BluRay.x264.AAC-[YTS.BZ].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Predator: Badlands 2025 720p WEBRip\n👤 38 💾 986.05 MB ⚙️ YTS",
+   "infoHash": "d13b332de225bf251204e006fa79fe282036bf64",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Predator.Badlands.2025.720p.WEBRip.x264.AAC-[YTS.LT].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Predator: Badlands 2025 720p WEBRip\n👤 18 💾 987.01 MB ⚙️ YTS",
+   "infoHash": "93f66a67fe51c177788d54c19d88a03f8fcfb60c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Predator.Badlands.2025.720p.WEBRip.x264.AAC-[YTS.BZ].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Predator.Badlands.2025.720P.WEB.H264-POKE\n👤 14 💾 2.53 GB ⚙️ ThePirateBay",
+   "infoHash": "58eeced02abfd7312c6f042724ffe5e509fd4497",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB|h264",
+    "filename": "predator.badlands.2025.720p.web.h264-poke.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Predator Badlands (2025) 720p WEBRip-LAMA\n👤 13 💾 986.05 MB ⚙️ ThePirateBay",
+   "infoHash": "3e479c4056fce78c51c92ba446f794d80e875ae1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Predator.Badlands.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Predator.Badlands.2025.PROPER.720p.BluRay.x264-PiGNUS\n👤 9 💾 4.74 GB ⚙️ ThePirateBay",
+   "infoHash": "5f3ca711e30818b89f43a6f0047eb9518cafa7d0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "predator.badlands.2025.proper.720p.bluray.x264-pignus.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Predator Badlands 2025 720p WEBRip x265 AAC-SSN\n👤 8 💾 1.51 GB ⚙️ ThePirateBay",
+   "infoHash": "db17f9b977aff47a1ea196c045b8deef7cf0d012",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x265",
+    "filename": "Predator Badlands 2025 720p WEBRip x265 AAC-SSN.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Predator Badlands 2025 720p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 5 💾 796.6 MB ⚙️ ThePirateBay",
+   "infoHash": "718634e97875a81e18a19400ffedde4463cdf2e4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|hevc|10bit",
+    "filename": "Predator Badlands 2025 720p 10bit WEBRip 6CH x265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nBluRay",
+   "title": "Predator Badlands (2025) [Elle Fanning] BluRay H264 DolbyD 5.1 + nickarad\n👤 9 💾 3.11 GB ⚙️ ThePirateBay",
+   "infoHash": "4cc382acab3054102f5b0f08eceec27182b8633a",
+   "fileIdx": 12,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BluRay|h264",
+    "filename": "Predator Badlands (2025) BluRay H264 DolbyD 5.1 + nickarad.mp4"
+   }
+  }
+ ]
+}

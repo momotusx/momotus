@@ -1,0 +1,155 @@
+{
+ "fetched": "2026-11-08T23:06:12.397Z",
+ "source": {
+  "torrentio": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/series/tt3530232:13:28.json",
+  "cinemeta": "https://v3-cinemeta.strem.io/meta/series/tt3530232.json"
+ },
+ "id": "tt3530232",
+ "type": "series",
+ "season": 13,
+ "episode": 28,
+ "meta": {
+  "name": "Last Week Tonight with John Oliver",
+  "year": "2014–",
+  "runtime": "33 min",
+  "genres": [
+   "Comedy",
+   "News",
+   "Talk-Show"
+  ],
+  "episodeTitle": "November 1, 2026: Midterm Elections",
+  "released": "2026-11-02T07:00:00.000Z"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Last Week Tonight with John Oliver S13E28 1080p WEB H264-CAKES\n👤 1163 💾 2.77 GB ⚙️ EZTV",
+   "infoHash": "6f1e1c03092f1e36e39bf89f7c8c36ed770436a8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|cakes",
+    "filename": "last.week.tonight.with.john.oliver.s13e28.1080p.web.h264-cakes[EZTVx.to].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Last Week Tonight with John Oliver S13E28 1080p HEVC x265-MeGusta\n👤 837 💾 420.92 MB ⚙️ EXT",
+   "infoHash": "fb02c5be669e978b9520d1424d2ce42122dd2c72",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|MeGusta",
+    "filename": "Last.Week.Tonight.with.John.Oliver.S13E28.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Last Week Tonight with John Oliver S13E28 Midterms 2026 1080P AMZN WEB-DL 2.0. X265 POOTLED\n👤 83 💾 1.43 GB ⚙️ EXT",
+   "infoHash": "4b58c0926b500a8e01af6b78d35d1e895e7f0772",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p",
+    "filename": "Last Week Tonight with John Oliver S13E28 Midterms 2026 1080P AMZN WEB-DL 2.0. X265 POOTLED.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Last Week Tonight with John Oliver S13E28 November 1 2026 1080p HEVC x265-MeGusta\n👤 3 💾 420.99 MB ⚙️ EXT",
+   "infoHash": "80d31bda9adf6d67e2ce1f6b0a770c04a1698392",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|MeGusta",
+    "filename": "Last.Week.Tonight.with.John.Oliver.S13E28.November.1.2026.1080p.HEVC.x265-MeGusta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Last Week Tonight with John Oliver S13E28 720p HEVC x265-MeGusta\n👤 451 💾 263.21 MB ⚙️ EZTV",
+   "infoHash": "c400f8ac8122eeb4ac6406205b3ec8fcc0878869",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|MeGusta",
+    "filename": "Last.Week.Tonight.with.John.Oliver.S13E28.720p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Last Week Tonight with John Oliver S13E28 720p AMZN WEB-DL DDP2 0 H 264-NTb\n👤 303 💾 1.6 GB ⚙️ EZTV",
+   "infoHash": "395fd67e9c807e96fc50ede54d16349c444ca896",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|NTb",
+    "filename": "Last Week Tonight with John Oliver S13E28 720p AMZN WEB-DL DDP2 0 H 264-NTb[EZTVx.to].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Last.Week.Tonight.with.John.Oliver.S13E28.720p.WEBRip.2CH.x265.HEVC-PSA\n👤 10 💾 244.71 MB ⚙️ EXT",
+   "infoHash": "d0008604d6bc9522f81f02460feb0a8032abf21f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|PSA",
+    "filename": "Last.Week.Tonight.with.John.Oliver.S13E28.720p.WEBRip.2CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Last Week Tonight with John Oliver S13E28 720p HEVC x265-MeGusta\n👤 8 💾 263.21 MB ⚙️ EXT",
+   "infoHash": "0b2118226003903a9dfe9cf7a052b0329789d9a5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|MeGusta",
+    "filename": "Last.Week.Tonight.with.John.Oliver.S13E28.720p.HEVC.x265-MeGusta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Last Week Tonight with John Oliver S13E28 November 1 2026 720p HEVC x265-MeGusta\n👤 3 💾 263.29 MB ⚙️ EXT",
+   "infoHash": "ade1b0a1e7173236ebe1b9ea54d847a9ebfa55b6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|MeGusta",
+    "filename": "Last.Week.Tonight.with.John.Oliver.S13E28.November.1.2026.720p.HEVC.x265-MeGusta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Last Week Tonight with John Oliver S13E28 November 1 2026 720p AMZN WEB-DL DDP2 0 H 264-NTb\n👤 2 💾 1.6 GB ⚙️ EXT",
+   "infoHash": "1c6ffe3443efb1c81ea88bbdc85dd3f3cfb98671",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|NTb",
+    "filename": "Last Week Tonight with John Oliver S13E28 November 1 2026 720p AMZN WEB-DL DDP2 0 H 264-NTb.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Last Week Tonight with John Oliver S13E28 720p AMZN WEB-DL DDP2 0 H 264-NTb\n👤 1 💾 1.6 GB ⚙️ EXT",
+   "infoHash": "6a3222b16e2886b9210addbb1c36bfb9dba2dcdb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|NTb",
+    "filename": "Last Week Tonight with John Oliver S13E28 720p AMZN WEB-DL DDP2 0 H 264-NTb.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n480p",
+   "title": "Last Week Tonight with John Oliver S13E28 480p x264-mSD\n👤 87 💾 167.6 MB ⚙️ EZTV",
+   "infoHash": "9d2ddd49318a25d3060c2c5c56ce32df9490e62a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|480p|mSD",
+    "filename": "Last.Week.Tonight.with.John.Oliver.S13E28.480p.x264-mSD[EZTVx.to].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nXviD",
+   "title": "Last Week Tonight with John Oliver S13E28 XviD-AFG\n👤 19 💾 532.53 MB ⚙️ EXT",
+   "infoHash": "213d7c082673a9080eea4f5251c7eb5946ce95df",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|XviD|AFG",
+    "filename": "Last.Week.Tonight.with.John.Oliver.S13E28.XviD-AFG[EZTVx.to].avi"
+   }
+  }
+ ]
+}

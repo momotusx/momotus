@@ -1,0 +1,1586 @@
+{
+  "id": "tt6262770",
+  "type": "movie",
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "Tenzing",
+    "year": "2026",
+    "releaseInfo": "2026",
+    "runtime": "126 min",
+    "episodeReleased": null,
+    "episodesInSeason": null
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Tenzing.2026.2160p.DV.HDR.ITA-ENG.MULTI.WEBRip.x265.AAC-V3SP4EV3R.mkv\n👤 100 💾 2.68 GB ⚙️ 1337x\nMulti Audio / 🇬🇧 / 🇮🇹",
+          "infoHash": "ba925ac1e7704217a009000b3d13ccb5cc67ff32",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|x265|DV|HDR",
+            "filename": "Tenzing.2026.2160p.DV.HDR.ITA-ENG.MULTI.WEBRip.x265.AAC-V3SP4EV3R.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Tenzing (2026) (2160p ATV WEB-DL x265 10bit DV HDR10+ EAC3 Atmos 5.1) [adst9]\n👤 2 💾 8.87 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇩 / 🇹🇭",
+          "infoHash": "03bde723ea76073edd82219453840c0e7aba54c7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|x265|10bit|DV|HDR10+",
+            "filename": "Tenzing (2026) (2160p ATV WEB-DL x265 10bit DV HDR10+ EAC3 Atmos 5.1) [adst9].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Tenzing 2026 2160p WEBRip\n👤 100 💾 5.6 GB ⚙️ YTS\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇫🇷 / 🇩🇪 / 🇮🇳 / 🇵🇱 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇹🇭",
+          "infoHash": "fde16762b3dea55a78950e6cc7e9f8de39951c73",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+            "filename": "Tenzing.2026.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "Tenzing 2026 [HLG HDR SDR] [1080p.WEB-DL.H264-AS76-FT] [ENG-Lektor PL] [Alusia]\n👤 5 💾 4.99 GB ⚙️ EXT\n🇬🇧 / 🇵🇱",
+          "infoHash": "42ee3a06a1583cad1551262627c5b7a332d401c0",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264|HDR",
+            "filename": "Tenzing 2026 [HLG HDR SDR] [1080p.WEB-DL.H264-AS76-FT] [ENG-Lektor PL] [Alusia].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir\n👤 909 💾 1.95 GB ⚙️ 1337x",
+          "infoHash": "b1f7d3a2f98cdc9f4a3aae7d7b7231a5dd8c7b05",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Tenzing.2026.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.ATVP.WEB-DL.DDP5.1.ENG.Atmos.ITA.H265-TBK\n👤 253 💾 5.36 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "bad85e70bbc4fb59c92bc6f98c0a1db678e4c770",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+            "filename": "Tenzing.2026.1080p.ATVP.WEB-DL.DDP5.1.ENG.Atmos.ITA.H265-TBK.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEBRip H264-PlayFulDarkness\n👤 234 💾 1.9 GB ⚙️ 1337x",
+          "infoHash": "2388520132e0c61b0b072e6fa3dd265159986289",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|h264",
+            "filename": "Tenzing.2026.1080p.WEBRip.H264-PlayFulDarkness.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.ATV.WEB-DL.DDP5.1.Atmos.H264.MP4-BTM\n👤 148 💾 9.41 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇩 / 🇹🇭",
+          "infoHash": "6f79b1c30ef7d8e3ea2504150f68d0182a10fb0c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Tenzing.2026.1080p.ATV.WEB-DL[Ben The Men].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p BluRay\n👤 100 💾 2.31 GB ⚙️ YTS",
+          "infoHash": "6929072dc9101ba725371311ccd438d4859b07cc",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Tenzing.2026.1080p.BluRay.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEBRip\n👤 100 💾 2.1 GB ⚙️ YTS",
+          "infoHash": "c988f9be1d6ff5db90a0f77e5da3d76e841eec68",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Tenzing.2026.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEBRip\n👤 100 💾 2.31 GB ⚙️ YTS",
+          "infoHash": "fcb15d64dc6299602f538f7f0787946469eed6f2",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Tenzing.2026.1080p.WEBRip.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEB-DL HEVC x265 5.1 BONE\n👤 89 💾 2.1 GB ⚙️ 1337x",
+          "infoHash": "18e390282598d306f685b7243187de46b363c766",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Tenzing 2026 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026) (1080p ATV WEB-DL x265 10bit EAC3 Atmos 5.1 Silence) [QxR]\n👤 77 💾 5.94 GB ⚙️ 1337x",
+          "infoHash": "0e43daf775a04c6d2e27bbb54910c3b87b1d35c6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+            "filename": "Tenzing (2026) (1080p ATV WEB-DL x265 EAC3 Silence).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.ITA-ENG.MULTI.WEBRip.x265.AAC-V3SP4EV3R.mkv\n👤 53 💾 1.96 GB ⚙️ 1337x\nMulti Audio / 🇬🇧 / 🇮🇹",
+          "infoHash": "d57b5034b735a524643a660f137a9a201ae43345",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Tenzing.2026.1080p.ITA-ENG.MULTI.WEBRip.x265.AAC-V3SP4EV3R.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv\n👤 52 💾 2.98 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "ad2bf58229b85d7bffe8867020a5411d989f3cc0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Tenzing (2026) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv\n👤 41 💾 12.19 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "b4103c1a53e063c6e3eb0496aaa1f3618a2494d0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Tenzing.2026.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026) 1080p H265 10Bit iTA EnG AC3 Sub iTA EnG-MIRCrew.mkv\n👤 39 💾 2.09 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "37e9acde19e42027f88f455206c21a46383dfac5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h265|10bit",
+            "filename": "Tenzing (2026) 1080p H265 10Bit iTA EnG AC3 Sub iTA EnG-MIRCrew.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEBRip x265 DDP5.1-CSP\n👤 36 💾 2.97 GB ⚙️ 1337x",
+          "infoHash": "769c7f2387b013c0d91895adc64dd0d891b253c7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Tenzing 2026 1080p WEBRip x265 DDP5.1-CSP.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA\n👤 35 💾 1.6 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "7df75eeebb17949fbef93ac4ea4f5e4f9af0130e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+            "filename": "Tenzing.2026.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.ATVP.WEB-DL.ITA.ENG.DD5.1.H.264-FHC_CREW.mkv\n👤 32 💾 9.74 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "2e4df6c3f7ea5753fbc1db6416037b1e7e641001",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Tenzing.2026.1080p.ATVP.WEB-DL.ITA.ENG.DD5.1.H.264-FHC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.WEB-DL.1080p.x264.DUAL.5.1-STARCKFILMES\n👤 19 💾 3.18 GB ⚙️ EXT\nDual Audio",
+          "infoHash": "d31f07209fa7e501b2ea8dd063ea78e1f02ea8a6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Tenzing.2026.WEB-DL.1080p.x264.DUAL.5.1-STARCKFILMES.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 NORDiC 1080p ATV WEB-DL H 265-NORViNE\n👤 15 💾 5.02 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇫🇮 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "970cb78b8c728f3eabb35a977815b00cf363341d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+            "filename": "Tenzing 2026 NORDiC 1080p ATV WEB-DL H 265-NORViNE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026) English HQ HDRip - 1080p - x264 - (DD+5.1 - ATMOS 768Kbps & AAC 2.0) - 2.5GB - ESub\n👤 12 💾 2.55 GB ⚙️ EXT",
+          "infoHash": "a678c4bf2818cee2bb81415c3be0eff7794cda12",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|HDRip|x264",
+            "filename": "Tenzing (2026) English HQ HDRip - 1080p - x264 - (DD+5.1 - ATMOS 768Kbps & AAC 2.0) - 2.5GB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEB x265-RMTeam\n👤 9 💾 1.56 GB ⚙️ EXT",
+          "infoHash": "27ec2e34ff9f4f58fb368142bc195291636818f1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|x265",
+            "filename": "Tenzing 2026 1080p WEB x265-RMTeam.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.WEB-DL.x264.DUAL.5.1\n👤 9 💾 2.83 GB ⚙️ EXT\nDual Audio / 🇬🇧 / 🇵🇹",
+          "infoHash": "92972fff74c31963b2c90c43c684698731cdf9e1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Tenzing.2026.1080p.WEB-DL.x264.DUAL.5.1.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.WEB-DL.H.264\n👤 9 💾 9.79 GB ⚙️ EXT\n🇬🇧 / 🇷🇺",
+          "infoHash": "0bed5da7cc219b71ad1c5f52182f64a2b8974071",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Tenzing.2026.1080p.WEB-DL.H.264.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.MULTi.1080p.WEB.H265-YTO\n👤 7 💾 1.82 GB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇸🇪 / 🇳🇴",
+          "infoHash": "4dc623d3229df8f576f2078f2f657f899234cfcf",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h265",
+            "filename": "Tenzing.2026.MULTi.1080p.WEB.H265-YTO.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEB-DL HEVC x265 5 1-BONE\n👤 7 💾 2.1 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "1dc1dd446ce29ccbdb88337c804876bd5f1478d5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Tenzing 2026 1080p WEB-DL HEVC x265 5 1-BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026) WEB-DL 1080p [Ukr Eng]\n👤 6 💾 9.73 GB ⚙️ EXT\n🇬🇧 / 🇺🇦",
+          "infoHash": "57fcae377737caf26404ebfa23ccebf646b8daf8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "Tenzing (2026) WEB-DL 1080p [Ukr,Eng].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026) WEB-DL 1080p H265 [Ukr Eng]\n👤 6 💾 5.34 GB ⚙️ EXT\n🇬🇧 / 🇺🇦",
+          "infoHash": "0a83afee1c07c673d24b456730436a62d7ac3486",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.MULTi.1080p.ATVP.WEB-DL.H264.DD5.1-OzW\n👤 6 💾 9.96 GB ⚙️ EXT\nMulti Audio / 🇬🇧",
+          "infoHash": "55abaae1f7981befc0aa1e5a3c44f0a6ad53b2c8",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Tenzing.2026.MULTi.1080p.ATVP.WEB-DL.H264.DD5.1-OzW.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026)[1080p][WEB-DL]\n👤 6 💾 9.4 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "15a3e5604b380ce6239e08537ea63df7bf6f6203",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p H 265 10bit iTA EnG AC3 Sub iTA EnG-MIRCrew\n👤 5 💾 2.09 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+          "infoHash": "cc2efe937e9d78e2f9a8e2a6a971a3dcbdd0f9e9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h265|10bit",
+            "filename": "Tenzing 2026 1080p H 265 10bit iTA EnG AC3 Sub iTA EnG-MIRCrew.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.(2026).1080p.10bit.x265.DDP5.1.ITA-ENG.AllSubs\n👤 4 💾 2.32 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+          "infoHash": "53388403871641a8bd81ef5056e9e19c28a70a88",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x265|10bit",
+            "filename": "Tenzing.(2026).1080p.10bit.x265.DDP5.1.ITA-ENG.AllSubs.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir\n👤 4 💾 1.95 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "358fcba6016e70a18baf93be736f84a098aac11d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Tenzing 2026 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 10bit 4KDS 1080p SVT-AV1-Tritium.mkv\n👤 3 💾 2.69 GB ⚙️ EXT",
+          "infoHash": "7633a322b4a07ec2cc46e21cccc454e741aeaded",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|10bit",
+            "filename": "Tenzing 10bit 4KDS 1080p SVT-AV1-Tritium.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026) 1080p WEBRip 5.1-LAMA\n👤 3 💾 2.31 GB ⚙️ EXT",
+          "infoHash": "8a10e847ac9b2a01c526cd9c7ad193e098e61add",
+          "fileIdx": 40,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Tenzing.2026.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing 2026 720p BluRay\n👤 100 💾 1.13 GB ⚙️ YTS",
+          "infoHash": "fbdc2e43d1331ed5aeb6645c4c97d8f2dd284e75",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Tenzing.2026.720p.BluRay.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing (2026) [720p] [WEBRip]\n👤 100 💾 1.13 GB ⚙️ EXT",
+          "infoHash": "4111818e25b0182f7d7482555eecf11e8e7b3a6d",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "Tenzing.2026.720p.WEBRip.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing 2026 720p ATVP WEB-DL DDP5 1 H 264-NTb\n👤 19 💾 3.17 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "e2ca0e85b17e1ad3fd627fc9500be09dd75904d4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "Tenzing 2026 720p ATVP WEB-DL DDP5 1 H 264-NTb.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing.2026.720p.10bit.WEBRip.6CH.x265.HEVC-PSA\n👤 14 💾 792.19 MB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "3ccdf22a69a2bb81543e17e738812f8474622be2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|hevc|10bit",
+            "filename": "Tenzing.2026.720p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing (2026) 720p WEBL DDP 5.1 X.264.iTA ENG_CREW.mkv\n👤 10 💾 3.5 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "201af144438bc95071927214ef8cade25e74b28d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|x264",
+            "filename": "Tenzing (2026) 720p WEBL DDP 5.1 X.264.iTA ENG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing 2026 720p ATVP WEB-DL DDP5 1 Atmos H 264-Kitsune\n👤 4 💾 3.17 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "83de62d9af2a7311f50857d05a26c39a4837aaad",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "Tenzing 2026 720p ATVP WEB-DL DDP5 1 Atmos H 264-Kitsune.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing (2026) English HQ HDRip - 720p - x264 - (DD+5.1 - 192Kbps & AAC 2.0) - 1.1GB - ESub\n👤 3 💾 1.18 GB ⚙️ EXT",
+          "infoHash": "f076e0429f1edb9ce401632e82c52b020845330b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|HDRip|x264",
+            "filename": "Tenzing (2026) English HQ HDRip - 720p - x264 - (DD+5.1 - 192Kbps & AAC 2.0) - 1.1GB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing (2026) 720p WEBRip-LAMA\n👤 3 💾 1.13 GB ⚙️ EXT",
+          "infoHash": "c7aa8d2eae7ff86a96aa1c6c24d18767e7385d66",
+          "fileIdx": 40,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "Tenzing.2026.720p.WEBRip.x264.AAC-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing 2026 720p ATVP WEB-DL DDP5 1 Atmos H 264-playWEB\n👤 3 💾 3.17 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "e700f2eba3250851f06834e700cfc5adb5d7a9c5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "Tenzing 2026 720p ATVP WEB-DL DDP5 1 Atmos H 264-playWEB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Tencing.2026.ATVP.WEB-DLRip.AVC\n👤 4 💾 2.79 GB ⚙️ EXT\n🇬🇧 / 🇷🇺",
+          "infoHash": "36611434dc2cd2d50a988276551f597e8f133bc0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL|avc",
+            "filename": "Tencing.2026.ATVP.WEB-DLRip.AVC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Tenzing.2026.D.WEB-DLRip\n👤 3 💾 2.05 GB ⚙️ EXT",
+          "infoHash": "3eb3d589ff534b7ca9c444f018892e4932eedc99",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL",
+            "filename": "Tenzing.2026.D.WEB-DLRip.avi"
+          }
+        },
+        {
+          "name": "Torrentio\nWEBRip",
+          "title": "Tenzing.2026.iTALiAN.WEBRiP.x264-PRiME\n👤 3 💾 1.7 GB ⚙️ EXT\n🇮🇹",
+          "infoHash": "3f4a3389ddbb5a36b6a25634165704b25282cff1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEBRip|x264",
+            "filename": "Tenzing.2026.iTALiAN.WEBRiP.x264-PRiME.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Tenzing.2026.WebDL.AC3.ITA.ENG.SUBS.DD-CREW\n👤 2 💾 1.96 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+          "infoHash": "34105c24cbe90a727ec500c00305251fa54e5207",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL",
+            "filename": "Tenzing.2026.WebDL.AC3.ITA.ENG.SUBS.DD-CREW.mkv"
+          }
+        }
+      ]
+    },
+    "torrentio-owner": {
+      "url": "https://torrentio.strem.fun/language=turkish|qualityfilter=threed,480p,scr,cam,unknown",
+      "streams": [
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Tenzing.2026.2160p.ATVP.WEB-DL.DV.HDR10+.DDP5.1.Atmos.H265.MP4-BTM\n👤 233 💾 22.97 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇩 / 🇹🇭",
+          "infoHash": "d11ffe37cf8efdb25477f58a2cc8d5f5403c96e4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265|10bit|DV|HDR10+",
+            "filename": "Tenzing.2026.2160p.ATVP.WEB-DL.DV.HDR10+L[Ben The Men].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Tenzing.2026.2160p.WEB-DL.DV.HDR10+.MULTi.LAT.CAS.FRE.GER.ITA.POR.Atmos.H265-BTM\n👤 64 💾 26.33 GB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇲🇽 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇩 / 🇹🇭",
+          "infoHash": "088f57729024a7bf95a3f0cf8c0366b840175691",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265|10bit|DV|HDR10+",
+            "filename": "Tenzing.2026.2160p.WEB-DL.DV.HDR10+.MULTi[Ben The Men].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Tenzing (2026)[2160p][HDR/DV][HEVC][WEB-DL]\n👤 13 💾 22.1 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "1f56177bf59a8c403183fc3b87b85986a5cf874e",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|hevc|DV|HDR"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Tenzing.2026.2160p.ATVP.WEB-DL.DUAL.DDP5.1.Atmos.DoVi.HDR.H.265-TURG\n👤 3 💾 22.46 GB ⚙️ EXT\nDual Audio / 🇬🇧 / 🇹🇷",
+          "infoHash": "19dae42c2c43240802974f0f15e46826386b461a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265|DV|HDR",
+            "filename": "Tenzing.2026.2160p.ATVP.WEB-DL.DUAL.DDP5.1.Atmos.DoVi.HDR.H.265-TURG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Tenzing (2026) (2160p ATV WEB-DL x265 10bit DV HDR10+ EAC3 Atmos 5.1) [adst9]\n👤 2 💾 8.87 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇩 / 🇹🇭",
+          "infoHash": "03bde723ea76073edd82219453840c0e7aba54c7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|x265|10bit|DV|HDR10+",
+            "filename": "Tenzing (2026) (2160p ATV WEB-DL x265 10bit DV HDR10+ EAC3 Atmos 5.1) [adst9].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Tenzing (2026) (2160p ATV WEB-DL x265 10bit DV HDR10+ EAC3 Atmos 5.1 REPACK) [adst9]\n👤 1 💾 9.96 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇩 / 🇹🇭",
+          "infoHash": "7445110c2536a5bc647814300895d331a0614334",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|x265|10bit|DV|HDR10+",
+            "filename": "Tenzing (2026) (2160p ATV WEB-DL x265 10bit DV HDR10+ EAC3 Atmos 5.1 REPACK) [adst9].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Tenzing 2026 2160p WEBRip\n👤 100 💾 5.6 GB ⚙️ YTS\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇫🇷 / 🇩🇪 / 🇮🇳 / 🇵🇱 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇹🇭",
+          "infoHash": "fde16762b3dea55a78950e6cc7e9f8de39951c73",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+            "filename": "Tenzing.2026.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.ATV.WEB-DL.DDP5.1.Atmos.H264.MP4-BTM\n👤 148 💾 9.41 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇩 / 🇹🇭",
+          "infoHash": "6f79b1c30ef7d8e3ea2504150f68d0182a10fb0c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Tenzing.2026.1080p.ATV.WEB-DL[Ben The Men].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA\n👤 35 💾 1.6 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "7df75eeebb17949fbef93ac4ea4f5e4f9af0130e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+            "filename": "Tenzing.2026.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 NORDiC 1080p ATV WEB-DL H 265-NORViNE\n👤 15 💾 5.02 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇫🇮 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "970cb78b8c728f3eabb35a977815b00cf363341d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+            "filename": "Tenzing 2026 NORDiC 1080p ATV WEB-DL H 265-NORViNE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEB-DL HEVC x265 5 1-BONE\n👤 7 💾 2.1 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "1dc1dd446ce29ccbdb88337c804876bd5f1478d5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Tenzing 2026 1080p WEB-DL HEVC x265 5 1-BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026)[1080p][WEB-DL]\n👤 6 💾 9.4 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "15a3e5604b380ce6239e08537ea63df7bf6f6203",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir\n👤 4 💾 1.95 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "358fcba6016e70a18baf93be736f84a098aac11d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Tenzing 2026 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026) (1080p ATV WEB-DL x265 10bit EAC3 Atmos 5.1 Silence) [QxR]\n👤 1 💾 5.94 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "f72af89cabaeac85e620451111cc7af03d884134",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p ITA-ENG MULTI WEBRip x265 AAC-V3SP4EV3R\n👤 1 💾 1.96 GB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇩 / 🇹🇭",
+          "infoHash": "ba8c882b617fde8a47c69a393ec3e877706b8609",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Tenzing 2026 1080p ITA-ENG MULTI WEBRip x265 AAC-V3SP4EV3R.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing 2026 720p ATVP WEB-DL DDP5 1 H 264-NTb\n👤 19 💾 3.17 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "e2ca0e85b17e1ad3fd627fc9500be09dd75904d4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "Tenzing 2026 720p ATVP WEB-DL DDP5 1 H 264-NTb.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing.2026.720p.10bit.WEBRip.6CH.x265.HEVC-PSA\n👤 14 💾 792.19 MB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "3ccdf22a69a2bb81543e17e738812f8474622be2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|hevc|10bit",
+            "filename": "Tenzing.2026.720p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing 2026 720p ATVP WEB-DL DDP5 1 Atmos H 264-Kitsune\n👤 4 💾 3.17 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "83de62d9af2a7311f50857d05a26c39a4837aaad",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "Tenzing 2026 720p ATVP WEB-DL DDP5 1 Atmos H 264-Kitsune.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing 2026 720p ATVP WEB-DL DDP5 1 Atmos H 264-playWEB\n👤 3 💾 3.17 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "e700f2eba3250851f06834e700cfc5adb5d7a9c5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "Tenzing 2026 720p ATVP WEB-DL DDP5 1 Atmos H 264-playWEB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Tenzing.2026.2160p.ATVP.WEB-DL.HDR.H.265.Master5\n👤 103 💾 22.46 GB ⚙️ EXT",
+          "infoHash": "d3bb347726196af45583626e8556eefdfcbd432c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265|HDR",
+            "filename": "Tenzing.2026.2160p.ATVP.WEB-DL.HDR.H.265.Master5.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Tenzing.2026.2160p.DV.HDR.ITA-ENG.MULTI.WEBRip.x265.AAC-V3SP4EV3R.mkv\n👤 100 💾 2.68 GB ⚙️ 1337x\nMulti Audio / 🇬🇧 / 🇮🇹",
+          "infoHash": "ba925ac1e7704217a009000b3d13ccb5cc67ff32",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|x265|DV|HDR",
+            "filename": "Tenzing.2026.2160p.DV.HDR.ITA-ENG.MULTI.WEBRip.x265.AAC-V3SP4EV3R.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Тенцинг / Tenzing (2026) WEB-DL 2160p | 4K | HDR10+ | Dolby Vision P8 | L\n👤 71 💾 22.51 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "98041a5fe5b785371c8909f474f795e6014fab85",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|10bit|DV|HDR10+",
+            "filename": "Tenzing.2026.2160p.ATVP.WEB-DL.DV.HDR10.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:98041a5fe5b785371c8909f474f795e6014fab85",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Тенцинг / Tenzing (2026) UHD WEB-DL 2160p | 4K | HDR10+ | Dolby Vision P8 | D P | HDrezka Studio\n👤 57 💾 22.79 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "b70025d09b64159b8dbe2c3422735a6dd4d6f147",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|x265|10bit|DV|HDR10+",
+            "filename": "Tenzing.2026.x265.WEB-DL.2160p.HDR-DV.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:b70025d09b64159b8dbe2c3422735a6dd4d6f147",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Tenzing.2026.2160p.ATVP.WEB-DL.DV.HDR10\n👤 23 💾 23.86 GB ⚙️ EXT",
+          "infoHash": "6d08ebc3b13cc59f40ebd9d8b2eee939f4c81fc2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|10bit|DV|HDR",
+            "filename": "Tenzing.2026.2160p.ATVP.WEB-DL.DV.HDR10.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Tenzing.2026.iTA-ENG.WEBDL.2160p.HEVC.HDR.x265-CYBER.mkv\n👤 19 💾 23.02 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "f3d8f636dcfc014a0d57876c4030081d2a0dd074",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|hevc|HDR",
+            "filename": "Tenzing.2026.iTA-ENG.WEBDL.2160p.HEVC.HDR.x265-CYBER.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Tenzing.2026.MULTi.VFF.AD.HDR.2160p.WEB.H265.mkv\n👤 18 💾 22.79 GB ⚙️ ThePirateBay\nMulti Audio / 🇬🇧 / 🇫🇷",
+          "infoHash": "167db0722470e79bff64092092fdc75cc4f61af2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB|h265|HDR",
+            "filename": "Tenzing.2026.MULTi.VFF.AD.HDR.2160p.WEB.H265.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Tenzing.(2026).WEB-DL.2160p.HDR.DV8.Ukr.Eng\n👤 13 💾 22.44 GB ⚙️ EXT\n🇬🇧 / 🇺🇦",
+          "infoHash": "b4e7ac5f24611d0e13ad6e041ee7a513e8725add",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|HDR",
+            "filename": "Tenzing.(2026).WEB-DL.2160p.HDR.DV8.Ukr.Eng.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Tenzing.2026.2160p.ATVP.WEB-DL.DDP5.1.Atmos.H.265-FLUX\n👤 105 💾 18.75 GB ⚙️ 1337x",
+          "infoHash": "27e01146ce99b9a3b64806de51efc96a8f6463cd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265",
+            "filename": "Tenzing.2026.2160p.ATVP.WEB-DL.DDP5.1.Atmos.H.265-FLUX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Tenzing Conquistando el Everest (2026) [4k 2160p][Esp]\n👤 25 💾 23.24 GB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "56d906753519fef13a246d25a4798f4d22bac85d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k",
+            "filename": "Tenzing Conquistando el Everest (2026) [4k 2160p][Esp].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p DV | HDR",
+          "title": "Tenzing.2026.PL.Ai.1080p.WEB-DL.DV.HDR.x265.AC3-R22\n👤 6 💾 3.51 GB ⚙️ BestTorrents\n🇵🇱",
+          "infoHash": "d4f84ac5540c776d54312e8d994ebbb7959eaf51",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x265|DV|HDR",
+            "filename": "Tenzing.2026.PL.Ai.1080p.WEB-DL.DV.HDR.x265.AC3-R22.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "Tenzing 2026 [HLG HDR SDR] [1080p.WEB-DL.H264-AS76-FT] [ENG-Lektor PL] [Alusia]\n👤 5 💾 4.99 GB ⚙️ EXT\n🇬🇧 / 🇵🇱",
+          "infoHash": "42ee3a06a1583cad1551262627c5b7a332d401c0",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264|HDR",
+            "filename": "Tenzing 2026 [HLG HDR SDR] [1080p.WEB-DL.H264-AS76-FT] [ENG-Lektor PL] [Alusia].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir\n👤 909 💾 1.95 GB ⚙️ 1337x",
+          "infoHash": "b1f7d3a2f98cdc9f4a3aae7d7b7231a5dd8c7b05",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Tenzing.2026.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Тенцинг / Tenzing (2026) WEB-DL 1080p от New-Team | D P | HDRezka Studio\n👤 269 💾 9.74 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "e950c9d71944a91e28f3726eb08b8d8ee04363c9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "Tenzing.2026.1080p.ATVP-New-Team.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:e950c9d71944a91e28f3726eb08b8d8ee04363c9",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.ATVP.WEB-DL.DDP5.1.ENG.Atmos.ITA.H265-TBK\n👤 253 💾 5.36 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "bad85e70bbc4fb59c92bc6f98c0a1db678e4c770",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+            "filename": "Tenzing.2026.1080p.ATVP.WEB-DL.DDP5.1.ENG.Atmos.ITA.H265-TBK.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEBRip H264-PlayFulDarkness\n👤 234 💾 1.9 GB ⚙️ 1337x",
+          "infoHash": "2388520132e0c61b0b072e6fa3dd265159986289",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|h264",
+            "filename": "Tenzing.2026.1080p.WEBRip.H264-PlayFulDarkness.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p BluRay\n👤 100 💾 2.31 GB ⚙️ YTS",
+          "infoHash": "6929072dc9101ba725371311ccd438d4859b07cc",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Tenzing.2026.1080p.BluRay.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEBRip\n👤 100 💾 2.1 GB ⚙️ YTS",
+          "infoHash": "c988f9be1d6ff5db90a0f77e5da3d76e841eec68",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Tenzing.2026.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEBRip\n👤 100 💾 2.31 GB ⚙️ YTS",
+          "infoHash": "fcb15d64dc6299602f538f7f0787946469eed6f2",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Tenzing.2026.1080p.WEBRip.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEB-DL HEVC x265 5.1 BONE\n👤 89 💾 2.1 GB ⚙️ 1337x",
+          "infoHash": "18e390282598d306f685b7243187de46b363c766",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Tenzing 2026 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026) (1080p ATV WEB-DL x265 10bit EAC3 Atmos 5.1 Silence) [QxR]\n👤 77 💾 5.94 GB ⚙️ 1337x",
+          "infoHash": "0e43daf775a04c6d2e27bbb54910c3b87b1d35c6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+            "filename": "Tenzing (2026) (1080p ATV WEB-DL x265 EAC3 Silence).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.ITA-ENG.MULTI.WEBRip.x265.AAC-V3SP4EV3R.mkv\n👤 53 💾 1.96 GB ⚙️ 1337x\nMulti Audio / 🇬🇧 / 🇮🇹",
+          "infoHash": "d57b5034b735a524643a660f137a9a201ae43345",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Tenzing.2026.1080p.ITA-ENG.MULTI.WEBRip.x265.AAC-V3SP4EV3R.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv\n👤 52 💾 2.98 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "ad2bf58229b85d7bffe8867020a5411d989f3cc0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Tenzing (2026) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv\n👤 41 💾 12.19 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "b4103c1a53e063c6e3eb0496aaa1f3618a2494d0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Tenzing.2026.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026) 1080p H265 10Bit iTA EnG AC3 Sub iTA EnG-MIRCrew.mkv\n👤 39 💾 2.09 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "37e9acde19e42027f88f455206c21a46383dfac5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h265|10bit",
+            "filename": "Tenzing (2026) 1080p H265 10Bit iTA EnG AC3 Sub iTA EnG-MIRCrew.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing : à la conquête de l'Everest MULTI WEBRIP 1080p 2026\n👤 37 💾 10.07 GB ⚙️ Torrent9\nMulti Audio / 🇬🇧 / 🇫🇷",
+          "infoHash": "79f630e9c9ec8edadfef13c3d31af32c7cb9c0ac",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|h264",
+            "filename": "Tenzing.2026.MULTi.1080p.WEB.H264-SUPPLY.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEBRip x265 DDP5.1-CSP\n👤 36 💾 2.97 GB ⚙️ 1337x",
+          "infoHash": "769c7f2387b013c0d91895adc64dd0d891b253c7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Tenzing 2026 1080p WEBRip x265 DDP5.1-CSP.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Тенцинг / Tenzing (2026) WEB-DL 1080p | D Р L\n👤 32 💾 11.14 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "ca72c61c4b757abde16860c49a15144500f30b24",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Tenzing.2026.1080p.WEB-DL.H.264.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:ca72c61c4b757abde16860c49a15144500f30b24",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing Conquistando el Everest (2026) [Bluray 1080p][Esp]\n👤 32 💾 10.41 GB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "97e9a4d944bd0149cbd0cd1d2257800b2efec0be",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay",
+            "filename": "Tenzing Conquistando el Everest (2026) [Bluray 1080p][Esp].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.ATVP.WEB-DL.ITA.ENG.DD5.1.H.264-FHC_CREW.mkv\n👤 32 💾 9.74 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "2e4df6c3f7ea5753fbc1db6416037b1e7e641001",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Tenzing.2026.1080p.ATVP.WEB-DL.ITA.ENG.DD5.1.H.264-FHC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.WEB-DL.1080p.x264.DUAL.5.1-STARCKFILMES\n👤 19 💾 3.18 GB ⚙️ EXT\nDual Audio",
+          "infoHash": "d31f07209fa7e501b2ea8dd063ea78e1f02ea8a6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Tenzing.2026.WEB-DL.1080p.x264.DUAL.5.1-STARCKFILMES.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Тенцинг / Tenzing (2026) WEB-DL 1080p | Sub\n👤 16 💾 9.4 GB ⚙️ Rutor\n🇷🇺",
+          "infoHash": "2a8b3a31772d2bc36e75f2b9840f9d049cd2e514",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Tenzing.2026.1080p.WEB-DL.H.264.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:2a8b3a31772d2bc36e75f2b9840f9d049cd2e514",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026) English HQ HDRip - 1080p - x264 - (DD+5.1 - ATMOS 768Kbps & AAC 2.0) - 2.5GB - ESub\n👤 12 💾 2.55 GB ⚙️ EXT",
+          "infoHash": "a678c4bf2818cee2bb81415c3be0eff7794cda12",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|HDRip|x264",
+            "filename": "Tenzing (2026) English HQ HDRip - 1080p - x264 - (DD+5.1 - ATMOS 768Kbps & AAC 2.0) - 2.5GB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 WEB-DL 1080p x264 DUAL 5.1\n👤 10 💾 3.03 GB ⚙️ BluDV\nDual Audio / 🇬🇧 / 🇵🇹",
+          "infoHash": "8ca16d993a77bdfff4ee09954c359b2643e1f703",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Tenzing 2026 WEB-DL 1080p x264 DUAL 5.1.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p WEB x265-RMTeam\n👤 9 💾 1.56 GB ⚙️ EXT",
+          "infoHash": "27ec2e34ff9f4f58fb368142bc195291636818f1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|x265",
+            "filename": "Tenzing 2026 1080p WEB x265-RMTeam.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing Conquistando el Everest Lat-Cast-Ing Subt Forz-Esp-Ing H264 AC3 5.1 BDRip Hd 1080p\n👤 9 💾 5.82 GB ⚙️ Cinecalidad\n🇬🇧 / 🇪🇸 / 🇲🇽",
+          "infoHash": "6be0b195697dd9334883abf40b53c8de58c2dc19",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|h264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.WEB-DL.x264.DUAL.5.1\n👤 9 💾 2.83 GB ⚙️ EXT\nDual Audio / 🇬🇧 / 🇵🇹",
+          "infoHash": "92972fff74c31963b2c90c43c684698731cdf9e1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Tenzing.2026.1080p.WEB-DL.x264.DUAL.5.1.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p.WEB-DL.H.264\n👤 9 💾 9.79 GB ⚙️ EXT\n🇬🇧 / 🇷🇺",
+          "infoHash": "0bed5da7cc219b71ad1c5f52182f64a2b8974071",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Tenzing.2026.1080p.WEB-DL.H.264.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.1080p-dual-lat-cinecalidad.my.mp4\n👤 8 💾 2.24 GB ⚙️ Cinecalidad\nDual Audio / 🇲🇽",
+          "infoHash": "84c380741b9d284500034464a41b212a8e40a41a",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.MULTi.1080p.WEB.H265-YTO\n👤 7 💾 1.82 GB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇸🇪 / 🇳🇴",
+          "infoHash": "4dc623d3229df8f576f2078f2f657f899234cfcf",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h265",
+            "filename": "Tenzing.2026.MULTi.1080p.WEB.H265-YTO.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026) WEB-DL 1080p [Ukr Eng]\n👤 6 💾 9.73 GB ⚙️ EXT\n🇬🇧 / 🇺🇦",
+          "infoHash": "57fcae377737caf26404ebfa23ccebf646b8daf8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "Tenzing (2026) WEB-DL 1080p [Ukr,Eng].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing (2026) WEB-DL 1080p H265 [Ukr Eng]\n👤 6 💾 5.34 GB ⚙️ EXT\n🇬🇧 / 🇺🇦",
+          "infoHash": "0a83afee1c07c673d24b456730436a62d7ac3486",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.conquistando.el.Everest.2026.WEB-DL.1080p-Dual-Lat\n👤 6 💾 9.21 GB ⚙️ Cinecalidad\nDual Audio / 🇲🇽",
+          "infoHash": "1119f31c302c363c19e92fa32e6fabfe6edae6b7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "Tenzing.conquistando.el.Everest.2026.WEB-DL.1080p-Dual-Lat.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing.2026.MULTi.1080p.ATVP.WEB-DL.H264.DD5.1-OzW\n👤 6 💾 9.96 GB ⚙️ EXT\nMulti Audio / 🇬🇧",
+          "infoHash": "55abaae1f7981befc0aa1e5a3c44f0a6ad53b2c8",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Tenzing.2026.MULTi.1080p.ATVP.WEB-DL.H264.DD5.1-OzW.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Tenzing 2026 1080p H 265 10bit iTA EnG AC3 Sub iTA EnG-MIRCrew\n👤 5 💾 2.09 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+          "infoHash": "cc2efe937e9d78e2f9a8e2a6a971a3dcbdd0f9e9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h265|10bit",
+            "filename": "Tenzing 2026 1080p H 265 10bit iTA EnG AC3 Sub iTA EnG-MIRCrew.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Тенцинг / Tenzing [2026 WEB-DLRip 720p] MVO (HDRezka Studio) + Dub (HDRezka Studio) + Original Eng + Sub Rus Eng\n👤 297 💾 5.14 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "49376f2c0bba05325107ad60329c1a651abdb4f5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|x264",
+            "filename": "Tenzing.2026.720p.ATVP.WEB-DLRip.x264_New-Team_il68k.mkv"
+          },
+          "sources": [
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "dht:49376f2c0bba05325107ad60329c1a651abdb4f5",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing 2026 720p BluRay\n👤 100 💾 1.13 GB ⚙️ YTS",
+          "infoHash": "fbdc2e43d1331ed5aeb6645c4c97d8f2dd284e75",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Tenzing.2026.720p.BluRay.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing (2026) [720p] [WEBRip]\n👤 100 💾 1.13 GB ⚙️ EXT",
+          "infoHash": "4111818e25b0182f7d7482555eecf11e8e7b3a6d",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "Tenzing.2026.720p.WEBRip.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing Conquistando el Everest (2026) [Bluray 720p][Esp]\n👤 71 💾 5.49 GB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "2df244b7dfe6a0ce17dafd52a75b678b538b3d96",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay",
+            "filename": "Tenzing Conquistando el Everest (2026) [Bluray 720p][Esp].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing : à la conquête de l'Everest FRENCH WEBRIP 720p 2026\n👤 24 💾 3.28 GB ⚙️ Torrent9\nMulti Audio / 🇬🇧 / 🇫🇷",
+          "infoHash": "a10379544007debcdd8af37e1828550f502690f0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip",
+            "filename": "Tenzing.2026.Multi.720P. WEBRIP.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing.conquistando.el.Everest.2026.720p-Dual-Lat\n👤 13 💾 1.14 GB ⚙️ Cinecalidad\nDual Audio / 🇲🇽",
+          "infoHash": "67d86af010d31b3958830d013f3a9942333e7c87",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p",
+            "filename": "Tenzing.conquistando.el.Everest.2026.720p-Dual-Lat.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Тенцинг / Tenzing (2026) WEB-DL 720p | D Р\n👤 11 💾 4.51 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "9dc2660cb3c548270d3706578c5fe805bf5f5e9c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL",
+            "filename": "Tenzing.2026.720p.WEB-DL.TORRNADO.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:9dc2660cb3c548270d3706578c5fe805bf5f5e9c",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing (2026) 720p WEBL DDP 5.1 X.264.iTA ENG_CREW.mkv\n👤 10 💾 3.5 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "201af144438bc95071927214ef8cade25e74b28d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|x264",
+            "filename": "Tenzing (2026) 720p WEBL DDP 5.1 X.264.iTA ENG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Tenzing (2026) [720p] [WEB-DL] [XviD] [AC3-R22] [Lektor PL Ai]\n👤 5 💾 3.59 GB ⚙️ BestTorrents\n🇵🇱",
+          "infoHash": "0321bd097ba8516b70bc27aba09e4ac062629528",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|xvid",
+            "filename": "Tenzing.2026.PL.Ai.720p.WEB-DL.XviD.AC3-R22.avi"
+          }
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Тенцинг / Tenzing [2026 WEB-DLRip] MVO (HDRezka Studio)\n👤 383 💾 1.46 GB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "83eee5731595ad9ee90db4a5123826af830ee637",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL",
+            "filename": "Тенцинг_2026_WEB-DLRip.avi"
+          },
+          "sources": [
+            "tracker:http://bt4.t-ru.org/ann?magnet",
+            "dht:83eee5731595ad9ee90db4a5123826af830ee637",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Тенцинг / Tenzing [2026 WEB-DLRip-AVC] Dub (HDRezka Studio) + MVO (HDRezka Studio) + Sub Rus Eng + Original Eng\n👤 139 💾 2.79 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "97f18b7d7584947ed8ce1dfb40f3263cb02ae484",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL|avc",
+            "filename": "Tencing.2026.ATVP.WEB-DLRip.AVC.mkv"
+          },
+          "sources": [
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "dht:97f18b7d7584947ed8ce1dfb40f3263cb02ae484",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nWEBRip",
+          "title": "Tenzing : à la conquête de l'Everest FRENCH WEBRIP 2026\n👤 62 💾 1.37 GB ⚙️ Torrent9\nMulti Audio / 🇫🇷",
+          "infoHash": "7d823fccaa788238b2558a8fe8e0bdb528e68e87",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEBRip",
+            "filename": "Tenzing.2026.Multi.WEBRIP.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Тенцинг / Tenzing (2026) WEB-DLRip-AVC от DoMiNo & селезень | D P | HDRezka Studio\n👤 26 💾 2.02 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "6f96ed0475f1633cef0217a86031652119a9aeca",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL|avc",
+            "filename": "Тенцинг.2026.WEB-DLRip.x264.seleZen.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:6f96ed0475f1633cef0217a86031652119a9aeca",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nBluRay",
+          "title": "Tenzing Conquistando el Everest (2026) [Bluray][Esp]\n👤 13 💾 1.7 GB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "f74c13d219b16416560db0bded692d94a2761c9d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BluRay",
+            "filename": "Tenzing Conquistando el Everest (2026) [Bluray][Esp].avi"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Tenzing.conquistando.el.Everest.2026.DVDRip-Lat\n👤 5 💾 626.92 MB ⚙️ Cinecalidad\n🇲🇽",
+          "infoHash": "ea9a39a87e4711e5103ef9944b16bb9326afea49",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip",
+            "filename": "Tenzing.conquistando.el.Everest.2026.DVDRip-Lat.mp4"
+          }
+        }
+      ]
+    }
+  }
+}

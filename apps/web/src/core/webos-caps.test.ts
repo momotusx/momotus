@@ -13,11 +13,13 @@ test("webOS is the Web0S agent plus a Chrome major", () => {
   expect(chromeMajor("Web0S without a browser name")).toBe(0);
 });
 
-test("a 1080p panel: no HDR, every video codec", () => {
+test("a 1080p panel: no HDR, every video codec from Chrome 87, no AV1 before", () => {
   const caps = webosCaps(false, 79, "en");
   expect(caps.displayHeight).toBe(1080);
   expect(caps.hdr).toEqual([]);
-  expect(caps.decoders).toEqual(["h264", "h265", "vp9", "av1"]);
+  expect(caps.decoders).toEqual(["h264", "h265", "vp9"]);
+  expect(webosCaps(false, 86, "en").decoders).toEqual(["h264", "h265", "vp9"]);
+  expect(webosCaps(false, 87, "en").decoders).toEqual(["h264", "h265", "vp9", "av1"]);
 });
 
 test("a 4K panel is HDR10 and, on Chrome 79, loses VP9 and AV1", () => {

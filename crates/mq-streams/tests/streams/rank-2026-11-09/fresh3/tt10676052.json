@@ -1,0 +1,640 @@
+{
+ "fetched": "2026-11-08T23:16:49.815Z",
+ "id": "tt10676052",
+ "type": "movie",
+ "sources": {
+  "meta": "https://v3-cinemeta.strem.io/meta/movie/tt10676052.json",
+  "streams": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt10676052.json"
+ },
+ "meta": {
+  "name": "The Fantastic Four: First Steps",
+  "year": "2025",
+  "runtime": "115 min",
+  "genres": [
+   "Action",
+   "Adventure",
+   "Sci-Fi"
+  ],
+  "country": "United Kingdom, United States, Canada, New Zealand"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k DV | HDR10+",
+   "title": "The Fantastic Four First Steps 2025 WEB-DL 2160p HDR10+ DV HEVC DDP Atmos 5.1 x265-E\n👤 85 💾 12.75 GB ⚙️ ThePirateBay",
+   "infoHash": "add50bc084aa698623ee6f92c8514f769b03b57e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|hevc|10bit|DV|HDR10+",
+    "filename": "The Fantastic Four First Steps 2025.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR",
+   "title": "The Fantastic Four: First Steps (2025) (2160p UHD BluRay x265 10bit DV HDR10 TrueHD Atmos 7.1 English French Spanish r00t) [QxR]\nThe Fantastic 4 - First Steps (2025) (2160p UHD BluRay x265 10bit DV HDR10+ r00t).mkv\n👤 38 💾 14.67 GB ⚙️ 1337x\n🇬🇧 / 🇪🇸 / 🇫🇷",
+   "infoHash": "b48c57ac5ced66b4f849529b1ac682b44e18ca11",
+   "fileIdx": 5,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|DV|HDR",
+    "filename": "The Fantastic 4 - First Steps (2025) (2160p UHD BluRay x265 10bit DV HDR10+ r00t).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR10+",
+   "title": "The Fantastic Four First Steps 2025 2160p HDR10Plus DV WEBRip 6CH x265 HEVC-PSA\n👤 26 💾 2.51 GB ⚙️ ThePirateBay",
+   "infoHash": "173d76ec050266cd4f8c6f6d1ffaa7c1a3d5eabe",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|hevc|DV|HDR10+",
+    "filename": "The.Fantastic.Four.First.Steps.2025.2160p.HDR10Plus.DV.WEBRip.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR",
+   "title": "The.Fantastic.Four.First.Steps.2025.2160p.IMAX.WEB.DV.HDR.LATINO.HINDI.MP4-BTM\n👤 14 💾 13.89 GB ⚙️ ThePirateBay\n🇲🇽 / 🇮🇳",
+   "infoHash": "8d7e9793fdcaa25ff49cc95227e02da4eb58a885",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB|DV|HDR",
+    "filename": "The.Fantastic.Four.First.Steps.2025.2160p.IMAX.DSNP.WEB-DL.DV.HDR[Ben The Men].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "The.Fantastic.Four.First.Steps.2025.bluray.hdr.2160p.av1.7.1.opus.subs-Dust\n👤 10 💾 2.88 GB ⚙️ 1337x",
+   "infoHash": "8b34e31c3a28cae8ae2a26aedc2b3986f931f665",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+    "filename": "The.Fantastic.Four.First.Steps.2025.bluray.hdr.2160p.av1.7.1.opus.subs-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR10+",
+   "title": "Les 4 Fantastiques : Premiers pas (2025) Hybrid MULTi VFF 2160p 10bit 4KLight DV HDR10Plus BluRay DDP 5.1 Atmos x265-QTZ (The Fantastic Four First Steps)\n👤 7 💾 5.4 GB ⚙️ EXT\nMulti Audio / 🇫🇷",
+   "infoHash": "8f8e1db0b1f3cc2e0bceeb0821dc61c9122a447f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|DV|HDR10+",
+    "filename": "The Fantastic Four First Steps (2025) Hybrid MULTi VFF 2160p 10bit 4KLight DV HDR10Plus BluRay DDP 5.1 Atmos x265-QTZ.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "The Fantastic Four: First Steps 2025 2160p WEBRip\n👤 154 💾 5.16 GB ⚙️ YTS",
+   "infoHash": "6a8bd390b233b868ad1646828b96b1b41926a60c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "The.Fantastic.Four.First.Steps.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "The Fantastic Four First Steps (2025) 2160p 4K WEB 5 1-LAMA\n👤 53 💾 5.16 GB ⚙️ 1337x",
+   "infoHash": "eed068c6e34a6cb81d51454f2ade607c84e3ecc7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB|x265|10bit",
+    "filename": "The.Fantastic.Four.First.Steps.2025.2160p.4K.WEB.x265.10bit.AAC5.1-LAMA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "The Fantastic Four First Steps 2025 Hybrid 1080p UHD BluRay DD 5 1 Atmos DV HDR10 x265-HiDt\n👤 14 💾 11.45 GB ⚙️ ThePirateBay",
+   "infoHash": "12a0aa27840f9af884312957ad58ce13781b8387",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "The Fantastic Four First Steps 2025 Hybrid 1080p UHD BluRay DD 5 1 Atmos DV HDR10  x265-HiDt.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "The Fantastic 4 First Steps 2025 Web-Dl 1080p HEVC 10bit HDR Dolby Digital Plus with Dolby Atmos 6ch-CAPTCHA\n👤 13 💾 2.15 GB ⚙️ ThePirateBay",
+   "infoHash": "07e5104786a0ccbe64f574add4a981ea61f2935c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc|10bit|HDR",
+    "filename": "The Fantastic 4 First Steps 2025 Web-Dl 1080p HEVC 10bit HDR Dolby Digital Plus with Dolby Atmos 6ch-CAPTCHA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "The Fantastic Four First Steps 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737\n👤 7 💾 6.38 GB ⚙️ ThePirateBay",
+   "infoHash": "fc13ac4457d438d89049f9b1c41008dcef70f361",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "The Fantastic Four First Steps 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10  x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Fantastic.Four.First.Steps.2025.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir\n👤 537 💾 1.71 GB ⚙️ ThePirateBay",
+   "infoHash": "2b39efa9778162dcc486544887740dfec1100129",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "The.Fantastic.Four.First.Steps.2025.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Fantastic.Four.First.Steps.2025.1080p.WEB.h264-ETHEL\n👤 267 💾 8.45 GB ⚙️ ThePirateBay",
+   "infoHash": "e2eebf078cdaf6a9aa290e959b9d47edd3cb90b7",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264",
+    "filename": "The.Fantastic.Four.First.Steps.2025.1080p.WEB.h264-ETHEL.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four: First Steps 2025 1080p WEBRip\n👤 198 💾 2.13 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+   "infoHash": "742d6457348953609dfbc9d93d4acef926adffa8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "The.Fantastic.Four.First.Steps.2025.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps 2025 1080p WEBRip x265-DH\n👤 195 💾 2.38 GB ⚙️ ThePirateBay",
+   "infoHash": "391caaf081f88a59843aeb9c78f833b4ad3d1217",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "The Fantastic Four First Steps 2025 1080p WEBRip x265-DH.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four: First Steps 2025 1080p WEBRip\n👤 153 💾 1.93 GB ⚙️ YTS",
+   "infoHash": "b9a8df3d29f75f6095ba6cfa030d4e796dbd417c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "The.Fantastic.Four.First.Steps.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic 4 First Steps 2025 BluRay 1080p DDP Atmos 5 1 x264-hallowed\n👤 134 💾 8.85 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇪🇸 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱",
+   "infoHash": "79f9e16344ffca744a3e4f03dd0ab2279b233909",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "The Fantastic 4 First Steps 2025 BluRay 1080p DDP Atmos 5 1 x264-hallowed.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four: First Steps 2025 1080p BluRay\n👤 109 💾 2.11 GB ⚙️ YTS",
+   "infoHash": "3406e0e34a7f675658aa5f2cecc663db11444788",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "The.Fantastic.Four.First.Steps.2025.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps 2025 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir\n👤 69 💾 1.71 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸 / 🇫🇷",
+   "infoHash": "50739f18d21221fd3d88cac8682c62b435a5e977",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "The Fantastic Four First Steps 2025 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four: First Steps (2025) (1080p BluRay x265 10bit EAC3 7.1 Silence) [QxR]\nThe Fantastic Four - First Steps (2025) (1080p BluRay x265 10bit Silence).mkv\n👤 52 💾 4.93 GB ⚙️ 1337x",
+   "infoHash": "6b402f488ff1dd939c0ae680c6a1075070caba6b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "The Fantastic Four - First Steps (2025) (1080p BluRay x265 10bit Silence).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic 4 First Steps 2025 1080p WebRip EAC3 5 1 X265-Lootera\n👤 45 💾 2.74 GB ⚙️ ThePirateBay",
+   "infoHash": "377b7843a3d03511aae3ed38acf31aa4c24aeca1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "The Fantastic 4 First Steps 2025 1080p WebRip EAC3 5 1 X265-Lootera.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Fantastic.Four.First.Steps.2025.1080p.WEB-DL.H.264.Dual.YG⭐\n👤 45 💾 4.85 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "dd7169006494e97ba1b7fde53ed625e7c8e7d42b",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "The.Fantastic.Four.First.Steps.2025.1080p.WEB-DL.H.264.Dual YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps 2025 BluRay 1080p DD 5 1 x264-BHDStudio\n👤 40 💾 6.84 GB ⚙️ ThePirateBay",
+   "infoHash": "d2dd3c1647b99ea2ee7c1f11af59d3aa0fa466f7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "The Fantastic Four First Steps 2025 BluRay 1080p DD 5 1 x264-BHDStudio.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic 4 First Steps 2025 1080p BluRay TrueHD 7 1 Atmos 10bit H 265-iVy\n👤 32 💾 5.38 GB ⚙️ ThePirateBay",
+   "infoHash": "e7d11f5fbed263a4f7bee6b8d1de313afb7d5c5d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h265|10bit",
+    "filename": "The Fantastic 4 First Steps 2025 1080p BluRay TrueHD 7 1 Atmos 10bit H 265-iVy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps (2025) 1080p BluRay 5.1-LAMA\n👤 32 💾 2.11 GB ⚙️ ThePirateBay",
+   "infoHash": "4b39b58de72819bc8ff9f7366b6647c089570e88",
+   "fileIdx": 36,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "The.Fantastic.Four.First.Steps.2025.1080p.BluRay.x264.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps 2025 NORDiC REPACK 1080p WEB-DL DDP5 1 Atmos H 264-BANDOLEROS\n👤 29 💾 6.91 GB ⚙️ ThePirateBay\n🇩🇰 / 🇫🇮 / 🇸🇪 / 🇳🇴",
+   "infoHash": "3226427f42f433a3db2e11cb0d0da929adaa7ada",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "The Fantastic Four First Steps 2025 NORDiC REPACK 1080p WEB-DL DDP5 1 Atmos H 264-BANDOLEROS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic 4: First Steps (2025) (1080p MA WEB-DL x265 10bit EAC3 Atmos 5.1 Ghost) [QxR]\n👤 26 💾 4.37 GB ⚙️ 1337x",
+   "infoHash": "fe9bdb343f255b8f82b3ce308c0055385560279d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+    "filename": "The Fantastic 4꞉ First Steps (2025) (1080p MA WEB-DL x265 Ghost).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps 2025 1080p WEB-DL HEVC x265 5.1 BONE\n👤 24 💾 1.93 GB ⚙️ 1337x",
+   "infoHash": "590f76f37322c4c80ef093d820cdd0975f2e820d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+    "filename": "The Fantastic Four First Steps 2025 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 20 💾 6.12 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸 / 🇫🇷",
+   "infoHash": "8765fb1459f79cbe480dbe73e25bc7e6edc5558a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "The Fantastic Four First Steps 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 17 💾 1.8 GB ⚙️ ThePirateBay",
+   "infoHash": "08ee345759067f22ae53f463a3012165f72f39ec",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "The.Fantastic.Four.First.Steps.2025.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps 2025 1080p Blu-Ray HEVC x265 10Bit DDP5.1 Subs KINGDOM\n👤 15 💾 5.46 GB ⚙️ 1337x",
+   "infoHash": "dcb3e3d047509c8539cff1d9a6964bf5eb6fde3a",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "The Fantastic Four First Steps 2025 1080p Blu-Ray HEVC x265 10Bit DDP5.1 Subs KINGDOM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four: First Steps (2025) IMAX (1080p DSNP WEB-DL x265 10bit EAC3 5.1 Silence) [QxR]\n👤 14 💾 4.91 GB ⚙️ 1337x",
+   "infoHash": "ca28d69cfdb5e6f1ef97f03310325a4c74362c0c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+    "filename": "The Fantastic Four - First Steps (2025) IMAX (1080p DSNP WEB-DL x265 10bit Silence).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic 4 First Steps 2025 1080p BluRay DDP 5 1 10bit H 265-iVy\n👤 14 💾 2.53 GB ⚙️ ThePirateBay",
+   "infoHash": "809c8e3125082e7fa04c467df8ecbca2309449a4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h265|10bit",
+    "filename": "The Fantastic 4 First Steps 2025 1080p BluRay DDP 5 1 10bit H 265-iVy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Marvel Cinematic Universe (2008-2025) Phase I-II-III-IV-V-VI 1080p 10bit IMAX DSNP WEB-DL & Blu-ray x265 HEVC [Org BD/DDP 5.1 Hindi DDP 5.1 Atmos English] MSubs ~ TombDoc\nThe Multiverse Saga (2021-2025) Phase IV-V-VI ~ TombDoc/37.The Fantastic Four - First Steps (2025) IMAX 1080p 10bit DSNP WEB-DL Org DDP 5.1 Hindi-English Atmos H.265-TombDoc.mkv\n👤 12 💾 4.67 GB ⚙️ 1337x\nMulti Subs / 🇬🇧 / 🇮🇳",
+   "infoHash": "b7855cb2176856067a9daeded39809008cca7067",
+   "fileIdx": 37,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "37.The Fantastic Four - First Steps (2025) IMAX 1080p 10bit DSNP WEB-DL Org DDP 5.1 Hindi-English Atmos H.265-TombDoc.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps (2025) [1080p] [WEBRip] [5.1] [YTS.MX]\n👤 12 💾 1.22 GB ⚙️ ThePirateBay",
+   "infoHash": "8beb7f2876ebab410d7457d898ae2cd5efa18abb",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps 2025 HQ 1080p JHS WEB-DL Multi DD 5 1 Atmos H 265-CPTN5DW\n👤 10 💾 3.78 GB ⚙️ EXT\nMulti Audio / 🇬🇧",
+   "infoHash": "df2ae7f3da87ec5814bb8bda9d9e806342a85906",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+    "filename": "The Fantastic Four First Steps 2025 HQ 1080p JHS WEB-DL Multi DD 5 1 Atmos H 265-CPTN5DW.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps 2025 IMAX 1080p DSNP WEB-DL DDPA 5 1 H 264-PiRaTeS\n👤 10 💾 5.29 GB ⚙️ ThePirateBay",
+   "infoHash": "954e83099e5961af524888bbb65c54ac66c40994",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "The Fantastic Four First Steps 2025 IMAX 1080p DSNP WEB-DL DDPA 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Fantastic.Four.First.Steps.2025.bluray.sdr.1080p.av1.7.1.opus.subs-Dust\n👤 10 💾 1.8 GB ⚙️ 1337x",
+   "infoHash": "44776ed2c0aff30575a0e97a6386c1ddcfb2a5f2",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "The.Fantastic.Four.First.Steps.2025.bluray.sdr.1080p.av1.7.1.opus.subs-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fantastická 4: První kroky / The Fantastic Four: First Steps (2025)(CZ)[1080p]\n👤 10 💾 4.53 GB ⚙️ EXT\n🇨🇿",
+   "infoHash": "1bfdccd91b915e61ccea8223adef618b6ecf630f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p",
+    "filename": "Fantastická 4 První kroky.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Fantastic.Four.First.Steps.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust\n👤 9 💾 1.8 GB ⚙️ 1337x",
+   "infoHash": "1a3d55f7028bde86a3f87d41bca3a1fdb2604ab5",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "The.Fantastic.Four.First.Steps.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "I Fantastici Quattro Gli Inizi (2025) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv\n👤 9 💾 2.94 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "1afb799081c257f322d18acc393a1361033ffd16",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "I Fantastici Quattro Gli Inizi (2025) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps (2025) Eng 1080p WEBRip x265 DD 5.1 ESub.mkv\n👤 9 💾 1.3 GB ⚙️ ThePirateBay",
+   "infoHash": "eb2475891e217426600835c4328c9c2ed2dfaddf",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "The Fantastic Four First Steps (2025) Eng 1080p WEBRip x265 DD 5.1 ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic 4 First Steps 2025 MULTi VF2 IMAX 1080p WEB H264-FW\n👤 8 💾 5.8 GB ⚙️ ThePirateBay\nMulti Audio",
+   "infoHash": "59613425a2a4687265cba43d5bf360da1ce3f1cb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264",
+    "filename": "The Fantastic 4 First Steps 2025 MULTi VF2 IMAX 1080p WEB H264-FW.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps 2025 1080p 10bit BluRay 8CH X265 HEVC-PSA\n👤 8 💾 2.05 GB ⚙️ ThePirateBay",
+   "infoHash": "3379bda532a0ad43bd81434894d4b6390f20f4e2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "The Fantastic Four First Steps 2025 1080p 10bit BluRay 8CH X265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Fantastic.Four.First.Steps.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta\n👤 7 💾 1.29 GB ⚙️ ThePirateBay",
+   "infoHash": "6a9235fbde00f1ed28979e9e1372cf6c087c1430",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "The.Fantastic.Four.First.Steps.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Fantastic.Four.First.Steps.2025.1080p.WEB.h264-ETHEL\n👤 7 💾 8.45 GB ⚙️ ThePirateBay",
+   "infoHash": "d582fdff70b14ed45f0668be366c11c82e1a29ba",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264",
+    "filename": "The.Fantastic.Four.First.Steps.2025.1080p.WEB.h264-ETHEL.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fantastická 4: První kroky / The Fantastic Four: First Steps (2025)[1080p][WebRip]\n👤 7 💾 2.13 GB ⚙️ EXT\n🇨🇿 / 🇸🇰",
+   "infoHash": "a386ab53ffeb7136505e4985a9b2a81907c81c63",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "The.Fantastic.Four.First.Steps.2025.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four: First Steps.2025.1080p.SDR.BDRip.OPUS5.1.AV1…\n👤 6 💾 986.54 MB ⚙️ TorrentGalaxy",
+   "infoHash": "b4d19b3120993fb7f70003f18dbc22e466d8c52f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|av1",
+    "filename": "The Fantastic Four - First Steps (2025).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "I Fantastici 4 Gli Inizi 2025 iTA ENG Bluray 1080p x264 CYBER mkv\n👤 6 💾 9.31 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "8642beeeb41b3ccc75f8f62307ce42bfb2c4beee",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "I.Fantastici.4.Gli.Inizi.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps 2025 1080p BluRay x265 Opus7 1-R1GY3B\n👤 6 💾 4.27 GB ⚙️ ThePirateBay",
+   "infoHash": "7368b934ab717e83ce12892dffc2bf368802c482",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "The Fantastic Four First Steps 2025 1080p BluRay x265 Opus7 1-R1GY3B.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps (2025) 1080p WEBRip x265 10bit 5 1-LAMA\n👤 6 💾 1.93 GB ⚙️ 1337x",
+   "infoHash": "269b9d43ff8956233b7583de5c02b5910c6dc1d4",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "The.Fantastic.Four.First.Steps.2025.1080p.WEBRip.x265.10bit.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Fantastic.Four.First.Steps.2025.1080p.WEBRip.x265-KONTRAST\n👤 6 💾 2.6 GB ⚙️ 1337x",
+   "infoHash": "e7697a5bfe78e57799caf785544b8c54bcf83f0d",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "The.Fantastic.Four.First.Steps.2025.1080p.WEBRip.x265-KONTRAST.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps 2025 1080p JHS WEB-DL Multi DD 5 1 Atmos H 265-CPTN5DW\n👤 5 💾 2.59 GB ⚙️ ThePirateBay\nMulti Audio / 🇬🇧 / 🇮🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "3cdd3d339891527704f9e938ccf1b1ae6565c755",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+    "filename": "The Fantastic Four First Steps 2025 1080p JHS WEB-DL Multi DD 5 1 Atmos H 265-CPTN5DW.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Fantastic Four First Steps 2025 1080p BluRay DTS x264-PRoDJi\n👤 5 💾 8.03 GB ⚙️ ThePirateBay",
+   "infoHash": "a5744764148075e411734ae7ef218b83b1abfc4e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "The Fantastic Four First Steps 2025 1080p BluRay DTS x264-PRoDJi.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The.Fantastic.4-First.Steps.2025.1080p.10bit.DS4K.iTunes.WEBRip.[Org.DDP5.1-Hindi DDPA5.1-English].ESub.HEVC-The.PunisheR\n👤 5 💾 5.82 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "d86d5d67ea410f057af0276a188503d639de5fc5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "The.Fantastic.4-First.Steps.2025.1080p.10bit.DS4K.iTunes.WEBRip.[Org.DDP5.1-Hindi+DDPA5.1-English].ESub.HEVC-The.PunisheR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Fantastic Four: First Steps 2025 720p WEBRip\n👤 104 💾 1.04 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+   "infoHash": "ff39ec1c2bba7ccee299da4c8d8e44f37b924736",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "The.Fantastic.Four.First.Steps.2025.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Fantastic Four: First Steps 2025 720p BluRay\n👤 50 💾 1.03 GB ⚙️ YTS",
+   "infoHash": "66b8059ce1d9bd33052a5478ab6334f99f4a616c",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "The.Fantastic.Four.First.Steps.2025.720p.BluRay.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Fantastic Four First Steps (2025) Eng 720p WEBRip x264 AAC ESub\n👤 18 💾 1.04 GB ⚙️ 1337x",
+   "infoHash": "282efac4a3a3a5488b32055ec58c3e625074c4ec",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "The Fantastic Four First Steps (2025) Eng 720p WEBRip x264 AAC ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Fantastic Four First Steps 2025 720p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 13 💾 3.31 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸 / 🇫🇷",
+   "infoHash": "2abd489e0a34465f7022af1d333b1919b8c0651c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB-DL|h264",
+    "filename": "The Fantastic Four First Steps 2025 720p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "The Fantastic Four First Steps (2025) 720p WEBRip-LAMA\n👤 5 💾 1.04 GB ⚙️ ThePirateBay",
+   "infoHash": "9ea59ba3ca00db6e368ab1a9407b5f8666b889b0",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "The.Fantastic.Four.First.Steps.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n576p",
+   "title": "The Fantastic Four First Steps 2025 576p WEBRip x265-SSN\n👤 27 💾 1.29 GB ⚙️ ThePirateBay",
+   "infoHash": "49af3704f90e1b43ce36ead957cd8c70b2cb4b72",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|576p|WEBRip|x265",
+    "filename": "The Fantastic Four First Steps 2025 576p WEBRip x265-SSN.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nBluRay",
+   "title": "The Fantastic Four First Steps (2025) [Pedro Pascal] BluRay H264 DolbyD 5.1 + ni\n👤 5 💾 2.32 GB ⚙️ ThePirateBay",
+   "infoHash": "9bca56c7923ce22cf1a309c1f05daa2b4f6f627e",
+   "fileIdx": 12,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BluRay|h264",
+    "filename": "The Fantastic Four First Steps (2025) BluRay H264 DolbyD 5.1 + nickarad.mp4"
+   }
+  }
+ ]
+}

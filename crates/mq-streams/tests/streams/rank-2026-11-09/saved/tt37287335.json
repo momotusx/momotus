@@ -1,0 +1,3511 @@
+{
+  "id": "tt37287335",
+  "type": "movie",
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "Obsession",
+    "year": "2026",
+    "releaseInfo": "2026",
+    "runtime": "109 min",
+    "episodeReleased": null,
+    "episodesInSeason": null
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Obsession (2026) (2160p UHD BluRay AV1 HDR Sepiol)\n👤 67 💾 8.3 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇩🇰 / 🇸🇪 / 🇳🇴",
+          "infoHash": "1bae2c7642b65ad7dd7a26bebbb781182f1faf3d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+            "filename": "Obsession (2026) (2160p UHD BluRay AV1 HDR Sepiol).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV",
+          "title": "Obsession.2025.DV.2160p.WEB.h265-TRB\n👤 15 💾 11.53 GB ⚙️ TorrentGalaxy",
+          "infoHash": "55feaf249e9d8f9136f339a00f9232edfcea57fe",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB|h265|DV",
+            "filename": "Obsession.2025.DV.2160p.WEB.h265-TRB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Obsession.2025.2160p.HDR10.BDRip.OPUS7.1.AV1.BluBit\n👤 13 💾 7.43 GB ⚙️ TorrentGalaxy",
+          "infoHash": "b3541fcfed845e5ec2e51a293e92e97abd2cdafb",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BDRip|av1|10bit|HDR",
+            "filename": "Obsession (2026).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Obsession 2025 2160p WEBRip\n👤 383 💾 4.87 GB ⚙️ YTS\n🇬🇧 / 🇪🇸",
+          "infoHash": "c790495487a4f8d09a5c120403b0419f3f745faf",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+            "filename": "Obsession.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Obsession.2026.2160p.WEB-DL.DDP5.1.H.265-MYOTTMYSUBS\n👤 70 💾 9.47 GB ⚙️ ThePirateBay",
+          "infoHash": "5f1f35c3d7123b33f39e2b553d56ef981ccf4e82",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265",
+            "filename": "Obsession.2025.2160p.WEB-DL.DDP5.1.H.265-MYOTTMYSUBS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Obsession.2025.2160p.WEB.h265-TRB\n👤 52 💾 9.6 GB ⚙️ TorrentGalaxy",
+          "infoHash": "7109c48bc152acd36d758507e1cab870fc007735",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB|h265"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Obsession (2025) (Spanish English Subs) Micro4K 2160P Sdr x265-Ac3 Aac\n👤 30 💾 5.11 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸",
+          "infoHash": "f695ed1800ed50974c447fc32d7b6b43ac8a0512",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|x265",
+            "filename": "Obsession (2025) (Spanish English Subs) Micro4K 2160P Sdr x265-Ac3 Aac By Chinako (Hispashare).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Obsession.2025.2160p.WEBRip.AVC.SDR.DDP5.1.Atmos-Asmo\n👤 7 💾 10.38 GB ⚙️ ThePirateBay",
+          "infoHash": "5e2e3700a9f4ed56f11027d0d2278ca8fb96fd41",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|avc",
+            "filename": "Obsession.2025.2160p.WEBRip.AVC.SDR.DDP5.1.Atmos-Asmo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "Obsession (2025) (UHD BDRip 1080p AV1 HDR10 EAC3 Atmos) [OEP][CF278595].mkv\n👤 69 💾 5.28 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇸🇦",
+          "infoHash": "0187c066c403ef3a2a1aaa15b66ac7351ae95aec",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|av1|10bit|HDR",
+            "filename": "Obsession (2025) (UHD BDRip 1080p AV1 HDR10 EAC3 Atmos) [OEP][CF278595].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "Obsession (2025) (1080p DS4K BluRay x265 10-bit HDR AAC 7.1) [WeSLeY]\n👤 30 💾 3.26 GB ⚙️ 1337x",
+          "infoHash": "ba61f90680ac3bc479bfb2433a22400838709f20",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|HDR",
+            "filename": "Obsession (2025) (1080p DS4K BluRay x265 10-bit HDR AAC 7.1) [WeSLeY].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "Obsesja - Obsession 2025 [HLG HDR SDR] [1080p.BluRay.H264.AC3.5.1.AS76-FT] [ENG-GER-Lektor PL] [Alusia]\n👤 5 💾 5.36 GB ⚙️ EXT\n🇬🇧 / 🇩🇪 / 🇵🇱",
+          "infoHash": "660cfaf5ff2553497ad7351d53457993e469d2fd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|h264|HDR",
+            "filename": "Obsesja - Obsession 2025 [HLG HDR SDR] [1080p.BluRay.H264.AC3.5.1.AS76-FT] [ENG-GER-Lektor PL] [Alusia].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.AMZN.WEB-DL.DDP5.1.H264.MP4-BTM\n👤 4923 💾 4.96 GB ⚙️ ThePirateBay",
+          "infoHash": "afa1047f19870e4a75a8603037fd0fb11bdfdce0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession.2026.1080p.AMZN.WEB-DL[Ben The Men].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p WEBRip\n👤 1422 💾 2.01 GB ⚙️ YTS",
+          "infoHash": "69e81483386084cb786d5b9e3e9692de72a446c5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Obsession.2025.1080p.WEBRip.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p WEB-DL HEVC x265 5.1 BONE\n👤 826 💾 1.56 GB ⚙️ ThePirateBay",
+          "infoHash": "62819469c03cdbe23c80a3872f0ef5048203c96d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Obsession 2026 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p BluRay\n👤 396 💾 2 GB ⚙️ YTS",
+          "infoHash": "10b2a6571a147038549f908b96718b29b5cc387f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession.2025.1080p.BluRay.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2026) (1080p BluRay x265 10bit EAC3 Atmos 7.1 Ghost) …\nObsession (2026) (1080p BluRay x265 Ghost).mkv\n👤 341 💾 5.61 GB ⚙️ TorrentGalaxy",
+          "infoHash": "fc7bf0133594a26827e5a18b8ace1430a67ec7a4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Obsession (2026) (1080p BluRay x265 Ghost).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p WEBRip\n👤 317 💾 1.82 GB ⚙️ YTS",
+          "infoHash": "1ca54c5df425f378b72039156d1000cc181c6a42",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Obsession.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p DUAL BluRay x264 EAC3 5 1 Atmos - HdT\n👤 262 💾 8.85 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇹🇷",
+          "infoHash": "e7671d3ad9d30b59687458dc6a3752c50b26fa73",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession 2026 1080p DUAL BluRay x264 EAC3 5 1 Atmos - HdT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p AMZN WEB-DL DDP5 1 H 264-KyoGo\n👤 239 💾 4.71 GB ⚙️ ThePirateBay",
+          "infoHash": "c9b5f280b6b25c2367828a0ca9bd9059df7cec4e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession 2026 1080p AMZN WEB-DL DDP5 1 H 264-KyoGo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir\n👤 226 💾 1.15 GB ⚙️ ThePirateBay",
+          "infoHash": "39916f69ab5c3338c559bdbf5b0eb4008e1e5bab",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Obsession.2026.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 174 💾 1.06 GB ⚙️ ThePirateBay",
+          "infoHash": "322bcce7de17df919772cd3daee8dcfd814efcc9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+            "filename": "Obsession 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2026) (1080p MA WEB-DL x265 10bit EAC3 Atmos 5.1 Ghos…\n👤 161 💾 4.4 GB ⚙️ TorrentGalaxy",
+          "infoHash": "f7f765441da081d35282a5510ef6a62afb98de0d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+            "filename": "Obsession (2026) (1080p MA WEB-DL x265 Ghost).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 157 💾 6.65 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸",
+          "infoHash": "00f372463ca4ab75fdd7addf763e511a22619bf4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir\n👤 137 💾 1.15 GB ⚙️ ThePirateBay",
+          "infoHash": "90e301fb88e12f1f0aee0bbf42e3049f9e342e4b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Obsession 2026 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.Bluray.10Bit.AAC7.1.x265-NeoNoir\n👤 124 💾 2.03 GB ⚙️ ThePirateBay",
+          "infoHash": "e3acd9cc3ded73be71777c8570dbd4fbd0821489",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Obsession.2025.1080p.Bluray.10Bit.AAC7.1.x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p AMZN WEB-DL-Ben The Men\n👤 108 💾 4.96 GB ⚙️ ThePirateBay",
+          "infoHash": "af12e7f978d76059602c8dc82b52acfefec21e8a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "Obsession 2026 1080p AMZN WEB-DL-Ben The Men.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv\n👤 91 💾 7.66 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+          "infoHash": "b5d1c8e38470ea759484a4fc7c1c85f09afee5b7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.bluray.sdr.1080p.av1.7.1.opus.subs-Dust\n👤 78 💾 1.43 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇩🇰 / 🇸🇪 / 🇳🇴",
+          "infoHash": "471245609983e5a39457f904b4573e214943a1a4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "Obsession.2025.bluray.sdr.1080p.av1.7.1.opus.subs-Dust.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2025) 1080p H265 iTA EnG -MIRCrew\n👤 56 💾 1.5 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹",
+          "infoHash": "755c4cc42940e120a2e09914fa9f860136798255",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h265|10bit",
+            "filename": "Obsession (2025) 1080p H265 10Bit iTA EnG AC3 Sub iTA EnG-MIRCrew.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.BluRay.AV1.DDP5.1-dAV1nci\n👤 54 💾 2.17 GB ⚙️ TorrentGalaxy",
+          "infoHash": "bb59b12b1b61070b966bd6614adbc39da4d8950d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "Obsession.2026.1080p.BluRay.AV1.DDP5.1-dAV1nci.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.ITA-ENG.WEBRip.x265.AAC-V3SP4EV3R.mkv\n👤 49 💾 1.33 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹",
+          "infoHash": "858cbc0ceee623206db9c07e738946af73ce7c5c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Obsession.2025.1080p.ITA-ENG.WEBRip.x265.AAC-V3SP4EV3R.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 iTA-ENG Bluray 1080p x264-CYBER\n👤 43 💾 5.48 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+          "infoHash": "257a09a680a8c50a04229ee9df829340b1d4a100",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession 2025 iTA-ENG Bluray 1080p x264-CYBER.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p AMZN WEB-DL H264-KyoGo\n👤 42 💾 4.71 GB ⚙️ ThePirateBay",
+          "infoHash": "0a6a392ee3161c1d36ad813fdd31ca933ba1a04c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession.2026.1080p.AMZN.WEB-DL.DDP5.1.H.264-KyoGo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.WEB-DL.1080p.Unrated.DD5.1.H264.Dual.YG⭐\n👤 35 💾 5.99 GB ⚙️ ThePirateBay\nDual Audio / 🇪🇸",
+          "infoHash": "b89ab468e36383cf922bf6163b1968106fd7982c",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession.2026.WEB-DL.1080p.Unrated.DD5.1.H264.Dual YG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p AMZN WEB-DL DUAL DDP5 1 H 264-TURG\n👤 34 💾 5.2 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇹🇷",
+          "infoHash": "b31a3848f92778a6902a40a80fd23218005727cd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession 2026 1080p AMZN WEB-DL DUAL DDP5 1 H 264-TURG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p WEB-DL HEVC x265 5 1-BONE\n👤 32 💾 1.56 GB ⚙️ ThePirateBay",
+          "infoHash": "c6eda3d74996f34ca933445400f7978692d87d81",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Obsession 2026 1080p WEB-DL HEVC x265 5 1-BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2025) 1080p BluRay 5.1-LAMA\n👤 31 💾 2 GB ⚙️ ThePirateBay",
+          "infoHash": "3b5578017111687cd3643da2bdf39bd171da3130",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession.2025.1080p.BluRay.x264.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv\n👤 30 💾 5.48 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+          "infoHash": "e3ba2442977f81619e3fd6b4a612dc983cf0baf5",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 m1080p DUAL BluRay x264 AAC 5 1 - HdT\n👤 29 💾 2.44 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇹🇷",
+          "infoHash": "8f2b1ecb72d74e53d65216e44a3b8fd8bf708b16",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession 2026 m1080p DUAL BluRay x264 AAC 5 1 - HdT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2026) Eng 1080p WEBDL x265 DDP 5.1\n👤 26 💾 1.71 GB ⚙️ 1337x",
+          "infoHash": "d6d184f2a74d3d3ebcb565708c6199a589fead9f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x265",
+            "filename": "Obsession  (2026) Eng 1080p WEBRip x265 DDP 5.1.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p WebRip EAC3 5 1 x265-Lootera\n👤 25 💾 2.68 GB ⚙️ ThePirateBay",
+          "infoHash": "1fb49d6bb038ebbb5836df945ef0e82b3372f7e5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Obsession 2026 1080p WebRip EAC3 5 1 x265-Lootera.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2026) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv\n👤 24 💾 2.1 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "38954206400ce739d9822cd172e4d7756456266a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Obsession (2026) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p DS4K WEBRip 10Bit DDP5 1 Atmos x265-NeoNoir\n👤 22 💾 1.74 GB ⚙️ ThePirateBay",
+          "infoHash": "cc201b38d4504163bd811f0c2b3a528acb77f50a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Obsession 2026 1080p DS4K WEBRip 10Bit DDP5 1 Atmos x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Posedlost / Obsession (2026)(CZ/EN)[1080p]\n👤 21 💾 4.78 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+          "infoHash": "75dcabca14f99590b08df4c7c981eca91af911f9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p",
+            "filename": "Posedlost (2025) CZ EN.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.10bit.DS4K.BluRay.[Org.DDP5.1-Hindi+DDPA7.1…\n👤 21 💾 3.24 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇳",
+          "infoHash": "b6c7e6a31244a92cdad0c2899c13a4052939c976",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Obsession.2026.1080p.10bit.DS4K.BluRay.[Org.DDP5.1-Hindi+DDPA7.1-English].ESub.HEVC-The.PunisheR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.DS4K.WEBRip.10Bit.DDP5.1.Atmos.x265-NeoNoir\n👤 21 💾 1.74 GB ⚙️ ThePirateBay",
+          "infoHash": "671171f873842bfb5b4b10506ca4ced403af00b6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Obsession.2026.1080p.DS4K.WEBRip.10Bit.DDP5.1.Atmos.x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1920x924.x264-pudszTTIOT\n👤 21 💾 1.89 GB ⚙️ EXT",
+          "infoHash": "1bba163f29d2ce1dc81b8caac96e9650cff77002",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Obsession.2026.1920x924.WEBRip.x264.AAC-pudszTTIOT.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2025) AC3 5.1 ITA.ENG 1080p H265 sub ita.eng MIRCrew\n👤 20 💾 2.34 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "a8d4a3f042888d95289432fea9c39a7487b02fe3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h265",
+            "filename": "Obsession (2025) AC3 5.1 ITA.ENG 1080p H265 sub ita.eng Sp33dy94-MIRCrew.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA\n👤 20 💾 1.06 GB ⚙️ EXT",
+          "infoHash": "2142fbbf77399c6d152ea5e2dc2aed5cd71423d8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+            "filename": "Obsession.2025.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.DS4K.WEBRip.10Bit.DDP5.1.Atmos.x265-NeoNoir\n👤 19 💾 1.74 GB ⚙️ EXT",
+          "infoHash": "c34b09e97c45945721a226cb7d9a693bd7c5c88f",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.BDRip.AVC.DDP5.1-Asmo\n👤 19 💾 8.21 GB ⚙️ EXT\n🇬🇧 / 🇷🇺 / 🇵🇱 / 🇺🇦",
+          "infoHash": "d625f62debbe670ab1b9ac5b825404279240e9c2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|avc",
+            "filename": "Obsession.2025.1080p.BDRip.AVC.DDP5.1-Asmo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2026) (1080p BluRay x265 10bit EAC3 Atmos 7.1 Ghost) …\nObsession (2026) (1080p BluRay x265 Ghost).mkv\n👤 19 💾 5.51 GB ⚙️ TorrentGalaxy",
+          "infoHash": "d34479846490e64412a4f92f78ff7564386124c2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Obsession (2026) (1080p BluRay x265 Ghost).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.BluRay.x265-KONTRAST\n👤 19 💾 3.1 GB ⚙️ TorrentGalaxy",
+          "infoHash": "5a3ddda19e36ef53f54bce66b127b73ea98d8295",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Obsession.2025.1080p.BluRay.x265-KONTRAST.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsesja / Obsession (2026) PL.1080p.WEB-DL.XviD.AC3-MAXX / Lekto…\n👤 19 💾 2.78 GB ⚙️ TorrentGalaxy\n🇵🇱",
+          "infoHash": "a6062fc51c9c1fa46f438576d60e7c3e315e49c8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|xvid",
+            "filename": "Obsession.2025.PL.1080p.WEB-DL.XviD.AC3-MAXX.avi"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2026) 1080p WEBRip x265 DDP 5.1 [ Hin Eng ] ESub\n👤 18 💾 1.25 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+          "infoHash": "665ceef69dce481572cd9c4307ec6d9bdab09b33",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Obsession (2026) 1080p WEBRip x265 DDP 5.1 [ Hin, Eng ] ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta\n👤 18 💾 749.36 MB ⚙️ ThePirateBay",
+          "infoHash": "5b609e243ef36c21ff8f2a79e5989f344639c091",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Obsession.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2025) (1080p DS4K BluRay x265 10-bit SDR E-AC-3 5.1) [WeSLeY]\n👤 17 💾 6.38 GB ⚙️ 1337x",
+          "infoHash": "a6a95af457f2f8d8b0c7426987807160ae7d1968",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Obsession (2025) (1080p DS4K BluRay x265 10-bit SDR E-AC-3 5.1) [WeSLeY].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Posedlost / Obsession (2025)[1080p][WEB-DL]\n👤 17 💾 6.6 GB ⚙️ TorrentGalaxy",
+          "infoHash": "bf6689baec9d84159c4bbfeceed9eeecf487b0e6",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p WEBRip x265-DH\n👤 17 💾 1.79 GB ⚙️ ThePirateBay",
+          "infoHash": "53ccd30b72830d6b0079eec7b728ce99e81f0c59",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Obsession 2026 1080p WEBRip x265-DH.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p AV1 10Bit DKong\n👤 16 💾 402.67 MB ⚙️ ThePirateBay",
+          "infoHash": "97ecb78c88d333b44208c0d659442c53bc38d938",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|av1|10bit",
+            "filename": "Obsession 2026 1080p AV1 10Bit DKong.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p WEB-DL x264 6CH-Pahe in\n👤 15 💾 1.44 GB ⚙️ ThePirateBay",
+          "infoHash": "1604b779fdbbeff0adc781d4fe2f04e708b52bad",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Obsession 2026 1080p WEB-DL x264 6CH-Pahe in.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2026) [1080p][Latino][VerPeliculasOnline.org\n👤 14 💾 1.74 GB ⚙️ EXT\n🇲🇽",
+          "infoHash": "6439ea3963a6a90c5a58fa260f69e90fff817c16",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p",
+            "filename": "Obsession (2026) [1080p][Latino][VerPeliculasOnline.org.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p BluRay x265-YAWNTiC\n👤 13 💾 7.43 GB ⚙️ TorrentGalaxy",
+          "infoHash": "4140340ffaa2d6325027456b44ed58ee2156a996",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Obsession 2025 1080p BluRay x265-YAWNTiC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv\n👤 13 💾 9.71 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "fe7c55aece7c99206ec74b3f9474fada166cb52e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Obsession.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.iTA.ENG.BluRay.1080p.x264-PRiME\n👤 12 💾 7.82 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+          "infoHash": "9ea5283200ac480fd67cdd579a927c42216b6957",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession.2025.iTA.ENG.BluRay.1080p.x264-PRiME.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p AMZN WEB-DL DUAL DDP5 1 HEVC-KyoGo\n👤 12 💾 2.25 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇮🇳",
+          "infoHash": "7d80c11c7d11835a0ca4dc74738972fd17997419",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Obsession 2026 1080p AMZN WEB-DL DUAL DDP5 1 HEVC-KyoGo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Posedlost / Obsession (2026)[1080p][WEBrip]\n👤 12 💾 2.01 GB ⚙️ TorrentGalaxy",
+          "infoHash": "796e95f209816fca8bb6e1c877a942a1847fe46b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Obsession.2025.1080p.WEBRip.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2025) 1080p WEBRip x265 10bit 5.1-LAMA\n👤 11 💾 1.82 GB ⚙️ ThePirateBay",
+          "infoHash": "7e00e77c39f45f6d20b102b208b8acc4f5efe741",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Obsession.2025.1080p.WEBRip.x265.10bit.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.10bit.DS4K.MA.WEBRip.DUAL.DDP5.1.Atmos.HEVC-DaddyCooL\n👤 11 💾 4.52 GB ⚙️ 1337x\nDual Audio / 🇮🇳",
+          "infoHash": "5c2d9a9fc4499b90bc5e744f10e50e7003122507",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+            "filename": "Obsession.2026.1080p.10bit.DS4K.MA.WEBRip.DUAL.DDP5.1.Atmos.HEVC-DaddyCooL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p BluRayRip Opus 7 1 x265-Lootera\n👤 10 💾 2.56 GB ⚙️ TorrentGalaxy",
+          "infoHash": "194e9adeef6ad47c294d5511471c9aeb7bc0bf0f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BRRip|x265",
+            "filename": "Obsession 2025 1080p BluRayRip Opus 7 1 x265-Lootera.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 NORDiC 1080p MA WEB-DL H 264-NORViNE\n👤 10 💾 6.65 GB ⚙️ ThePirateBay\n🇩🇰 / 🇫🇮 / 🇸🇪 / 🇳🇴",
+          "infoHash": "1498c3a625c271aa3582bea01222c2d5926da318",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession 2025 NORDiC 1080p MA WEB-DL H 264-NORViNE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.AMZN.WEB-DL.DDP5.1.H264.MP4-BEN.THE.MEN\n👤 9 💾 4.96 GB ⚙️ EXT",
+          "infoHash": "0e751a2d2a6ac00deb175171b37d180ee95f0821",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p WEBRip HEVC DDP5.1-RiPRG\n👤 9 💾 1.68 GB ⚙️ TorrentGalaxy",
+          "infoHash": "b658ef172ab1b0ba489eca4dac8ed3da56de3246",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc",
+            "filename": "Obsession 2025 1080p WEBRip HEVC DDP5.1-RiPRG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p WebRip Atmos EAC3 5 1 x265-Lootera\n👤 9 💾 2.92 GB ⚙️ ThePirateBay",
+          "infoHash": "a5c4dd410f2cbe408871b3edb7fdcfd3ec893744",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Obsession 2026 1080p WebRip Atmos EAC3 5 1 x265-Lootera.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsesion (2026) 1080p WEBDL LAT - ZeiZ\n👤 8 💾 4.43 GB ⚙️ EXT\n🇲🇽",
+          "infoHash": "e06a9fb22e185e566da02bd069434de987454bd5",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.WEB.h264-ETHEL\n👤 8 💾 5.69 GB ⚙️ TorrentGalaxy",
+          "infoHash": "c538de8a77d9a6d9ebb0d162d9032846f2fabe07",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264",
+            "filename": "Obsession.2025.1080p.WEB.h264-ETHEL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.WEBRip.DS4K.AV1.DDP5.1-dAV1nci\n👤 8 💾 1.44 GB ⚙️ 1337x",
+          "infoHash": "78cfcaccab2f7352047c5a1fa72bf5b54566f2c3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|av1",
+            "filename": "Obsession.2026.1080p.WEBRip.DS4K.AV1.DDP5.1-dAV1nci.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2025) 1080p WEBRip 5.1-LAMA\n👤 8 💾 2.01 GB ⚙️ ThePirateBay",
+          "infoHash": "7b7d37e4a5e9fa2acf54c4900a718a9ce9e282b8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Obsession.2025.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p BluRay x265 10bit Atmos TrueHD 7 1-WiKi\n👤 7 💾 8.42 GB ⚙️ EXT\n🇬🇧 / 🇨🇳",
+          "infoHash": "a79cf391303767527206ad042e4dd43098e59bbe",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Obsession.2025.1080p.BluRay.x265.10bit.Atmos.TrueHD.7.1-WiKi.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.MULTI.1080p.WEB.H264-LOST\n👤 7 💾 5.99 GB ⚙️ ThePirateBay\nMulti Audio",
+          "infoHash": "dcea7e01378f25058b839bd0119386f057ad45c1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264",
+            "filename": "Obsession.2025.MULTI.1080p.WEB.H264-LOST.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 m1080p BluRay x264-GeneMige\n👤 6 💾 2.49 GB ⚙️ ThePirateBay",
+          "infoHash": "aa29d6dc6f1b0bc1567bff2cd79939443fb18905",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession 2025 m1080p BluRay x264-GeneMige.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.WEB-DL.DDP5.1.Atmos.H.264-FHC_CREW.mkv\n👤 6 💾 8.12 GB ⚙️ 1337x",
+          "infoHash": "9407a4cf6ef0b70d741375bec726ea100725e929",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession.2025.1080p.WEB-DL.DDP5.1.Atmos.H.264-FHC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p AMZN WEB-DL DUAL DDP5 1 HEVC-KyoGo\n👤 5 💾 2.25 GB ⚙️ EXT\nDual Audio",
+          "infoHash": "eaad477d018e5ef4951251a78e370da1f33eacb8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Obsession 2026 1080p AMZN WEB-DL DUAL DDP5 1 HEVC-KyoGo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.(2025).BDRip.1080p.3xUkr.Eng\n👤 5 💾 14.14 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇺🇦",
+          "infoHash": "e968ef28f5c1292ddf2d4f226fdc7c32237c8d20",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip",
+            "filename": "Obsession.(2025).BDRip.1080p.3xUkr.Eng.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.WEBRip.x265-KONTRAST\n👤 5 💾 2.93 GB ⚙️ 1337x",
+          "infoHash": "cf77b4274296a9adc99641d8b48ba31547b8a4ea",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Obsession.2025.1080p.WEBRip.x265-KONTRAST.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p ITA-ENG WEBRip x265 AAC-V3SP4EV3R\n👤 5 💾 1.33 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹",
+          "infoHash": "5da3af33ca893f960af00b6bc3e8fbba1de4b4df",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Obsession 2025 1080p ITA-ENG WEBRip x265 AAC-V3SP4EV3R.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession 2025 720p BluRay\n👤 148 💾 998.63 MB ⚙️ YTS",
+          "infoHash": "13e549228ffa288d931763678d76ab77d58c5e39",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Obsession.2025.720p.BluRay.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession 2025 720p WEBRip\n👤 123 💾 1000.91 MB ⚙️ YTS",
+          "infoHash": "23c343804f6b00d0f5e289b830fd827fec40870b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "Obsession.2025.720p.WEBRip.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession 2025.720p.WEB-DL.AAC.x264-rothebehap\n👤 22 💾 2.36 GB ⚙️ TorrentGalaxy",
+          "infoHash": "10250920b6945b8a9cbe6178161780e3ce65a265",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|x264",
+            "filename": "Obsession 2025.720p.WEB-DL.AAC.x264-rothebehap.mp4.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession 2025 720p 10bit BluRay 6CH x265 HEVC-PSA\n👤 18 💾 584.92 MB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇩🇰 / 🇸🇪 / 🇳🇴",
+          "infoHash": "3cbc07e745c643a92bfacebe29a57ca92e41c89b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|hevc|10bit",
+            "filename": "Obsession 2025 720p 10bit BluRay 6CH x265 HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession 2025 720p MA WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 10 💾 3.63 GB ⚙️ ThePirateBay",
+          "infoHash": "b7beb3d9c72b7fb161ed2543c727efc066ef4372",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "Obsession 2025 720p MA WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession 2025 720p BluRay x264-GeneMige\n👤 8 💾 4.37 GB ⚙️ ThePirateBay",
+          "infoHash": "9e9d8b038fdf7145e254e0fe665495f5f97368f0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Obsession 2025 720p BluRay x264-GeneMige.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession (2025) 720p WEBRip-LAMA\n👤 8 💾 1000.91 MB ⚙️ ThePirateBay",
+          "infoHash": "c6c4c98e8621a580f9ede13f3ab091aa08f8dd69",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "Obsession.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession (2026) 720p x265 10bit-VRC\nobsession.2026.720p.x265.10bit-vrc.mkv\n👤 5 💾 355.34 MB ⚙️ TorrentGalaxy",
+          "infoHash": "ec696f277e61678964f81fff2047a1bf457bd11d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|x265|10bit",
+            "filename": "obsession.2026.720p.x265.10bit-vrc.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nHDRip",
+          "title": "Obsession (2025) HQ HDRip - x264 - AAC - 400MB - ESub\n👤 19 💾 402.31 MB ⚙️ EXT",
+          "infoHash": "53d9361c571a263039ca40aa86dfe05145fb9452",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|HDRip|x264",
+            "filename": "Obsession (2025) HQ HDRip - x264 - AAC - 400MB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nWEBRip",
+          "title": "Posedlost-Obsession 2025/WEBrip/HEVC\n👤 18 💾 1.2 GB ⚙️ TorrentGalaxy",
+          "infoHash": "7aec7124eff1c9515e84867cab43b588cec829f0",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEBRip|hevc"
+          }
+        },
+        {
+          "name": "Torrentio\nBDRip",
+          "title": "Obsession.2025.iTALiAN.BDRiP.x264-PRiME\n👤 8 💾 1.67 GB ⚙️ EXT\n🇮🇹",
+          "infoHash": "925fc1fcd06c5c463e8324382812fb58f2246e90",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BDRip|x264",
+            "filename": "Obsession.2025.iTALiAN.BDRiP.x264-PRiME.mkv"
+          }
+        }
+      ]
+    },
+    "torrentio-owner": {
+      "url": "https://torrentio.strem.fun/language=turkish|qualityfilter=threed,480p,scr,cam,unknown",
+      "streams": [
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p DUAL BluRay x264 EAC3 5 1 Atmos - HdT\n👤 262 💾 8.85 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇹🇷",
+          "infoHash": "e7671d3ad9d30b59687458dc6a3752c50b26fa73",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession 2026 1080p DUAL BluRay x264 EAC3 5 1 Atmos - HdT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p AMZN WEB-DL DUAL DDP5 1 H 264-TURG\n👤 34 💾 5.2 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇹🇷",
+          "infoHash": "b31a3848f92778a6902a40a80fd23218005727cd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession 2026 1080p AMZN WEB-DL DUAL DDP5 1 H 264-TURG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 m1080p DUAL BluRay x264 AAC 5 1 - HdT\n👤 29 💾 2.44 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇹🇷",
+          "infoHash": "8f2b1ecb72d74e53d65216e44a3b8fd8bf708b16",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession 2026 m1080p DUAL BluRay x264 AAC 5 1 - HdT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4320p HDR",
+          "title": "Obsession (2025) 4320p HDR Ai Upscale 7.1 Atmos + 5.1 Multidub/Sub MKV -Mesc\n👤 5 💾 18.34 GB ⚙️ ThePirateBay\nMulti Subs",
+          "infoHash": "c2852573f3461ec1f711839765e6fa740045f577",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4320p|HDR",
+            "filename": "Obsession (2025) 4320p HDR Ai Upscale -Mesc.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Obsession.2026.2160p.WEB-DL.UNRATED.DV.HDR10+.MULTi.FRE.LAT.Atmos.H265.MP4-BTM\n👤 593 💾 21.74 GB ⚙️ ThePirateBay\nMulti Audio / 🇬🇧 / 🇪🇸 / 🇲🇽 / 🇫🇷",
+          "infoHash": "2ce4a94acc287b04bb190c0756d667e409c9fdb4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265|10bit|DV|HDR10+",
+            "filename": "Obsession.2026.2160p.iT.WEB-DL.UNRATED.DV.HDR10+.MULTi[Ben The Men].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Obsession.2025.2026.2160p.UHD.BluRay.Remux.DV.P7.HDR.MULTi.TrueH…\nObsession.2026.2160p.UHD.BluRay.Remux.DV.P7.HDR.MULTi[Ben The Men].mkv\n👤 322 💾 55.46 GB ⚙️ TorrentGalaxy\nMulti Audio / 🇬🇧",
+          "infoHash": "5bd7ac400b3e470829912a50ade31927a43f66ee",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay REMUX|DV|HDR",
+            "filename": "Obsession.2026.2160p.UHD.BluRay.Remux.DV.P7.HDR.MULTi[Ben The Men].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Obsession (2026) (2160p UHD BluRay x265 10bit DV HDR TrueHD Atmos 7.1 English French Spanish r00t) [QxR]\n👤 238 💾 20.03 GB ⚙️ 1337x\n🇬🇧 / 🇪🇸 / 🇫🇷",
+          "infoHash": "31ceb850bb34449f4e3006c7e5f8d32648b1b078",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|x265|10bit|DV|HDR",
+            "filename": "Obsession (2026) (2160p UHD BluRay x265 10bit DV HDR r00t).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Obsession.2025.2026.2160p.UHD.BluRay.DV.HDR.ENG.LATINO.DDP5.1.H265.MP4-BTM\n👤 145 💾 22.07 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸 / 🇲🇽",
+          "infoHash": "80c01808d452be910608825c2266f2e243239722",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|h265|DV|HDR",
+            "filename": "Obsession.2025.2026.2160p.UHD.BluRay.DV.HDR[Ben The Men].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Obsession 2025 UHD BluRay 2160p HDR10 DV HEVC TrueHD Atmos 7.1 x…\n👤 84 💾 23.28 GB ⚙️ TorrentGalaxy",
+          "infoHash": "e519fcdaa359e55616b973e393bd34901d46e536",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|hevc|10bit|DV|HDR",
+            "filename": "Obsession 2025.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Obsession (2026) (2160p UHD BluRay AV1 HDR Sepiol)\n👤 67 💾 8.3 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇩🇰 / 🇸🇪 / 🇳🇴",
+          "infoHash": "1bae2c7642b65ad7dd7a26bebbb781182f1faf3d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+            "filename": "Obsession (2026) (2160p UHD BluRay AV1 HDR Sepiol).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Obsession.2025.HDR.2160p.WEB.h265-TRB\n👤 62 💾 19.3 GB ⚙️ TorrentGalaxy",
+          "infoHash": "8f541db1a7721a05a31696fae4fd33994f40414b",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB|h265|HDR"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Obsessão 2026 WEB-DL 2160p x265 DV HDR10 DUAL 5.1\n👤 61 💾 20.03 GB ⚙️ BluDV\nDual Audio / 🇬🇧 / 🇵🇹",
+          "infoHash": "bdbb9f99153171cd0f27876e6b7d60dd64f9ff4b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|x265|10bit|DV|HDR",
+            "filename": "Obsessão 2026 WEB-DL 2160p x265 DV HDR10 DUAL 5.1.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Обсессия / Obsession (2025) UHD WEB-DL 2160p | 4K | HDR10+ | Dolby Vision Profile 8 | D P | HDRezka Studio\n👤 54 💾 20.14 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "e1afa0a9cc37759b6ba0158caf523935dab27b85",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|x265|10bit|DV|HDR10+",
+            "filename": "Obsession.2025.MA.x265.WEB-DL.2160p.HDR-DV.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:e1afa0a9cc37759b6ba0158caf523935dab27b85",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Obsession.2025.2160p.UHD.Bluray.Remux.DV.HDR.HEVC.TrueHD.Atmos.7.1-CiNEPHiLES\n👤 40 💾 51.67 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇩🇰 / 🇸🇪 / 🇳🇴",
+          "infoHash": "b1dbbfdcebbb24dd43e20b18fb28211e0d06189b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay REMUX|hevc|DV|HDR",
+            "filename": "Obsession.2025.2160p.UHD.Blu-ray.Remux.DV.HDR.HEVC.TrueHD.Atmos.7.1-CiNEPHiLES.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Obsession.2025.MULTi.VF2.HDR.DV.2160p.WEB.H265-SUPPLY\n👤 39 💾 20.36 GB ⚙️ Torrent9\nMulti Audio / 🇫🇷",
+          "infoHash": "9ea9b3f19ea3f1c2b0af81cd36e01b355190ebcd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB|h265|DV|HDR",
+            "filename": "Obsession.2025.MULTi.VF2.HDR.DV.2160p.WEB.H265-SUPPLY.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Obsession 2025 USA BluRay REMUX UHD DoVi HDR10 2160p Atmos TrueHD7.1-DreamHD\n👤 38 💾 51.7 GB ⚙️ ThePirateBay",
+          "infoHash": "58203f7f14c39ed772b2fc341e74580a8754fe58",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay REMUX|10bit|DV|HDR",
+            "filename": "Obsession 2025 USA BluRay REMUX UHD DoVi HDR10 2160p Atmos TrueHD7.1-DreamHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Obsession.2025.2160p.60fps.AI.RIFE.DV.HDR10.DDP.Atmos.Multi-Lang…\n👤 29 💾 16.37 GB ⚙️ TorrentGalaxy\nMulti Audio / 🇬🇧",
+          "infoHash": "6bf03cdccf9641148becafc21e6cf8d976c38eb6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|hevc|10bit|DV|HDR",
+            "filename": "Obsession.2025.2160p.60fps.AI.RIFE.DV.HDR10.DDP.Atmos.Multi-Lang.REMUX.HEVC-WoodrowsPoo69.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Обсессия / Obsession (2025) UHD BDRemux | 2160p | 4K | HDR10 | Dolby Vision P7 | D P | HDRezka Studio\n👤 25 💾 52.01 GB ⚙️ Rutor",
+          "infoHash": "6fa6cd8dbbd2653f10929b059d30833737d61f03",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay REMUX|10bit|DV|HDR",
+            "filename": "Obsession.2025.BDRemux.2160p.HDR-DV.mkv"
+          },
+          "sources": [
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet",
+            "dht:6fa6cd8dbbd2653f10929b059d30833737d61f03"
+          ]
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Obsession.2026.2160p.iT.WEB-DL.UNRATED.DV.HDR10+.MULTi.FRE.LAT.DDP5.1.Atmos.H265.MP4-BEN.THE.MEN\n👤 23 💾 21.74 GB ⚙️ Cinecalidad\nMulti Audio / 🇲🇽 / 🇫🇷",
+          "infoHash": "837a0e64624b6368c30ceae0dd482b4b5d2d33e8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265|10bit|DV|HDR10+",
+            "filename": "Obsession.2026.2160p.iT.WEB-DL.UNRATED.DV.HDR10+.MULTi[Ben The Men].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Posedlost / Obsession (2026)(CZ/EN)[2160p][HDR10/DV][HEVC]\n👤 18 💾 16.34 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+          "infoHash": "9d65f297cff0302990fa5c77e733378c7e245f3e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|hevc|10bit|DV|HDR",
+            "filename": "Posedlost (2025) 4K CZ dab.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV",
+          "title": "Obsession.2025.DV.2160p.WEB.h265-TRB\n👤 15 💾 11.53 GB ⚙️ TorrentGalaxy",
+          "infoHash": "55feaf249e9d8f9136f339a00f9232edfcea57fe",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB|h265|DV",
+            "filename": "Obsession.2025.DV.2160p.WEB.h265-TRB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Obsession.2025.2160p.HDR10.BDRip.OPUS7.1.AV1.BluBit\n👤 13 💾 7.43 GB ⚙️ TorrentGalaxy",
+          "infoHash": "b3541fcfed845e5ec2e51a293e92e97abd2cdafb",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BDRip|av1|10bit|HDR",
+            "filename": "Obsession (2026).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Obsession.2025.4K.HDR.DV.2160p.BDRemux Ita Eng x265-NAHOM\n👤 12 💾 52.57 GB ⚙️ Wolfmax4k\n🇬🇧 / 🇮🇹",
+          "infoHash": "6b81bb8a1d754039a642b093e3be91c9821700bf",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay REMUX|x265|DV|HDR",
+            "filename": "Obsession.2025.4K.HDR.DV.2160p.BDRemux Ita Eng x265-NAHOM.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Obsession.2025.iTA-ENG.WEBDL.2160p.HEVC.HDR.x265-CYBER.mkv\n👤 12 💾 21.01 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "029d51b502cf89c8be4bbb0d4a1f1961eb8d3fc5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|hevc|HDR",
+            "filename": "Obsession.2025.iTA-ENG.WEBDL.2160p.HEVC.HDR.x265-CYBER.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Posedlost.Obsession.(2026)[4K][WEB-DL].=.CSFD.85%\n👤 9 💾 21.74 GB ⚙️ Wolfmax4k\nMulti Audio",
+          "infoHash": "9b6d8d9869a833067bf1abab3646235c77db3ffc",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|10bit|DV|HDR10+",
+            "filename": "Obsession.2026.2160p.iT.WEB-DL.UNRATED.DV.HDR10+.MULTi[Ben The Men].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Обсессия / Obsession (2025) UHD BDRemux 2160p | 4K | HDR10 | Dolby Vision Profile 7 | D P P2 | Paragraph Media HDRezka Studio Кубик в Кубе\n👤 8 💾 52.84 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "49add901929d7c80f0736d5ee4ed3f7af6cbe991",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay REMUX|10bit|DV|HDR",
+            "filename": "Обсессия.2025.UHD.Blu-Ray.Remux.2160p.[by arxivariys].mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:49add901929d7c80f0736d5ee4ed3f7af6cbe991",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Obsession.2025.4K.HDR.DV.2160p.WEBDL Ita Eng x265-NAHOM\n👤 7 💾 20.03 GB ⚙️ Wolfmax4k\n🇬🇧 / 🇮🇹",
+          "infoHash": "cee181cec5211a24e8df436e7b7728d989280c9a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|x265|DV|HDR",
+            "filename": "Obsession.2025.4K.HDR.DV.2160p.WEBDL Ita Eng x265-NAHOM.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Обсессия / Obsession [2025 UHD BDRemux 2160p HDR10 Dolby Vision] Dub (HDRezka) + Ukr Dub + Original Eng + Sub Eng\n👤 5 💾 51.87 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺 / 🇺🇦",
+          "infoHash": "1380a9a316dc04d0669c765027239c62a7616c3e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay REMUX|10bit|DV|HDR",
+            "filename": "Obsession.2025.2160p.mkv"
+          },
+          "sources": [
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "dht:1380a9a316dc04d0669c765027239c62a7616c3e",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Posedlost / Obsession (2025)[2160p][HDR10+/DV][WEB-DL]\n👤 5 💾 19.6 GB ⚙️ TorrentGalaxy",
+          "infoHash": "b983b95709adb446ba7aa647233aca6e9adce3ce",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|10bit|DV|HDR10+"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Obsesja / Obsession (2026) [MULTi] [2160p] [DV] [HDR10] [WEB-DL]…\n👤 5 💾 20.05 GB ⚙️ TorrentGalaxy\nMulti Audio / 🇬🇧 / 🇵🇱",
+          "infoHash": "3feb0ebea58057572e14dac5ee4acc1c5b112960",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|hevc|10bit|DV|HDR",
+            "filename": "Obsession.2025.MULTi.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.HEVC-KiT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Obsession 2025 2160p WEBRip\n👤 383 💾 4.87 GB ⚙️ YTS\n🇬🇧 / 🇪🇸",
+          "infoHash": "c790495487a4f8d09a5c120403b0419f3f745faf",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+            "filename": "Obsession.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Obsession.2025.2160p.MA.WEB-DL.DDP5.1.Atmos.H.265-BYNDR 2026 SDR 4k UHD\n👤 339 💾 19.45 GB ⚙️ ThePirateBay\n🇬🇧 / 🇵🇹 / 🇪🇸",
+          "infoHash": "89c2b8cc774e1fa19d8056bbf544faa91de6d64e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265",
+            "filename": "Obsession.2025.2160p.MA.WEB-DL.DDP5.1.Atmos.H.265-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Obsession.2026.2160p.WEB-DL.DDP5.1.H.265-MYOTTMYSUBS\n👤 70 💾 9.47 GB ⚙️ ThePirateBay",
+          "infoHash": "5f1f35c3d7123b33f39e2b553d56ef981ccf4e82",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265",
+            "filename": "Obsession.2025.2160p.WEB-DL.DDP5.1.H.265-MYOTTMYSUBS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Обсессия / Obsession [2025 WEB-DL 2160p SDR] Dub (HDRezka Studio) + MVO (HDRezka Studio) + Dub Bel + Original Eng + Sub (Rus Eng)\n👤 65 💾 20.03 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "2a59ba16dffffa622a0aeedfd1b4b7d209701e84",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|x265",
+            "filename": "Obsession.2025.MA.x265.WEB-DL.2160p.SDR.mkv"
+          },
+          "sources": [
+            "tracker:http://bt4.t-ru.org/ann?magnet",
+            "dht:2a59ba16dffffa622a0aeedfd1b4b7d209701e84",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Obsession.2025.2160p.WEB.h265-TRB\n👤 52 💾 9.6 GB ⚙️ TorrentGalaxy",
+          "infoHash": "7109c48bc152acd36d758507e1cab870fc007735",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB|h265"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Obsession (2025) [4k 2160p][Esp]\n👤 48 💾 15.46 GB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "cd243a5b4cf78bafebd20ec28e469b685c5bb3ab",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k",
+            "filename": "Obsession (2025) [4k 2160p][Esp].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Obsession (2025) (Spanish English Subs) Micro4K 2160P Sdr x265-Ac3 Aac\n👤 30 💾 5.11 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸",
+          "infoHash": "f695ed1800ed50974c447fc32d7b6b43ac8a0512",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|x265",
+            "filename": "Obsession (2025) (Spanish English Subs) Micro4K 2160P Sdr x265-Ac3 Aac By Chinako (Hispashare).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Обсессия / Obsession (2025) UHD WEB-DL 2160p | 4K | SDR | D P P2 А | Paragraph Media HDRezka Studio Кубик в Кубе Яроцкий\n👤 13 💾 21.01 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "26dfb305b512c0ea8c41d1fa08be8005c370cb00",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|x265",
+            "filename": "Obsession.2025.MA.x265.WEB-DL.2160p.SDR.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:26dfb305b512c0ea8c41d1fa08be8005c370cb00",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Posedlost / Obsession (2026)[2160p][BDrip]\n👤 9 💾 51.6 GB ⚙️ TorrentGalaxy",
+          "infoHash": "2fcaf32130a6c0aff180c4a92951e1e3a1fa629a",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BDRip"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Obsession.2025.2160p.FRA.UHD.Blu-ray.REMUX.HEVC.Atmos.TrueHD7.1-DiY\n👤 7 💾 72.5 GB ⚙️ EXT\n🇫🇷",
+          "infoHash": "56acd9d7212d58a23f61f50aa64695fb7acce888",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay REMUX|hevc",
+            "filename": "痴迷.Obsession.2025.2160p.FRA.UHD.Blu-ray.REMUX.HEVC.Atmos.TrueHD7.1-DiY@HDHome.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Obsession.2025.2160p.WEBRip.AVC.SDR.DDP5.1.Atmos-Asmo\n👤 7 💾 10.38 GB ⚙️ ThePirateBay",
+          "infoHash": "5e2e3700a9f4ed56f11027d0d2278ca8fb96fd41",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|avc",
+            "filename": "Obsession.2025.2160p.WEBRip.AVC.SDR.DDP5.1.Atmos-Asmo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Obsession.2025.2160p.MA.WEB-DL.TrueHD.7.1.Atmos.H.265-TRB\n👤 7 💾 21.91 GB ⚙️ TorrentGalaxy",
+          "infoHash": "21061956a5f3be18e7d3437fb0153c95dead77f7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265",
+            "filename": "Obsession.2025.2160p.MA.WEB-DL.TrueHD.7.1.Atmos.H.265-TRB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "Obsession (2025) (UHD BDRip 1080p AV1 HDR10 EAC3 Atmos) [OEP][CF278595].mkv\n👤 69 💾 5.28 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇸🇦",
+          "infoHash": "0187c066c403ef3a2a1aaa15b66ac7351ae95aec",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|av1|10bit|HDR",
+            "filename": "Obsession (2025) (UHD BDRip 1080p AV1 HDR10 EAC3 Atmos) [OEP][CF278595].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "Obsession (2025) (1080p DS4K BluRay x265 10-bit HDR AAC 7.1) [WeSLeY]\n👤 30 💾 3.26 GB ⚙️ 1337x",
+          "infoHash": "ba61f90680ac3bc479bfb2433a22400838709f20",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|HDR",
+            "filename": "Obsession (2025) (1080p DS4K BluRay x265 10-bit HDR AAC 7.1) [WeSLeY].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p DV | HDR",
+          "title": "Обсессия / Obsession (2025) UHD BDRip-HEVC 1080p | HDR | Dolby Vision P8 | D | Paragraph Media\n👤 16 💾 11.33 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "61b4bf025e0f34d9dcb126a216e5529cd6d738a2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|hevc|DV|HDR",
+            "filename": "Obsession (2025).mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:61b4bf025e0f34d9dcb126a216e5529cd6d738a2",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p DV | HDR",
+          "title": "Обсессия / Obsession (2025) UHD BDRip-HEVC 1080p | HDR | Dolby Vision P8 | D P | HDRezka Studio\n👤 14 💾 11.42 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "fe0be6a70d6639be0dfce45bafde84c69cbc1a18",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|hevc|DV|HDR",
+            "filename": "Obsession (2025).mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:fe0be6a70d6639be0dfce45bafde84c69cbc1a18",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "Obsesja - Obsession 2025 [HLG HDR SDR] [1080p.BluRay.H264.AC3.5.1.AS76-FT] [ENG-GER-Lektor PL] [Alusia]\n👤 5 💾 5.36 GB ⚙️ EXT\n🇬🇧 / 🇩🇪 / 🇵🇱",
+          "infoHash": "660cfaf5ff2553497ad7351d53457993e469d2fd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|h264|HDR",
+            "filename": "Obsesja - Obsession 2025 [HLG HDR SDR] [1080p.BluRay.H264.AC3.5.1.AS76-FT] [ENG-GER-Lektor PL] [Alusia].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.AMZN.WEB-DL.DDP5.1.H264.MP4-BTM\n👤 4923 💾 4.96 GB ⚙️ ThePirateBay",
+          "infoHash": "afa1047f19870e4a75a8603037fd0fb11bdfdce0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession.2026.1080p.AMZN.WEB-DL[Ben The Men].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p WEBRip\n👤 1422 💾 2.01 GB ⚙️ YTS",
+          "infoHash": "69e81483386084cb786d5b9e3e9692de72a446c5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Obsession.2025.1080p.WEBRip.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p WEB-DL HEVC x265 5.1 BONE\n👤 826 💾 1.56 GB ⚙️ ThePirateBay",
+          "infoHash": "62819469c03cdbe23c80a3872f0ef5048203c96d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Obsession 2026 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p BluRay\n👤 396 💾 2 GB ⚙️ YTS",
+          "infoHash": "10b2a6571a147038549f908b96718b29b5cc387f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession.2025.1080p.BluRay.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2026) (1080p BluRay x265 10bit EAC3 Atmos 7.1 Ghost) …\nObsession (2026) (1080p BluRay x265 Ghost).mkv\n👤 341 💾 5.61 GB ⚙️ TorrentGalaxy",
+          "infoHash": "fc7bf0133594a26827e5a18b8ace1430a67ec7a4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Obsession (2026) (1080p BluRay x265 Ghost).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p WEBRip\n👤 317 💾 1.82 GB ⚙️ YTS",
+          "infoHash": "1ca54c5df425f378b72039156d1000cc181c6a42",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Obsession.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p AMZN WEB-DL DDP5 1 H 264-KyoGo\n👤 239 💾 4.71 GB ⚙️ ThePirateBay",
+          "infoHash": "c9b5f280b6b25c2367828a0ca9bd9059df7cec4e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession 2026 1080p AMZN WEB-DL DDP5 1 H 264-KyoGo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir\n👤 226 💾 1.15 GB ⚙️ ThePirateBay",
+          "infoHash": "39916f69ab5c3338c559bdbf5b0eb4008e1e5bab",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Obsession.2026.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 174 💾 1.06 GB ⚙️ ThePirateBay",
+          "infoHash": "322bcce7de17df919772cd3daee8dcfd814efcc9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+            "filename": "Obsession 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2026) (1080p MA WEB-DL x265 10bit EAC3 Atmos 5.1 Ghos…\n👤 161 💾 4.4 GB ⚙️ TorrentGalaxy",
+          "infoHash": "f7f765441da081d35282a5510ef6a62afb98de0d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+            "filename": "Obsession (2026) (1080p MA WEB-DL x265 Ghost).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 157 💾 6.65 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸",
+          "infoHash": "00f372463ca4ab75fdd7addf763e511a22619bf4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2025) [Bluray 1080p][Esp]\n👤 137 💾 12.89 GB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "78ae386f5972f88ca81e149ae635e8e6e6a266fe",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay",
+            "filename": "Obsession (2025) [Bluray 1080p][Esp].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsessão.2026.1080p.WEB-DL.x264.DUAL.5.1\n👤 137 💾 2.68 GB ⚙️ Comando\nDual Audio / 🇬🇧 / 🇵🇹",
+          "infoHash": "b417859c1a5c3f539b042fb51a44787e52edb6c0",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Obsessão.2026.1080p.WEB-DL.x264.DUAL.5.1.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir\n👤 137 💾 1.15 GB ⚙️ ThePirateBay",
+          "infoHash": "90e301fb88e12f1f0aee0bbf42e3049f9e342e4b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Obsession 2026 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.MULTi.VF2.1080p.WEB.H264-SUPPLY\n👤 125 💾 6.68 GB ⚙️ Torrent9\nMulti Audio / 🇫🇷",
+          "infoHash": "e01acaf4d9fc42cd8d4b4a1a4bceaf6702f20003",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264",
+            "filename": "Obsession.2025.MULTi.VF2.1080p.WEB.H264-SUPPLY.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.Bluray.10Bit.AAC7.1.x265-NeoNoir\n👤 124 💾 2.03 GB ⚙️ ThePirateBay",
+          "infoHash": "e3acd9cc3ded73be71777c8570dbd4fbd0821489",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Obsession.2025.1080p.Bluray.10Bit.AAC7.1.x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2025) [Bluray 1080p][Esp]\n👤 118 💾 12.89 GB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "b85c5a2a5a56352bb36fd5f538c40b86dedb6190",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay",
+            "filename": "Obsession (2025) [Bluray 1080p][Esp].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p AMZN WEB-DL-Ben The Men\n👤 108 💾 4.96 GB ⚙️ ThePirateBay",
+          "infoHash": "af12e7f978d76059602c8dc82b52acfefec21e8a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "Obsession 2026 1080p AMZN WEB-DL-Ben The Men.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv\n👤 91 💾 7.66 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+          "infoHash": "b5d1c8e38470ea759484a4fc7c1c85f09afee5b7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Обсессия / Obsession (2025) WEB-DL 1080p от New-Team | D P | HDRezka Studio\n👤 84 💾 7.09 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "c9bfbae5dd0e87abc850b4762677cf5cfc53480e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "Obsession.2025.1080p.MA-New-Team.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:c9bfbae5dd0e87abc850b4762677cf5cfc53480e",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.bluray.sdr.1080p.av1.7.1.opus.subs-Dust\n👤 78 💾 1.43 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇩🇰 / 🇸🇪 / 🇳🇴",
+          "infoHash": "471245609983e5a39457f904b4573e214943a1a4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "Obsession.2025.bluray.sdr.1080p.av1.7.1.opus.subs-Dust.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsessão 2026 WEB-DL 1080p x264 DUAL 5.1\n👤 76 💾 2.66 GB ⚙️ BluDV\nDual Audio / 🇬🇧 / 🇵🇹",
+          "infoHash": "ea34dec62d2b7b4ac9c3286665798b70fcdf2d4f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Obsessão 2026 WEB-DL 1080p x264 DUAL 5.1.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2025) 1080p H265 iTA EnG -MIRCrew\n👤 56 💾 1.5 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹",
+          "infoHash": "755c4cc42940e120a2e09914fa9f860136798255",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h265|10bit",
+            "filename": "Obsession (2025) 1080p H265 10Bit iTA EnG AC3 Sub iTA EnG-MIRCrew.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.BluRay.AV1.DDP5.1-dAV1nci\n👤 54 💾 2.17 GB ⚙️ TorrentGalaxy",
+          "infoHash": "bb59b12b1b61070b966bd6614adbc39da4d8950d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "Obsession.2026.1080p.BluRay.AV1.DDP5.1-dAV1nci.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.ITA-ENG.WEBRip.x265.AAC-V3SP4EV3R.mkv\n👤 49 💾 1.33 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹",
+          "infoHash": "858cbc0ceee623206db9c07e738946af73ce7c5c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Obsession.2025.1080p.ITA-ENG.WEBRip.x265.AAC-V3SP4EV3R.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Обсессия / Obsession [2025 BDRemux 1080p] Dub (Paragraph Media HDRezka Studio) + MVO (2х HDRezka Studio) + DVO (Кубик в Кубе) + VO (Яроцкий) + Sub (Rus Ukr Eng etc.) + Original Eng\n👤 46 💾 29.44 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺 / 🇺🇦",
+          "infoHash": "3870fbff52a12a4f9a7830b36bdc8903e90eb75b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay REMUX",
+            "filename": "Obsession.2025.REMUX.mkv"
+          },
+          "sources": [
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "dht:3870fbff52a12a4f9a7830b36bdc8903e90eb75b",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 iTA-ENG Bluray 1080p x264-CYBER\n👤 43 💾 5.48 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+          "infoHash": "257a09a680a8c50a04229ee9df829340b1d4a100",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession 2025 iTA-ENG Bluray 1080p x264-CYBER.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Обсессия / Obsession (2025) BDRip 1080p от EniaHD | D P P2 A | Paragraph Media HDrezka Studio Кубик в Кубе Яроцкий\n👤 43 💾 14.59 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "e75604d919cc4fd3e4586dff769d7992fe7f6c2a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|x264",
+            "filename": "Obsession.2025.1080p.BluRay.x264-ZoroSenpai_EniaHD.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:e75604d919cc4fd3e4586dff769d7992fe7f6c2a",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p AMZN WEB-DL H264-KyoGo\n👤 42 💾 4.71 GB ⚙️ ThePirateBay",
+          "infoHash": "0a6a392ee3161c1d36ad813fdd31ca933ba1a04c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession.2026.1080p.AMZN.WEB-DL.DDP5.1.H.264-KyoGo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.WEB-DL.1080p.Unrated.DD5.1.H264.Dual.YG⭐\n👤 35 💾 5.99 GB ⚙️ ThePirateBay\nDual Audio / 🇪🇸",
+          "infoHash": "b89ab468e36383cf922bf6163b1968106fd7982c",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession.2026.WEB-DL.1080p.Unrated.DD5.1.H264.Dual YG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p WEB-DL HEVC x265 5 1-BONE\n👤 32 💾 1.56 GB ⚙️ ThePirateBay",
+          "infoHash": "c6eda3d74996f34ca933445400f7978692d87d81",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Obsession 2026 1080p WEB-DL HEVC x265 5 1-BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2025) 1080p BluRay 5.1-LAMA\n👤 31 💾 2 GB ⚙️ ThePirateBay",
+          "infoHash": "3b5578017111687cd3643da2bdf39bd171da3130",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession.2025.1080p.BluRay.x264.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv\n👤 30 💾 5.48 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+          "infoHash": "e3ba2442977f81619e3fd6b4a612dc983cf0baf5",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.USA.BluRay.Remux.AVC.1080p.Atmos.TrueHD7.1-DreamHD\n👤 29 💾 27.73 GB ⚙️ ThePirateBay\n🇬🇧 / 🇨🇳",
+          "infoHash": "7e61728fc4b4e42ee47ff16ecdc7b8ce830b81a7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay REMUX|avc",
+            "filename": "Obsession 2025 USA BluRay Remux AVC 1080p Atmos TrueHD7.1-DreamHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2026) Eng 1080p WEBDL x265 DDP 5.1\n👤 26 💾 1.71 GB ⚙️ 1337x",
+          "infoHash": "d6d184f2a74d3d3ebcb565708c6199a589fead9f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x265",
+            "filename": "Obsession  (2026) Eng 1080p WEBRip x265 DDP 5.1.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p WebRip EAC3 5 1 x265-Lootera\n👤 25 💾 2.68 GB ⚙️ ThePirateBay",
+          "infoHash": "1fb49d6bb038ebbb5836df945ef0e82b3372f7e5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Obsession 2026 1080p WebRip EAC3 5 1 x265-Lootera.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2026) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv\n👤 24 💾 2.1 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "38954206400ce739d9822cd172e4d7756456266a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Obsession (2026) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p DS4K WEBRip 10Bit DDP5 1 Atmos x265-NeoNoir\n👤 22 💾 1.74 GB ⚙️ ThePirateBay",
+          "infoHash": "cc201b38d4504163bd811f0c2b3a528acb77f50a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Obsession 2026 1080p DS4K WEBRip 10Bit DDP5 1 Atmos x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Posedlost / Obsession (2026)(CZ/EN)[1080p]\n👤 21 💾 4.78 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+          "infoHash": "75dcabca14f99590b08df4c7c981eca91af911f9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p",
+            "filename": "Posedlost (2025) CZ EN.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.10bit.DS4K.BluRay.[Org.DDP5.1-Hindi+DDPA7.1…\n👤 21 💾 3.24 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇳",
+          "infoHash": "b6c7e6a31244a92cdad0c2899c13a4052939c976",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Obsession.2026.1080p.10bit.DS4K.BluRay.[Org.DDP5.1-Hindi+DDPA7.1-English].ESub.HEVC-The.PunisheR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.DS4K.WEBRip.10Bit.DDP5.1.Atmos.x265-NeoNoir\n👤 21 💾 1.74 GB ⚙️ ThePirateBay",
+          "infoHash": "671171f873842bfb5b4b10506ca4ced403af00b6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Obsession.2026.1080p.DS4K.WEBRip.10Bit.DDP5.1.Atmos.x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1920x924.x264-pudszTTIOT\n👤 21 💾 1.89 GB ⚙️ EXT",
+          "infoHash": "1bba163f29d2ce1dc81b8caac96e9650cff77002",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Obsession.2026.1920x924.WEBRip.x264.AAC-pudszTTIOT.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2025) AC3 5.1 ITA.ENG 1080p H265 sub ita.eng MIRCrew\n👤 20 💾 2.34 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "a8d4a3f042888d95289432fea9c39a7487b02fe3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h265",
+            "filename": "Obsession (2025) AC3 5.1 ITA.ENG 1080p H265 sub ita.eng Sp33dy94-MIRCrew.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA\n👤 20 💾 1.06 GB ⚙️ EXT",
+          "infoHash": "2142fbbf77399c6d152ea5e2dc2aed5cd71423d8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+            "filename": "Obsession.2025.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.DS4K.WEBRip.10Bit.DDP5.1.Atmos.x265-NeoNoir\n👤 19 💾 1.74 GB ⚙️ EXT",
+          "infoHash": "c34b09e97c45945721a226cb7d9a693bd7c5c88f",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.BDRip.AVC.DDP5.1-Asmo\n👤 19 💾 8.21 GB ⚙️ EXT\n🇬🇧 / 🇷🇺 / 🇵🇱 / 🇺🇦",
+          "infoHash": "d625f62debbe670ab1b9ac5b825404279240e9c2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|avc",
+            "filename": "Obsession.2025.1080p.BDRip.AVC.DDP5.1-Asmo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2026) (1080p BluRay x265 10bit EAC3 Atmos 7.1 Ghost) …\nObsession (2026) (1080p BluRay x265 Ghost).mkv\n👤 19 💾 5.51 GB ⚙️ TorrentGalaxy",
+          "infoHash": "d34479846490e64412a4f92f78ff7564386124c2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Obsession (2026) (1080p BluRay x265 Ghost).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.BluRay.x265-KONTRAST\n👤 19 💾 3.1 GB ⚙️ TorrentGalaxy",
+          "infoHash": "5a3ddda19e36ef53f54bce66b127b73ea98d8295",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Obsession.2025.1080p.BluRay.x265-KONTRAST.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsesja / Obsession (2026) PL.1080p.WEB-DL.XviD.AC3-MAXX / Lekto…\n👤 19 💾 2.78 GB ⚙️ TorrentGalaxy\n🇵🇱",
+          "infoHash": "a6062fc51c9c1fa46f438576d60e7c3e315e49c8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|xvid",
+            "filename": "Obsession.2025.PL.1080p.WEB-DL.XviD.AC3-MAXX.avi"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Обсессия / Obsession (2025) BDRip 1080p от селезень | D | Paragraph Media\n👤 18 💾 11.5 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "cfab193679f64f73c1ff86a03e9c04af2574fdc2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip",
+            "filename": "Obsession.2025.BDRip.1080p.seleZen.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:cfab193679f64f73c1ff86a03e9c04af2574fdc2",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2026) 1080p WEBRip x265 DDP 5.1 [ Hin Eng ] ESub\n👤 18 💾 1.25 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+          "infoHash": "665ceef69dce481572cd9c4307ec6d9bdab09b33",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Obsession (2026) 1080p WEBRip x265 DDP 5.1 [ Hin, Eng ] ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta\n👤 18 💾 749.36 MB ⚙️ ThePirateBay",
+          "infoHash": "5b609e243ef36c21ff8f2a79e5989f344639c091",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Obsession.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Обсессия / Obsession (2025) BDRip 1080p | D P | HDRezka Studio\n👤 17 💾 12.98 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "7d22b2250f2bc1eea725bfa7a976ac1e152e5b46",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip",
+            "filename": "Obsession.2025.BDRip.1080p.Night25.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:7d22b2250f2bc1eea725bfa7a976ac1e152e5b46",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2025) (1080p DS4K BluRay x265 10-bit SDR E-AC-3 5.1) [WeSLeY]\n👤 17 💾 6.38 GB ⚙️ 1337x",
+          "infoHash": "a6a95af457f2f8d8b0c7426987807160ae7d1968",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Obsession (2025) (1080p DS4K BluRay x265 10-bit SDR E-AC-3 5.1) [WeSLeY].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Posedlost / Obsession (2025)[1080p][WEB-DL]\n👤 17 💾 6.6 GB ⚙️ TorrentGalaxy",
+          "infoHash": "bf6689baec9d84159c4bbfeceed9eeecf487b0e6",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p WEBRip x265-DH\n👤 17 💾 1.79 GB ⚙️ ThePirateBay",
+          "infoHash": "53ccd30b72830d6b0079eec7b728ce99e81f0c59",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Obsession 2026 1080p WEBRip x265-DH.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p AV1 10Bit DKong\n👤 16 💾 402.67 MB ⚙️ ThePirateBay",
+          "infoHash": "97ecb78c88d333b44208c0d659442c53bc38d938",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|av1|10bit",
+            "filename": "Obsession 2026 1080p AV1 10Bit DKong.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p WEB-DL x264 6CH-Pahe in\n👤 15 💾 1.44 GB ⚙️ ThePirateBay",
+          "infoHash": "1604b779fdbbeff0adc781d4fe2f04e708b52bad",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Obsession 2026 1080p WEB-DL x264 6CH-Pahe in.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2026) [1080p][Latino][VerPeliculasOnline.org\n👤 14 💾 1.74 GB ⚙️ EXT\n🇲🇽",
+          "infoHash": "6439ea3963a6a90c5a58fa260f69e90fff817c16",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p",
+            "filename": "Obsession (2026) [1080p][Latino][VerPeliculasOnline.org.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p BluRay x265-YAWNTiC\n👤 13 💾 7.43 GB ⚙️ TorrentGalaxy",
+          "infoHash": "4140340ffaa2d6325027456b44ed58ee2156a996",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Obsession 2025 1080p BluRay x265-YAWNTiC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv\n👤 13 💾 9.71 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "fe7c55aece7c99206ec74b3f9474fada166cb52e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Obsession.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.iTA.ENG.BluRay.1080p.x264-PRiME\n👤 12 💾 7.82 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+          "infoHash": "9ea5283200ac480fd67cdd579a927c42216b6957",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession.2025.iTA.ENG.BluRay.1080p.x264-PRiME.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p AMZN WEB-DL DUAL DDP5 1 HEVC-KyoGo\n👤 12 💾 2.25 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇮🇳",
+          "infoHash": "7d80c11c7d11835a0ca4dc74738972fd17997419",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Obsession 2026 1080p AMZN WEB-DL DUAL DDP5 1 HEVC-KyoGo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Posedlost / Obsession (2026)[1080p][WEBrip]\n👤 12 💾 2.01 GB ⚙️ TorrentGalaxy",
+          "infoHash": "796e95f209816fca8bb6e1c877a942a1847fe46b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Obsession.2025.1080p.WEBRip.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2025) 1080p WEBRip x265 10bit 5.1-LAMA\n👤 11 💾 1.82 GB ⚙️ ThePirateBay",
+          "infoHash": "7e00e77c39f45f6d20b102b208b8acc4f5efe741",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Obsession.2025.1080p.WEBRip.x265.10bit.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.10bit.DS4K.MA.WEBRip.DUAL.DDP5.1.Atmos.HEVC-DaddyCooL\n👤 11 💾 4.52 GB ⚙️ 1337x\nDual Audio / 🇮🇳",
+          "infoHash": "5c2d9a9fc4499b90bc5e744f10e50e7003122507",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+            "filename": "Obsession.2026.1080p.10bit.DS4K.MA.WEBRip.DUAL.DDP5.1.Atmos.HEVC-DaddyCooL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p BluRayRip Opus 7 1 x265-Lootera\n👤 10 💾 2.56 GB ⚙️ TorrentGalaxy",
+          "infoHash": "194e9adeef6ad47c294d5511471c9aeb7bc0bf0f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BRRip|x265",
+            "filename": "Obsession 2025 1080p BluRayRip Opus 7 1 x265-Lootera.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 NORDiC 1080p MA WEB-DL H 264-NORViNE\n👤 10 💾 6.65 GB ⚙️ ThePirateBay\n🇩🇰 / 🇫🇮 / 🇸🇪 / 🇳🇴",
+          "infoHash": "1498c3a625c271aa3582bea01222c2d5926da318",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession 2025 NORDiC 1080p MA WEB-DL H 264-NORViNE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.AMZN.WEB-DL.DDP5.1.H264.MP4-BEN.THE.MEN\n👤 9 💾 4.96 GB ⚙️ EXT",
+          "infoHash": "0e751a2d2a6ac00deb175171b37d180ee95f0821",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p WEBRip HEVC DDP5.1-RiPRG\n👤 9 💾 1.68 GB ⚙️ TorrentGalaxy",
+          "infoHash": "b658ef172ab1b0ba489eca4dac8ed3da56de3246",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc",
+            "filename": "Obsession 2025 1080p WEBRip HEVC DDP5.1-RiPRG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsessão 2026 WEB-DL 1080p x264 FULLHD DUAL 5.1\n👤 9 💾 5.1 GB ⚙️ BluDV\nDual Audio / 🇬🇧 / 🇵🇹",
+          "infoHash": "d7e67b7b58635d81e54fdace699294d9a52696bb",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Obsessão 2026 WEB-DL 1080p x264 FULLHD DUAL 5.1.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p WebRip Atmos EAC3 5 1 x265-Lootera\n👤 9 💾 2.92 GB ⚙️ ThePirateBay",
+          "infoHash": "a5c4dd410f2cbe408871b3edb7fdcfd3ec893744",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Obsession 2026 1080p WebRip Atmos EAC3 5 1 x265-Lootera.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsesion (2026) 1080p WEBDL LAT - ZeiZ\n👤 8 💾 4.43 GB ⚙️ EXT\n🇲🇽",
+          "infoHash": "e06a9fb22e185e566da02bd069434de987454bd5",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.WEB.h264-ETHEL\n👤 8 💾 5.69 GB ⚙️ TorrentGalaxy",
+          "infoHash": "c538de8a77d9a6d9ebb0d162d9032846f2fabe07",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264",
+            "filename": "Obsession.2025.1080p.WEB.h264-ETHEL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2026.1080p.WEBRip.DS4K.AV1.DDP5.1-dAV1nci\n👤 8 💾 1.44 GB ⚙️ 1337x",
+          "infoHash": "78cfcaccab2f7352047c5a1fa72bf5b54566f2c3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|av1",
+            "filename": "Obsession.2026.1080p.WEBRip.DS4K.AV1.DDP5.1-dAV1nci.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession (2025) 1080p WEBRip 5.1-LAMA\n👤 8 💾 2.01 GB ⚙️ ThePirateBay",
+          "infoHash": "7b7d37e4a5e9fa2acf54c4900a718a9ce9e282b8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Obsession.2025.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p BluRay x265 10bit Atmos TrueHD 7 1-WiKi\n👤 7 💾 8.42 GB ⚙️ EXT\n🇬🇧 / 🇨🇳",
+          "infoHash": "a79cf391303767527206ad042e4dd43098e59bbe",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Obsession.2025.1080p.BluRay.x265.10bit.Atmos.TrueHD.7.1-WiKi.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.FRA.Blu-ray.REMUX.AVC.TrueHD.7.1.Atmos-DIY\n👤 7 💾 32.26 GB ⚙️ EXT\n🇫🇷",
+          "infoHash": "0dbb0ede2dbbb409863ff76f6923d2b6821290d4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay REMUX|avc",
+            "filename": "痴迷.Obsession.2025.1080p.FRA.Blu-ray.REMUX.AVC.TrueHD.7.1.Atmos-DIY@TTG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Обсессия / Obsession (2025) BDRemux 1080p | D P P2 A | Paragraph Media HDrezka Studio Кубик в Кубе Яроцкий\n👤 7 💾 30.6 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺 / 🇺🇦",
+          "infoHash": "fc59fad0c41c6bd697ff1766886243ea520352eb",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay REMUX",
+            "filename": "Obsession.2025.BDRemux.1080p.NNMClub.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:fc59fad0c41c6bd697ff1766886243ea520352eb",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.MULTI.1080p.WEB.H264-LOST\n👤 7 💾 5.99 GB ⚙️ ThePirateBay\nMulti Audio",
+          "infoHash": "dcea7e01378f25058b839bd0119386f057ad45c1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264",
+            "filename": "Obsession.2025.MULTI.1080p.WEB.H264-LOST.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.BluRay.x264-TRB\n👤 7 💾 17.12 GB ⚙️ TorrentGalaxy",
+          "infoHash": "84c95bd334ba1179e514af53f9ab0d3977c91fe9",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "obsession.2025.1080p.bluray.x264-TRB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 m1080p BluRay x264-GeneMige\n👤 6 💾 2.49 GB ⚙️ ThePirateBay",
+          "infoHash": "aa29d6dc6f1b0bc1567bff2cd79939443fb18905",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Obsession 2025 m1080p BluRay x264-GeneMige.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.WEB-DL.DDP5.1.Atmos.H.264-FHC_CREW.mkv\n👤 6 💾 8.12 GB ⚙️ 1337x",
+          "infoHash": "9407a4cf6ef0b70d741375bec726ea100725e929",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Obsession.2025.1080p.WEB-DL.DDP5.1.Atmos.H.264-FHC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.PLSUB.AI.1080p.10bit.WEB-DL.DDP5.1.x265.HEVC-AdL\n👤 6 💾 1.2 GB ⚙️ BestTorrents\n🇬🇧 / 🇵🇱",
+          "infoHash": "cc53bbc333ce22aaba0ee1a16c4a62818d4e9de9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc|10bit",
+            "filename": "Obsession.2025.PLSUB.AI.1080p.10bit.WEB-DL.DDP5.1.x265.HEVC-AdL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2026 1080p AMZN WEB-DL DUAL DDP5 1 HEVC-KyoGo\n👤 5 💾 2.25 GB ⚙️ EXT\nDual Audio",
+          "infoHash": "eaad477d018e5ef4951251a78e370da1f33eacb8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Obsession 2026 1080p AMZN WEB-DL DUAL DDP5 1 HEVC-KyoGo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.(2025).BDRip.1080p.3xUkr.Eng\n👤 5 💾 14.14 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇺🇦",
+          "infoHash": "e968ef28f5c1292ddf2d4f226fdc7c32237c8d20",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip",
+            "filename": "Obsession.(2025).BDRip.1080p.3xUkr.Eng.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Обсессия / Obsession [2025 BDRip 1080p] MVO (HDRezka Studio) + Dub (HDRezka Studio) + VO (М. Яроцкий) + Dub Bel + Original Eng + Sub (Rus Eng)\n👤 5 💾 14.47 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "e95d4537a0cdda7c30552cfeb69ecd38421ddc1f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|x264",
+            "filename": "Obsession.2025.1080p.BluRay.x264-playHD_RGzsRutracker.mkv"
+          },
+          "sources": [
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "dht:e95d4537a0cdda7c30552cfeb69ecd38421ddc1f",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.WEBRip.x265-KONTRAST\n👤 5 💾 2.93 GB ⚙️ 1337x",
+          "infoHash": "cf77b4274296a9adc99641d8b48ba31547b8a4ea",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Obsession.2025.1080p.WEBRip.x265-KONTRAST.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession 2025 1080p ITA-ENG WEBRip x265 AAC-V3SP4EV3R\n👤 5 💾 1.33 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹",
+          "infoHash": "5da3af33ca893f960af00b6bc3e8fbba1de4b4df",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Obsession 2025 1080p ITA-ENG WEBRip x265 AAC-V3SP4EV3R.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Obsession.2025.1080p.BluRay.x264-TRB\n👤 5 💾 17.12 GB ⚙️ TorrentGalaxy",
+          "infoHash": "a1145c9c8d1f618fb303c3600698771604102912",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "obsession.2025.1080p.bluray.x264-TRB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession 2025 720p BluRay\n👤 148 💾 998.63 MB ⚙️ YTS",
+          "infoHash": "13e549228ffa288d931763678d76ab77d58c5e39",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Obsession.2025.720p.BluRay.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession 2025 720p WEBRip\n👤 123 💾 1000.91 MB ⚙️ YTS",
+          "infoHash": "23c343804f6b00d0f5e289b830fd827fec40870b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "Obsession.2025.720p.WEBRip.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession (2025) [Bluray 720p][Esp]\n👤 110 💾 4.98 GB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "fcb7c40bfa7fce721177566cfb73ed641d81449e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay",
+            "filename": "Obsession (2025) [Bluray 720p][Esp].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession.2025.Multi.Vf2.720P.WEBRIP-NOTAG\n👤 85 💾 2.9 GB ⚙️ Torrent9\nMulti Audio / 🇫🇷",
+          "infoHash": "6ac8bd555b3fff461c3c753b16cf24e220052c08",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip",
+            "filename": "Obsession.2025.Multi.Vf2.720P. WEBRIP.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Обсессия / Obsession (2025) BDRip 720p от DoMiNo & селезень | D | Paragraph Media\n👤 34 💾 3.58 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "709483d3858fab5fdf4a07a54927231b7d379b45",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BDRip|x264",
+            "filename": "Obsession.2025.DUB.BDRip.720p.x264.seleZen.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:709483d3858fab5fdf4a07a54927231b7d379b45",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Обсессия / Obsession (2025) BDRip 720p от DoMiNo & селезень | D P | HDRezka Studio\n👤 24 💾 3.68 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "66c58878e13741a91081b02d303858b4e73057f7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BDRip|x264",
+            "filename": "Obsession.2025.BDRip.720p.x264.seleZen.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:66c58878e13741a91081b02d303858b4e73057f7",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession 2025.720p.WEB-DL.AAC.x264-rothebehap\n👤 22 💾 2.36 GB ⚙️ TorrentGalaxy",
+          "infoHash": "10250920b6945b8a9cbe6178161780e3ce65a265",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|x264",
+            "filename": "Obsession 2025.720p.WEB-DL.AAC.x264-rothebehap.mp4.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession 2025 720p 10bit BluRay 6CH x265 HEVC-PSA\n👤 18 💾 584.92 MB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇩🇰 / 🇸🇪 / 🇳🇴",
+          "infoHash": "3cbc07e745c643a92bfacebe29a57ca92e41c89b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|hevc|10bit",
+            "filename": "Obsession 2025 720p 10bit BluRay 6CH x265 HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Обсессия / Obsession (2025) WEB-DLRip 720p от DoMiNo & селезень | D P | HDRezka Studio\n👤 10 💾 2.89 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "3263a9d0c102c7963277883cbd8c3ff29ffd7b4f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|x264",
+            "filename": "Obsession.2025.D.P.WEB-DLRip.720p.x264.seleZen.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:3263a9d0c102c7963277883cbd8c3ff29ffd7b4f",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Обсессия / Obsession (2025) WEB-DL 720p от New-Team | D P | HDRezka Studio\n👤 10 💾 4.07 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "badd944ce3d71e656d57ff16a0b32980299991e3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "Obsession.2025.720p.MA.WEB-DL.H264_New-Team_il68k.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:badd944ce3d71e656d57ff16a0b32980299991e3",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession 2025 720p MA WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 10 💾 3.63 GB ⚙️ ThePirateBay",
+          "infoHash": "b7beb3d9c72b7fb161ed2543c727efc066ef4372",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "Obsession 2025 720p MA WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession 2025 720p BluRay x264-GeneMige\n👤 8 💾 4.37 GB ⚙️ ThePirateBay",
+          "infoHash": "9e9d8b038fdf7145e254e0fe665495f5f97368f0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Obsession 2025 720p BluRay x264-GeneMige.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession (2025) 720p WEBRip-LAMA\n👤 8 💾 1000.91 MB ⚙️ ThePirateBay",
+          "infoHash": "c6c4c98e8621a580f9ede13f3ab091aa08f8dd69",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "Obsession.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession.2025.PL.720p.WEB-DL.XviD.AC3-OzW\n👤 7 💾 2.78 GB ⚙️ BestTorrents\n🇵🇱",
+          "infoHash": "ba8e32636512bb7d01184e869998697d12abd7b9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|xvid",
+            "filename": "Obsession.2025.PL.720p.WEB-DL.XviD.AC3-OzW.avi"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Обсессия / Obsession (2025) WEB-DLRip 720p от DoMiNo & селезень | Sub\n👤 6 💾 2.45 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "95a44f7edb18c025ad7ae1d75f5f0b79061740c1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|x264",
+            "filename": "Obsession.2025.WEB-DLRip.720p.x264.seleZen.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:95a44f7edb18c025ad7ae1d75f5f0b79061740c1",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Obsession (2026) 720p x265 10bit-VRC\nobsession.2026.720p.x265.10bit-vrc.mkv\n👤 5 💾 355.34 MB ⚙️ TorrentGalaxy",
+          "infoHash": "ec696f277e61678964f81fff2047a1bf457bd11d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|x265|10bit",
+            "filename": "obsession.2026.720p.x265.10bit-vrc.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nBDRip",
+          "title": "Обсессия / Obsession [2025 BDRip-AVC] Dub (HDRezka Studio 18+) + Sub (Rus Eng)\n👤 142 💾 1.37 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "2e056d4fdaac16d779f5606f563a042c83bd36a2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BDRip|avc",
+            "filename": "Obsession.2025.BDRip-AVC.x264.seleZen.mkv"
+          },
+          "sources": [
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "dht:2e056d4fdaac16d779f5606f563a042c83bd36a2",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Обсессия / Obsession [2025 WEB-DLRip-AVC] MVO (HDRezka Studio) + Original Eng + Sub Rus Eng\n👤 123 💾 2.08 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "8a9e9af0095397cbb57f5c37f06ba314118c07f7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL|avc",
+            "filename": "Обсессия (2025) WEB-DLRip-AVC_ivanes.mkv"
+          },
+          "sources": [
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "dht:8a9e9af0095397cbb57f5c37f06ba314118c07f7",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nWEBRip",
+          "title": "Obsession.2025.Multi.Vf2.WEBRIP-NOTAG\n👤 81 💾 758.67 MB ⚙️ Torrent9\nMulti Audio / 🇫🇷",
+          "infoHash": "b77f57db3719cacaece18994f61881d11b396070",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEBRip",
+            "filename": "Obsession.2025.Multi.Vf2.WEBRIP.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\nBDRip",
+          "title": "Обсессия / Obsession [2025 BDRip-AVC] DVO (Кубик в Кубе) + Original (Eng) + Sub (Rus Eng)\n👤 79 💾 2.17 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "39d20d65659ef154c643d0ef2b476e0b7cf2a035",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BDRip|avc",
+            "filename": "Obsession.BDRip.Kubik.v.Kube.mkv"
+          },
+          "sources": [
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "dht:39d20d65659ef154c643d0ef2b476e0b7cf2a035",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Обсессия / Obsession [2025 WEB-DLRip] MVO (HDRezka Studio)\n👤 75 💾 1.45 GB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "4d33af18bb586c793dfc0f9113fb6a6c19bae304",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL",
+            "filename": "Обсессия_2025_WEB-DLRip.avi"
+          },
+          "sources": [
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "dht:4d33af18bb586c793dfc0f9113fb6a6c19bae304",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nHDRip",
+          "title": "Обсессия / Obsession [2025 HDRip] Dub (Paragraph Media)\n👤 64 💾 1.46 GB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "70cabc480943835416ea40204fc0fdf5d89923a7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|HDRip",
+            "filename": "Obsession.2025.HDRip.Dub.avi"
+          },
+          "sources": [
+            "tracker:http://bt4.t-ru.org/ann?magnet",
+            "dht:70cabc480943835416ea40204fc0fdf5d89923a7",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nBDRip",
+          "title": "Обсессия / Obsession (2025) BDRip-AVC от DoMiNo & селезень | D | Paragraph Media\n👤 40 💾 1.56 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "200b1a70d6d9633c3f54be68fd741d24452d1c0d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BDRip|avc",
+            "filename": "Obsession.2025.DUB.BDRip.x264.seleZen.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:200b1a70d6d9633c3f54be68fd741d24452d1c0d",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nBDRip",
+          "title": "Обсессия / Obsession (2025) BDRip | D P | HDRezka Studio\n👤 37 💾 1.47 GB ⚙️ Rutor\n🇷🇺",
+          "infoHash": "271219e8baedfd5ead9c7bdc5e1d678097b51785",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BDRip",
+            "filename": "Obsession.2025.BDRip.Night25.avi"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:271219e8baedfd5ead9c7bdc5e1d678097b51785",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Обсессия / Obsession (2025) WEB-DLRip-AVC от New-Team | D P | HDRezka Studio\n👤 23 💾 1.92 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "d588bad68f174e9d1d519102b28837caccfc0649",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL|avc",
+            "filename": "Obsession.2025.x264.WEB-DLRip-New-Team.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:d588bad68f174e9d1d519102b28837caccfc0649",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nHDRip",
+          "title": "Obsession (2025) HQ HDRip - x264 - AAC - 400MB - ESub\n👤 19 💾 402.31 MB ⚙️ EXT",
+          "infoHash": "53d9361c571a263039ca40aa86dfe05145fb9452",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|HDRip|x264",
+            "filename": "Obsession (2025) HQ HDRip - x264 - AAC - 400MB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nWEBRip",
+          "title": "Posedlost-Obsession 2025/WEBrip/HEVC\n👤 18 💾 1.2 GB ⚙️ TorrentGalaxy",
+          "infoHash": "7aec7124eff1c9515e84867cab43b588cec829f0",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEBRip|hevc"
+          }
+        },
+        {
+          "name": "Torrentio\nBDRip",
+          "title": "Обсессия / Obsession (2025) BDRip-AVC от DoMiNo & селезень | D P | HDRezka Studio\n👤 16 💾 2 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "29a5da63e3fa9588b2ff5540402c4201ca94c8d9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BDRip|avc",
+            "filename": "Obsession.2025.BDRip-AVC.seleZen.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:29a5da63e3fa9588b2ff5540402c4201ca94c8d9",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Obsession.2025.PL.WEB-DL.XviD-GR4PE\n👤 14 💾 699.29 MB ⚙️ BestTorrents\n🇵🇱",
+          "infoHash": "731f2ee8c7c2d9fbae834c766680fedbadc55e65",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL|xvid",
+            "filename": "Obsession.2025.PL.WEB-DL.XviD-GR4PE.avi"
+          }
+        },
+        {
+          "name": "Torrentio\nBluRay",
+          "title": "Obsession (2025) [Bluray][Esp]\n👤 12 💾 1.09 GB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "f38cdc0eec24d1517ad2c28f0c6b46e9777ef213",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BluRay",
+            "filename": "Obsession (2025) [Bluray][Esp].avi"
+          }
+        },
+        {
+          "name": "Torrentio\nBDRip",
+          "title": "Obsession.2025.iTALiAN.BDRiP.x264-PRiME\n👤 8 💾 1.67 GB ⚙️ EXT\n🇮🇹",
+          "infoHash": "925fc1fcd06c5c463e8324382812fb58f2246e90",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BDRip|x264",
+            "filename": "Obsession.2025.iTALiAN.BDRiP.x264-PRiME.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nHDRip",
+          "title": "Обсессия / Obsession (2025) HDRip-AVC от ExKinoRay | P | HDRezka Studio\n👤 6 💾 746.67 MB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "d3ff309ab675d4ab5ce0be4dbeae572501e0f430",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|HDRip|avc",
+            "filename": "Obsession.2025.HDRip-AVC.ExKinoRay.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:d3ff309ab675d4ab5ce0be4dbeae572501e0f430",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        }
+      ]
+    }
+  }
+}

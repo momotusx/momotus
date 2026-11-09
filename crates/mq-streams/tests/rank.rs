@@ -826,12 +826,409 @@ fn when_nothing_keeps_up_the_row_that_pauses_least_wins() {
     );
 }
 
+#[test]
+fn bitrate_counts_only_up_to_what_the_swarm_is_known_to_carry() {
+    // plans/stream-ranking.md 4.9 rule 15 (review r3 algo N1): on a
+    // 20-seeder profile a 25-seeder swarm passes the wanted count, but its
+    // 11 Mbit/s earns picture points only up to 2.44 x 25 / 19 = 3.2, so a
+    // 400-seeder 5 Mbit/s WEB-DL of the same resolution wins.
+    let case = Case {
+        prefs: StreamPrefs {
+            min_seeders: 20,
+            size_limit_bytes: None,
+            ..StreamPrefs::default()
+        },
+        conditions: Conditions {
+            runtime_s: Some(100 * 60),
+            free_bytes: Some(200 << 30),
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![
+        seeded(1, "Movie.2020.1080p.BluRay.x264-FEW", 25, 7.68),
+        seeded(2, "Movie.2020.1080p.WEB-DL.x264-MANY", 400, 3.49),
+    ]);
+    let few = row(&ranked, "Movie.2020.1080p.BluRay");
+    assert!(few.key.sustains && few.key.tier == 2, "{:?}", few.key);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.WEB-DL.x264-MANY"
+    );
+}
+
+#[test]
+fn a_learned_thin_sample_never_lifts_a_row_over_the_floor() {
+    // plans/stream-ranking.md 4.2 (review r2 playback M2): one fast thin
+    // sample (8 Mbit/s from some 45-seeder swarm) says nothing about a
+    // 6-seeder one; the floor (2.44 x 6 / 19 = 0.77) still holds back its
+    // 2.9 Mbit/s, which the sample alone (5.6 safe) would let through.
+    let case = Case {
+        conditions: Conditions {
+            runtime_s: Some(100 * 60),
+            p2p_thin: Speed {
+                mbps: 8.0,
+                samples: 2,
+            },
+            free_bytes: Some(200 << 30),
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(vec![
+        seeded(1, "Movie.2020.1080p.WEB-DL.x264-SIX", 6, 2.0),
+        seeded(2, "Movie.2020.720p.WEB-DL.x264-MANY", 45, 1.1),
+    ]);
+    assert!(!row(&ranked, "Movie.2020.1080p").key.sustains);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.720p.WEB-DL.x264-MANY"
+    );
+}
+
+/// The rule tests of plans/stream-ranking.md 6.2, on the 1080p stick with
+/// the default preferences (50 seeders, 5 GB) unless a test says otherwise.
+fn with(conditions: Conditions) -> Case {
+    Case {
+        conditions: Conditions {
+            free_bytes: Some(200 << 30),
+            ..conditions
+        },
+        ..Case::stick()
+    }
+}
+
+fn episode_case(conditions: Conditions) -> Case {
+    Case {
+        target: Target {
+            title: "Show".into(),
+            year: None,
+            season: Some(1),
+            episode: Some(3),
+        },
+        ..with(Conditions {
+            runtime_s: Some(2700),
+            episodes_in_season: Some(10),
+            ..conditions
+        })
+    }
+}
+
+/// 4.1 and 4.2, cause A (Windtalkers, 134 min, the default user): the
+/// 39-seeder 1080p Blu-ray (3.02 Mbit/s, carried 5.0) is the pick over the
+/// 14-seeder 720p YIFY; with a measured thin speed of 1.0 (0.7 safe) the
+/// 1080p cannot keep up and the 720p, which pauses least, is the pick.
+#[test]
+fn a_thin_1080p_wins_on_the_floor_and_loses_to_a_measured_thin_line() {
+    let rows = || {
+        vec![
+            seeded(1, "Movie.2002.1080p.BluRay.x264-GRP", 39, 2.83),
+            seeded(2, "Movie.2002.720p.BluRay.x264-YIFY", 14, 0.70),
+        ]
+    };
+    let unmeasured = with(Conditions {
+        runtime_s: Some(134 * 60),
+        ..engine().clone()
+    });
+    let ranked = unmeasured.rank(rows());
+    assert!(row(&ranked, "Movie.2002.1080p").key.sustains);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2002.1080p.BluRay.x264-GRP"
+    );
+    let measured = with(Conditions {
+        runtime_s: Some(134 * 60),
+        p2p_thin: Speed {
+            mbps: 1.0,
+            samples: 2,
+        },
+        ..engine().clone()
+    });
+    let ranked = measured.rank(rows());
+    assert!(!row(&ranked, "Movie.2002.1080p").key.sustains);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2002.720p.BluRay.x264-YIFY"
+    );
+}
+
+/// 4.2: a 6-seeder 1080p at 8 Mbit/s is held back (carried 0.77) and loses
+/// to a 45-seeder 720p.
+#[test]
+fn a_six_seeder_8_mbit_1080p_loses_to_a_45_seeder_720p() {
+    let ranked = with(Conditions {
+        runtime_s: Some(60 * 60),
+        ..engine().clone()
+    })
+    .rank(vec![
+        seeded(1, "Movie.2020.1080p.WEB-DL.x264-SIX", 6, 3.35),
+        seeded(2, "Movie.2020.720p.WEB-DL.x264-MANY", 45, 1.0),
+    ]);
+    assert!(!row(&ranked, "Movie.2020.1080p").key.sustains);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.720p.WEB-DL.x264-MANY"
+    );
+}
+
+/// 4.1 and 4.3 (Obsession, 109 min): the 4.96 GB Amazon WEB-DL (6.5
+/// Mbit/s, 4,923 seeders) beats the 1.56 GB HEVC re-encode (826) on an
+/// unmeasured line (under the 15 Mbit/s ceiling) and on a measured
+/// 10 Mbit/s one: no headroom term favours the small file.
+#[test]
+fn a_full_web_dl_beats_a_small_re_encode_measured_or_not() {
+    let rows = || {
+        vec![
+            seeded(1, "Movie.2026.1080p.WEB-DL.HEVC.x265.5.1-BONE", 826, 1.56),
+            seeded(
+                2,
+                "Movie.2026.1080p.AMZN.WEB-DL.DDP5.1.H264-BTM",
+                4923,
+                4.96,
+            ),
+        ]
+    };
+    for p2p in [
+        Conditions::default().p2p,
+        Speed {
+            mbps: 10.0,
+            samples: 3,
+        },
+    ] {
+        let ranked = with(Conditions {
+            runtime_s: Some(109 * 60),
+            p2p,
+            ..engine().clone()
+        })
+        .rank(rows());
+        assert_eq!(
+            first_line(ranked.best().unwrap()),
+            "Movie.2026.1080p.AMZN.WEB-DL.DDP5.1.H264-BTM",
+            "{p2p:?}"
+        );
+    }
+}
+
+/// 4.9 rule 1: on mobile data, measured or not, a row is held to 1.5 GB
+/// per hour; Obsession's rows pick a file under 3 GB (109 min: 2.7 GB).
+#[test]
+fn on_mobile_data_obsession_picks_a_file_under_3_gb() {
+    for p2p in [
+        Conditions::default().p2p,
+        Speed {
+            mbps: 50.0,
+            samples: 3,
+        },
+    ] {
+        let ranked = with(Conditions {
+            runtime_s: Some(109 * 60),
+            metered: true,
+            p2p,
+            ..engine().clone()
+        })
+        .rank(vec![
+            seeded(
+                1,
+                "Movie.2026.1080p.AMZN.WEB-DL.DDP5.1.H264-BTM",
+                4923,
+                4.96,
+            ),
+            seeded(2, "Movie.2026.1080p.DUAL.BluRay.x264.EAC3-HdT", 262, 8.85),
+            seeded(3, "Movie.2026.1080p.WEB-DL.HEVC.x265.5.1-BONE", 826, 1.56),
+            seeded(4, "Movie.2025.1080p.WEBRip.x264-YTS", 1422, 2.01),
+            seeded(5, "Movie.2025.1080p.BluRay.x264-YTS", 396, 2.0),
+        ]);
+        let best = ranked.best().unwrap();
+        assert!(
+            best.stream.size_bytes.unwrap() < 3 << 30,
+            "{p2p:?}: {}",
+            first_line(best)
+        );
+    }
+}
+
+/// 4.4: a pack row with no file name and a 5 GiB size weighs one episode
+/// (0.5 GiB, 1.59 Mbit/s over 45 min), not the pack (15.9 Mbit/s, under
+/// the disc ceiling the old guard split at).
+#[test]
+fn a_pack_row_weighs_one_episode() {
+    let ranked = episode_case(engine().clone()).rank(vec![seeded(
+        1,
+        "Show.S01.1080p.WEB.x264-GRP",
+        300,
+        5.0,
+    )]);
+    let mbps = ranked.rows[0].bitrate_mbps.unwrap();
+    assert!((mbps - 1.59).abs() < 0.01, "{mbps}");
+}
+
+/// 4.9 rule 13: a pack of several seasons, or a complete one naming none,
+/// with no file name has an unknown bitrate: one season's count cannot
+/// split it.
+#[test]
+fn a_multi_season_pack_has_an_unknown_bitrate() {
+    for name in [
+        "Show.S01-S03.1080p.WEB.x264-GRP",
+        "Show.COMPLETE.1080p.WEB.x264-GRP",
+    ] {
+        let ranked = episode_case(engine().clone()).rank(vec![seeded(1, name, 300, 30.0)]);
+        assert_eq!(ranked.rows.len(), 1, "{name}: {:?}", ranked.hidden);
+        assert_eq!(ranked.rows[0].bitrate_mbps, None, "{name}");
+    }
+}
+
+/// 4.2: a torrent a debrid account has not shown cached (`Unknown`) with 7
+/// seeders is held back like a swarm (carried 0.9): a service fetching it
+/// fetches from the same swarm.
+#[test]
+fn an_unknown_7_seeder_row_is_held_back_like_a_swarm() {
+    let ranked = with(Conditions {
+        runtime_s: Some(100 * 60),
+        ..with_account().clone()
+    })
+    .rank(vec![
+        seeded(1, "Movie.2020.1080p.WEB-DL.x264-SEVEN", 7, 3.0),
+        seeded(2, "Movie.2020.720p.WEB-DL.x264-MANY", 60, 1.0),
+    ]);
+    let thin = row(&ranked, "Movie.2020.1080p");
+    assert_eq!(thin.class, SourceClass::Unknown);
+    assert!(!thin.key.sustains);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.720p.WEB-DL.x264-MANY"
+    );
+}
+
+/// Playback r2 m5, today's behaviour pinned: a row with no listed size
+/// passes `size_ok` and ranks above an over-limit row with a size.
+#[test]
+fn a_row_with_no_size_passes_the_limit() {
+    let ranked = with(engine().clone()).rank(vec![
+        seeded(1, "Movie.2020.1080p.BluRay.x264-BIG", 300, 9.0),
+        json!({ "name": "Torrentio", "title": "Movie.2020.1080p.WEB-DL.x264-NOSIZE\n👤 300",
+                "infoHash": format!("{:040x}", 0x150), "fileIdx": 0 }),
+    ]);
+    assert!(row(&ranked, "Movie.2020.1080p.WEB-DL").key.size_ok);
+    assert!(!row(&ranked, "Movie.2020.1080p.BluRay").key.size_ok);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.WEB-DL.x264-NOSIZE"
+    );
+}
+
+/// 4.9 rule 10: a torrent at 4 x the wanted seeders and one at the wanted
+/// seeders tie on `start` (the band is said in the line); one under the
+/// wanted seeders does not.
+#[test]
+fn torrents_at_and_past_the_wanted_seeders_tie_on_start() {
+    let ranked = with(engine().clone()).rank(vec![
+        seeded(1, "Movie.2020.1080p.WEB-DL.x264-FOUR", 200, 2.0),
+        seeded(2, "Movie.2020.1080p.WEB-DL.x264-WANTED", 50, 2.0),
+        seeded(3, "Movie.2020.1080p.WEB-DL.x264-THIN", 49, 2.0),
+    ]);
+    let start = |name| row(&ranked, name).key.start;
+    assert_eq!(
+        (
+            start("Movie.2020.1080p.WEB-DL.x264-FOUR"),
+            start("Movie.2020.1080p.WEB-DL.x264-WANTED"),
+            start("Movie.2020.1080p.WEB-DL.x264-THIN"),
+        ),
+        (2, 2, 1)
+    );
+}
+
+/// 4.9 rule 14: on mobile data a film with no runtime is counted over 2 h,
+/// so it is held to 1.5 GB per hour: a 4 GB 1080p (4.8 Mbit/s) is held
+/// back, a 2.5 GB one (3.0) is the pick.
+#[test]
+fn on_mobile_data_a_film_with_no_runtime_is_held_to_the_budget() {
+    let ranked = with(Conditions {
+        metered: true,
+        ..engine().clone()
+    })
+    .rank(vec![
+        seeded(1, "Movie.2020.1080p.WEB-DL.x264-BIG", 300, 4.0),
+        seeded(2, "Movie.2020.1080p.WEB-DL.x264-FITS", 300, 2.5),
+    ]);
+    assert!(
+        !row(&ranked, "Movie.2020.1080p.WEB-DL.x264-BIG")
+            .key
+            .sustains
+    );
+    let best = ranked.best().unwrap();
+    assert_eq!(first_line(best), "Movie.2020.1080p.WEB-DL.x264-FITS");
+    assert!((best.bitrate_mbps.unwrap() - 2.98).abs() < 0.01);
+}
+
+/// 4.9 rule 4: a remux is the pick only when no encode of its resolution
+/// and tier is there, even with more seeders on a fast line with no limit.
+#[test]
+fn a_remux_wins_only_when_no_encode_of_its_resolution_is_there() {
+    let case = Case {
+        prefs: StreamPrefs {
+            size_limit_bytes: None,
+            ..StreamPrefs::default()
+        },
+        ..with(Conditions {
+            runtime_s: Some(120 * 60),
+            p2p: Speed {
+                mbps: 100.0,
+                samples: 3,
+            },
+            ..engine().clone()
+        })
+    };
+    let remux = || seeded(1, "Movie.2020.1080p.BluRay.REMUX.AVC-GRP", 300, 25.0);
+    let ranked = case.rank(vec![
+        remux(),
+        seeded(2, "Movie.2020.1080p.BluRay.x264-GRP", 60, 10.0),
+    ]);
+    assert_eq!(row(&ranked, "Movie.2020.1080p.BluRay.REMUX").key.start, 1);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.BluRay.x264-GRP"
+    );
+    let alone = case.rank(vec![
+        remux(),
+        seeded(3, "Movie.2020.720p.BluRay.x264-GRP", 300, 4.0),
+    ]);
+    assert_eq!(
+        first_line(alone.best().unwrap()),
+        "Movie.2020.1080p.BluRay.REMUX.AVC-GRP"
+    );
+}
+
+/// 4.9 rule 7: on a device without 10-bit HEVC an H.265 row that names no
+/// bit depth is `Unstated` (most are 10-bit), so an H.264 row wins.
+#[test]
+fn hevc_of_unstated_depth_is_unstated_without_ten_bit_hevc() {
+    let case = Case {
+        caps: DeviceCaps {
+            ten_bit_hevc: false,
+            ..DeviceCaps::basic_1080p()
+        },
+        ..with(engine().clone())
+    };
+    let ranked = case.rank(vec![
+        seeded(1, "Movie.2020.1080p.WEB-DL.x265-ONE", 300, 2.0),
+        seeded(2, "Movie.2020.1080p.WEB-DL.x264-TWO", 300, 2.0),
+    ]);
+    assert_eq!(
+        row(&ranked, "Movie.2020.1080p.WEB-DL.x265").key.playability,
+        Playability::Unstated
+    );
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.WEB-DL.x264-TWO"
+    );
+}
+
 /// Research R2 (case 2): swarms under the wanted seeders are judged against
-/// what small swarms give (before any sample, 1.4 Mbit/s for 18 seeders,
-/// scaled per seeder), not the line. A 6-seeder 720p and a 22-seeder 1080p
-/// no longer beat a 900-seeder 1080p that needs 72% of a measured
-/// 10 Mbit/s; their line says they have few seeders (the small-swarm
-/// figure is an estimate, plans/play-every-version.md 2g).
+/// what small swarms are known to carry (plans/stream-ranking.md 4.2:
+/// 2.44 Mbit/s for 19 seeders, per seeder), not the line. A 6-seeder 720p
+/// and a 22-seeder 1080p no longer beat a 900-seeder 1080p that needs 72%
+/// of a measured 10 Mbit/s; their line says they have few seeders (the
+/// small-swarm figure is an estimate, plans/play-every-version.md 2g).
 #[test]
 fn a_thin_swarm_is_judged_against_small_swarms_not_the_line() {
     let case = Case {
@@ -942,11 +1339,13 @@ fn inside_pace_band_zero_the_row_least_over_its_speed_wins() {
     );
 }
 
-/// The small-swarm prior scales per seeder (1.4 Mbit/s for the race's 18):
-/// among thin swarms more seeders still help. Winter Sleep's shape (196
-/// min, the corpus's asserted pick): a 31-seeder 1080p of 3.1 GB (needs
-/// 2.1, gets 2.4) stays ahead of an 11-seeder 720p of 1.6 GB (needs 1.1,
-/// gets 0.86).
+/// The thin floor scales per seeder (plans/stream-ranking.md 4.2: 2.44
+/// Mbit/s for the race's 19, no margin): among thin swarms more seeders
+/// still help. Winter Sleep's shape (196 min, the corpus's asserted pick):
+/// a 31-seeder 1080p of 3.1 GB (needs 2.1, carries 3.98) stays ahead of an
+/// 11-seeder 720p of 1.6 GB (needs 1.1, carries 1.41). Both keep up now
+/// (v2: the floor is the rate thin swarms began to fail at, not 0.7 of a
+/// 1.4 Mbit/s prior), so the 1080p wins on its resolution.
 #[test]
 fn more_seeders_still_help_among_thin_swarms() {
     let case = Case {
@@ -973,11 +1372,13 @@ fn more_seeders_still_help_among_thin_swarms() {
         row(&ranked, "Movie.2020.1080p").key.pace,
         row(&ranked, "Movie.2020.720p").key.pace,
     );
-    assert_eq!(paces, (2, 1));
+    assert_eq!(paces, (3, 3));
 }
 
 /// Mutation 5: a release in the user's language wins even when it may
-/// pause; one in another language that keeps up does not.
+/// pause; one in another language that keeps up does not. The line is
+/// measured (10 Mbit/s): unmeasured, the 12.9 Mbit/s file is under the
+/// 15 Mbit/s ceiling and keeps up (plans/stream-ranking.md 4.1).
 #[test]
 fn your_language_wins_even_when_it_may_pause() {
     let case = Case {
@@ -987,6 +1388,10 @@ fn your_language_wins_even_when_it_may_pause() {
         },
         conditions: Conditions {
             runtime_s: Some(100 * 60),
+            p2p: Speed {
+                mbps: 10.0,
+                samples: 3,
+            },
             ..engine().clone()
         },
         ..Case::stick()
@@ -1050,19 +1455,29 @@ fn a_cinema_copy_never_wins_on_seeds() {
     assert_eq!(kind(&row(&ranked, "Movie.2020.1080p.HDTS").line), "copy");
 }
 
-/// Mutation 12 (question 5: as many seeders as possible): seeders count up
-/// to 1,000. Below it more seeders win, as in Shawshank's recording: a
-/// stereo 1.6 GB copy with 698 over a 5.1 2.2 GB one with 239. Past it the
-/// file decides: a Blu-ray with 1,000 over a WEBRip with 5,000.
+/// Mutation 12, changed by plans/stream-ranking.md 4.9 rule 11: seeders
+/// count up to 4 x the wanted ones (200 at the default 50). Below that
+/// more seeders win: 190 over 60 for the same file. Past it the file
+/// decides, as in Shawshank's recording: a 5.1 2.2 GB Blu-ray with 239
+/// over a stereo 1.6 GB copy with 698 (v1 counted seeders up to 1,000 and
+/// picked the copy), and a Blu-ray with 1,000 over a WEBRip with 5,000.
 #[test]
-fn seeders_count_up_to_1000_then_the_file_decides() {
+fn seeders_count_up_to_four_times_the_wanted_then_the_file_decides() {
+    let ranked = Case::stick().rank(vec![
+        seeded(1, "Movie.2020.1080p.BluRay.x264-FEW", 60, 2.0),
+        seeded(2, "Movie.2020.1080p.BluRay.x264-MORE", 190, 2.0),
+    ]);
+    assert_eq!(
+        first_line(ranked.best().unwrap()),
+        "Movie.2020.1080p.BluRay.x264-MORE"
+    );
     let ranked = Case::stick().rank(vec![
         seeded(1, "Movie.2020.1080p.BluRay.x264.AAC.5.1-SIX", 239, 2.2),
         seeded(2, "Movie.2020.1080p.BrRip.x264-YIFY", 698, 1.6),
     ]);
     assert_eq!(
         first_line(ranked.best().unwrap()),
-        "Movie.2020.1080p.BrRip.x264-YIFY"
+        "Movie.2020.1080p.BluRay.x264.AAC.5.1-SIX"
     );
     let ranked = Case::stick().rank(vec![
         seeded(3, "Movie.2020.1080p.WEBRip.x264-MANY", 5000, 2.0),
@@ -1159,11 +1574,8 @@ fn prior_case(free: u64, runtime_s: Option<u32>, caps: DeviceCaps) -> Case {
 /// The owner's example (3.2): 7 min ahead, 6 on Apple targets, where the
 /// engine's `F` also counts the 16 MiB APFS keeps of the head (419 s).
 fn owners_minutes() -> u32 {
-    if mq_engine_sched::APFS_HEAD_BYTES > 0 {
-        6
-    } else {
-        7
-    }
+    // The engine's own condition for APFS_HEAD_BYTES: a `> 0` on the const is always false off Apple.
+    if cfg!(target_vendor = "apple") { 6 } else { 7 }
 }
 
 /// One row's line, ranked alone.
@@ -1852,8 +2264,9 @@ fn a_title_named_in_two_languages_matches_either() {
 /// Past the wanted seeders a swarm starts as well as with more (pick audit:
 /// 16 of 16 legal swarms with 4 to 333 live seeders started, in no order of
 /// seeders), so on a 4K TV a 4K with 116 beats a 1080p with 711; under the
-/// wanted seeders the seeders decide, as before; between versions equal
-/// on the screen, the 4 x band still does; a ready file still comes first.
+/// wanted seeders the seeders decide, as before; a ready file still comes
+/// first. Between versions equal on the screen the 4 x band no longer
+/// decides (plans/stream-ranking.md 4.9 rule 10): the file does.
 #[test]
 fn past_the_wanted_seeders_the_better_version_wins() {
     let fast = Speed {
@@ -1889,7 +2302,9 @@ fn past_the_wanted_seeders_the_better_version_wins() {
         first_line(ranked.best().unwrap()),
         "Movie.2020.1080p.WEB-DL.x264-RDY"
     );
-    // On a 720p screen both count as 720p: the 4 x band picks.
+    // On a 720p screen both count as 720p and start alike (the 4 x band is
+    // said in the line, not ranked on): the native 720p wins over the
+    // 1080p the screen scales down, though that one has 774 seeders.
     let small = Case {
         caps: DeviceCaps {
             display_height: 720,
@@ -1901,9 +2316,14 @@ fn past_the_wanted_seeders_the_better_version_wins() {
         seeded(4, "Movie.2020.720p.WEB-DL.x264-GRP", 89, 1.1),
         seeded(5, "Movie.2020.1080p.BluRay.x264-GRP", 774, 2.0),
     ]);
+    let starts = (
+        row(&ranked, "Movie.2020.720p").key.start,
+        row(&ranked, "Movie.2020.1080p").key.start,
+    );
+    assert_eq!(starts, (2, 2));
     assert_eq!(
         first_line(ranked.best().unwrap()),
-        "Movie.2020.1080p.BluRay.x264-GRP"
+        "Movie.2020.720p.WEB-DL.x264-GRP"
     );
 }
 

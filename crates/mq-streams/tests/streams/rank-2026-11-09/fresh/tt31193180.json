@@ -1,0 +1,632 @@
+{
+  "id": "tt31193180",
+  "type": "movie",
+  "season": null,
+  "episode": null,
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "Sinners",
+    "year": "2025",
+    "releaseInfo": "2025",
+    "runtime": "138 min",
+    "country": "United States",
+    "language": null,
+    "episodeTitle": null,
+    "episodeReleased": null
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Sinners 2025 2160p HDR10Plus DV BluRay 8CH x265 HEVC-PSA\n👤 89 💾 5.45 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇹🇭",
+          "infoHash": "1175658c5b4656dcfb592f1d3b25806002faf713",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|hevc|DV|HDR10+",
+            "filename": "Sinners.2025.2160p.HDR10Plus.DV.BluRay.8CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Sinners (2025) 4K UHD BDRip Extras H265 HDR10 AAC 7.1 Multi Sub\nSinners 4K.mkv\n👤 17 💾 8.06 GB ⚙️ 1337x\nMulti Subs / 🇬🇧",
+          "infoHash": "142a897c3779dfc9d1373abc47514992a7a2a36d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BDRip|h265|10bit|HDR",
+            "filename": "Sinners 4K.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Sinners 2025 2160p HDR10Plus DV WEBRip 6CH x265 HEVC-PSA\n👤 13 💾 3.07 GB ⚙️ ThePirateBay",
+          "infoHash": "2649189d220dfe3f1dad9c185241b2e8a7a1699c",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|hevc|DV|HDR10+",
+            "filename": "Sinners.2025.2160p.HDR10Plus.DV.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Sinners 2025 2160p WEBRip\n👤 294 💾 6.14 GB ⚙️ YTS",
+          "infoHash": "67372a0430a5976aec3ce4ded815a29cdc5ca390",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+            "filename": "Sinners.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Sinners.2025.2160p.WEB-DL.DDP5.1.Atmos.SDR.H265-AOC\n👤 23 💾 12.19 GB ⚙️ 1337x",
+          "infoHash": "54fdb33390b70f15aac56b682e2f835ece86da24",
+          "fileIdx": 8,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265",
+            "filename": "Sinners.2025.2160p.WEB-DL.DDP5.1.Atmos.SDR.H265-AOC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "Sinners (2025) (1080p DS4K BluRay x265 10bit HDR AAC 7.1) [Kris]\n👤 8 💾 6.15 GB ⚙️ 1337x",
+          "infoHash": "ee67581c30a94556fa0344450ad5978ec496314b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|HDR",
+            "filename": "Sinners (2025) (1080p DS4K BluRay x265 10bit HDR AAC 7.1) [Kris].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p HDRip HEVC x265-RMTeam\n👤 919 💾 1.1 GB ⚙️ 1337x",
+          "infoHash": "81fb914ab74ec72bf992f11efc9cdbc4736a8bc0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|HDRip|hevc",
+            "filename": "Sinners 2025 1080p HDRip HEVC x265-RMTeam.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners.2025.1080p.WEB-DL.DDP5.1.x265-NeoNoir\n👤 780 💾 2.07 GB ⚙️ 1337x",
+          "infoHash": "62db0f641e07ca982ed3f6e40682a2fa4562c6a0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x265",
+            "filename": "Sinners.2025.1080p.WEB-DL.DDP5.1.x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p WEBRip\n👤 338 💾 2.54 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+          "infoHash": "5c4f02d6fffcb6b3fee83ecfe825e252e918f7e1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Sinners.2025.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p BluRay\n👤 161 💾 2.54 GB ⚙️ YTS",
+          "infoHash": "6db4acb7f15ec8247b941906c03413dcb8d4f02b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Sinners.2025.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p WEBRip\n👤 152 💾 2.3 GB ⚙️ YTS",
+          "infoHash": "8dbcb7d525712eaac6e29b169c4e1e5af8bdf8c3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Sinners.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p BluRay x264 DD 5.1-SUBS\n👤 113 💾 2.79 GB ⚙️ ThePirateBay",
+          "infoHash": "3c240596dcf89531016fce738121b00afb231179",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Sinners 2025 1080p BluRay x264 DD 5.1.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners (2025) 1080p BluRay 5.1-LAMA\n👤 108 💾 2.54 GB ⚙️ ThePirateBay",
+          "infoHash": "be62dffdc8b95d32d6936dcda9acad2f96f95e68",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Sinners.2025.1080p.BluRay.x264.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners (2025) (1080p BluRay x265 10bit EAC3 7.1 Ghost) [QxR]\nSinners (2025) (1080p BluRay x265 Ghost).mkv\n👤 96 💾 7.05 GB ⚙️ 1337x",
+          "infoHash": "743941bddc854684af064fe99032320f9ba2aa11",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Sinners (2025) (1080p BluRay x265 Ghost).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 REPACK 1080p BluRay x265 10bit TrueHD-WiKi\n👤 93 💾 11.06 GB ⚙️ ThePirateBay",
+          "infoHash": "cfd6ab455922216b869e50e746a56f0bc69a9344",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Sinners 2025 REPACK 1080p BluRay x265 10bit TrueHD-WiKi.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners.2025.1080p.WEB-DL.DDP5.1.Atmos.H.264-4kHDHub.mkv\n👤 59 💾 7.23 GB ⚙️ TorrentGalaxy",
+          "infoHash": "89b17dfa615f3ffb86cf289092e7d8a09080b9b2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Sinners.2025.1080p.WEB-DL.DDP5.1.Atmos.H.264-4kHDHub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners.2025.IMAX.1080p.WEB-DL.H.264.Dual.YG⭐\n👤 55 💾 7.59 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇪🇸",
+          "infoHash": "d9f41c0e7609e681155881d687f6d15c2d63ef87",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Sinners.2025.IMAX.1080p.WEB-DL.H.264.Dual YG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners (2025) (1080p MA WEB-DL x265 10bit EAC3 Atmos 5.1 Ghost) [QxR]\n👤 51 💾 5.07 GB ⚙️ 1337x",
+          "infoHash": "643ac0308d7a55deb071ee2fd55f576777b23b4f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+            "filename": "Sinners (2025) (1080p MA WEB-DL x265 Ghost).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners (2025) REPACK DS4K 1080p MA WEBRip AV1 Opus 5.1 [RAV1NE]\n👤 38 💾 2.08 GB ⚙️ 1337x",
+          "infoHash": "1cbde271a904ae68dee9252ee20728240b7e2cf7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|av1",
+            "filename": "Sinners.2025.REPACK.DS4K.1080p.MA.WEBRip.AV1.Opus.5.1-RAV1NE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 BluRay 1080p DDP 5 1 x264-hallowed\n👤 33 💾 10.25 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸 / 🇫🇷",
+          "infoHash": "566a88dae27374b74ecdbce0a4b43e63d69acdc0",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Sinners 2025 BluRay 1080p DDP 5 1 x264-hallowed.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p WEBRip\n👤 30 💾 2.1 GB ⚙️ YTS",
+          "infoHash": "aa292d9563095a97a8956d86e4e202e33ee4b3a2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Sinners.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p WEB-DL HEVC x265 5.1 BONE\n👤 24 💾 2.03 GB ⚙️ ThePirateBay",
+          "infoHash": "8a9d7db9064ada789447810617ed9b20760ad07a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Sinners 2025 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-PiracyIsASin\n👤 22 💾 8.31 GB ⚙️ ThePirateBay",
+          "infoHash": "53ad0553d610baca5c23101b3e049f68c30e5294",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Sinners 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-PiracyIsASin.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p WEBRip\n👤 22 💾 2.32 GB ⚙️ YTS",
+          "infoHash": "f17511f158d61e21accb56569d62b3a01935fd07",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Sinners.2025.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners.2025.1080p.WEB-DL.AAC.x264-skyflickz\n👤 20 💾 1.46 GB ⚙️ 1337x",
+          "infoHash": "33d8d1204c156a943c93379482ce03429cd693d7",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Sinners.2025.1080p.WEB-DL.AAC.x264-skyflickz.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 REPACK 1080p DS4K MA WEBRip DD 5 1 Atmos X265-Ralphy\n👤 20 💾 4.62 GB ⚙️ ThePirateBay",
+          "infoHash": "4de427e40220f37a220b8d7d4b04783c0d1345da",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Sinners 2025 REPACK 1080p DS4K MA WEBRip DD  5 1 Atmos X265-Ralphy.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p WEBRip x264 AAC 5.1-[88]\n👤 20 💾 2.32 GB ⚙️ 1337x",
+          "infoHash": "33da98910f832276a0cc67e77a92c8b03a0a12b0",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Sinners 2025 1080p WEBRip x264 AAC 5.1.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners.2025.1080p.WEBRip.READNFO.x264.AC3-AOC\n👤 19 💾 9.38 GB ⚙️ 1337x",
+          "infoHash": "824fb2d0898ad6f608e80331e812230067ed4948",
+          "fileIdx": 10,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Sinners.2025.1080p.WEBRip.READNFO.x264.AC3-AOC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 with BASL 1080p AMZN WEB-DL DDP5 1 Atmos H 264-Kitsune\n👤 17 💾 8.91 GB ⚙️ ThePirateBay",
+          "infoHash": "ba3541ef70aeb9df08598ad09f8e7f39b475154a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Sinners 2025 with BASL 1080p AMZN WEB-DL DDP5 1 Atmos H 264-Kitsune.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners (2025) DS4K 1080p iT WEBRip AV1 Opus 5.1 [RAV1NE]\n👤 17 💾 1.97 GB ⚙️ 1337x",
+          "infoHash": "bb4ed2ab75504309bf4bf21e5c5bb65d30e7b8f5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|av1",
+            "filename": "Sinners.2025.DS4K.1080p.iT.WEBRip.AV1.Opus.5.1-RAV1NE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners.2025.MULTi.VFF.1080p.WEBrip.EAC3.5.1.x265-TyHD\n👤 17 💾 2.8 GB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇫🇷",
+          "infoHash": "f611a5192f92b02b06e9c4985dc8aee272f4a7bb",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust\n👤 14 💾 1.79 GB ⚙️ 1337x",
+          "infoHash": "8a5547338b0b5e47ae6545ba5cf668a0456fa479",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "Sinners.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners (2025) Eng 1080p WEBRip x265 DD 5.1 ESub\n👤 14 💾 971.09 MB ⚙️ 1337x",
+          "infoHash": "f770e0a72de6b32200c12a657c95cdac42fb9f94",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Sinners (2025) Eng 1080p WEBRip x265 DD 5.1 ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p 10bit BluRay 8CH x265 HEVC-PSA\n👤 13 💾 2.14 GB ⚙️ ThePirateBay",
+          "infoHash": "40b2d2ea5ba5bc8068a8ee7ecc0dd17ba168b12f",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Sinners.2025.1080p.10bit.BluRay.8CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners (2025) 1080p WEBRip x265 10bit 5.1-LAMA\n👤 12 💾 2.3 GB ⚙️ EXT",
+          "infoHash": "604374e2e091c8c83c9dfbad70bceb61fff3b2aa",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Sinners.2025.1080p.WEBRip.x265.10bit.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners.2025.MULTi.FRENCH.1080p.WEB.H264-LUCKY.mkv\n👤 12 💾 7.96 GB ⚙️ ThePirateBay\nMulti Audio / 🇫🇷",
+          "infoHash": "e93f5480342e4f558a8e7111ec3f8e59f2a6c340",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264",
+            "filename": "Sinners.2025.MULTi.FRENCH.1080p.WEB.H264-LUCKY.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners (2025) 1080p WEBRip x265 10bit 5.1\n👤 12 💾 2.1 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇵🇹",
+          "infoHash": "dcc916ef58d856e6381867cf63c9780a1b030ba0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Sinners.2025.1080p.WEBRip.x265.10bit.AAC5.1-.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p Bluray OPUS 7 1 AV1-WhiskeyJack\n👤 11 💾 3.14 GB ⚙️ ThePirateBay",
+          "infoHash": "6381737e8caaa54a11e6477d930695a9305dbfae",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "Sinners 2025 1080p Bluray OPUS 7 1 AV1-WhiskeyJack.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 11 💾 2.07 GB ⚙️ ThePirateBay",
+          "infoHash": "3597dabdabcc213228b1e9a8ec540ec18c38836f",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+            "filename": "Sinners.2025.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinnres.2025.PROPER.1080p.WEB-DL.x264.6CH.Dual.YG⭐\n👤 11 💾 3.17 GB ⚙️ ThePirateBay\nDual Audio",
+          "infoHash": "00e788ddc3537d9b05fb251213b37c632a60e2f9",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Sinnres.2025.PROPER.1080p.WEB-DL.x264.6CH.Dual YG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners.2025.1080p.WEBRip.x265-KONTRAST\n👤 10 💾 3.1 GB ⚙️ 1337x",
+          "infoHash": "91a2399abb2e53d8c8399e7b02e47cd8d291b773",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Sinners.2025.1080p.WEBRip.x265-KONTRAST.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners (2025) DS4K DUAL 1080p BD-Rip DDP5.1 10bit HEVC - SP1EG3L\n👤 9 💾 4.13 GB ⚙️ EXT\nDual Audio",
+          "infoHash": "438f0a12c1967490ead7639510898ced39536387",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|hevc|10bit",
+            "filename": "Sinners (2025) DS4K DUAL 1080p BD-Rip DDP5.1 10bit HEVC - SP1EG3L.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p AMZN WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 9 💾 8.77 GB ⚙️ TorrentGalaxy",
+          "infoHash": "02c40adb727e388925e96c23925cc634c67f7404",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Sinners 2025 1080p AMZN WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners.2025.1080p.10bit.IMAX.DS4K.iTunes.WEBRip.DDP5.1.Atmos.ESub.HEVC-The.PunisheR\n👤 9 💾 4.72 GB ⚙️ 1337x",
+          "infoHash": "afdee66da42c3fcc8d3648f356933ad1ccab019f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+            "filename": "Sinners.2025.1080p.10bit.IMAX.DS4K.iTunes.WEBRip.DDP5.1.Atmos.ESub.HEVC-The.PunisheR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners.2025.1080p.iT.WEB-DL.DDP5.1.Atmos.H.264.ENG.YG⭐\n👤 9 💾 7.23 GB ⚙️ ThePirateBay",
+          "infoHash": "e20fb6ef555bc2ceeace3219966a6169317a92a1",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Sinners.2025.1080p.iT.WEB-DL.DDP5.1.Atmos.H.264.ENG YG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Hříšníci / Sinners (2025)[1080p][WebRip]\n👤 9 💾 2.54 GB ⚙️ EXT\n🇨🇿",
+          "infoHash": "b70446af51b716fd04c806939be2e63c73fe6f0d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Sinners.2025.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners.2025.bluray.sdr.1080p.x265.5.1.eac3.subs-Dust\n👤 8 💾 2.29 GB ⚙️ 1337x",
+          "infoHash": "c59955581eae465cb467954408303f82ca0830f6",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Sinners.2025.bluray.sdr.1080p.x265.5.1.eac3.subs-Dust.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners (2025) (1080p BluRay x265 HEVC 10bit AAC 7.1) Ryan Coogler Michael B Jordan Hailee Steinfeld Miles Caton Jack O Connell Wunmi Mosaku Jayme Lawson Omar Benson Miller Delroy Lindo Li Jun Yao Lola Kirke Peter Dreimanis Buddy Guy Saul Williams hq\n👤 8 💾 14.23 GB ⚙️ 1337x",
+          "infoHash": "4f484eb16ac9a774bf008dac20e1a0582f62acc4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Sinners.2025.1080p.BluRay.x265.hevc.10bit.AAC.7.1-HeVK.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "I.Peccatori.2025.iTA-ENG.iMAX.Bluray.1080p.x264-CYBER.mkv\n👤 8 💾 10.31 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "20f17ea6278ba562a8b3cd1b43e2ef25b32132a9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "I.Peccatori.2025.iTA-ENG.iMAX.Bluray.1080p.x264-CYBER.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p WEBRip DDP Atmos 5 1 10bit H 265-iVy\n👤 6 💾 1.89 GB ⚙️ ThePirateBay",
+          "infoHash": "929d47aca20a86fae08e7d7b30da12faccb91786",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|h265|10bit",
+            "filename": "Sinners 2025 1080p WEBRip DDP Atmos 5 1 10bit H 265-iVy.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners.2025.web-dl.sdr.1080p.av1.5.1.eac3-Dust\n👤 6 💾 1.68 GB ⚙️ 1337x",
+          "infoHash": "4ce499b9b37ae846434eb5707c9d38efdbb1a17c",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|av1",
+            "filename": "Sinners.2025.web-dl.sdr.1080p.av1.5.1.eac3-Dust.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Sinners 2025 1080p DS4K iT WEBRip DD 5 1 Atmos X265-Ralphy\n👤 6 💾 4 GB ⚙️ ThePirateBay",
+          "infoHash": "260974543f69aeddf64db7ef598b605a697385ea",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Sinners 2025 1080p DS4K iT WEBRip DD  5 1 Atmos X265-Ralphy.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Sinners 2025 720p BluRay\n👤 93 💾 1.24 GB ⚙️ YTS",
+          "infoHash": "68c72ff956c8a67a26fdbfd86e1be6922d5bb2dd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Sinners.2025.720p.BluRay.x264.AAC-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Sinners 2025 720p WEBRip\n👤 70 💾 1.24 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+          "infoHash": "d164c443cd3504b0d8da04a5233c004b03e14786",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "Sinners.2025.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Sinners (2025) 720p WEBRip-LAMA\n👤 22 💾 1.13 GB ⚙️ ThePirateBay",
+          "infoHash": "ade39c316ea45f2dfe1f32e9a81a633c31a84054",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "Sinners.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Sinners 2025 720p WEBRip\n👤 11 💾 1.13 GB ⚙️ YTS",
+          "infoHash": "e3ede3924eef471df979c9f5172877f809c10559",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "Sinners.2025.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Sinners.2025.720p.BluRay.x264-D3US\n👤 7 💾 6.13 GB ⚙️ ThePirateBay",
+          "infoHash": "30dd78ae6df484ac9b34ba1c1761f7ba0fdedbcc",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "d3us-sinners-720p.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Sinners (2025) BR 720p AV1 Stereo\n👤 5 💾 735.92 MB ⚙️ 1337x",
+          "infoHash": "347cb6f986342d9e5953b1e9e2da9ac2df75b18b",
+          "fileIdx": 6,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|av1",
+            "filename": "Sinners (2025).mp4"
+          }
+        },
+        {
+          "name": "Torrentio\nBluRay",
+          "title": "Sinners (2025) [Michael B. Jordan] BluRay H264 DolbyD 5.1 + nickarad\n👤 6 💾 2.79 GB ⚙️ ThePirateBay",
+          "infoHash": "4e11e24fc89687e12a09ad5f89b6098bfa6a1d61",
+          "fileIdx": 12,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BluRay|h264",
+            "filename": "Sinners (2025) BluRay H264 DolbyD 5.1 + nickarad.mp4"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "101 Horror Movies Mega Pack Vol 16 Mixed x264 [i_c]\nSinners 2025.mkv\n👤 19 💾 3.28 GB ⚙️ ThePirateBay",
+          "infoHash": "debe613422bd034cbe2e1e9b4678e59769c4500b",
+          "fileIdx": 44,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|x264",
+            "filename": "Sinners 2025.mkv"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "101 Horror Movies Mega Pack Vol 15 Mixed x264 [i_c]\nSinners (2025).mkv\n👤 15 💾 1.33 GB ⚙️ ThePirateBay",
+          "infoHash": "225f8ad7bb4a07ab2fbe5339a63299379ade5c39",
+          "fileIdx": 58,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|x264",
+            "filename": "Sinners (2025).mkv"
+          }
+        }
+      ]
+    }
+  }
+}

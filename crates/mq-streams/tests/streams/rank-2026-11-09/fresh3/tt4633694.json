@@ -1,0 +1,540 @@
+{
+ "fetched": "2026-11-08T23:16:50.319Z",
+ "id": "tt4633694",
+ "type": "movie",
+ "sources": {
+  "meta": "https://v3-cinemeta.strem.io/meta/movie/tt4633694.json",
+  "streams": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt4633694.json"
+ },
+ "meta": {
+  "name": "Spider-Man: Into the Spider-Verse",
+  "year": "2018",
+  "runtime": "117 min",
+  "genres": [
+   "Animation",
+   "Action",
+   "Adventure"
+  ],
+  "country": "United States"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Spider-Man - Into the Spider-Verse (2018) (2160p BluRay x265 HEVC 10bit HDR AAC 7.1 Tigole) [QxR]\n👤 39 💾 10 GB ⚙️ 1337x",
+   "infoHash": "70aca3f2a41a779aac4162c71ab08b1027b07cbd",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|hevc|10bit|HDR"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Spider-Man Into the Spider-Verse 2018 UHD 4K BluRay 2160p HDR10 TrueHD 7.1 Atmos H.265-MgB\n👤 14 💾 9.79 GB ⚙️ TorrentGalaxy",
+   "infoHash": "aba5c4b98380273af9d5056a303f08a1b9cbb2c6",
+   "fileIdx": 22,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|h265|10bit|HDR",
+    "filename": "Spider-Man Into the Spider-Verse 2018 UHD 4K BluRay 2160p HDR10 TrueHD 7.1 Atmos H.265-MgB.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Spider-Man.Into.the.Spider-Verse.2018.4K.HDR.2160p.BDRip Ita Eng x265-NAHOM\n👤 14 💾 6.37 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "c363721bb45d318d1caf64e0fd414d58d03bb38b",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BDRip|x265|HDR",
+    "filename": "Spider-Man.Into.the.Spider-Verse.2018.4K.HDR.2160p.BDRip Ita Eng x265-NAHOM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Spider-Man.Into.the.Spider-Verse.2018.2160p.HDR.UHDRip.x265.DD5.\n👤 13 💾 9.65 GB ⚙️ ThePirateBay",
+   "infoHash": "e4d8773df9dc31486e685c4b6516674d8f414869",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|UHDRip|x265|HDR",
+    "filename": "Spider-Man.Into.the.Spider-Verse.2018.2160p.HDR.UHDRip.x265.DD5.1-DTOne.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR",
+   "title": "Spider-Man: Into the Spider-Verse 2018 2160p DV HDR BluRay AV1 Opus 7.1 [dAV1nci]\n👤 8 💾 7.7 GB ⚙️ TorrentGalaxy",
+   "infoHash": "28c4129bf364eb5f885ef975d10a45d69996beea",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|av1|DV|HDR",
+    "filename": "Spider.Man.Into.The.Spider.Verse.2018.2160p.DV.HDR.BluRay.AV1.Opus.7.1.Multi4-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Spider-Man: Into The Spider-Verse.2018.2160p.HDR10.BDRip.DDP5.1.…\n👤 7 💾 9.11 GB ⚙️ TorrentGalaxy",
+   "infoHash": "f3fbbd6662ab749824179fe39b813a39b97df4d9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BDRip|10bit|HDR",
+    "filename": "Spider-Man - Into The Spider-Verse (2018).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR10+",
+   "title": "Spider-Man - Un Nuovo Universo - Into the Spider-Verse (2018) 2160p H265 BluRay Rip 10 bit DV HDR10+ ita eng AC3 5.1 sub ita eng Licdom\n👤 7 💾 5.52 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "92435def34b740ec828b8b945023bacef676f25b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BRRip|h265|10bit|DV|HDR10+",
+    "filename": "Spider-Man - Un Nuovo Universo - Into the Spider-Verse (2018) 2160p H265 10 bit DV HDR10+ ita eng AC3 5.1 sub ita eng Licdom.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR",
+   "title": "Spider-Man - Un nuovo universo (2018 2160p x265 DV 10bit HDR Ita DTS-HD Eac3 Eng Eac3 Sub Ita Eng BDrip) [Accid]\n👤 7 💾 14.61 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "9eea6f25561702532da26b2152e4f222f5cbff1c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BDRip|x265|10bit|DV|HDR",
+    "filename": "Spider-Man - Un nuovo universo (2018 2160p x265 DV 10bit HDR Ita DTS-HD Eac3 Eng Eac3 Sub Ita Eng BDrip) [Accid].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Spider-Man Into the Spider-Verse (2018) [2160p] [BluRay] [5.1]\n👤 154 💾 5.32 GB ⚙️ ThePirateBay",
+   "infoHash": "de22f7d84a92567aba6ebd4d060ccd3b93ede893",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit",
+    "filename": "Spider-Man.Into.The.Spider-Verse.2018.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Spider-Man Into the Spider-Verse 2018 2160p 4K BluRay x265 SDR HEVC DuaL-GeneMige\n👤 17 💾 5.59 GB ⚙️ ThePirateBay\nDubbed / Dual Audio",
+   "infoHash": "81004d529bc80f8c7c4dbf7c65ed38bcc9ea2618",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|hevc",
+    "filename": "Spider-Man Into the Spider-Verse 2018 2160p 4K BluRay x265 SDR HEVC DuaL-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Spider-Man.Into.the.Spider-Verse.2018.2160p.WEBRip.3500MB.DDP5.1.x264-GalaxyRG\n👤 15 💾 3.51 GB ⚙️ 1337x",
+   "infoHash": "edf3ccf5b731f7fb41d3b09419d5d3930ed280a3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x264",
+    "filename": "Spider-Man.Into.the.Spider-Verse.2018.2160p.WEBRip.3500MB.DDP5.1.x264-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Spider-Man Into the Spider-Verse (2018) (2160p WEBRip x265 HEVC SDR 10bit AC3 5.1 Joy) [UTR]\n👤 4 💾 5.2 GB ⚙️ 1337x",
+   "infoHash": "5bb44fda2ed86eb2224498c25efa9010c5a99c2b",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|hevc|10bit"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Spider-Man - Complete Movie Collection (2002-2022) 1080p.HEVC.HDR10.1920x800.x265. DTS-HD MA 5.1 eng.subs [BluRay] {dezzie}\n2018.Spider-Man Into The Spider-Verse.1920x800.BluRay.x265 DTS-HD.MA {dezzie}.mkv\n👤 67 💾 11.93 GB ⚙️ TorrentGalaxy",
+   "infoHash": "6921ecd1a4101111be5957ef1d7e332d5e95c8eb",
+   "fileIdx": 6,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit|HDR",
+    "filename": "2018.Spider-Man Into The Spider-Verse.1920x800.BluRay.x265 DTS-HD.MA {dezzie}.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Spider-Man Into the Spider-Verse 2018 1080p UHD BluRay DD 5 1 Atmos DV HDR x265-SQS\n👤 13 💾 8.24 GB ⚙️ ThePirateBay",
+   "infoHash": "782800d0897a99d7a045aa6f106f6a820f791596",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|DV|HDR",
+    "filename": "Spider-Man Into the Spider-Verse 2018 1080p UHD BluRay DD  5 1 Atmos DV HDR x265-SQS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Spider-Man: Into the Spider-Verse (2018) 1080p HDR BluRay AV1 Opus Multi4 [dAV1nci]\n👤 6 💾 5.27 GB ⚙️ 1337x",
+   "infoHash": "7651eea16693665c52d6f4183a0bbed6f08748e8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1|HDR",
+    "filename": "Spider.Man.Into.The.Spider.Verse.2018.1080p.HDR.BluRay.AV1.Opus.Multi4-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Spider-Man.Into.the.Spider-Verse.2018.1080p.AMZN.WEB-DL.MULTi.DD 5.1.Atmos.HDR.H.265-TheBiscuitMan\n👤 3 💾 3.94 GB ⚙️ 1337x\nDubbed / Multi Audio / 🇮🇳",
+   "infoHash": "7964ce4dc998ca8cebcc6345a570cd1702c78dd1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265|HDR",
+    "filename": "Spider-Man.Into.the.Spider-Verse.2018.1080p.AMZN.WEB-DL.MULTi.DD+5.1.Atmos.HDR.H.265-TheBiscuitMan.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man.Into.the.Spider-Verse.2018.1080p.BRRip.x264-Spiderman\n👤 222 💾 2.25 GB ⚙️ ThePirateBay",
+   "infoHash": "5d1b0afb8ebb7123ba3446fd080dd0ae42530f6f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x264",
+    "filename": "Spider-Man.Into.the.Spider-Verse.2018.1080p.BRRip.x264-MkvCage.ws.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man: Into the Spider-Verse 2018 1080p BluRay\n👤 206 💾 1.88 GB ⚙️ YTS",
+   "infoHash": "eadf812fff1d9f1200aa87ab93daee6b40f96c33",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Spider-Man.Into.The.Spider-Verse.2018.1080p.BluRay.x264-[YTS.AM].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man.Into.The.Spider.Verse.2018.REPACK.1080p.BluRay.DDP5.1\n👤 192 💾 3 GB ⚙️ ThePirateBay",
+   "infoHash": "e23a03e3c159b296cea30fec2f7bee354596da95",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Spider-Man.Into.The.Spider.Verse.2018.REPACK.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man: Into the Spider-Verse 2018 1080p WEBRip\n👤 116 💾 1.87 GB ⚙️ YTS",
+   "infoHash": "a753ea13f243ef9c4006d103dcbdbc7cabad8a01",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Spider-Man.Into.The.Spider-Verse.2018.1080p.WEBRip.x264-[YTS.AM].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man - Into the Spider-Verse (2018) (1080p BluRay x265 HEVC 10bit AAC 5.1 Tigole) [QxR]\nSpider-Man - Into the Spider-Verse (2018) (1080p BluRay x265 10bit Tigole).mkv\n👤 52 💾 4.54 GB ⚙️ 1337x\n🇬🇧 / 🇪🇸 / 🇫🇷",
+   "infoHash": "51123feb7544d2bb6dc345151f158c865045bce0",
+   "fileIdx": 11,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Spider-Man - Into the Spider-Verse (2018) (1080p BluRay x265 10bit Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man.Into.The.Spider-Verse.2018.1080p.WEB-DL.ENG.LATINO.HINDI.ITA.H264-BTM\n👤 30 💾 5.73 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇲🇽 / 🇮🇳",
+   "infoHash": "f054ab811a88ff75c16ae6b5cdbd9b849b6b8bdb",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Spider-Man.Into.The.Spider-Verse.2018.1080p.WEB-DL.ENG.LATINO.HINDI.ITA.DD.5.1.H264-BEN.THE.MEN.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man.Into.the.Spider-Verse.2018.Alternate.Cut.RERIP.1080p.10bit.BluRay.6CH.x265.HEVC-PSA\n👤 17 💾 3.02 GB ⚙️ 1337x",
+   "infoHash": "6a7bf532e15178187c434fd95266cd569ad8b5d0",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Spider-Man.Into.the.Spider-Verse.2018.Alternate.Cut.RERIP.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man.Into.the.Spider-Verse.2018.1080p.AMZN.WEB.5.1.x264-RG\n👤 15 💾 4.9 GB ⚙️ ThePirateBay",
+   "infoHash": "f997c80dbe209869be04546ecfbd52c55ac7319f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|x264",
+    "filename": "Spider-Man.Into.the.Spider-Verse.2018.1080p.AMZN.WEB-DL.AAC5.1.x264-Rapta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man Into the Spider-Verse 2018 BluRay 1080p DTS x264-MgB\n👤 13 💾 10.3 GB ⚙️ ThePirateBay",
+   "infoHash": "2819d6ae150d814fb415e66899d708091c239b47",
+   "fileIdx": 34,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Spider-Man Into the Spider-Verse 2018 Alternate Cut BluRay 1080p DTS AC3 x264-MgB.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man.Into the Spider-Verse.2019.1080p.WEB-DL.H264.AC3-E...\n👤 13 💾 4 GB ⚙️ ThePirateBay",
+   "infoHash": "0fd446418bb2f38ad9ae24cd079a6ead9f32a0ed",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Spider-Man.Into the Spider-Verse.2019.1080p.WEB-DL.H264.AC3-EVO[EtHD].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man.Into.The.Spider.Verse.2018.1080p.BluRay.x265-RARBG\n👤 11 💾 1.82 GB ⚙️ RARBG\n🇬🇧 / 🇪🇸",
+   "infoHash": "230ab388ade6ce412d9f6cbfb8bd197932d8c514",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Spider-Man.Into.The.Spider.Verse.2018.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man.Into.the.Spider-Verse.2018.1080p.WEB-DL.DD5.1.x264-RG\n👤 11 💾 3.9 GB ⚙️ ThePirateBay",
+   "infoHash": "4496a489ab80f7b8019a559c4f2f044ed7055ab8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Spider-Man.Into.the.Spider-Verse.2018.1080p.WEB-DL.DD5.1.x264-Rapta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man.Into.the.Spider-Verse.2018.1080p.BluRay.H264.AAC-LAMA\n👤 10 💾 2.23 GB ⚙️ ThePirateBay",
+   "infoHash": "c93e8949c4f512757ea889088b3ed850dafffa65",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264",
+    "filename": "Spider-Man.Into.the.Spider-Verse.2018.1080p.BluRay.H264.AAC-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "IMDB TOP 051-100 BluRay 1080p x265 10bit MNHD-FRDS\n057.蜘蛛侠：平行宇宙.Spider.Man.Into.The.Spider.Verse.2018.BluRay.1080p.x265.10bit.3Audio.MNHD-FRDS/Spider.Man.Into.The.Spider.Verse.2018.BluRay.1080p.x265.10bit.3Audio.MNHD-FRDS.mkv\n👤 9 💾 8.86 GB ⚙️ EXT",
+   "infoHash": "e6d934fd7e96efcb009c3372198360262bca2b65",
+   "fileIdx": 42,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Spider.Man.Into.The.Spider.Verse.2018.BluRay.1080p.x265.10bit.3Audio.MNHD-FRDS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man Into the Spider-Verse 2018 HYBRID 1080p BluRay x265 DDPA5 1-R1GY3B\n👤 9 💾 4.17 GB ⚙️ ThePirateBay",
+   "infoHash": "0c412fff234c9fe5bd4f0335c108f2fc1ed39f43",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Spider-Man Into the Spider-Verse 2018 HYBRID 1080p BluRay x265 DDPA5 1-R1GY3B.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man : Into The Spider-Verse [2018] COMPLETE 1080p BDRip x265 TrueHD Atmos 7.1 Kira [SEV]\nSpider-Man - Into The Spider-Verse [2018] 1080p BDRip x265 TrueHD Atmos 7.1 Kira [SEV].mkv\n👤 9 💾 12.2 GB ⚙️ 1337x",
+   "infoHash": "32288444f0b7bc70b7c197c8f0cd8719d537e19f",
+   "fileIdx": 12,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|x265",
+    "filename": "Spider-Man - Into The Spider-Verse [2018] 1080p BDRip x265 TrueHD Atmos 7.1 Kira [SEV].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man.Into.The.Spider-Verse.2018.1080p.WEBRip.X264-DEFLATE\n👤 9 💾 11.37 GB ⚙️ RARBG",
+   "infoHash": "39bf1ce6b5847fb9eef20018d4b3f7fc46d23fae",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man Into the Spider-Verse 2018 1080p BluRay x265 HEVC 10bit AAC 5 1 Tigole\n👤 8 💾 4.54 GB ⚙️ ThePirateBay",
+   "infoHash": "648abe2160ae9041d4bedd822b550ce738ec2280",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Spider-Man Into the Spider-Verse 2018 1080p BluRay x265 HEVC 10bit AAC 5 1 Tigole.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man: Into the Spider-Verse 2018 Alt-Universe Cut 1080p BluRay DD 5.1 x265-edge2020\n👤 8 💾 5.75 GB ⚙️ 1337x",
+   "infoHash": "8ba700262d7a624e2da5be8f3a77687d773056f6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Spider-Man.Into.the.Spider-Verse.2018.Alt-Universe.Cut.1080p.BluRay.DDP.5.1.x265-EDGE2020.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man - Into the Spider-Verse 2018 1080p BluRay DD 7.1 x264-LoRD[EtHD]\n👤 8 💾 12.84 GB ⚙️ 1337x",
+   "infoHash": "23db3406e02d574354f69e572230a7b6dcc9508c",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Spider-Man - Into the Spider-Verse 2018 1080p BluRay DD+7.1 x264-LoRD[EtHD].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man Un nuovo universo - Into the Spider-Verse (2018) AC3 5.1 ITA.ENG 1080p H265 sub ita.eng Sp33dy94-MIRCrew.mkv\n👤 7 💾 3.14 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "90f83770e44210325f93eb7126298442f21c9468",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h265",
+    "filename": "Spider-Man Un nuovo universo - Into the Spider-Verse (2018) AC3 5.1 ITA.ENG 1080p H265 sub ita.eng Sp33dy94-MIRCrew.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man.Into.the.Spider-Verse.2018.1080p.AMZN.WEB-DL.MULTi.DD 5.1.Atmos.H.264-TheBiscuitMan\n👤 5 💾 8.42 GB ⚙️ 1337x\nDubbed / Multi Audio / 🇮🇳",
+   "infoHash": "02f996dc5622f073b3e48fedf2015f0dbe3c738f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Spider-Man.Into.the.Spider-Verse.2018.1080p.AMZN.WEB-DL.MULTi.DD+5.1.Atmos.H.264-TheBiscuitMan.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man.Un.Nuovo.Universo.2018.iTA-ENG.Bluray.1080p.x264-DDNCREW.mkv\n👤 5 💾 11.35 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "1f6e4d7fc549910d15d02c78b1bc283f9e9299a9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Spider-Man.Un.Nuovo.Universo.2018.iTA-ENG.Bluray.1080p.x264-DDNCREW.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man: Into the Spider-Verse 2018 1080p Bluray x264 Greek Audio-Sexmeup [Braveheart]\n👤 4 💾 2.5 GB ⚙️ 1337x\n🇬🇷",
+   "infoHash": "3853c25cef05749e58c9307056ef8d38e0fbb595",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man.Novi.svijet.(2018).1080p.x265.4Mbps.6CH.224.crtani.film.hrvatski.sink\n👤 3 💾 3.6 GB ⚙️ 1337x\n🇭🇷",
+   "infoHash": "9d9fd42d1b9c5aa1eebb18240a9cd8d367aed336",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x265"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man - Un Nuovo Universo - Into the Spider-Verse (2018) 1080p H265 ita eng AC3 5.1 sub ita eng Licdom.mkv\n👤 3 💾 2.99 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "00e56165504ec065c484dc8d04b57075db09f2dc",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h265",
+    "filename": "Spider-Man - Un Nuovo Universo - Into the Spider-Verse (2018) 1080p H265 ita eng AC3 5.1 sub ita eng Licdom.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider.Man.Into.The.Spider.Verse.2018.1080p.ITA-ENG.BluRay.x265.OPUS-V3SP4EV3R.mkv\n👤 3 💾 2.93 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "a76c06c008712ab7f0d81cbb21cbaafba237608c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Spider.Man.Into.The.Spider.Verse.2018.1080p.ITA-ENG.BluRay.x265.OPUS-V3SP4EV3R.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider.Man.Novi.svijet.(2018).1080p.filmovi.za.djecu.hrvatski.sink.[remastered]\n👤 3 💾 2.22 GB ⚙️ 1337x\n🇭🇷",
+   "infoHash": "783dd68077348c6d527306d2fa946e83fb8fa652",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p",
+    "filename": "Spider-Man Novi svijet - Spider Man Into The Spider-Verse (2018).mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man: Into the Spider-Verse (2018) [BluRay 4K to 1080p HEVC OPUS 7.1] HR-DR\n👤 3 💾 4.1 GB ⚙️ 1337x",
+   "infoHash": "0d2389363f2f445ef242ba36cc176eec1286cd5f",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "[HR] Spider-Man - Into the Spider-Verse (2018) [9FBC33F5].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Spider-Man Universe (2002-2019) 1080p 10bit Bluray x265 HEVC [Org DD 5.1 Hindi DD 5.1 English] MSubs ~ TombDoc\nSpider-Man - Into the Spider-Verse (2018) 1080p 10bit Bluray x265 HEVC [Org UHD BD 5.1 Hindi + DD 5.1 English] ESubs ~ TombDoc.mkv\n👤 3 💾 4.06 GB ⚙️ 1337x\nMulti Subs / 🇬🇧 / 🇮🇳",
+   "infoHash": "a6a9fa1259601221a68a9b8df0a5996f90eac0f6",
+   "fileIdx": 5,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Spider-Man - Into the Spider-Verse (2018) 1080p 10bit Bluray x265 HEVC [Org UHD BD 5.1 Hindi + DD 5.1 English] ESubs ~ TombDoc.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Spider-Man: Into the Spider-Verse 2018 720p BluRay\n👤 37 💾 1003.46 MB ⚙️ YTS",
+   "infoHash": "44c2fac39605db697c045d0eb664c9e4b7d1f95b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Spider-Man.Into.The.Spider-Verse.2018.720p.BluRay.x264-[YTS.AM].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Spider-Man.Into.the.Spider-Verse.2018.720p.BluRay.x264-NeZu\n👤 17 💾 1.34 GB ⚙️ ThePirateBay",
+   "infoHash": "0477746f39b583367b1166f2806ce51cc4991de3",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "spider-man.into.the.spider-verse.2018.720p.bluray.x264-nezu.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nBluRay REMUX",
+   "title": "[MrManager] Robot Carnival (1987) BDRemux (Dual Audio + Special Features)\nFeaturettes/Chicken Man & Red Neck - Storyboard to Screen.mkv\n👤 19 💾 119.17 MB ⚙️ NyaaSi\nDubbed / Dual Audio",
+   "infoHash": "72cf7b3b2e34cc339bccd28ae8d3109f68eb3b85",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|72cf7b3b2e34cc339bccd28ae8d3109f68eb3b85",
+    "filename": "Chicken Man & Red Neck - Storyboard to Screen.mkv"
+   },
+   "sources": [
+    "tracker:udp://tracker.opentrackr.org:1337/announce",
+    "tracker:udp://open.stealth.si:80/announce",
+    "tracker:udp://open.demonii.com:1337/announce",
+    "tracker:udp://open.tracker.cl:1337/announce",
+    "tracker:udp://tracker.skynetcloud.site:6969/announce",
+    "tracker:udp://tracker.qu.ax:6969/announce",
+    "tracker:udp://tracker.theoks.net:6969/announce",
+    "tracker:udp://tracker-udp.gbitt.info:80/announce",
+    "tracker:udp://explodie.org:6969/announce",
+    "tracker:udp://tracker.ducks.party:1984/announce",
+    "tracker:udp://tracker.tryhackx.org:6969/announce",
+    "tracker:udp://tracker.nyaa.vc:6969/announce",
+    "tracker:udp://tracker.dler.org:6969/announce",
+    "tracker:udp://tracker2.dler.org:80/announce",
+    "tracker:http://tracker.dler.com:6969/announce",
+    "tracker:udp://tracker.gmi.gd:6969/announce",
+    "tracker:http://tracker.renfei.net:8080/announce",
+    "tracker:udp://tracker.peerfect.org:6969/announce",
+    "tracker:udp://tracker.opentrackr.com:6969/announce",
+    "tracker:udp://tracker.ilibr.org:6969/announce",
+    "tracker:http://nyaa.tracker.wf:7777/announce",
+    "tracker:http://anidex.moe:6969/announce",
+    "tracker:http://tracker.anirena.com:80/announce",
+    "tracker:udp://tracker.uw0.xyz:6969/announce",
+    "tracker:http://share.camoe.cn:8080/announce",
+    "tracker:http://t.nyaatracker.com:80/announce",
+    "dht:72cf7b3b2e34cc339bccd28ae8d3109f68eb3b85"
+   ]
+  },
+  {
+   "name": "Torrentio",
+   "title": "Marvel - MCU - X-Men - Spider-Man - Collection 2000-2019\nOthers/Spider-Man - Into The Spider-Verse.mp4\n👤 3 💾 1.88 GB ⚙️ 1337x",
+   "infoHash": "47b0e8b1c696185e3f4f87c6a5919a52ef8503b9",
+   "fileIdx": 24,
+   "behaviorHints": {
+    "filename": "Spider-Man - Into The Spider-Verse.mp4"
+   }
+  }
+ ]
+}

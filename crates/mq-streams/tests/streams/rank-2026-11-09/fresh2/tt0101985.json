@@ -1,0 +1,102 @@
+{
+ "fetched": "2026-11-08T23:06:18.930Z",
+ "source": {
+  "torrentio": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt0101985.json",
+  "cinemeta": "https://v3-cinemeta.strem.io/meta/movie/tt0101985.json"
+ },
+ "id": "tt0101985",
+ "type": "movie",
+ "meta": {
+  "name": "A Brighter Summer Day",
+  "year": "2011",
+  "runtime": "237 min",
+  "genres": [
+   "Crime",
+   "Drama",
+   "Romance"
+  ]
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n1080p",
+   "title": "A Brighter Summer Day 1991 1080p BluRay\n👤 62 💾 3.94 GB ⚙️ YTS",
+   "infoHash": "d1fc88a0bcc0504efd66dcda9a1fa30831753b98",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "A.Brighter.Summer.Day.1991.1080p.BluRay.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "A Brighter Summer Day (1991) 1080p BrRip x264 - VPPV\n👤 51 💾 5.25 GB ⚙️ ThePirateBay\n🇨🇳",
+   "infoHash": "8afe1c59f953e4e2dbad6234d00f25ca33f0b15d",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x264",
+    "filename": "A.Brighter.Summer.Day.1991.1080p.BluRay.x264.VPPV.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "A Brighter Summer Day (1991) Criterion (1080p BluRay x265 HEVC 10bit AAC 1.0 Chinese Tigole) [QxR]\nA Brighter Summer Day (1991) Criterion (1080p BluRay x265 10bit Tigole).mkv\n👤 37 💾 10.13 GB ⚙️ 1337x\n🇨🇳",
+   "infoHash": "4946051a095566dfdd112a3bf643683ea3afd3f9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "A Brighter Summer Day (1991) Criterion (1080p BluRay x265 10bit Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "A Brighter Summer Day 1991 1080p BluRay x264-OFT\n👤 5 💾 9.84 GB ⚙️ ThePirateBay",
+   "infoHash": "9e33b08af3dc746d92ceaa5bd097c97adfa487d7",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "A Brighter Summer Day 1991 1080p BluRay x264-OFT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "A.Brighter.Summer.Day.1991.CHINESE.1080p.BluRay.H264.AAC-VXT\n👤 3 💾 4.51 GB ⚙️ RARBG\n🇨🇳",
+   "infoHash": "56251ea98fbd52b680bd8698e0704ff29e5b2b78",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "A Brighter Summer Day (1991) [720p] [BluRay] [YTS] [YIFY]\n👤 19 💾 2.12 GB ⚙️ 1337x\n🇨🇳",
+   "infoHash": "8fa73af4b97d6df9387ce5b19177be4ede9663b5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "A.Brighter.Summer.Day.1991.720p.BluRay.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Edward Yang - A Brighter Summer Day (1991)\n👤 1 💾 14.61 GB ⚙️ ThePirateBay",
+   "infoHash": "8a9798be5e8f35959ba34f829904379ed2697ce7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "A.Brighter.Summer.Day.1991.Criterion.Collection.720p.Bluray.x264.AC3-HDChina.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nBRRip",
+   "title": "A.Brighter.Summer.Day.1991.CHINESE.BRRip.XviD.MP3-VXT\n👤 1 💾 2.98 GB ⚙️ RARBG\n🇨🇳",
+   "infoHash": "8cfd3369c3701e3c89aad6de2d61df60eb5b351e",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BRRip|xvid"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "牯嶺街少年殺人事件/A Brighter Summer Day(1991)LDrip 楊德昌\n👤 1 💾 1.37 GB ⚙️ ThePirateBay",
+   "infoHash": "93a68fca53fd0701e6695973d4e076cc2f60b40b"
+  }
+ ]
+}

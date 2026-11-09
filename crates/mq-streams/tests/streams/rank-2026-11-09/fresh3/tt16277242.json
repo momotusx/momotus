@@ -1,0 +1,250 @@
+{
+ "fetched": "2026-11-08T23:16:50.991Z",
+ "id": "tt16277242",
+ "type": "movie",
+ "sources": {
+  "meta": "https://v3-cinemeta.strem.io/meta/movie/tt16277242.json",
+  "streams": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt16277242.json"
+ },
+ "meta": {
+  "name": "Society of the Snow",
+  "year": "2024",
+  "runtime": "143 min",
+  "genres": [
+   "Adventure",
+   "Biography",
+   "Drama"
+  ],
+  "country": "Spain"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k",
+   "title": "Society of the Snow 2023 2160p WEBRip\n👤 14 💾 6.5 GB ⚙️ YTS",
+   "infoHash": "c3a96a99cfdfc4040a5cf678ca8e7bcf3f41fc99",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "Society.Of.The.Snow.2023.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Society.of.the.Snow.2023.DUAL-AUDIO.SPA-ENG.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA\n👤 94 💾 2.11 GB ⚙️ 1337x\nDual Audio / 🇬🇧 / 🇪🇸",
+   "infoHash": "a788a64b1162ac57a209be5d92d177aa63899f66",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "Society.of.the.Snow.A.K.A.La.sociedad.de.la.nieve.2023.DUAL-AUDIO.SPA-ENG.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Society of the Snow 2023 1080p WEBRip\n👤 26 💾 2.68 GB ⚙️ YTS",
+   "infoHash": "e82eb6c6bae80925e2407653a39258029bc16c00",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Society.Of.The.Snow.2023.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Society.of.the.Snow.2023.1080p.WEB.h264-EDITH[TGx]\n👤 16 💾 8.99 GB ⚙️ TorrentGalaxy\n🇪🇸",
+   "infoHash": "8fac11aef696fb463ef1381eb04d06bc33970b77",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264",
+    "filename": "Society.of.the.Snow.2023.1080p.WEB.h264-EDITH.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "La.sociedad.de.la.nieve.2023.1080p.WEBRip.x264.YG⭐\n👤 15 💾 1.9 GB ⚙️ TorrentGalaxy\n🇪🇸",
+   "infoHash": "3b12922da79ae72b0423258e93536339ef8f7f51",
+   "fileIdx": 6,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "La.sociedad.de.la.nieve.2023.1080p.WEBRip.x264.YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Society of the Snow 2023 1080p WEBRip\n👤 15 💾 2.43 GB ⚙️ YTS",
+   "infoHash": "c8887f7bffd2ea967fdb1d081f792a459d2785fc",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Society.Of.The.Snow.2023.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Society of the Snow (2023) (1080p NF WEB-DL x265 HEVC 10bit EAC3 5.1 Spanish Silence) [QxR]\n👤 13 💾 6.89 GB ⚙️ 1337x\n🇪🇸",
+   "infoHash": "a5376bffff6537a775ddc0fb3c0c2dcffb7e1d37",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc|10bit",
+    "filename": "Society of the Snow (2023) (1080p NF WEB-DL x265 Silence).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Society.of.the.Snow.A.K.A.La.sociedad.de.la.nieve.2023.DUAL-AUDIO.SPA-ENG.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA\n👤 7 💾 2.11 GB ⚙️ 1337x\nDual Audio / 🇬🇧 / 🇪🇸",
+   "infoHash": "9ec57640d180a8c2032e84fd4a61b7823ceb0799",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "Society.of.the.Snow.A.K.A.La.sociedad.de.la.nieve.2023.DUAL-AUDIO.SPA-ENG.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "La.sociedad.de.la.nieve.2023.MULTi.FRENCH.1080p.WEB.x264-FW.mkv\n👤 5 💾 11.07 GB ⚙️ ThePirateBay\nMulti Audio / 🇫🇷",
+   "infoHash": "66b6a1b402827deaa246caa653879fc5a65666f7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|x264",
+    "filename": "La.sociedad.de.la.nieve.2023.MULTi.FRENCH.1080p.WEB.x264-FW.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Society.of.the.Snow.2023.1080p.WEBRip.DUAL.x265-KONTRAST\n👤 5 💾 2.98 GB ⚙️ 1337x\nDual Audio / 🇪🇸",
+   "infoHash": "935aed1878cddbf6d6bf6b35521917885781a949",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Society.of.the.Snow.2023.1080p.WEBRip.DUAL.x265-KONTRAST.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Society.of.the.Snow.2024.DUBBED.1080p.NF.WEBRip.DDP5.1.x265.10bit-GalaxyRG265\n👤 5 💾 3.2 GB ⚙️ TorrentGalaxy\nDubbed",
+   "infoHash": "3e8c3b6b161dd70ebe333d111d8d0a29daf59a40",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Society.of.the.Snow.2024.DUBBED.1080p.NF.WEBRip.DDP5.1.x265.10bit-GalaxyRG265.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Society.of.the.Snow.2023.web.sdr.1080p.av1.5.1.eac3.subs-Dust\n👤 4 💾 1.47 GB ⚙️ 1337x\n🇪🇸",
+   "infoHash": "5b77540e91aa42839206a587d33b1f6fcec19a52",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|av1",
+    "filename": "Society.of.the.Snow.2023.web.sdr.1080p.av1.5.1.eac3.subs-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Society of the Snow (2023) 1080p NF WEB AV1 Opus Multi3 [Ewillian9]\n👤 3 💾 2.35 GB ⚙️ 1337x\n🇪🇸",
+   "infoHash": "bbd00d908f2ece0ea81a49046dfd1e3af8276f82",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|av1",
+    "filename": "Society.of.the.Snow.2023.1080p.NF.WEB.AV1.Opus.Multi3-Ewillian9.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Society of the Snow 2023 1080p NF WEB-DL DUAL DDP5 1 Atmos H 264-FLUX\n👤 3 💾 9.77 GB ⚙️ 1337x\nDual Audio / 🇬🇧",
+   "infoHash": "34bb7060d029b76a46fba40a7bfa05114d333b58",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Society.of.the.Snow.2023.1080p.NF.WEB-DL.DUAL.DDP5.1.Atmos.H.264-FLUX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "La.Sociedad.De.La.Nieve.2023.MULTi.FRENCH.1080p.WEB.x265-NBDY.mkv\n👤 2 💾 3.61 GB ⚙️ ThePirateBay\nMulti Audio / 🇫🇷",
+   "infoHash": "2af3898d50c29af01d0d57a1ae794de404f52b53",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|x265",
+    "filename": "La.Sociedad.De.La.Nieve.2023.MULTi.FRENCH.1080p.WEB.x265-NBDY.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Society.Of.The.Snow.2023.1080p.ITA-SPA.MULTI.WEBRip.x265.AAC-V3SP4EV3R.mkv\n👤 2 💾 2.22 GB ⚙️ TorrentGalaxy\nMulti Audio / 🇮🇹 / 🇪🇸",
+   "infoHash": "29842e130029292760a12a286dbd087c218e0290",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Society.Of.The.Snow.2023.1080p.ITA-SPA.MULTI.WEBRip.x265.AAC-V3SP4EV3R.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Adventure-Survival Movies Collection (1080p.AV1.AC3 encoded.muxed by VerbaL) (2026) [25 Movies]\nLa Società Della Neve (La Sociedad De La Nieve) (2023) [1080p] [tmdb-906126] [imdb-tt16277242].mkv\n👤 1 💾 2.49 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+   "infoHash": "e46c3177d39ac86814523b93c10cd06fad87be98",
+   "fileIdx": 190,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|av1",
+    "filename": "La Società Della Neve (La Sociedad De La Nieve) (2023) [1080p] [tmdb-906126] [imdb-tt16277242].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "La sociedad de la nieve (2023).HD 1080p (Spanish-English+Subt)\n👤 1 💾 2.48 GB ⚙️ EXT\n🇬🇧 / 🇪🇸",
+   "infoHash": "1d56695730f0829404a22101a76ff46ff40602da",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Society of the Snow (2023) [Uzbek Dubbed] 1080p WEB-DLRip TeeWee\n👤 1 💾 6.53 GB ⚙️ TorrentGalaxy\nDubbed",
+   "infoHash": "1868c3583de3bdf12b3870f888a5cf1d3d6c0e4e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL",
+    "filename": "Society of the Snow (2023) [Uzbek Dubbed] 1080p WEB-DLRip TeeWee.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "La.Società.Della.Neve.2023.iTA-SPA.WEBDL.1080p.x264-CYBER.mkv\n👤 1 💾 10.93 GB ⚙️ 1337x\n🇮🇹 / 🇪🇸",
+   "infoHash": "b44be9db8a7ffbc680c918f38f8c4ae55bd64ea9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "La.Società.Della.Neve.2023.iTA-SPA.WEBDL.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Society of the Snow 2024 1080p NF WEB-DL ENG DUAL DDP5 1 Atmos H 264-FLUX\n👤 1 💾 9.77 GB ⚙️ 1337x\nDual Audio / 🇬🇧",
+   "infoHash": "49c28cda31163d55021926709487ce0420e3a8fa",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Society.of.the.Snow.2024.1080p.NF.WEB-DL.DUAL.DDP5.1.Atmos.H.264-FLUX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Society of the Snow 2023 720p WEBRip\n👤 18 💾 1.3 GB ⚙️ YTS",
+   "infoHash": "3fa8a2dfbccb92aae5a51e8d285dc6f6ca646e93",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Society.Of.The.Snow.2023.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Society.of.the.Snow.2023.SPANISH.720p.WEBRip.900MB.x264-GalaxyRG\n👤 11 💾 900.04 MB ⚙️ TorrentGalaxy\n🇪🇸",
+   "infoHash": "805830515181dd7fde1297aa0132b38e23ea4c73",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Society.of.the.Snow.2023.SPANISH.720p.WEBRip.900MB.x264-GalaxyRG.mkv"
+   }
+  }
+ ]
+}

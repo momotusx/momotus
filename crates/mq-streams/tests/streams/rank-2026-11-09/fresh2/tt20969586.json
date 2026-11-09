@@ -1,0 +1,581 @@
+{
+ "fetched": "2026-11-08T23:05:56.594Z",
+ "source": {
+  "torrentio": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt20969586.json",
+  "cinemeta": "https://v3-cinemeta.strem.io/meta/movie/tt20969586.json"
+ },
+ "id": "tt20969586",
+ "type": "movie",
+ "meta": {
+  "name": "Thunderbolts*",
+  "year": "2025",
+  "runtime": "127 min",
+  "genres": [
+   "Action",
+   "Adventure",
+   "Crime"
+  ]
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Thunderbolts 2025 2160p AMZN WEB-DL DDP5.1 HDR HEVC-TBMovies\n👤 99 💾 13.81 GB ⚙️ 1337x",
+   "infoHash": "44799eb3e27c00a640452eee6aff08c45928f769",
+   "fileIdx": 6,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|hevc|HDR",
+    "filename": "Thunderbolts 2025 2160p AMZN WEB-DL DDP5.1 HDR HEVC-TBMovies.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Thunderbolts*.2025.2160p.AMZN.WEB-DL.DDP5.1.HDR.HEVC.x265.Dual.YG⭐\n👤 17 💾 14.38 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "23d407e4e9540d52105b9178f0b37821b95b5611",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|hevc|HDR",
+    "filename": "Thunderbolts.2025.2160p.AMZN.WEB-DL.DDP5.1.HDR.HEVC.x265.Dual YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR",
+   "title": "Thunderbolts.2025.2160p.DV.HDR10.BDRip.OPUS7.1.AV1.BluBit\n👤 7 💾 1.78 GB ⚙️ TorrentGalaxy",
+   "infoHash": "ed5adc737db1c0c4d0cc7a4fbd701440be0db207",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BDRip|av1|10bit|DV|HDR",
+    "filename": "Thunderbolts (2025).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Thunderbolts.2025.2160p.HDR10.BDRip.DDP5.1.x265.BluBit\n👤 7 💾 1.76 GB ⚙️ 1337x",
+   "infoHash": "acb3127a968042ea5f64daf423f9dfb980e6e893",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BDRip|x265|10bit|HDR",
+    "filename": "Thunderbolts (2025).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Thunderbolts.2025.2160p.WEB-DL.DDP5.1.HDR.H.265-TURG\n👤 7 💾 13.93 GB ⚙️ 1337x\n🇹🇷",
+   "infoHash": "ad87b302846a518836316070721cef0f3e3d8a40",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|h265|HDR",
+    "filename": "Thunderbolts.2025.2160p.WEB-DL.DDP5.1.HDR.H.265-TURG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Thunderbolts* 2025 2160p WEBRip\n👤 134 💾 5.65 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+   "infoHash": "31fabe9b7a5fdf15270bef38747fde8b32f78cba",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "Thunderbolts.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Thunderbolts* (2025) WEB-DL 4K SDR 2160p HEVC (DD 5.1 640Kbps & AAC 2.0) ESub\n👤 5 💾 13.92 GB ⚙️ 1337x",
+   "infoHash": "4ec6fdf3e415a278dcf7dd14b75f4dc99908b213",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|hevc",
+    "filename": "Thunderbolts (2025) English TRUE WEB-DL - 4K SDR - HEVC - (DD+5.1 - 640Kbps & AAC) - 13GB - ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Thunderbolts 2025 1080p HFR BluRay H265 10bit HDR-Robo29\n👤 113 💾 2.45 GB ⚙️ ThePirateBay",
+   "infoHash": "c034721d3b775d6b1eabb43abee523f8aa3526f6",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h265|10bit|HDR",
+    "filename": "Thunderbolts 2025 1080p HFR BluRay H265 10bit HDR-Robo29.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Thunderbolts 2025 1080p BluRay DV HDR X265 DDP 7 1-Chivaman\n👤 9 💾 5.76 GB ⚙️ ThePirateBay",
+   "infoHash": "523dcb3926541f4e25c76c1796ecf0fe856d236f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|DV|HDR",
+    "filename": "Thunderbolts 2025 1080p BluRay DV HDR X265 DDP 7 1-Chivaman.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Thunderbolts 2025 1080p DSNP WEB-DL MULTi DDP5 1 DV HDR H 265-DUSKLiGHT\n👤 5 💾 7.08 GB ⚙️ ThePirateBay\nMulti Audio",
+   "infoHash": "dc61c912f78e6ace00ae5903852175d5c52a3df1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265|DV|HDR",
+    "filename": "Thunderbolts 2025 1080p DSNP WEB-DL MULTi DDP5 1 DV HDR H 265-DUSKLiGHT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts.2025.1080p.WEB.h264-ETHEL\n👤 210 💾 9.48 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸 / 🇫🇷",
+   "infoHash": "6ca49c0efa0e7fbb50230d8ea5339f7923d6dda9",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264",
+    "filename": "Thunderbolts.2025.1080p.WEB.h264-ETHEL.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts (2025) 1080p WEBRip 5.1-LAMA\n👤 192 💾 2.36 GB ⚙️ ThePirateBay",
+   "infoHash": "a971e16092ac89972e4e6cf2bf75e83aeee48ab2",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Thunderbolts.2025.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts* 2025 1080p WEBRip\n👤 153 💾 2.34 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+   "infoHash": "f5d21373baa9ff4439294e19b59fe7f3df2e7ec2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Thunderbolts.2025.REPACK.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts 2025 1080p WEB-DL HEVC x265 5.1 BONE\n👤 97 💾 2.07 GB ⚙️ 1337x",
+   "infoHash": "ecbaa65b75ede83725ea272a93d8817656fb6168",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+    "filename": "Thunderbolts 2025 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts* 2025 1080p BluRay\n👤 77 💾 2.34 GB ⚙️ YTS",
+   "infoHash": "fb53f3d866dbad5d34042c109880217567f2d5b2",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Thunderbolts.2025.HYBRID.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts* 2025 1080p WEBRip\n👤 70 💾 2.12 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+   "infoHash": "8516aa65703c86f98377c6de183ad8c0553d8d5f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Thunderbolts.2025.REPACK.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts* (2025) 1080p SDRip x264 AC3 Re-Encoded [700MB] - OneHack\n👤 69 💾 621.47 MB ⚙️ 1337x",
+   "infoHash": "a85b2e36f00c950ff7dea1d34d6a1ebe8c564e04",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Thunderbolts (2025) 1080p SDRip x264 AC3 Re-Encoded [700MB] - OneHack.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts* 2025 1080p WEBRip\n👤 64 💾 2.36 GB ⚙️ YTS",
+   "infoHash": "a37e6f5da41f8e4d6434a0f719dad165e8e1c3f0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Thunderbolts.2025.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts (2025) (1080p MA WEB-DL x265 10bit EAC3 5.1 Silence) [QxR]\n👤 53 💾 5.07 GB ⚙️ 1337x",
+   "infoHash": "1153a3e042a709091d053299cd0e6d600421dea7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+    "filename": "Thunderbolts (2025) (1080p MA WEB-DL x265 10bit Silence).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts* (2025) (1080p BluRay x265 10bit TrueHD Atmos 7.1 English French Spanish r00t) [QxR]\n👤 52 💾 11.6 GB ⚙️ 1337x\n🇬🇧 / 🇪🇸 / 🇫🇷",
+   "infoHash": "8a71a84e179e08df681d70c2b6c25e923b92b7fb",
+   "fileIdx": 6,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Thunderbolts (2025) (1080p BluRay x265 10bit r00t).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts.2025.1080p.WEBRip.x264.Dual.YG⭐\n👤 50 💾 7.8 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇪🇸",
+   "infoHash": "ef566d705bf6cbfe81224e2293e4c2d3ee28f58b",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Thunderbolts.2025.1080p.WEBRip.x264.Dual YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts 2025 1080p AMZN WEB-DL DDP5 1 HEVC-KyoGo\n👤 27 💾 2.29 GB ⚙️ ThePirateBay",
+   "infoHash": "c644f2cd37360a58b8d3c24414a0ada3724d84c5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+    "filename": "Thunderbolts 2025 1080p AMZN WEB-DL DDP5 1 HEVC-KyoGo.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts [2025] 1080p SDRip x264 AC3 (UKB)\nThunderbolts [2025].mkv\n👤 24 💾 3.93 GB ⚙️ 1337x",
+   "infoHash": "67db9f6b4617545eed46e5d90e72142d60225791",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Thunderbolts [2025].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts.A.K.A.The.New.Avengers.2025.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA\n👤 23 💾 1.65 GB ⚙️ ThePirateBay",
+   "infoHash": "12958c418d70e04d20adbe990e796af953a82095",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "Thunderbolts.A.K.A.The.New.Avengers.2025.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts.2025.1080p.WEB-DL.DDP5.1.x265-NeoNoir\n👤 23 💾 1.93 GB ⚙️ 1337x",
+   "infoHash": "e9d24868df55867c6ee81729b3c1242451b3d245",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265",
+    "filename": "Thunderbolts.2025.1080p.WEB-DL.DDP5.1.x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts 2025 1080p Blu-Ray HEVC x265 10Bit DDP5 1 Subs KINGDOM\n👤 22 💾 6.33 GB ⚙️ ThePirateBay",
+   "infoHash": "3b9328194236d477297e5ab4a79c95149f4e9df1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Thunderbolts 2025 1080p Blu-Ray HEVC x265 10Bit DDP5 1 Subs KINGDOM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts.2025.1080p.BluRay.AV1.DDP.5.1-dAV1nci\n👤 20 💾 2.4 GB ⚙️ 1337x",
+   "infoHash": "7c29b8ac8ea919a5581e37b767d874eb7189f0f3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Thunderbolts.2025.1080p.BluRay.AV1.DDP.5.1-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts (2025) REPACK 1080p WEBRip 5.1-LAMA\n👤 20 💾 2.34 GB ⚙️ ThePirateBay",
+   "infoHash": "55b8a3665ad1ccd3ff4ec2615cac2eceac55db9e",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Thunderbolts.2025.REPACK.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts 2025 Proper 1080p WEB-DL DDP5 1 x265-NeoNoir\n👤 19 💾 1.93 GB ⚙️ ThePirateBay",
+   "infoHash": "ab8684830559472139b723ec1e63da894e058fa3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265",
+    "filename": "Thunderbolts 2025 Proper 1080p WEB-DL DDP5 1 x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta\n👤 17 💾 1.22 GB ⚙️ 1337x",
+   "infoHash": "c7117ebabdc3f1f3735cebd992436a05d1f0efa3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Thunderbolts.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts 2025 1080p BluRay x265 Opus7 1-R1GY3B\n👤 14 💾 4.8 GB ⚙️ ThePirateBay",
+   "infoHash": "2d6acfca7f0d96c26f380ef228ac9ee42b771137",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Thunderbolts 2025 1080p BluRay x265 Opus7 1-R1GY3B.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts 2025 1080p Blu-Ray HEVC x265 10Bit DDP5.1 Subs KINGDOM\n👤 14 💾 6.33 GB ⚙️ 1337x",
+   "infoHash": "d77f8c7e2614905808fe96114159c07815441c7a",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Thunderbolts 2025 1080p Blu-Ray HEVC x265 10Bit DDP5.1 Subs KINGDOM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv\n👤 13 💾 10.62 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "22571e7c7305d88684b6dcdae78a289e4c6c7a32",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Thunderbolts.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts.2025.1080p.WebripSCreener.x264.Trial.YG.ST⭐\n👤 13 💾 7.69 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸",
+   "infoHash": "eef8503886afb317ece2966ba906b6ab9fff373b",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Thunderbolts.2025.1080p.WebripScreener.x264.Trial.YG ST.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Marvel Cinematic Universe (2008-2025) Phase I-II-III-IV-V-VI 1080p 10bit IMAX DSNP WEB-DL & Blu-ray x265 HEVC [Org BD/DDP 5.1 Hindi DDP 5.1 Atmos English] MSubs ~ TombDoc\nThe Multiverse Saga (2021-2025) Phase IV-V-VI ~ TombDoc/36.Thunderbolts (2025) 1080p 10bit Bluray x265 HEVC [Org DDP 5.1 Hindi + DDP EX 7.1 English] MSubs ~ TombDoc.mkv\n👤 12 💾 6.2 GB ⚙️ 1337x\nMulti Subs / 🇬🇧 / 🇮🇳",
+   "infoHash": "b7855cb2176856067a9daeded39809008cca7067",
+   "fileIdx": 36,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "36.Thunderbolts (2025) 1080p 10bit Bluray x265 HEVC [Org DDP 5.1 Hindi + DDP EX 7.1 English] MSubs ~ TombDoc.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts (2025) 1080p WEBRip x265 10bit 5.1-LAMA\n👤 12 💾 2.13 GB ⚙️ ThePirateBay",
+   "infoHash": "a800ae2d5d9a2a3e11ad26ad2204e07a9da1e9cd",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Thunderbolts.2025.1080p.WEBRip.x265.10bit.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts* 2025 1080p WEBRip\n👤 12 💾 2.13 GB ⚙️ YTS",
+   "infoHash": "2cc22a309f386bb32df2b50a8db85a1cba319ae8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Thunderbolts.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 10 💾 6.64 GB ⚙️ ThePirateBay",
+   "infoHash": "bd0473d1133eba00017354be896051e608d85d76",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Thunderbolts 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 9 💾 6.64 GB ⚙️ ThePirateBay",
+   "infoHash": "bc6b06888f6c865d7c31e791f1c1d9e46da01b9e",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Thunderbolts  2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts.2025.1080p.AMZN.WEB-DL.DDP5.1.H.264-KyoGo\n👤 9 💾 6.53 GB ⚙️ 1337x",
+   "infoHash": "f0479bc3472de3f385c66023e7c685077a013547",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Thunderbolts.2025.1080p.AMZN.WEB-DL.DDP5.1.H.264-KyoGo.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts (2025) 1080p BRRip x265 DD 5.1 [ Hin Eng ] ESub\n👤 8 💾 1.45 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "2d42eba6b298b13a184bfbfd7ef1a6c25bba6dcf",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x265",
+    "filename": "Thunderbolts (2025) 1080p BRRip x265 DD 5.1 [ Hin, Eng ] ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts*.2025.BRRip.1080p.H.264.Dual.YG⭐\n👤 8 💾 4.66 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "cee9ad98e9e4f4186f48256a7e2558ac8cb98895",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|h264",
+    "filename": "Thunderbolts.2025.BRRip.1080p.H.264.Dual YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts.2025.1080p.WEBRip.DS4K.AV1.DDP.5.1-dAV1nci\n👤 8 💾 1.97 GB ⚙️ 1337x",
+   "infoHash": "6e6936b23ac478857cf2e49c2f9c313cd0b8918c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|av1",
+    "filename": "Thunderbolts.2025.1080p.WEBRip.DS4K.AV1.DDP.5.1-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Amazing Films 13 - Mp4 x264 AC3 1080p\nThunderbolts (2025) 1080p Surround.mp4\n👤 7 💾 2.87 GB ⚙️ 1337x",
+   "infoHash": "1cd4535f03f1035b0e20bd2196a99c62df1d7e45",
+   "fileIdx": 76,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Thunderbolts (2025) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts*.20251080p.BluRay.x264.DD+5.1.Dual.YG⭐\n👤 6 💾 3.91 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "86b136c5db15db3c7a838f90ba355ea282dc1da9",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Thunderbolts  2025 1080p.BluRay.x264.DD+5.1.Dual YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts A K A The New Avengers 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 6 💾 1.65 GB ⚙️ ThePirateBay",
+   "infoHash": "c701fdd272a09491bbef5e5a6bb7393af49237d9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "Thunderbolts A K A The New Avengers 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts* (2025)[WebRip][1080p]\n👤 6 💾 2.36 GB ⚙️ EXT\n🇨🇿",
+   "infoHash": "a0ce22eab96e33e6d3c93a51343af5ee0bcdc2cd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Thunderbolts.2025.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts.[2025].1080p.SDRip.x264.(UKB).Dual.YG⭐\n👤 6 💾 4.27 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "ac3390a10bdf634c1f6e28bb48ca86b1579437ca",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Thunderbolts [2025](UKB) Dual YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Thunderbolts (2025) 1080p x264 (DD 5.1 640Kbps & AAC 2.0) ESub\n👤 5 💾 2.68 GB ⚙️ 1337x",
+   "infoHash": "110fb41ee59827eb85e1035227093ec0dbcf434e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|HDRip|x264",
+    "filename": "Thunderbolts (2025) English HQ HDRip - 1080p - x264 - (DD5.1 - 640Kbps & AAC) - 2.6GB - ESub .mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Thunderbolts* 2025 720p WEBRip\n👤 93 💾 1.14 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+   "infoHash": "4cee5396f5e9019bd724b1b5650f8304a0c20063",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Thunderbolts.2025.REPACK.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Thunderbolts* 2025 720p BluRay\n👤 36 💾 1.14 GB ⚙️ YTS",
+   "infoHash": "a624bccbc51ece54c8517244d4e63acc2440f2b9",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Thunderbolts.2025.HYBRID.720p.BluRay.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Thunderbolts* 2025 720p WEBRip\n👤 26 💾 1.15 GB ⚙️ YTS",
+   "infoHash": "7431e668e67bdcd4a67d2283c17c46ecb341427a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Thunderbolts.2025.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Thunderbolts 2025 720p AMZN WEB-DL DDP5 1 HEVC-KyoGo\n👤 10 💾 734.93 MB ⚙️ ThePirateBay",
+   "infoHash": "c6907bbbfd9657f5c5a2ce7dc537e5625d4093eb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB-DL|hevc",
+    "filename": "Thunderbolts 2025 720p AMZN WEB-DL DDP5 1 HEVC-KyoGo.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Thunderbolts.2025.720p.BluRay.x264-D3US\n👤 9 💾 4.66 GB ⚙️ ThePirateBay",
+   "infoHash": "c8a082ba9fa1a46497dc49d8362c4db3c9baa77e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "d3us-thunderbolts-720p.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Thunderbolts 2025 720p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 7 💾 3.05 GB ⚙️ ThePirateBay",
+   "infoHash": "d77ae07c265899e11b92b16913e491eb7ecb3ddc",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB-DL|h264",
+    "filename": "Thunderbolts 2025 720p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n576p",
+   "title": "Thunderbolts 2025 576p WEBRip x265 AAC-SSN\n👤 10 💾 1.43 GB ⚙️ ThePirateBay",
+   "infoHash": "9b307976f87d84c9871eb665d1164f428b65feb6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|576p|WEBRip|x265",
+    "filename": "Thunderbolts 2025 576p WEBRip x265 AAC-SSN.mkv"
+   }
+  }
+ ]
+}

@@ -1,0 +1,513 @@
+{
+  "id": "tt9253284",
+  "type": "series",
+  "season": 2,
+  "episode": 1,
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "Andor",
+    "year": "2022–2025",
+    "releaseInfo": "2022–2025",
+    "runtime": "48 min",
+    "country": "United States",
+    "language": null,
+    "episodeTitle": "One Year Later",
+    "episodeReleased": "2025-04-23T05:00:00.000Z"
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Andor (2022) Season 2 S02 (2160p HDR DSNP WEB-DL x265 HEVC 10bit DDP 5.1 Vyndros)\nAndor.S02E01.One.Year.Later.2160p.10bit.DSNP.WEB-DL.DDP5.1.HEVC-Vyndros.mkv\n👤 293 💾 2.08 GB ⚙️ 1337x",
+          "infoHash": "ce3ba2902f277e23bdac3a4b70be6851e374cb24",
+          "fileIdx": 9,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|ce3ba2902f277e23bdac3a4b70be6851e374cb24",
+            "filename": "Andor.S02E01.One.Year.Later.2160p.10bit.DSNP.WEB-DL.DDP5.1.HEVC-Vyndros.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Star.Wars.Andor.S02E01.2160p.DSNP.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-FLUX\n👤 119 💾 4.07 GB ⚙️ 1337x",
+          "infoHash": "52307014b8bd40d0fb8a5217e6efe73c18f393db",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|DV|HDR|FLUX",
+            "filename": "Star.Wars.Andor.S02E01.One.Year.Later.2160p.DSNP.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-FLUX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Star.Wars.Andor.S02.2160p.DSNP.WEB-DL.DV.HDR.DDP5.1.Atmos.H265.MP4-BEN.THE.MEN\nStar.Wars.Andor.S02E01.2160p.DSNP.WEB-DL.DV.HDR[Ben The Men].mp4\n👤 50 💾 4.41 GB ⚙️ ThePirateBay",
+          "infoHash": "a11a7cd5f01ce381627157c0b238ece6b5ff2f18",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|a11a7cd5f01ce381627157c0b238ece6b5ff2f18",
+            "filename": "Star.Wars.Andor.S02E01.2160p.DSNP.WEB-DL.DV.HDR[Ben The Men].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Andor S02E01 One Year Later 2160p DSNP WEB-DL DDP5 1 Atmos HDR H 265-STC\n👤 6 💾 4.05 GB ⚙️ ThePirateBay",
+          "infoHash": "04cd16da55e9e595b0d0e71490a7ee71528411ff",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|HDR|STC",
+            "filename": "Andor S02E01 One Year Later 2160p DSNP WEB-DL DDP5 1 Atmos HDR H 265-STC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Andor S02E01 One Year Later 2160p DSNP WEB-DL DDP5 1 DV HDR H 265-NTb\n👤 6 💾 4.07 GB ⚙️ ThePirateBay",
+          "infoHash": "fe8343788c9151b519bf87f09850375757a37550",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|DV|HDR|NTb",
+            "filename": "Andor S02E01 One Year Later 2160p DSNP WEB-DL DDP5 1 DV HDR H 265-NTb.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Andor.A.Star.Wars.Story.S02E01-03.2160p.DSNP.WEB-DL.ITA-ENG.DDP5.1.DV.HDR.H.265-G66\nAndor.A.Star.Wars.Story.Stagione.2.S02E01.Un.Anno.Dopo.2160p.DSNP.WEB-DL.DDP5.1.DV.HDR.H.265-G66.mkv\n👤 4 💾 4.16 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "36e26736de7068b819bc296b7a524c5f2039796c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|36e26736de7068b819bc296b7a524c5f2039796c",
+            "filename": "Andor.A.Star.Wars.Story.Stagione.2.S02E01.Un.Anno.Dopo.2160p.DSNP.WEB-DL.DDP5.1.DV.HDR.H.265-G66.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Andor.S02E01.MULTI.2160p.WEBRip.DSNP.DV.HDR.x265.EAC3.5.1.Atmos-Amen (Star Wars : Andor)\n👤 3 💾 1.76 GB ⚙️ EXT\nMulti Audio / 🇬🇧",
+          "infoHash": "071a5745f1337ddf903de1d5e4e2df699a1061ea",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|DV|HDR"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Star Wars Andor S02E01 One Year Later 2160p DSNP WEB-DL DDP5 1 Atmos DV HDR\n👤 3 💾 4.07 GB ⚙️ ThePirateBay",
+          "infoHash": "ed8c237dd18d7d4a01d76b6d13ec3789b1547b62",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|DV|HDR|FLUX",
+            "filename": "Star Wars Andor S02E01 One Year Later 2160p DSNP WEB-DL DDP5 1 Atmos DV HDR H 265-FLUX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Andor.A.Star.Wars.Story.S02E01-03.2160p.DSNP.WEB-DL.ITA-ENG.DDP5.1.HDR.H.265-G66\nAndor.A.Star.Wars.Story.Stagione.2.S02E01.Un.Anno.Dopo.2160p.DSNP.WEB-DL.DDP5.1.HDR.H.265-G66.mkv\n👤 2 💾 4.14 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "c433b2beb604f109df8dc1f18c34c281cbcacf25",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|c433b2beb604f109df8dc1f18c34c281cbcacf25",
+            "filename": "Andor.A.Star.Wars.Story.Stagione.2.S02E01.Un.Anno.Dopo.2160p.DSNP.WEB-DL.DDP5.1.HDR.H.265-G66.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Andor S02E01 One Year Later 2160p WEB-DL DDP5 1 Atmos H 265-Kitsune\n👤 12 💾 3.55 GB ⚙️ ThePirateBay",
+          "infoHash": "949b87119dd46fbe652f86cbd05e75d70255099d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|Kitsune",
+            "filename": "Andor S02E01 One Year Later 2160p WEB-DL DDP5 1 Atmos H 265-Kitsune.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p DV | HDR",
+          "title": "Andor.A.Star.Wars.Story.S02E01-06.1080p.DSNP.WEB-DL.ITA-ENG.DDP5.1.DV.HDR.H.265-G66\nAndor.A.Star.Wars.Story.Stagione.2.S02E01.Un.Anno.Dopo.1080p.DSNP.WEB-DL.DDP5.1.DV.HDR.H.265-G66.mkv\n👤 14 💾 1.78 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "5f1daefa5b4f01aa1889b013ba21c2d9fac57342",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|5f1daefa5b4f01aa1889b013ba21c2d9fac57342",
+            "filename": "Andor.A.Star.Wars.Story.Stagione.2.S02E01.Un.Anno.Dopo.1080p.DSNP.WEB-DL.DDP5.1.DV.HDR.H.265-G66.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "Andor.S02E01.MULTi.HDR.1080p.WEB.H265-TFA\n👤 3 💾 1.77 GB ⚙️ EXT\nMulti Audio / 🇬🇧",
+          "infoHash": "c0ebd9086c0c51d4a30746466a91c9f148dd7b15",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|HDR|TFA"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Star.Wars.Andor.Season.2.COMPLETE.1080p.DSNP.WEB-DL.x264.ESubs.S02.Full-MIKE\nAndor.S02E01.1080p.DSNP.WEB-DL.x264-MIKE.mkv\n👤 449 💾 723.49 MB ⚙️ ThePirateBay",
+          "infoHash": "2868f34481cf6712c759814bf8a138cb576a6e8b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|2868f34481cf6712c759814bf8a138cb576a6e8b",
+            "filename": "Andor.S02E01.1080p.DSNP.WEB-DL.x264-MIKE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Andor S02E01 1080p WEB H264-SuccessfulCrab\n👤 246 💾 1.81 GB ⚙️ EZTV",
+          "infoHash": "a0c46256c9e93c91f57ec37b9f7714a909c80a5d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|successfulcrab",
+            "filename": "andor.s02e01.1080p.web.h264-successfulcrab[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Andor - Season 2 - Mp4 x264 AC3 1080p\nAndor S02E01.mp4\n👤 229 💾 1.15 GB ⚙️ 1337x",
+          "infoHash": "903201858bb192402e63fecf45982175e257610f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|903201858bb192402e63fecf45982175e257610f",
+            "filename": "Andor S02E01.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Andor.S02.1080p.x265-ELiTE\nAndor.S02E01.1080p.x265-ELiTE.mkv\n👤 188 💾 618.01 MB ⚙️ ThePirateBay",
+          "infoHash": "69dc2d2a0df4b111a4ed7150e4976611ff5b04e5",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|69dc2d2a0df4b111a4ed7150e4976611ff5b04e5",
+            "filename": "Andor.S02E01.1080p.x265-ELiTE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Star Wars Andor (2022) S02 (1080p DSNP WEB-DL x265 10bit EAC3 5.1 t3nzin) [QxR]\nStar Wars Andor (2022) - S02E01 - One Year Later (1080p DSNP WEB-DL x265 t3nzin).mkv\n👤 122 💾 1.69 GB ⚙️ 1337x",
+          "infoHash": "0ad8ece0d902cd9c992f396d7b0ca86ee75ff2c4",
+          "fileIdx": 8,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|0ad8ece0d902cd9c992f396d7b0ca86ee75ff2c4",
+            "filename": "Star Wars Andor (2022) - S02E01 - One Year Later (1080p DSNP WEB-DL x265 t3nzin).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Star.Wars.Andor.S02E01.1080p.DSNP.WEB-DL.DDP5.1.Atmos.H.264-FLUX\n👤 121 💾 1.81 GB ⚙️ 1337x",
+          "infoHash": "c0b58209847f68cab1a85720f61c43242da11b03",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|FLUX",
+            "filename": "Star.Wars.Andor.S02E01.One.Year.Later.1080p.DSNP.WEB-DL.DDP5.1.Atmos.H.264-FLUX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Star.Wars.Andor.S02.1080p.DSNP.WEB-DL.DDP51.Atmos.H264-FLUX\nStar.Wars.Andor.S02E01.One.Year.Later.1080p.DSNP.WEB-DL.DDP5.1.Atmos.H.264-FLUX.mkv\n👤 109 💾 1.81 GB ⚙️ 1337x",
+          "infoHash": "60dd878d724d4f53f208b23c07e6b36470378d6b",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|60dd878d724d4f53f208b23c07e6b36470378d6b",
+            "filename": "Star.Wars.Andor.S02E01.One.Year.Later.1080p.DSNP.WEB-DL.DDP5.1.Atmos.H.264-FLUX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Star Wars Andor S02 Season 2 2025 1080p DSNP WEBRip AAC5.1 10bits x265-Rapta\nAndor - S02E01 - One Year Later.mkv\n👤 89 💾 456.5 MB ⚙️ 1337x",
+          "infoHash": "271d50143d93e8c284190e05ee1728377dfd9951",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|271d50143d93e8c284190e05ee1728377dfd9951",
+            "filename": "Andor - S02E01 - One Year Later.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Andor 2022 Seasons 1 and 2 Complete 1080p WEB x264 [i_c]\nSeason 2/Andor - S02E01 - One Year Later.mkv\n👤 48 💾 736.84 MB ⚙️ ThePirateBay",
+          "infoHash": "32fdf5107a312e1b1348823118dce51ac1ee3a8e",
+          "fileIdx": 12,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|32fdf5107a312e1b1348823118dce51ac1ee3a8e",
+            "filename": "Andor - S02E01 - One Year Later.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Andor S02E01 1080p HEVC x265-MeGusta\n👤 36 💾 524.05 MB ⚙️ EZTV",
+          "infoHash": "238cd52162578f65d8f60b2f9f9f463297616dbe",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|MeGusta",
+            "filename": "Andor.S02E01.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Star Wars Andor S02E01 1080p DSNP WEB-DL DDP5 1 Atmos H 264-FLUX\n👤 28 💾 1.81 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷",
+          "infoHash": "61aba84a1689e6a173d9bbc1b2421a93b74adf75",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|FLUX",
+            "filename": "Star Wars Andor S02E01 1080p DSNP WEB-DL DDP5 1 Atmos H 264-FLUX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Andor.S02E01.1080p.x265-ELiTE\n👤 26 💾 618.01 MB ⚙️ 1337x",
+          "infoHash": "7d436e41b6c1de633577144f693e2fd61c0e0af7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|ELiTE",
+            "filename": "Andor.S02E01.1080p.x265-ELiTE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Andor.S02.1080p.WEBRip.x265-KONTRAST\nAndor.S02E01.1080p.WEBRip.x265-KONTRAST.mkv\n👤 18 💾 1 GB ⚙️ 1337x",
+          "infoHash": "ac98d4a976172390c1f8a34ce86f2fc97b323f3c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|ac98d4a976172390c1f8a34ce86f2fc97b323f3c",
+            "filename": "Andor.S02E01.1080p.WEBRip.x265-KONTRAST.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Star.Wars.Andor.S02E01.1080p.WEBRip.10bit.DDP5.1.x265-HODL\n👤 16 💾 601.21 MB ⚙️ ThePirateBay",
+          "infoHash": "b93d06f50ae0a9b6f16149b94413b9a1a657f6cf",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|HODL",
+            "filename": "Star.Wars.Andor.S02E01.One.Year.Later.1080p.WEBRip.10bit.DDP5.1.x265-HODL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Star.Wars.Andor.S02E01.1080p.WEB.H264-SuccessfulCrab\n👤 15 💾 1.81 GB ⚙️ 1337x",
+          "infoHash": "ca9dd436bb0347b8d8f338d7d74a406434d3150c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|successfulcrab",
+            "filename": "andor.s02e01.1080p.web.h264-successfulcrab.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Andor S02E01 One Year Later 1080p DSNP WEB-DL DDP5 1 H 264-NTb\n👤 9 💾 1.81 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇯🇵 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷",
+          "infoHash": "a1a3603933ae691c44ba48791eac01ad170f58b0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|NTb",
+            "filename": "Andor S02E01 One Year Later 1080p DSNP WEB-DL DDP5 1 H 264-NTb.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Andor.2022.Season.02.COMPLETE.1080p.WEB-DL.H.264.Dual.YG⭐\ns02e01.mkv\n👤 9 💾 1.9 GB ⚙️ ThePirateBay\nDual Audio",
+          "infoHash": "13ca559ec2d599aec4af52078b5edabe67cbb359",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|13ca559ec2d599aec4af52078b5edabe67cbb359",
+            "filename": "s02e01.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Star Wars Andor - Season 1 -2 HEVC10bit 1080p 7RIP\nAndor (2025) Season 2 - HEVC10bit 1080p 7RIP/Andor S02E01 One Year Later.mkv\n👤 7 💾 241.06 MB ⚙️ 1337x",
+          "infoHash": "79d07d43c1a7e16c6be118a9161775e79da0a244",
+          "fileIdx": 13,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|79d07d43c1a7e16c6be118a9161775e79da0a244",
+            "filename": "Andor S02E01 One Year Later.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Star Wars Andor S02E01 One Year Later 1080p DSNP WEB-DL DDP5 1 H 264-NTb\n👤 4 💾 1.81 GB ⚙️ ThePirateBay",
+          "infoHash": "cc3f2a7d475b980b7e819385bde106ec98b3c334",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|NTb",
+            "filename": "Star Wars Andor S02E01 One Year Later 1080p DSNP WEB-DL DDP5 1 H 264-NTb.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Andor.S02E01.1080p.ENG.ITA.H264-TheBlackKing.mkv\n👤 4 💾 1.9 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹",
+          "infoHash": "e571814338cbbec041e78de19d6a50e8868bbcfb",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|TheBlackKing",
+            "filename": "Andor.S02E01.1080p.ENG.ITA.H264-TheBlackKing.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Andor S02E01 One Year Later 1080p DSNP WEB-DL DDP5 1 Atmos H 264-STC\n👤 4 💾 1.81 GB ⚙️ ThePirateBay",
+          "infoHash": "a9bfe6719b57479328dddcb2e9e269121e0a1b07",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|STC",
+            "filename": "Andor S02E01 One Year Later 1080p DSNP WEB-DL DDP5 1 Atmos H 264-STC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Star.Wars.Andor.S02E01.One.Year.Later.1080p.HEVC.x265-MeGusta\n👤 2 💾 524.04 MB ⚙️ ThePirateBay",
+          "infoHash": "adfb423177f208757db99dec776aadc050c518f2",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|MeGusta",
+            "filename": "Star.Wars.Andor.S02E01.One.Year.Later.1080p.HEVC.x265-MeGusta.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Star.Wars.Andor.S02E01.1080p.DSNP.WEB-DL.x264.ESubs-LEO\n👤 2 💾 723.49 MB ⚙️ 1337x",
+          "infoHash": "5e171fde10d31cb5d631a6d1c412f961dabb6ed7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|LEO",
+            "filename": "Star.Wars.Andor.S02E01.1080p.DSNP.WEB-DL.x264.ESubs-LEO.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Andor.S02E01.MULTI.1080p.WEBRiP.x265-KAF\n👤 2 💾 866.56 MB ⚙️ EXT\nMulti Audio",
+          "infoHash": "e691f689aa7a6741d94e826d20b8c8adbbdef675",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|KAF"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Andor.S02E01.MULTi.1080p.WEB.H264-FW (Star Wars : Andor)\n👤 2 💾 1.9 GB ⚙️ EXT\nMulti Audio",
+          "infoHash": "24ee982af2117c900f2af9f6dae3c51e52c98f34",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Star.Wars.Andor.Season.2.COMPLETE.720p.DSNP.WEB-DL.x264.ESubs.S02.Full-MIKE\nAndor.S02E01.720p.DSNP.WEB-DL.x264-MIKE.mkv\n👤 36 💾 433.86 MB ⚙️ 1337x",
+          "infoHash": "de7a2eba72953c3c6f0c493bec91ae274605961c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|de7a2eba72953c3c6f0c493bec91ae274605961c",
+            "filename": "Andor.S02E01.720p.DSNP.WEB-DL.x264-MIKE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Andor.S02.720p.x264-FENiX\nAndor.S02E01.720p.x264-FENiX.mkv\n👤 24 💾 503.39 MB ⚙️ 1337x",
+          "infoHash": "e86bd97b07c8141c7904602e696ca1668b5e5d50",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|e86bd97b07c8141c7904602e696ca1668b5e5d50",
+            "filename": "Andor.S02E01.720p.x264-FENiX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Andor S02E01 720p HEVC x265-MeGusta\n👤 23 💾 425.91 MB ⚙️ EZTV",
+          "infoHash": "4f9a8f56a3629a31138f57b2054f27d34101beba",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|MeGusta",
+            "filename": "Andor.S02E01.720p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Star.Wars.Andor.S02E01.720p.DSNP.WEB-DL.x264.ESubs-LEO\n👤 12 💾 433.86 MB ⚙️ 1337x",
+          "infoHash": "d870dd1618d090ae9ea7cdd1aa73f1ec0fed6fd5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|LEO",
+            "filename": "Star.Wars.Andor.S02E01.720p.DSNP.WEB-DL.x264.ESubs-LEO.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Andor S02E01 One Year Later 720p DSNP WEB-DL DDP5 1 H 264-NTb\n👤 12 💾 1.07 GB ⚙️ EZTV",
+          "infoHash": "7ba45c339d56c5d31d22b085ab2505fca932ad37",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|NTb",
+            "filename": "Andor S02E01 One Year Later 720p DSNP WEB-DL DDP5 1 H 264-NTb[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Andor 2022 Seasons 1 and 2 Complete 720p WEB x264 [i_c]\nSeason 2/Andor - S02E01 - One Year Later.mkv\n👤 10 💾 544.33 MB ⚙️ ThePirateBay",
+          "infoHash": "e88d28da85a04756f8d17a5c327fc5cdf119a796",
+          "fileIdx": 12,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|e88d28da85a04756f8d17a5c327fc5cdf119a796",
+            "filename": "Andor - S02E01 - One Year Later.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Andor S02E01 720p x264-FENiX\n👤 9 💾 503.39 MB ⚙️ EZTV",
+          "infoHash": "1cedbc4eb0828f75e2e81e2519848c036fdfdccd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|FENiX",
+            "filename": "Andor S02E01 720p x264-FENiX[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Andor.COMPLETE.720p.10bit.MiXED.x265-budgetbits\nAndor.S02E01.One.Year.Later.720p.10bit.WEBRip.x265-budgetbits.mkv\n👤 8 💾 169.43 MB ⚙️ 1337x",
+          "infoHash": "05cac56aabeefe6f5f1521093d3569fefa392277",
+          "fileIdx": 14,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|05cac56aabeefe6f5f1521093d3569fefa392277",
+            "filename": "Andor.S02E01.One.Year.Later.720p.10bit.WEBRip.x265-budgetbits.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Andor.S02E01.720p.HEVC.x265-MeGusta\n👤 2 💾 434.5 MB ⚙️ TorrentGalaxy",
+          "infoHash": "7b176f8c31c024c1138024c664792353d76ef0fb",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|MeGusta"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Andor.S02E01.720p.x264-FENiX\n👤 2 💾 503.39 MB ⚙️ 1337x",
+          "infoHash": "e2e273f69f355071d5100c3f8f74ceb13ba483c6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|FENiX",
+            "filename": "Andor.S02E01.720p.x264-FENiX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n480p",
+          "title": "Andor S02E01 480p x264-mSD\n👤 8 💾 382.64 MB ⚙️ EZTV",
+          "infoHash": "a4c4f017af0ac9bfa474da5d4f4f68ca5d876064",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|480p|mSD",
+            "filename": "Andor.S02E01.480p.x264-mSD[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nXviD",
+          "title": "Andor S02E01 XviD-AFG\n👤 10 💾 398.93 MB ⚙️ EZTV",
+          "infoHash": "f04b00f05756d3e78d7ad30e7421cb9ed2c820cc",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|XviD|AFG",
+            "filename": "Andor.S02E01.XviD-AFG[EZTVx.to].avi"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "Andor S02\n👤 1 💾 272.5 MB ⚙️ EXT",
+          "infoHash": "ef64db4b7d9d5b23ea07e0476040db6adf4f6be8",
+          "fileIdx": 9,
+          "behaviorHints": {
+            "filename": "Andor S02E01.mp4"
+          }
+        }
+      ]
+    }
+  }
+}

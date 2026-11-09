@@ -1,0 +1,544 @@
+{
+  "id": "tt16311594",
+  "type": "movie",
+  "season": null,
+  "episode": null,
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "F1: The Movie",
+    "year": "2025",
+    "releaseInfo": "2025",
+    "runtime": "156 min",
+    "country": "United States",
+    "language": null,
+    "episodeTitle": null,
+    "episodeReleased": null
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "F1 The Movie 2025 2160p HDR10Plus DV WEBRip 6CH x265 HEVC-PSA\n👤 46 💾 4.27 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "21fa369e2fa56c5ff7c41dae9914929b534f0822",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|hevc|DV|HDR10+",
+            "filename": "F1.The.Movie.2025.2160p.HDR10Plus.DV.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "F1.The.Movie.2025.bluray.hdr.2160p.av1.7.1.opus-Dust\n👤 10 💾 5.04 GB ⚙️ 1337x",
+          "infoHash": "1e5d898049f07d1ff5657c3fd2e910f8cb03105e",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+            "filename": "F1.The.Movie.2025.bluray.hdr.2160p.av1.7.1.opus-Dust.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "F1: The Movie 2025 2160p WEBRip\n👤 187 💾 6.94 GB ⚙️ YTS\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "7f06af6b05a770680706d763b3338739f92edbcd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+            "filename": "F1.The.Movie.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p DV | HDR",
+          "title": "F1 The Movie 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737\n👤 42 💾 8.39 GB ⚙️ ThePirateBay",
+          "infoHash": "19afd8227a11e47b0b9ba0033219c3d9a5696dac",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+            "filename": "F1 The Movie 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10  x265-SM737.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "F1 (2025) (1080p DS4K BluRay x265 10-bit HDR AAC 7.1) [WeSLeY]\n👤 11 💾 5.05 GB ⚙️ 1337x",
+          "infoHash": "b73370d2505b34cddeeeba1272b244ccfcd4bab0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|HDR",
+            "filename": "F1 (2025) (1080p DS4K BluRay x265 10-bit HDR AAC 7.1) [WeSLeY].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p DV | HDR",
+          "title": "F1: The Movie (2025)(CZ/SK/EN)[1080p][HDR+/DV][HEVC]\n👤 10 💾 4.48 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+          "infoHash": "63964b3f08f540f0d8cdc6b47f2a173e90329433",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|hevc|DV|HDR",
+            "filename": "F1 The Movie (2025) FHDRDV cz sk en.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p DV | HDR",
+          "title": "F1 2025 1080p BluRay DV HDR X265 DDP 7 1-Chivaman\n👤 8 💾 6.85 GB ⚙️ ThePirateBay",
+          "infoHash": "2c1b38fbf9075eb8ed18db1b811d53d6ed66ad5b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|DV|HDR",
+            "filename": "F1 2025 1080p BluRay DV HDR X265 DDP 7 1-Chivaman.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie 2025 1080p WEB-DL HEVC x265 5.1 BONE\n👤 1169 💾 2.59 GB ⚙️ 1337x",
+          "infoHash": "d5beac0a4f81c1c0b0f3c99cd81391f685543619",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "F1 The Movie 2025 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1: The Movie 2025 1080p WEBRip\n👤 253 💾 2.48 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+          "infoHash": "c419d2a7499437de1456d6774d28357dddb88ef7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "F1.The.Movie.2025.1080p.WEBRip.x264.AAC-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1: The Movie 2025 1080p BluRay\n👤 104 💾 2.86 GB ⚙️ YTS",
+          "infoHash": "6fb09cd48f1339f8a7f3f3037ce20504be2ef160",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "F1.The.Movie.2025.HYBRID.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1: The Movie 2025 1080p WEBRip\n👤 90 💾 2.59 GB ⚙️ YTS",
+          "infoHash": "e6a36c5328373d00aae6d07a7f4013f6d5751499",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "F1.The.Movie.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1: The Movie 2025 1080p WEBRip\n👤 68 💾 2.89 GB ⚙️ YTS",
+          "infoHash": "96b62c1718cd8115d7b949a6dd75708b540ce18f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "F1.The.Movie.2025.REPACK.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie (2025) REPACK 1080p WEBRip 5.1-LAMA\n👤 62 💾 2.89 GB ⚙️ ThePirateBay",
+          "infoHash": "c11857da6e40852177f0fbbfb584b80a39405fb8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "F1.The.Movie.2025.REPACK.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie 2025 1080p DS4K WEBRip 10Bit DDP5 1 Atmos x265-NeoNoir\n👤 42 💾 5.5 GB ⚙️ ThePirateBay",
+          "infoHash": "917545d7f82dadc9ded735dd5c02de94b13e71e5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "F1 The Movie 2025 1080p DS4K WEBRip 10Bit DDP5 1 Atmos x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie 2025 1080p WEB-DL AAC2 0 H 264-TTL\n👤 41 💾 7.55 GB ⚙️ ThePirateBay",
+          "infoHash": "cfed1ecd2089882834bb007449ecebd57296b6a8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "F1 The Movie 2025 1080p WEB-DL AAC2 0 H 264-TTL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie (2025) HYBRID 1080p BluRay 5.1-LAMA\n👤 38 💾 2.86 GB ⚙️ ThePirateBay",
+          "infoHash": "71eb8bda44196b5b3743845bfb2cbb494f2896dc",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "F1.The.Movie.2025.HYBRID.1080p.BluRay.x264.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 38 💾 9.43 GB ⚙️ ThePirateBay",
+          "infoHash": "930eb1135e635e74bacedcde6fc327d608a0e3e0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "F1 The Movie 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 2025 1080p BluRay DDP 5 1 10bit H 265-iVy\n👤 21 💾 3.38 GB ⚙️ ThePirateBay",
+          "infoHash": "9304d27550156f03598dd2c0e3a718029f59114a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|h265|10bit",
+            "filename": "F1 2025 1080p BluRay DDP 5 1 10bit H 265-iVy.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 18 💾 2.86 GB ⚙️ ThePirateBay",
+          "infoHash": "890a5ebd90db3ade9440dc134c670a833b2299eb",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+            "filename": "F1.The.Movie.2025.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 (2025) (1080p AMZN WEB-DL x265 10bit EAC3 5.1 Silence) [QxR]\n👤 16 💾 6.83 GB ⚙️ 1337x",
+          "infoHash": "c97d7a241ffdb2053b9d023292aa813c78620ab8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+            "filename": "F1 (2025) (1080p AMZN WEB-DL x265 10bit Silence).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie 2025.1080p.WEB-DL.DDP5.1.H264-AOC\n👤 15 💾 1.4 GB ⚙️ ThePirateBay",
+          "infoHash": "ba3004771cf364f93ba7eb12a0883530d4205d7f",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "F1 The Movie 2025.1080p.WEB-DL.DDP5.1.H264-AOC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 14 💾 10.73 GB ⚙️ ThePirateBay",
+          "infoHash": "59ff5d960493e5dd0f768ec44db052ec12624727",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "F1 The Movie 2025 1080p AMZN WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1.The.Movie.2025.1080p.AMZN.WEB-DL.DDP5.1.Atmos.H.264-BYNDR\n👤 13 💾 10.73 GB ⚙️ 1337x",
+          "infoHash": "ae0bce0d1e1d07a826490dec0cf28e28c870bc6c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "F1.The.Movie.2025.1080p.AMZN.WEB-DL.DDP5.1.Atmos.H.264-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie 2025 1080p Blu-Ray HEVC x265 10Bit DDP5.1 Subs KINGDOM\n👤 12 💾 7.37 GB ⚙️ 1337x",
+          "infoHash": "037fcaa0408044eac07776865d4a988c94c4bc5e",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "F1 The Movie 2025 1080p Blu-Ray HEVC x265 10Bit DDP5.1 Subs KINGDOM.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie.2025.1080p.WEB-DL.AAC.x264-skyflickz\n👤 12 💾 2.37 GB ⚙️ 1337x",
+          "infoHash": "03c46ddfcf41dad069dbb68f74a48cb187b97714",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "F1 The Movie.2025.1080p.WEB-DL.AAC.x264-skyflickz.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 12 💾 2.86 GB ⚙️ ThePirateBay",
+          "infoHash": "e753c896d4e09fd9e933ad554fce61daf4fc1044",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+            "filename": "F1 The Movie 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Amazing Films 13 - Mp4 x264 AC3 1080p\nF1 The Movie (2025) 1080p Surround.mp4\n👤 11 💾 3.47 GB ⚙️ 1337x",
+          "infoHash": "1cd4535f03f1035b0e20bd2196a99c62df1d7e45",
+          "fileIdx": 25,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x264",
+            "filename": "F1 The Movie (2025) 1080p Surround.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 2025 1080p WEBRip DDP Atmos 5 1 10bit H 265-iVy\n👤 11 💾 3.28 GB ⚙️ ThePirateBay",
+          "infoHash": "58d61cbfbd57c1d64a73786da066fd2e00e7dcca",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|h265|10bit",
+            "filename": "F1 2025 1080p WEBRip DDP Atmos 5 1 10bit H 265-iVy.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1.The.Movie.2025.bluray.sdr.1080p.av1.7.1.opus-Dust\n👤 10 💾 1.72 GB ⚙️ 1337x",
+          "infoHash": "04748e83e3804db3f86faf59a7daf80d4c39554e",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "F1.The.Movie.2025.bluray.sdr.1080p.av1.7.1.opus-Dust.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1.The.Movie.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust\n👤 9 💾 1.79 GB ⚙️ 1337x",
+          "infoHash": "ba6cf1650bec61ac984b09e28417c8a25e78433c",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "F1.The.Movie.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1.The.Movie.2025.1080p.10bit.BluRay.AV1.Hindi-English.DDP5.1.ESubs-DaddyCooL\n👤 9 💾 3.9 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+          "infoHash": "4c0181fefabb06faccc81a2a14e74519c4ee0a86",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1|10bit",
+            "filename": "F1.The.Movie.2025.1080p.10bit.BluRay.AV1.Hindi-English.DDP5.1.ESubs-DaddyCooL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 2025 MULTi VFF WiTH AD 1080p WEBRip AC3 5 1 H264-LiHDL\n👤 8 💾 4.76 GB ⚙️ ThePirateBay\nMulti Audio / 🇫🇷",
+          "infoHash": "a78800dc7178c19c5a2773b53b39d238ba2c6850",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|h264",
+            "filename": "F1 2025 MULTi VFF WiTH AD 1080p WEBRip AC3 5 1 H264-LiHDL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie 2025 1080p WEB-DL H264-TTL\n👤 8 💾 7.55 GB ⚙️ ThePirateBay",
+          "infoHash": "dc77478ea734b9e5aacce0dcfe5a9d7657bbfb1a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "F1 The Movie 2025 1080p WEB-DL H264-TTL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1.Il.Film.2025.WebDL.1080p.E-AC3 AC3.ITA.ENG.SUBS.LFi.mkv\n👤 8 💾 12.25 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "abca07c96aad089f89d86936d9b1b81fb6ec20c5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "F1.Il.Film.2025.WebDL.1080p.E-AC3+AC3.ITA.ENG.SUBS.LFi.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie (2025) (1080p DS4K AMZN WEBRip AV1 Opus 5.1) [Retr0]\n👤 7 💾 3.74 GB ⚙️ 1337x",
+          "infoHash": "e9da23383e48a280293352785e0c0311b10d5419",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|av1",
+            "filename": "F1.The.Movie.2025.1080p.DS4K.AMZN.WEBRip.AV1.Opus.5.1-Retr0.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie (2025) 1080p WEBRip-LAMA\n👤 7 💾 2.48 GB ⚙️ ThePirateBay",
+          "infoHash": "55ddc742e7bc33fe9518ebb9de5f274712210c76",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "F1.The.Movie.2025.1080p.WEBRip.x264.AAC-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 2025 1080p BluRay x264-OFT\n👤 6 💾 6.73 GB ⚙️ ThePirateBay",
+          "infoHash": "f3fd076d2a69926a94d0756332f18a951ac6f6d1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "F1 2025 1080p BluRay x264-OFT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1.Il.Film.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv\n👤 6 💾 12.25 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "c15836561921642de1df6286f04a7fbfb0d5ec4b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "F1.Il.Film.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1:The.Movie.2025.1080p.h264.WEB-DL.AMZN.EAC3\n👤 6 💾 10.73 GB ⚙️ 1337x",
+          "infoHash": "1013db1fe8f27fba3192a6e6d21a3a0243879661",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "F1 (2025) {tmdb-911430} [AMZN][WEBDL-1080p][EAC3 Atmos 5.1][h264]-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1.The.Movie.2025.m1080p.BluRay.x264.DuaL-MtD\n👤 5 💾 3.16 GB ⚙️ ThePirateBay\nDual Audio",
+          "infoHash": "b8d07961d878c601da88833dfc99f6c1db1259b3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "F1.The.Movie.2025.m1080p.BluRay.x264.DuaL-MtD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 Il Film (2025) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv\n👤 5 💾 3.69 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "39a5387b922d515ae2a51b7cadc163ba30bb46c1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "F1 Il Film (2025) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "F1 The Movie 2025 1080p iT WEB-DL DDP5 1 Atmos H 264-WADU\n👤 5 💾 11.63 GB ⚙️ ThePirateBay",
+          "infoHash": "e888c4b59b12b5cc066c511d36ec9489e338cfe9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "F1 The Movie 2025 1080p iT WEB-DL DDP5 1 Atmos H 264-WADU.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "F1: The Movie 2025 720p WEBRip\n👤 77 💾 1.34 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+          "infoHash": "7be6dc3ac7f7b11fd8963f0d2bfca869dd6a5efa",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "F1.The.Movie.2025.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "F1: The Movie 2025 720p BluRay\n👤 48 💾 1.39 GB ⚙️ YTS",
+          "infoHash": "04b0a7d7d33482beba7472e3378d7d0939d50d1d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "F1.The.Movie.2025.HYBRID.720p.BluRay.x264.AAC-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "F1 The Movie (2025) Eng 720p WEBRip x264 AAC ESub\n👤 37 💾 1.25 GB ⚙️ 1337x",
+          "infoHash": "4b1f90f9219741df41475c8a8699fccea844ede4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "F1 The Movie (2025) Eng 720p WEBRip x264 AAC ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "F1: The Movie 2025 720p WEBRip\n👤 35 💾 1.41 GB ⚙️ YTS",
+          "infoHash": "d55d8583ae86d11ba2576a56079bc24725669d11",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "F1.The.Movie.2025.REPACK.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "F1 The Movie (2025) 720p WEBRip-LAMA\n👤 11 💾 1.34 GB ⚙️ ThePirateBay",
+          "infoHash": "755ceb03c2eba1db0ea7aba2274e0c83c1b6d5e4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "F1.The.Movie.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Formula.1.GP.USA.2026.Carrera.ESPNF1.HDTV.720p.EveHQ\n👤 9 💾 3.43 GB ⚙️ EXT",
+          "infoHash": "80c83ca0439ff5b61366b7a79466eeb04514c11f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|HDTV",
+            "filename": "Formula.1.GP.USA.2026.Carrera.ESPNF1.HDTV.720p.EveHQ.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "F1.The.Movie.2025.720p.BluRay.x264-KNiVES\n👤 9 💾 6.96 GB ⚙️ ThePirateBay",
+          "infoHash": "59ca9cfbcd20e924ad7410b5a9176391480071d3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "f1.the.movie.2025.720p.bluray.x264-knives.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "F1 The Movie (2025) REPACK 720p WEBRip-LAMA\n👤 8 💾 1.41 GB ⚙️ ThePirateBay",
+          "infoHash": "97d31b4331a5471510318715a4b4ab73b5c1b6fe",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "F1.The.Movie.2025.REPACK.720p.WEBRip.x264.AAC-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "F1.The.Movie.2025.720p.AMZN.WEB-DL.DDP5.1.Atmos.H.264-BYNDR\n👤 7 💾 5.47 GB ⚙️ 1337x",
+          "infoHash": "000e496d33e69c6605f9046346a0a221f55a7add",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "F1.The.Movie.2025.720p.AMZN.WEB-DL.DDP5.1.Atmos.H.264-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "F1 2025 720p WEBRip DD 5 1 Atmos x264-playHD\n👤 5 💾 10.13 GB ⚙️ ThePirateBay",
+          "infoHash": "61f1d9b99bfa6b0519c87d4fab75dadceb97f397",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "F1 2025 720p WEBRip DD 5 1 Atmos x264-playHD.mkv"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,517 @@
+{
+ "fetched": "2026-11-08T23:05:58.243Z",
+ "source": {
+  "torrentio": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt1312221.json",
+  "cinemeta": "https://v3-cinemeta.strem.io/meta/movie/tt1312221.json"
+ },
+ "id": "tt1312221",
+ "type": "movie",
+ "meta": {
+  "name": "Frankenstein",
+  "year": "2025",
+  "runtime": "150 min",
+  "genres": [
+   "Drama",
+   "Fantasy",
+   "Horror"
+  ]
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k DV | HDR",
+   "title": "Frankenstein (2025) 2160p H265 WebDl Rip 10 bit DV HDR10 ita eng AC3 5.1 sub ita eng NUita NUeng Licdom\n👤 32 💾 5.76 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "09cb2ec21836daf0b2eecc46675abefe93908feb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|h265|10bit|DV|HDR",
+    "filename": "Frankenstein (2025) 2160p H265 10 bit DV HDR10+ ita eng AC3 5.1 sub ita eng NUita NUeng-Licdom.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Frankenstein 2025 2160p WEBRip\n👤 129 💾 6.81 GB ⚙️ YTS\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇭🇷 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "024d41decbf6647e3df4336150aed8bd650e5106",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "Frankenstein.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Frankenstein 2025 UHD NF WEBRip 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737\n👤 14 💾 8.24 GB ⚙️ EXT",
+   "infoHash": "11a38494c99083f19bccc00ec5f11540250e0b52",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit|DV|HDR",
+    "filename": "Frankenstein 2025 UHD NF WEBRip 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Frankenstein (2025)(CZ/EN)[1080p][HDR10][HEVC]\n👤 8 💾 5 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+   "infoHash": "7d7eeabee6e669ce97948a2ef4fc5ae3d10e4242",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|hevc|10bit|HDR",
+    "filename": "Frankenstein CZ + EN.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Frankenstein.2025.1080p.NF.WEB-DL.DDP5.1.Atmos.HDR.H.265-SNAKE\n👤 6 💾 4.19 GB ⚙️ ThePirateBay",
+   "infoHash": "4465ec4bcd944e75ef8795046cccffbea184637a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265|HDR",
+    "filename": "Frankenstein.2025.1080p.NF.WEB-DL.DDP5.1.Atmos.HDR.H.265-SNAKE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV",
+   "title": "Frankenstein.2025.1080p.NF.WEB-DL.DDP5.1.Atmos.DV.H.265-SNAKE\n👤 6 💾 3 GB ⚙️ ThePirateBay",
+   "infoHash": "7a5fb64fa648a42001d02861e2b3d4df09286d4a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265|DV",
+    "filename": "Frankenstein.2025.1080p.NF.WEB-DL.DDP5.1.Atmos.DV.H.265-SNAKE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Frankenstein 2025 1080p NF WEB-DL DDP5 1 Atmos DV HDR H 265-WADU\n👤 3 💾 4.24 GB ⚙️ ThePirateBay",
+   "infoHash": "28794a3b3f6f5075587f2ad6181a3adc29860e8f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265|DV|HDR",
+    "filename": "Frankenstein 2025 1080p NF WEB-DL DDP5 1 Atmos DV HDR H 265-WADU.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein.2025.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir\n👤 573 💾 1.93 GB ⚙️ ThePirateBay",
+   "infoHash": "9a4d23fa7a824c11d8ef363ea8faffdfcd2d62c9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Frankenstein.2025.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein 2025 1080p WEBRip\n👤 389 💾 2.81 GB ⚙️ YTS",
+   "infoHash": "c82d88934c1da999bd9e762d66e9d742be94b8a6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Frankenstein.2025.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein (2025) (Reborn Cut) Criterion (1080p BluRay x265 10bit EAC3 Atmos 7.1 Ghost) [QxR]\nFrankenstein (2025) (Reborn Cut) Criterion (1080p BluRay x265 Ghost).mkv\n👤 176 💾 7.61 GB ⚙️ 1337x",
+   "infoHash": "0c10b683537bbb08bc697a69b698e4800ba4b287",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Frankenstein (2025) (Reborn Cut) Criterion (1080p BluRay x265 Ghost).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein 2025 1080p WEBRip\n👤 143 💾 2.55 GB ⚙️ YTS",
+   "infoHash": "d346e266860c6c5664e5b25345e9de31be0caf0f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Frankenstein.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein 2025 1080p WEB DL HEVC x265 5 1 BONE\n👤 113 💾 2.02 GB ⚙️ TorrentGalaxy",
+   "infoHash": "32fcc810c48ebcdbcc712048dd38aaea462bd7a7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+    "filename": "Frankenstein 2025 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein (2025) [1080p] [BluRay] [5.1]\n👤 81 💾 2.93 GB ⚙️ EXT",
+   "infoHash": "9f66fb218a6101b9bcb50562c2611b3d2d1a556c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Frankenstein.2025.THE.REBORN.CUT.1080p.BluRay.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein (2025) (1080p NF WEB-DL x265 10bit EAC3 Atmos 5.1 Ghost) [QxR]\nFrankenstein (2025) (1080p NF WEB-DL x265 Ghost).mkv\n👤 52 💾 6.04 GB ⚙️ 1337x",
+   "infoHash": "f88f2db6e35ba9cb4f691cff4c0e46b8fd5bff8f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+    "filename": "Frankenstein (2025) (1080p NF WEB-DL x265 Ghost).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein.2025.1080p.NF.WEB-DL.DDP5.1.Atmos.H.264-FLUX\n👤 49 💾 5.98 GB ⚙️ 1337x",
+   "infoHash": "54753892d63adbcddeb3d2422d85740e4b1e6de9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Frankenstein.2025.1080p.NF.WEB-DL.DDP5.1.Atmos.H.264-FLUX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein.2025.1080p.WEB.h264-ETHEL\n👤 34 💾 5.98 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇭🇷 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "8da86d524f940ec51131c369ef2642dc3547f833",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264",
+    "filename": "Frankenstein.2025.1080p.WEB.h264-ETHEL.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein.2025.1080p.NF.WEBRip.AAC5.1.10bits.x265-Rapta\n👤 19 💾 1.88 GB ⚙️ 1337x",
+   "infoHash": "dfdf6dac9522d48f93ad3e4ea3d39d461f098b53",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Frankenstein.2025.1080p.NF.WEBRip.AAC5.1.10bits.x265-Rapta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Veliki.paket.titlovanih.filmova.2025.20.1080p.x264.[ExYuSubs] ⭐\nFrankenstein.2025.1080p.WEBRip.H264.[ExYuSubs]/Frankenstein.2025.1080p.WEBRip.H264.[ExYuSubs].mp4\n👤 15 💾 2.45 GB ⚙️ ThePirateBay",
+   "infoHash": "550b130f459d09fdbe99e35ad013e4b860631f35",
+   "fileIdx": 15,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Frankenstein.2025.1080p.WEBRip.H264.[ExYuSubs].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein (2025) 1080p WEBRip 5.1-LAMA\n👤 12 💾 2.81 GB ⚙️ ThePirateBay",
+   "infoHash": "db205f978de12f90bcc26b7b2d340dd9fd04dee4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Frankenstein.2025.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein (2025) 1080p WEBDL H264 ITA ENG FRE Subs - LoZio\n👤 11 💾 4.05 GB ⚙️ EXT\n🇬🇧 / 🇮🇹 / 🇫🇷",
+   "infoHash": "0c4384634c087bb7392cfadc416eb69c1f8ca745",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Frankenstein (2025) 1080p WEBDL H264 ITA ENG FRE Subs - LoZio .mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein (2025) THE REBORN CUT 1080p BluRay 5 1-LAMA\n👤 10 💾 2.93 GB ⚙️ EXT",
+   "infoHash": "cc0bf72b5e67196f96851c326e667532aef38637",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Frankenstein.2025.THE.REBORN.CUT.1080p.BluRay.x264.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein 2025 iTA ENG WEBDL 1080p x264 CYBER mkv\n👤 9 💾 8.02 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "b789b1dd9478b9d1ac23b250d3d290ecac0bdbe8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Frankenstein.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein.2025.1080p.WEBRip.x265-KONTRAST\n👤 9 💾 3.44 GB ⚙️ 1337x",
+   "infoHash": "dff4ceedefcb797b04edfe0e7896dd34db5f0413",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Frankenstein.2025.1080p.WEBRip.x265-KONTRAST.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 7 💾 2.14 GB ⚙️ ThePirateBay",
+   "infoHash": "d0178142d41f5943d23f4292c145a25ad36cf3d5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "Frankenstein 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein 2025 Criterion 1080p BluRay x264-OFT\n👤 6 💾 6.51 GB ⚙️ EXT",
+   "infoHash": "eb396433c07413d8f0f535a664f89fbf74d076d0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Frankenstein 2025 Criterion 1080p BluRay x264-OFT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein (2025) 1080p H265 WebDl Rip ita eng AC3 5.1 sub ita eng NUita NUeng Licdom\n👤 6 💾 3.34 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "c7788bf253f3356d56aa711fe3a18425ea2740a3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+    "filename": "Frankenstein (2025) 1080p H265 ita eng AC3 5.1 sub ita eng NUita NUeng-Licdom.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein.2025.1080p.NF.WEB.DL.Multi.DDP5.1.Atmos.H.265-themoviesboss\n👤 6 💾 5.73 GB ⚙️ 1337x\nMulti Audio / 🇮🇳",
+   "infoHash": "fd000455836b74d1d8432eb7edc119550744ae05",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+    "filename": "Frankenstein.2025.1080p.NF.WEB.DL.Multi.DDP5.1.Atmos.H.265-themoviesboss.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein 2025 1080p HDRip x264-RGB\n👤 6 💾 1.09 GB ⚙️ ThePirateBay",
+   "infoHash": "95ceb7c7c1ed2414364765fdd42aca470813f9e8",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|HDRip|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein.2025.1080p.10bit.DS4K.NF.WEBRip.[Org.DDPA5.1-Hindi DDPA5.1-English].ESub.HEVC-The.PunisheR\n👤 5 💾 6.98 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "cd87923794eea0c82b3a155ee7d37e967a3f3b3e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "Frankenstein.2025.1080p.10bit.DS4K.NF.WEBRip.[Org.DDPA5.1-Hindi+DDPA5.1-English].ESub.HEVC-The.PunisheR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein (2025) Eng 1080p WEBRip x265 DDP 5.1 ESub\n👤 5 💾 2.15 GB ⚙️ 1337x",
+   "infoHash": "83f12cad47e185c3e3595d62f1eec149b38afaa1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Frankenstein (2025) Eng 1080p WEBRip x265 DDP 5.1 ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein 2025 1080p NF WEB-DL DDP5 1 Atmos H 264-FLUX\n👤 5 💾 5.98 GB ⚙️ ThePirateBay",
+   "infoHash": "50a4c9c42abed9923445291d8f46c7733b789430",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Frankenstein 2025 1080p NF WEB-DL DDP5 1 Atmos H 264-FLUX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein 2025 Theatrical Cut m1080p BluRay x264-GeneMige\n👤 4 💾 3.32 GB ⚙️ EXT",
+   "infoHash": "da87b947b908518dc8d299567af76cb5b5eb82f5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Frankenstein 2025 Theatrical Cut m1080p BluRay x264-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein 2025 1080p WebRip EAC3 5 1 x265-Lootera\n👤 4 💾 3.02 GB ⚙️ EXT",
+   "infoHash": "041143a253e159614c197ab5936d044988a2d0f0",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein 2025 MULTi VFi WiTH AD 1080p WEBRip AC3 5 1 H264-LiHDL\n👤 4 💾 4.63 GB ⚙️ ThePirateBay\nMulti Audio / 🇫🇷",
+   "infoHash": "eb7d999eae3ec7d787c6236c00b53d1460e996ad",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|h264",
+    "filename": "Frankenstein 2025 MULTi VFi WiTH AD 1080p WEBRip AC3 5 1 H264-LiHDL.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein 2025 1080p WebRip EAC3 5 1 x265-Lootera\n👤 4 💾 3.02 GB ⚙️ TorrentGalaxy",
+   "infoHash": "10a028a1ce1a0aa9fa07caecc2377b564e4f7292",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Frankenstein 2025 1080p WebRip EAC3 5 1 x265-Lootera.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein 2025 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir\n👤 4 💾 1.93 GB ⚙️ ThePirateBay",
+   "infoHash": "f476b5f155bc1348498cbde9a626b44dacf0e6c1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Frankenstein 2025 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frank.2025.1080p.WEB.H264-EMX\n👤 4 💾 5.59 GB ⚙️ ThePirateBay",
+   "infoHash": "2efaabb25482601096c25c4fada9aeb75f3abc96",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264",
+    "filename": "frank.2025.1080p.web.h264-emx.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein (2025) BDRip 1080p_grab777\n👤 3 💾 14.64 GB ⚙️ EXT\n🇬🇧 / 🇺🇦",
+   "infoHash": "46caadf3a4111507da7ef4ecef0d6c3ee8b6a399",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip",
+    "filename": "Frankenstein (2025) BDRip 1080p_grab777.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein 2025 1080p WEB-DL HEVC x265 5 1 BONE\n👤 3 💾 2.02 GB ⚙️ ThePirateBay",
+   "infoHash": "60550b6671f4a765750d0ce285d60dbe49ac2d61",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+    "filename": "Frankenstein 2025 1080p WEB-DL HEVC x265 5 1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein (2025)Web-Dl 1080P x264-Eac3Atmos\n👤 3 💾 5.18 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸",
+   "infoHash": "859476ee4cf9a17fd7549ab0b22689d39b082a9b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Frankenstein (2025) (Spanish English Subs) Web-Dl 1080P x264-Eac3Atmos By Enjoy (Hispashare).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein.2025.MULTI.1080p.WEB.X264-HiggsBoson\n👤 3 💾 6.52 GB ⚙️ ThePirateBay\nMulti Audio",
+   "infoHash": "8b13a893acae6bc4a2f42efb30dc2ea41dbee990",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|x264",
+    "filename": "frankenstein.2025.multi.1080p.web.x264-higgsboson.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein 2025 m1080p BluRay x264-GeneMige\n👤 2 💾 3.5 GB ⚙️ EXT",
+   "infoHash": "a46876f743266d77f048ea2304baab778efe3b58",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Frankenstein 2025 m1080p BluRay x264-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Frankenstein (2025) The Reborn Cut 1080p 10bit Bluray x265 HEVC [Org DDP 5.1 Atmos Hindi DDP EX 7.1 English] ESubs ~ TombDoc\n👤 2 💾 8.36 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "008adb3fb19f05f3972d3f7d4341f3f20600b413",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Frankenstein (2025) The Reborn Cut 1080p 10bit Bluray x265 HEVC [Org DDP 5.1 Atmos Hindi + DDP EX 7.1 English] ESubs ~ TombDoc.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Frankenstein 2025 720p WEBRip\n👤 123 💾 1.37 GB ⚙️ YTS",
+   "infoHash": "98211dd20bafdbf35fcd4d000696961ad120a845",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Frankenstein.2025.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Frankenstein (2025) [720p] [BluRay]\n👤 26 💾 1.43 GB ⚙️ EXT",
+   "infoHash": "3968fb938229142f3f78afe153554162f4484df9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Frankenstein.2025.THE.REBORN.CUT.720p.BluRay.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Frankenstein (2025) 720p WEBRip-LAMA\n👤 8 💾 1.37 GB ⚙️ ThePirateBay",
+   "infoHash": "8d8f1fb3be4807a1cc18f33c78d2f08c70220c7a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Frankenstein.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Frankenstein 2025 720p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 6 💾 1.07 GB ⚙️ ThePirateBay",
+   "infoHash": "d1bc80c93571bf0eb38926e605e37d2af25a24af",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|hevc|10bit",
+    "filename": "Frankenstein 2025 720p 10bit WEBRip 6CH x265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Frankenstein 80 (1972) 720p BluRay-WORLD\n👤 5 💾 823.54 MB ⚙️ ThePirateBay",
+   "infoHash": "467259b4da2bf01a27cf59e1809d51c84891e027",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Frankenstein.80.1972.720p.BluRay.x264.AAC-WORLD.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Frankenstein.2025.720p.NF.WebRip.Multi.AAC2.0.H.264-themoviesboss\n👤 4 💾 1.48 GB ⚙️ 1337x\nMulti Audio / 🇮🇳",
+   "infoHash": "066e7d3672438d08faa1ab14b2ed9d11fc877be0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|h264",
+    "filename": "Frankenstein.2025.720p.NF.WebRip.Multi.AAC2.0.H.264-themoviesboss.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Frankenstein 2025 m720p BluRay x264-GeneMige\n👤 3 💾 1.92 GB ⚙️ EXT",
+   "infoHash": "fb3fc77e59d5046de494ee7d1d5309c2af063d08",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Frankenstein 2025 m720p BluRay x264-GeneMige.mkv"
+   }
+  }
+ ]
+}

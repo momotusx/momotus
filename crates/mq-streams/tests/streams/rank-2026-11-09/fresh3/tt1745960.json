@@ -1,0 +1,631 @@
+{
+ "fetched": "2026-11-08T23:16:50.704Z",
+ "id": "tt1745960",
+ "type": "movie",
+ "sources": {
+  "meta": "https://v3-cinemeta.strem.io/meta/movie/tt1745960.json",
+  "streams": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt1745960.json"
+ },
+ "meta": {
+  "name": "Top Gun: Maverick",
+  "year": "2022",
+  "runtime": "131 min",
+  "genres": [
+   "Action",
+   "Drama"
+  ],
+  "country": "United States"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Top Gun Maverick 2022 2160p AV1 IMAX HDR10 EN/ITA/FR/ES OPUS 7.1-UH [UserHEVC]\n👤 41 💾 11.26 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇪🇸 / 🇫🇷",
+   "infoHash": "78c0e3d2de01d8300738b828b1c397cbcb3d2584",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|av1|10bit|HDR",
+    "filename": "Top.Gun.Maverick.2022.2160p.AV1.HDR10.OPUS.7.1-UH.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Top Gun Maverick (2022) IMAX (2160p HDR10 WEB-DL x265 HEVC 10bit EAC3 5.1 SAMPA) [QxR]\n👤 27 💾 7.56 GB ⚙️ 1337x",
+   "infoHash": "81ad65b553649f727f19c8be393ec89d09fde475",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|hevc|10bit|HDR",
+    "filename": "Top Gun Maverick (2022) IMAX (2160p HDR10 WEB-DL x265 SAMPA).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Top Gun - Maverick (2022) (2160p BluRay x265 HEVC 10bit HDR AAC 7.1 Tigole) [QxR]\n👤 21 💾 12.95 GB ⚙️ 1337x",
+   "infoHash": "126612212d79e41f2a33a123cc56b30805a9146e",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|hevc|10bit|HDR",
+    "filename": "Top Gun - Maverick (2022) (2160p BluRay x265 10bit HDR Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Top Gun: Maverick (2022) 2160p UHD HDR Bluray AV1 Opus Multi5 [dAV1nci]\n👤 11 💾 7.11 GB ⚙️ 1337x",
+   "infoHash": "792eaadf8cc4f73025318192800e1efcb971a824",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+    "filename": "Top.Gun.Maverick.2022.2160p.UHD.HDR.Bluray.AV1.Opus.Multi5-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR",
+   "title": "Top.Gun.Maverick.2022.IMAX.2160p.10bit.HDR.DV.BluRay.8CH.x265.HEVC-PSA\n👤 10 💾 3.57 GB ⚙️ 1337x",
+   "infoHash": "b537e0b7d2f737282ad26d701841aeffe90dad73",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|hevc|10bit|DV|HDR",
+    "filename": "Top.Gun.Maverick.2022.IMAX.2160p.10bit.HDR.DV.BluRay.8CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV | HDR",
+   "title": "Top Gun: Maverick.IMAX.2022.2160p.DV.HDR10.BDRip.DDP5.1.x265.Blu…\n👤 7 💾 6.47 GB ⚙️ TorrentGalaxy",
+   "infoHash": "03156faa70006aa8e400f82394f955ca366885c0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BDRip|x265|10bit|DV|HDR",
+    "filename": "Top Gun - Maverick (IMAX) (2022).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Top Gun - Maverick (2022) 2160p H265 WebDl Rip 10 bit HDR ita eng AC3 5.1 sub ita eng Licdom\n👤 6 💾 4.5 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "50f63a8df2cd7c32e65e8ee8805f4f0ae61a13bd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|h265|10bit|HDR",
+    "filename": "Top Gun - Maverick (2022) 2160p H265 10 bit ita eng AC3 5.1 sub ita eng Licdom.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV",
+   "title": "Top.Gun.Maverick.2022.IMAX.2160p.WEB-DL.DDP5.1.Atmos.DV.MP4.x265-DVSUX\n👤 6 💾 13.76 GB ⚙️ RARBG",
+   "infoHash": "6153a0123261f52a8bfa87b0d2555573446d90bd",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|x265|DV",
+    "filename": "Top.Gun.Maverick.2022.IMAX.2160p.WEB-DL.DDP5.1.Atmos.DV.MP4.x265-DVSUX.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Top Gun: Maverick 2022 2160p WEBRip\n👤 65 💾 5.81 GB ⚙️ YTS",
+   "infoHash": "d34ff246a82c7621ed2ec9fe9413c4d251bedc24",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "Top.Gun.Maverick.2022.IMAX.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Top Gun: Maverick (2022) IMAX 2160p H265 10 bit Ita Eng Ac3 5.1 Sub Ita Eng SnakeSPL MIRCrew\n👤 6 💾 3.32 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "d4c6dac9ca2a8d36661ce9900c804b84dcfe4147",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|h265|10bit",
+    "filename": "Top Gun Maverick (2022) IMAX 2160p H265 10 bit  Ita Eng Ac3 5.1 Sub Ita Eng SnakeSPL MIRCrew.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Top.Gun.Maverick.2022.IMAX.2160p.WEBRip.3999MB.DDP5.1.x264-Galax\n👤 5 💾 4.01 GB ⚙️ ThePirateBay",
+   "infoHash": "422c82173e3fabe4427a19bf82d4de9e99bb6c2c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x264",
+    "filename": "Top.Gun.Maverick.2022.IMAX.2160p.WEBRip.3999MB.DDP5.1.x264-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Top Gun Maverick 2022 IMAX PROPER UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737\n👤 79 💾 7.14 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "d1431de7b5285268509167b0115b00eb8b2cf886",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Top Gun Maverick 2022 IMAX PROPER UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10  x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV",
+   "title": "Top Gun Maverick 2022 IMAX PROPER UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10x265-SM737\n👤 41 💾 7.14 GB ⚙️ ThePirateBay",
+   "infoHash": "2dc79f1edd9fe3d8643596c4249049fe2345e7d2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|DV",
+    "filename": "Top Gun Maverick 2022 IMAX PROPER UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Top Gun Maverick 2022 IMAX UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737\n👤 8 💾 7.35 GB ⚙️ ThePirateBay",
+   "infoHash": "c86810bf2a8369ffce6269278fe85576daea5156",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Top Gun Maverick 2022 IMAX UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Top Gun Maverick 2022 IMAX PROPER UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737\n👤 6 💾 7.14 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "7fbd00070cfaf4b9d2483bc331b597fd89109189",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Top Gun Maverick 2022 IMAX PROPER UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun Maverick (2022) [1080p] [BluRay]\n👤 415 💾 2.4 GB ⚙️ ThePirateBay",
+   "infoHash": "568ccb946b4bcfb30155314e0c517fef37e6bdbf",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Top.Gun.Maverick.2022.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun: Maverick 2022 1080p WEBRip\n👤 128 💾 2.4 GB ⚙️ YTS",
+   "infoHash": "f3dcdc3a1fc67bb14634074d8659a06ac5fbd131",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Top.Gun.Maverick.2022.IMAX.REPACK.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top.Gun.Maverick.2022.IMAX.1080p.Bluray.Atmos.TrueHD.7.1.x264-EV\n👤 39 💾 14.52 GB ⚙️ ThePirateBay",
+   "infoHash": "746f2f584168d59d8e6e064014a64d3f3490733e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Top.Gun.Maverick.2022.IMAX.1080p.Bluray.Atmos.TrueHD.7.1.x264-EVO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun: Maverick 2022 1080p WEBRip\n👤 35 💾 2.17 GB ⚙️ YTS",
+   "infoHash": "6c7842fc3aa1c66f91812cc398c0edba92f941f3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Top.Gun.Maverick.2022.1080p.WEBRip.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top.Gun.Maverick.2022.1080p.WEBRip.1600MB.DD2.0.x264-GalaxyRG\n👤 35 💾 1.6 GB ⚙️ ThePirateBay",
+   "infoHash": "cc25174f96cbfbd572e67034a7c99a6a3e82cab4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Top.Gun.Maverick.2022.1080p.WEBRip.1600MB.DD2.0.x264-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun - Maverick (2022) (1080p BluRay x265 HEVC 10bit AAC 7.1 Tigole) [QxR]\nTop Gun - Maverick (2022) (1080p BluRay x265 10bit Tigole).mkv\n👤 34 💾 6.18 GB ⚙️ 1337x",
+   "infoHash": "184369288c6ce9227d5d0a92a67e1544cffaee2d",
+   "fileIdx": 6,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Top Gun - Maverick (2022) (1080p BluRay x265 10bit Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top.Gun.Maverick.2022.IMAX.1080p.WEBRip.1600MB.DD5.1.x264-GalaxyRG\n👤 28 💾 1.61 GB ⚙️ TorrentGalaxy",
+   "infoHash": "0393c8e4d4dae2a34d89819da0123b1672a90e28",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Top.Gun.Maverick.2022.IMAX.1080p.WEBRip.1600MB.DD5.1.x264-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun- Maverick 2022.1080p.WEB-DL.AAC.x264-rothebehap\n👤 26 💾 5.62 GB ⚙️ 1337x",
+   "infoHash": "d802e828b73688868ce395f1006a2ce7b233e655",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Top Gun- Maverick 2022.1080p.WEB-DL.AAC.x264-rothebehap.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top.Gun.Maverick.2022.KORSUB.IMAX.1080p.WEBRip.AAC2.0.x264-SHITBOX\n👤 26 💾 5.68 GB ⚙️ RARBG\n🇰🇷",
+   "infoHash": "a6e449c2281e62edbf8cdb447413ca288cf0e568",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Top.Gun.Maverick.2022.KORSUB.IMAX.1080p.WEBRip.AAC2.0.x264-SHITBOX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun Maverick 2022 1080p NowPlayer WEB-DL H 264 AAC-UBWEB\n👤 18 💾 4.24 GB ⚙️ ThePirateBay",
+   "infoHash": "0152a46751c3bf3ccbe3197c8edd539c49a6f28d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Top Gun Maverick 2022 1080p NowPlayer WEB-DL H 264 AAC-UBWEB.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top.Gun.Maverick.2022.1080p.10bit.BluRay.AAC7.1.HEVC.x265-Vyndros\n👤 17 💾 4.28 GB ⚙️ ThePirateBay",
+   "infoHash": "eceb38b3efa0e22b49e65fe1a6bbb319d32c9454",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Top Gun Maverick [2022] 1080p 10bit BluRay AAC7.1 HEVC-Vyndros.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun Maverick 2022 1080p BluRay x265-YAWNTiC\n👤 15 💾 6.99 GB ⚙️ ThePirateBay",
+   "infoHash": "5a21994bc73fd0811efa93393ddbe41f2b68125c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Top Gun Maverick 2022 1080p BluRay x265-YAWNTiC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun Maverick 2022 IMAX 1080p BluRay DDP 7 1 x264-c0kE\n👤 15 💾 12.72 GB ⚙️ ThePirateBay",
+   "infoHash": "d709fa6ccd195367a045b29d2630f1be5a4f9122",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Top.Gun.Maverick.2022.IMAX.1080p.BluRay.DDP.7.1.x264-c0kE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top.Gun.Maverick.2022.IMAX.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265\n👤 15 💾 2.4 GB ⚙️ TorrentGalaxy",
+   "infoHash": "a71dec598b888a6fd728801a697a58888535fe9b",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Top.Gun.Maverick.2022.IMAX.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun: Maverick (2022) + Extras (1080p WEB-DL x265 HEVC 10bit EAC3 5.1 SAMPA) [QxR]\nTop Gun Maverick (2022) (1080p WEB-DL x265 SAMPA) (1).mkv\n👤 15 💾 3.47 GB ⚙️ TorrentGalaxy",
+   "infoHash": "4009ad577550aa585ff864fb063063ce10666513",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc|10bit",
+    "filename": "Top Gun Maverick (2022) (1080p WEB-DL x265 SAMPA) (1).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun: Maverick (2022) IMAX FullHD 1080p.H264 Ita Eng AC3 5.1 Sub Ita Eng realDMDJ DDL Ita\n👤 15 💾 2.97 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "54501fa75de527917e195367158ef74b0073b9a8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h264",
+    "filename": "Top Gun Maverick 2022 IMAX FullHD 1080p.H264 Ita Eng AC3 5.1 Sub Ita Eng realDMDJ.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top.Gun.Maverick.2022.IMAX.1080p.BluRay.1600MB.DD2.0.x264-Galaxy\n👤 13 💾 1.67 GB ⚙️ ThePirateBay",
+   "infoHash": "6b7a312323f0999647ccc51b555e73c79add578b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Top.Gun.Maverick.2022.IMAX.1080p.BluRay.1600MB.DD2.0.x264-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun - Maverick (2022) IMAX 1080p H264 Ita Eng Ac3 5.1 Sub Ita Eng SnakeSPL MIRCrew\n👤 12 💾 2.9 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "e271705c6bcc0a66fe1168cc5f57df901fbb9a04",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h264",
+    "filename": "Top Gun - Maverick (2022) IMAX 1080p H264 Ita Eng Ac3 5.1 Sub Ita Eng SnakeSPL MIRCrew.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun Maverick 2022 1080p ATVP WEB-DL DDPA 5 1 H 264-PiRaTeS\n👤 11 💾 6.66 GB ⚙️ ThePirateBay",
+   "infoHash": "dee98b76f069ff422a52df4094a5f4baf1a994bd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Top Gun Maverick 2022 1080p ATVP WEB-DL DDPA 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun: Maverick 2022 1080p BluRay DD+ 7.1 x265-edge2020\n👤 11 💾 3.12 GB ⚙️ TorrentGalaxy",
+   "infoHash": "74c36821bf9766649ea51d082ed330b99047f5b6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Top.Gun.Maverick.2022.1080p.BluRay.DDP.7.1.x265-edge2020.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun Maverick 2022 Bluray 1080p AV1 AC3 5.1-UH\n👤 11 💾 3.88 GB ⚙️ ThePirateBay",
+   "infoHash": "14a9b048b76a461bd494b9b2ed374abea252c595",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Top.Gun.Maverick.2022.Bluray.1080p.AV1.AC3.5.1-UH.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top.Gun.Maverick.2022.IMAX.1080p.BluRay.x265-RARBG\n👤 10 💾 2.03 GB ⚙️ RARBG",
+   "infoHash": "88b3f7d199548683950644df9e800c94a541fd9d",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Top.Gun.Maverick.2022.IMAX.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun: Maverick IMAX (2022) AC3 5.1 ITA.ENG 1080p H265 sub ita.eng Sp33dy94 MIRCrew\n👤 10 💾 3.26 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "a3f93af601e7278ed283b64de42c55f81030eb6b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h265",
+    "filename": "Top Gun Maverick IMAX (2022) AC3 5.1 ITA.ENG 1080p H265 sub ita.eng Sp33dy94-MIRCrew.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top.Gun.Maverick.2022.IMAX.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA\n👤 10 💾 2.18 GB ⚙️ 1337x",
+   "infoHash": "3c8920865dff1504a5b58194b4618a6612cec2a5",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "Top.Gun.Maverick.2022.IMAX.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun Maverick.2022.1080p.WEB-DL.H264.AAC-EVO[TGx]\n👤 10 💾 5.68 GB ⚙️ ThePirateBay",
+   "infoHash": "437c6bf3e8315dc0a42ac8c5310b3b4aa642841c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Top Gun Maverick.2022.1080p.WEB-DL.H264.AAC-EVO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Amazing Films 10 - Mp4 x264 AC3 1080p\nTop Gun (2022) Maverick 1080p Surround.mp4\n👤 9 💾 3.66 GB ⚙️ ThePirateBay",
+   "infoHash": "8213ff185d34d609cbd4e5c6f9ef380ba4090d6d",
+   "fileIdx": 74,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Top Gun (2022) Maverick 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top.Gun.Maverick.2022.1080p.BluRay.x264-RiPRG\n👤 9 💾 2.74 GB ⚙️ 1337x",
+   "infoHash": "cfc711a6077b5a6a67d511b40cc428cdfa02a659",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Top.Gun.Maverick.2022.1080p.BluRay.x264-RiPRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top.Gun.Maverick.2022.Blu-ray.1080p.DS4K.10bit.HEVC.[Hindi.DDP5.1-English.DDP7.1]-NmCT\n👤 8 💾 6.83 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇳",
+   "infoHash": "dcb75ed38e4beb78459f67c8f1b5878502945297",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Top.Gun.Maverick.2022.Blu-ray.1080p.DS4K.10bit.HEVC.[Hindi.DDP5.1-English.DDP7.1]-NmCT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun Maverick.2022.HC.IMAX.1080p.WEB-DL.H264.AAC-EVO\n👤 8 💾 5.68 GB ⚙️ ThePirateBay",
+   "infoHash": "11e4d0b79a081bc84927543d00afd0a9abb2948e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Top Gun Maverick.2022.1080p.WEB-DL.H264.AAC-EVO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top.Gun.Maverick.2022.IMAX.iTA.ENG.AC3.SUB.iTA.ENG.BluRay.HEVC.1080p.x265.jeddak-MIRCrew\n👤 6 💾 2.78 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "201d5db2c4802b758d05a6f06cf15faea84d1eb2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "Top.Gun.Maverick.2022.IMAX.iTA.ENG.AC3.SUB.iTA.ENG.BluRay.HEVC.1080p.x265.jeddak-MIRCrew.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top.Gun.Maverick.2022.IMAX.1080p.WEBRip.DDP5.1.x264-NOGRP\n👤 6 💾 5.43 GB ⚙️ RARBG",
+   "infoHash": "8ac6325a87fe38be371cb79afd4315baccdd2b12",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Top.Gun.Maverick.2022.IMAX.1080p.WEBRip.DDP5.1.x264-NOGRP.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun Maverick.2022.1080p.WEB-DL.H264.AAC5.1-EVO[TGx]\nTop Gun Maverick.2022.1080p.WEB-DL.H264.AAC5.1-EVO.mkv\n👤 6 💾 7.45 GB ⚙️ ThePirateBay",
+   "infoHash": "5b4d5ce9d5486ac0032ae1389bc1eccec483a721",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Top Gun Maverick.2022.1080p.WEB-DL.H264.AAC5.1-EVO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun Maverick.2022.1080p.WebRip.AAC.2.0.H264-themoviesboss\n👤 6 💾 1.54 GB ⚙️ TorrentGalaxy",
+   "infoHash": "904b7c6f63f506d9e3cf1c59e9a6283512efb205",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|h264",
+    "filename": "Top Gun Maverick.2022.1080p.WebRip.AAC.2.0.H264-themoviesboss.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun Maverick 2022 m1080p BluRay x264-GeneMige\n👤 5 💾 3.17 GB ⚙️ EXT",
+   "infoHash": "0e70abdf4d72a56c39b72e185a805678e82de6e8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Top Gun Maverick 2022 m1080p BluRay x264-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun Maverick 2022 1080p ALL4 WEB-DL AAC 2 0 H 264-PiRaTeS\n👤 5 💾 4.35 GB ⚙️ ThePirateBay",
+   "infoHash": "009ab0a4d14a170f90738d00dd4017b2ecdaa1d9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Top Gun Maverick 2022 1080p ALL4 WEB-DL AAC 2 0 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun Maverick 2022 1080p Rifftrax 6ch x265 HEVC\n👤 5 💾 2.77 GB ⚙️ ThePirateBay",
+   "infoHash": "23a7772d79b30ec866d8997dad56783c6e1806a1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|hevc",
+    "filename": "Top.Gun.Maverick.2022.1080p.Rifftrax.6ch.x265.HEVC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top Gun Maverick 2022 1080p Rifftrax 6ch x264 AVC\n👤 5 💾 4.14 GB ⚙️ ThePirateBay",
+   "infoHash": "dea34ec7af76633cab7031132a84d98601bb0a81",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|avc",
+    "filename": "Top.Gun.Maverick.2022.1080p.Rifftrax.6ch.x264.AVC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Top.Gun.Maverick.2022.IMAX.FRENCH-ENG.1080p.WEB.H264.mkv\n👤 5 💾 7.67 GB ⚙️ ThePirateBay\n🇬🇧 / 🇫🇷",
+   "infoHash": "2dbd3678b34014b055f071a9500a58e9ab903347",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264",
+    "filename": "Top.Gun.Maverick.2022.IMAX.FRENCH-ENG.1080p.WEB.H264.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Top Gun Maverick (2022) [720p] [BluRay]\n👤 61 💾 1.17 GB ⚙️ ThePirateBay",
+   "infoHash": "9aa239b25bf2a5229131c706c65886cb273bc48e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Top.Gun.Maverick.2022.720p.BluRay.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Top Gun Maverick.2022.HD720p.FuckAds.SRT.mkv\n👤 24 💾 1.41 GB ⚙️ ThePirateBay",
+   "infoHash": "aa4b231cbb26382bc3f54446665bd58e4705d8eb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p",
+    "filename": "Top Gun Maverick.2022.HD720p.FuckAds.SRT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Top Gun Maverick 2022 IMAX 720p AMZN WEB-DL DDP5 1 Atmos H 264-FLUX\n👤 18 💾 3.36 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇵🇹 / 🇪🇸 / 🇨🇳 / 🇫🇷 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "a75f7c26053466c33b25c36d579b4ba51548db3b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB-DL|h264",
+    "filename": "Top Gun Maverick 2022 IMAX 720p AMZN WEB-DL DDP5 1 Atmos  H 264-FLUX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Top.Gun.Maverick.2022.720p.WEBRip.900MB.x264-GalaxyRG\n👤 11 💾 896.68 MB ⚙️ ThePirateBay",
+   "infoHash": "3e60359ab20674b28aefd2c60b44c47e99bea6a4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Top.Gun.Maverick.2022.720p.WEBRip.900MB.x264-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Top Gun: Maverick (2022) RiffTrax dual audio 720p.10bit.BluRay.x265-budgetbits\n👤 10 💾 725.39 MB ⚙️ 1337x\nDual Audio / 🇬🇧",
+   "infoHash": "cf02bea16ff8c70a687fc0e28e097bf405b2038b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x265|10bit",
+    "filename": "Top Gun Maverick (2022) RiffTrax dual audio 720p.10bit.BluRay.x265-budgetbits.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Top Gun: Maverick 2022 720p WEBRip\n👤 9 💾 1.17 GB ⚙️ YTS",
+   "infoHash": "4005d91c4a87b34257750ba8bb14e875b283b4e9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Top.Gun.Maverick.2022.IMAX.REPACK.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Top Gun: Maverick 2022 720p WEBRip\n👤 8 💾 1.17 GB ⚙️ YTS",
+   "infoHash": "f9420fce425e526687805ce82f0da095064e6803",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Top.Gun.Maverick.2022.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Top.Gun.Maverick.2022.IMAX.720p.BluRay.x264.DTS-FGT\n👤 6 💾 6.38 GB ⚙️ RARBG",
+   "infoHash": "bbf79b4687285bf18851b7aeb5477565d1a65278",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Top.Gun.Maverick.2022.IMAX.720p.BluRay.x264.DTS-FGT.mkv"
+   }
+  }
+ ]
+}

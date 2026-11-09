@@ -21,19 +21,31 @@ pub struct RankInput<'a> {
 }
 
 const MAX_REASONS: usize = 3;
-/// A window that holds less than this much of a file ahead ranks as a file
-/// too large, never hidden (plans/streaming-window-chunks.md).
+/// A window that holds less than this much of a file ahead says "large";
+/// one that holds more says how it plays (plans/streaming-window-chunks.md).
 const WINDOW_AHEAD_S: u64 = 120;
 /// Torrents under this many seeders may not start at all.
 const FEW_SEEDERS: u32 = 5;
-/// Seeders count in the score up to this many, then the file decides. The
-/// owner's rule is as many seeders as possible, at least 50 (question 5).
-const SATURATE_SEEDERS: f32 = 1000.0;
+/// Seeders count in the score up to this many times the wanted ones (the
+/// `start` band of 4 x), then the file decides (plans/stream-ranking.md 4.9).
+const SATURATE_WANTED: f32 = 4.0;
 /// Share of the measured speed a file may need (Jellyfin's factor): the
 /// speed must be at least 1.43 times the bitrate. A pick cannot step down
 /// mid-film, so this is the most conservative share players use
 /// (research R4: keep it).
 const SAFE_SHARE: f32 = 0.7;
+/// With no measured speed, the most a row may need: 15 Mbit/s, the top of a
+/// 1080p encode (plans/stream-ranking.md 4.1). Above it, 4K and remux files
+/// wait for a measurement.
+const UNMEASURED_SAFE_MBPS: f32 = 15.0;
+/// On mobile data, measured or not: 1.5 GB (base 1024, as addons print
+/// sizes) per hour of film, about 3.6 Mbit/s. A 1080p within it wins on
+/// resolution; a 720p only when no 1080p fits.
+const METERED_SAFE_MBPS: f32 = 1.5 * 1_073_741_824.0 * 8.0 / 3600.0 / 1e6;
+/// What thin swarms held in the race: 2.44 Mbit/s from 19 seeders
+/// (bench/m13/race.jsonl), counted per seeder with no margin.
+const THIN_HELD_MBPS: f32 = 2.44;
+const THIN_HELD_SEEDERS: f32 = 19.0;
 
 /// What the ranking derives for one stream that passed the gates.
 struct Scored {
@@ -159,7 +171,13 @@ fn window_of(s: &ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Opt
     if class != SourceClass::Swarm {
         return None;
     }
-    let room = room(s, input, input.conditions.free_bytes?, file_size(s, input)?);
+    // The bytes of the file the row plays (3.1): a pack row's episode share.
+    let room = room(
+        s,
+        input,
+        input.conditions.free_bytes?,
+        weight(s, input).size?,
+    );
     matches!(room, Room::Window { .. }).then_some(room)
 }
 
@@ -176,25 +194,35 @@ fn pack(s: &ParsedStream, input: &RankInput<'_>) -> bool {
         && (r.complete || r.episodes.len() >= 2 || (r.episodes.is_empty() && !r.seasons.is_empty()))
 }
 
-/// The bytes of the file a row plays, which its room is judged by (3.1). A
-/// pack row lists the pack: the file is one episode's share, by the
-/// episodes it names, else by the season's count; unknown otherwise (the
-/// app then decides at open). Other rows weigh as the pack guard says.
-fn file_size(s: &ParsedStream, input: &RankInput<'_>) -> Option<u64> {
-    if !pack(s, input) {
-        return weight(s, input).size;
+/// The episodes a pack row's size is shared by: those the release names,
+/// else the season's count; unknown for a pack of several seasons (or a
+/// complete one naming none), whose size one season's count cannot split.
+fn pack_episodes(s: &ParsedStream, input: &RankInput<'_>) -> Option<u64> {
+    let r = &s.release;
+    let named = r.episodes.len() as u64;
+    if named >= 2 {
+        return Some(named);
     }
-    let named = s.release.episodes.len() as u64;
-    let episodes = if named >= 2 {
-        Some(named)
-    } else {
-        input
-            .conditions
-            .episodes_in_season
-            .filter(|n| *n >= 2)
-            .map(u64::from)
-    };
-    Some(s.size_bytes? / episodes?)
+    if r.seasons.len() >= 2 || (r.complete && r.seasons.is_empty()) {
+        return None;
+    }
+    input
+        .conditions
+        .episodes_in_season
+        .filter(|n| *n >= 2)
+        .map(u64::from)
+}
+
+/// The runtime a bitrate is counted over: the title's, else on mobile data
+/// a typical one for its kind (2 h for a film, 45 min for an episode), so
+/// the data budget holds for a title with no runtime.
+fn runtime(input: &RankInput<'_>) -> Option<u32> {
+    let c = input.conditions;
+    let episode = input.target.season.is_some() || input.target.episode.is_some();
+    c.runtime_s.filter(|r| *r > 0).or_else(|| {
+        c.metered
+            .then_some(if episode { 45 * 60 } else { 120 * 60 })
+    })
 }
 
 fn room(s: &ParsedStream, input: &RankInput<'_>, free: u64, size: u64) -> Room {
@@ -608,7 +636,10 @@ fn playability(s: &ParsedStream, input: &RankInput<'_>) -> Option<Playability> {
     let container_ok = container.is_none_or(|c| caps.opens(c));
     // A device that opens mkv opens what releases come in; one that does
     // not may not open an unstated container.
-    let unstated = container.is_none() && !caps.opens("mkv");
+    // An HEVC row that names no bit depth is most often 10-bit: a device
+    // without 10-bit HEVC plays it natively only if it is not.
+    let depth_unstated = r.codec == VideoCodec::H265 && r.bit_depth.is_none() && !caps.ten_bit_hevc;
+    let unstated = (container.is_none() && !caps.opens("mkv")) || depth_unstated;
     match (codec_ok && audio_ok && container_ok, hdr_ok) {
         (true, true) if unstated => Some(Playability::Unstated),
         (true, true) => Some(Playability::Native),
@@ -661,14 +692,26 @@ struct Weight {
     mbps: Option<f32>,
 }
 
-/// The pack guard (3.3): for an episode above the disc ceiling the size is
-/// a pack's, divided by the episodes the release names, else by the
-/// season's episode count, else the bitrate is unknown. A movie's bitrate
-/// is its own, however high (a 3D remux is 51 Mbit/s).
+/// The pack guard (3.3): a pack row weighs one episode (plans/stream-ranking.md
+/// 4.4); another episode row above the disc ceiling is a pack's size,
+/// divided by the episodes the release names, else by the season's episode
+/// count, else the bitrate is unknown. A movie's bitrate is its own,
+/// however high (a 3D remux is 51 Mbit/s).
 fn weight(s: &ParsedStream, input: &RankInput<'_>) -> Weight {
     let c = input.conditions;
+    // A pack row weighs one episode whatever its bitrate looks like.
+    if pack(s, input) {
+        let size = s
+            .size_bytes
+            .zip(pack_episodes(s, input))
+            .map(|(b, n)| b / n);
+        let mbps = size
+            .zip(runtime(input))
+            .map(|(b, r)| b as f32 * 8.0 / r as f32 / 1e6);
+        return Weight { size, mbps };
+    }
     let size = s.size_bytes;
-    let (Some(bytes), Some(runtime)) = (size, c.runtime_s.filter(|r| *r > 0)) else {
+    let (Some(bytes), Some(runtime)) = (size, runtime(input)) else {
         return Weight { size, mbps: None };
     };
     let mbps = bytes as f32 * 8.0 / runtime as f32 / 1e6;
@@ -694,51 +737,81 @@ fn weight(s: &ParsedStream, input: &RankInput<'_>) -> Weight {
     }
 }
 
-/// Seeders of the race swarms the small-swarm prior came from (17 to 22,
-/// `bench/m13/race.jsonl`): the prior is their rate.
-const THIN_PRIOR_SEEDERS: f32 = 18.0;
-/// The least the small-swarm prior gives a swarm.
+/// The least the small-swarm figure gives a swarm.
 const THIN_FLOOR_MBPS: f32 = 0.3;
 
-/// The measured speed a row streams at (3.2), and whether it is the
-/// small-swarm figure; a fetch has none. A swarm listed (or counted live)
-/// under the wanted seeders is judged against the slower of the line and
-/// what small swarms give (research R2).
+/// The speed a row is judged by (plans/stream-ranking.md 4.9), and whether
+/// it is the small-swarm figure; a fetch has none. A measured speed, else a
+/// ceiling of 15 Mbit/s; on mobile data never over the data budget. A
+/// swarm listed (or counted live) under the wanted seeders is judged
+/// against the slower of that and the small-swarm floor.
 fn speed(s: &ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Option<(Speed, bool)> {
     let c = input.conditions;
-    match class {
-        SourceClass::Ready => Some((c.http, false)),
-        SourceClass::Unknown if c.engine => Some((c.p2p, false)),
-        SourceClass::Unknown => Some((c.http, false)),
-        SourceClass::Swarm => match s.seeders.filter(|n| *n < input.prefs.min_seeders) {
-            Some(seeders) => {
-                let thin = thin_speed(c, seeders);
-                if thin.mbps < c.p2p.mbps {
-                    Some((thin, true))
-                } else {
-                    Some((c.p2p, false))
-                }
+    // A measured speed, else the ceiling an unmeasured line keeps; on
+    // mobile data never more than the data budget.
+    let line = |sp: Speed| {
+        let line = if sp.samples > 0 {
+            sp
+        } else {
+            Speed {
+                mbps: UNMEASURED_SAFE_MBPS / SAFE_SHARE,
+                samples: 0,
             }
-            None => Some((c.p2p, false)),
-        },
+        };
+        let budget = METERED_SAFE_MBPS / SAFE_SHARE;
+        if c.metered && line.mbps > budget {
+            Speed {
+                mbps: budget,
+                samples: 0,
+            }
+        } else {
+            line
+        }
+    };
+    match class {
+        SourceClass::Ready => Some((line(c.http), false)),
+        // A torrent a service has not shown cached fetches from the same
+        // swarm, so a thin one is judged as thin either way.
+        SourceClass::Swarm | SourceClass::Unknown => {
+            let p2p = if class == SourceClass::Unknown && !c.engine {
+                line(c.http)
+            } else {
+                line(c.p2p)
+            };
+            match s.seeders.filter(|n| *n < input.prefs.min_seeders) {
+                Some(seeders) => {
+                    let thin = thin_speed(c, seeders);
+                    if thin.mbps < p2p.mbps {
+                        Some((thin, true))
+                    } else {
+                        Some((p2p, false))
+                    }
+                }
+                None => Some((p2p, false)),
+            }
+        }
         SourceClass::Fetch => None,
     }
 }
 
-/// What a swarm of `seeders` (under the wanted number) streams at: the
-/// learned small-swarm estimate once it has samples; before that its prior
-/// scaled per seeder, 1.4 Mbit/s x seeders / 18, within 0.3 Mbit/s and the
-/// line's speed. So a 31-seeder swarm gets about 2.4 and an 11-seeder one
-/// about 0.86, and more seeders still help among thin swarms.
+/// What a swarm of `seeders` (under the wanted number) is held to: 2.44
+/// Mbit/s x seeders / 19 with no margin (bench/m13/race.jsonl: 17 to 20
+/// seeder swarms at 2.44 Mbit/s played clean in 7 of 12 runs), at least 0.3;
+/// a learned small-swarm estimate only lowers it.
 // ponytail: learned samples are not scaled by their seeders; store the
 // seeders with each sample if thin picks flip once samples exist.
 fn thin_speed(c: &Conditions, seeders: u32) -> Speed {
-    if c.p2p_thin.samples > 0 {
+    // Held back over the rate at which the race's thin swarms began to
+    // fail: the safe share is taken off later, so it is put back here.
+    let floor = (THIN_HELD_MBPS * seeders as f32 / THIN_HELD_SEEDERS).max(THIN_FLOOR_MBPS);
+    // A learned thin sample may only lower it: one fast 45-seeder swarm
+    // says nothing about a 6-seeder one.
+    // The "may pause" line speaks of a measurement only when it binds.
+    if c.p2p_thin.samples > 0 && c.p2p_thin.mbps * SAFE_SHARE < floor {
         return c.p2p_thin;
     }
-    let scaled = c.p2p_thin.mbps * seeders as f32 / THIN_PRIOR_SEEDERS;
     Speed {
-        mbps: scaled.clamp(THIN_FLOOR_MBPS, c.p2p.mbps.max(THIN_FLOOR_MBPS)),
+        mbps: floor / SAFE_SHARE,
         samples: 0,
     }
 }
@@ -941,7 +1014,7 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
     };
     let fails_here = no_picture(s, input) || did_not_play(s, input) || wrong_file(s, input);
     let window = window_of(s, class, input);
-    let key = RankKey {
+    let mut key = RankKey {
         language: input.prefs.languages.is_empty() || langs.is_empty() || wanted(langs, input),
         legit: legit(s),
         year_ok: year_ok(s, input.conditions, input.target),
@@ -967,19 +1040,17 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
             playability(s, input).unwrap_or(Playability::NeedsTranscode)
         },
         viable: start > 0 && !fails_here,
-        // A windowed row frees the disk as it plays: under the default
-        // limit it passes when its window holds 2 minutes ahead; a ring
-        // that holds less, or a limit the viewer chose, compares the file,
-        // so a row that fits or holds more ranks first (plans/streaming-window.md
-        // 3.1, plans/streaming-window-chunks.md).
-        // A download keeps the whole file whatever its source: the limit
-        // holds for every row.
+        // The limit compares the file (a pack's episode) for every torrent
+        // row (plans/stream-ranking.md 4.9 rule 5): a windowed row over the
+        // default limit no longer passes, it keeps its buffer line and plays
+        // when picked by hand. A download keeps the whole file whatever its
+        // source: the limit holds for every row.
         size_ok: if download {
             size_ok(weight.size, SourceClass::Swarm, input.prefs)
         } else {
-            (matches!(window, Some(Room::Window { ahead_s, .. }) if ahead_s >= WINDOW_AHEAD_S)
-                && !input.conditions.limit_chosen)
-                || size_ok(weight.size, class, input.prefs)
+            // The limit holds for the automatic pick; a row over it still
+            // plays in a window when the viewer picks it by hand.
+            size_ok(weight.size, class, input.prefs)
         },
         tier: tier(class, start),
         binge: matches!((input.last_binge_group, &s.binge_group), (Some(a), Some(b)) if a == b),
@@ -989,10 +1060,22 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
         within: if download {
             smaller(weight.size)
         } else {
-            within(s, class, bitrate, safe, input)
+            within(s, class, bitrate, input)
         },
     };
     let line = line(s, class, &key, weight, judged, window, input);
+    // A remux is the pick only when nothing else of its resolution and tier
+    // is there: below every encode on `start` (its line keeps its seeders)
+    // and on `within`.
+    // Past the wanted seeders a swarm starts as well as with more (pick
+    // audit, 16 of 16): the 4 x band is said in the line, not ranked on.
+    if matches!(class, SourceClass::Swarm | SourceClass::Unknown) {
+        key.start = key.start.min(2);
+    }
+    if s.release.quality == Quality::Remux {
+        key.start = key.start.min(1);
+        key.within /= 10;
+    }
     Scored {
         stream,
         key,
@@ -1064,7 +1147,13 @@ fn line(
     if washed_out(s, input.caps) {
         return ReasonLine::WashedOut;
     }
+    // Over the default limit, a row its window holds 2 minutes of plays
+    // when picked by hand: it says how, not "large" (it still ranks below
+    // the rows that fit).
+    let windowed = matches!(window, Some(Room::Window { ahead_s, .. }) if ahead_s >= WINDOW_AHEAD_S)
+        && !input.conditions.limit_chosen;
     if !key.size_ok
+        && !windowed
         && let (Some(size), Some(limit)) = (size, input.prefs.size_limit_bytes)
     {
         return ReasonLine::Large {
@@ -1090,13 +1179,11 @@ fn line(
         return ReasonLine::Buffer {
             seeders: s.seeders,
             // The file it plays: a pack's episode, not the pack.
-            size_bytes: file_size(s, input),
+            size_bytes: size,
             ahead_min: (!input.conditions.metered).then(|| (ahead_s / 60).min(10) as u32),
             budget_bytes: budget,
         };
     }
-    // A pack's episode, as its buffer line says.
-    let size = file_size(s, input).or(size);
     if key.start == 3 {
         return ReasonLine::Quick {
             seeders: s.seeders,
@@ -1121,30 +1208,54 @@ fn smaller(size: Option<u64>) -> u16 {
     })
 }
 
+/// A bitrate past which a release of that height and codec looks no better:
+/// HEVC, AV1 and VP9 need about 0.6 of H.264's.
+fn good_mbps(height: u32, codec: VideoCodec) -> f32 {
+    let (h264, efficient) = match height {
+        h if h >= 2160 => (25.0, 16.0),
+        h if h >= 1080 => (8.0, 5.0),
+        h if h >= 720 => (4.0, 2.5),
+        _ => (2.0, 1.2),
+    };
+    match codec {
+        VideoCodec::H265 | VideoCodec::Av1 | VideoCodec::Vp9 => efficient,
+        _ => h264,
+    }
+}
+
 /// Bounded 0..=1000 score among rows whose key fields tie (3.6).
 fn within(
     s: &ParsedStream,
     class: SourceClass,
     bitrate: Option<f32>,
-    safe: Option<f32>,
     input: &RankInput<'_>,
 ) -> u16 {
     let r = &s.release;
-    // Start: more seeders, up to `SATURATE_SEEDERS`.
+    // Start: more seeders, up to `SATURATE_WANTED` x the wanted ones.
+    // 0 to 150: past the wanted seeders a swarm starts as well as with more,
+    // so seeders weigh no more than the source's spread (plans/stream-ranking.md 4.9).
+    let saturate = SATURATE_WANTED * input.prefs.min_seeders.max(FEW_SEEDERS) as f32;
     let mut score = match (class, s.seeders) {
-        (SourceClass::Ready, _) => 250.0,
-        (_, None) => 125.0,
-        (_, Some(n)) => {
-            250.0 * ((1.0 + n as f32).log2() / (1.0 + SATURATE_SEEDERS).log2()).min(1.0)
-        }
+        (SourceClass::Ready, _) => 150.0,
+        (_, None) => 75.0,
+        (_, Some(n)) => 150.0 * ((1.0 + n as f32).log2() / (1.0 + saturate).log2()).min(1.0),
     };
-    // Headroom: how far the safe speed is above the file's need.
-    score += match (bitrate, safe) {
-        (Some(b), Some(safe)) if b > 0.0 => 150.0 * ((safe / b - 1.0) / 2.0).clamp(0.0, 1.0),
-        _ => 75.0,
+    // Picture: size per minute, up to a good level for the resolution and
+    // codec (plans/stream-ranking.md 4.3), counted only up to what the
+    // row's swarm is known to carry (the thin floor's rate): a 25-seeder
+    // 11 Mbit/s file earns no more than 3.2 Mbit/s of picture.
+    let height = r.resolution.height();
+    let carried = match (class, s.seeders) {
+        (SourceClass::Swarm | SourceClass::Unknown, Some(n)) => bitrate
+            .map(|b| b.min((THIN_HELD_MBPS * n as f32 / THIN_HELD_SEEDERS).max(THIN_FLOOR_MBPS))),
+        _ => bitrate,
+    };
+    score += match carried {
+        Some(b) if height > 0 => 100.0 * (b / good_mbps(height, r.codec)).min(1.0),
+        _ => 50.0,
     };
     score += match r.quality {
-        Quality::Remux => 200.0,
+        Quality::Remux => 170.0,
         Quality::BluRay => 170.0,
         Quality::WebDl => 150.0,
         Quality::WebRip => 120.0,

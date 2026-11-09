@@ -1,0 +1,1590 @@
+{
+  "id": "tt34385135",
+  "type": "movie",
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "Colony",
+    "year": "2026",
+    "releaseInfo": "2026",
+    "runtime": "123 min",
+    "episodeReleased": null,
+    "episodesInSeason": null
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Colony.2026.2160p.x265.hdr.5.1-dual-lat-cinecalidad.my.mkv\n👤 40 💾 8.49 GB ⚙️ EXT\nDual Audio / 🇪🇸 / 🇲🇽 / 🇰🇷",
+          "infoHash": "3a1f9c6ab55650d2d292dc6d541623a5f0a44508",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|x265|HDR",
+            "filename": "Colony.2026.2160p.x265.hdr.5.1-dual-lat-cinecalidad.my.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Gunche (2026) [2160p] [WEBRip] [x265] [10bit] [5.1]\n👤 71 💾 5.48 GB ⚙️ EXT",
+          "infoHash": "caa6e1104e35f87ce5636ed9a4ceb6b8a444f172",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+            "filename": "Gunche.2026.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Colony (2026) UHD BDRip 2160p [4K SDR 10-bit]\n👤 1 💾 14.13 GB ⚙️ EXT\n🇬🇧 / 🇷🇺",
+          "infoHash": "fd97f4b1e5fc79eecb4bb52726ec31024c502f80",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BDRip|10bit"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "Kolonia - Gunche 2026 [HLG HDR SDR] [1080p.WEB-DL.H264-AS76-FT] [Lektor PL] [Alusia]\n👤 2 💾 4.75 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "aa280f39906b86bcde423b1380580faa275952e3",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264|HDR",
+            "filename": "Kolonia - Gunche 2026 [HLG HDR SDR] [1080p.WEB-DL.H264-AS76-FT] [Lektor PL] [Alusia].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.1080p.Korean.WEBRip.10bit.AAC2.0.x265-FaS\n👤 1270 💾 1.67 GB ⚙️ ThePirateBay\n🇰🇷",
+          "infoHash": "6345315a91a4e2ea348a2c1cafdbb9441c84c22c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Colony.2026.1080p.WEBRip.10bit.AAC2.0.x265-FaS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony (2026) (1080p DS4K UHD BluRay x265 10bit EAC3 Atmos 7.1 K…\n👤 244 💾 8.97 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇷🇺 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇸🇦",
+          "infoHash": "8f08bd4621d4129c10c0a4548d0832e437fc9f23",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Colony (2026) (1080p DS4K UHD BluRay x265 10bit r00t).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony (2026) Eng 1080p WEBRip x265 AAC ESub\n👤 234 💾 2.42 GB ⚙️ TorrentGalaxy",
+          "infoHash": "4d00af877a4ad98e28a26376f1bc1dd014a91c09",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Colony (2026) Eng 1080p WEBRip x265 AAC ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Gunche 2026 1080p WEBRip\n👤 216 💾 2.04 GB ⚙️ YTS",
+          "infoHash": "61eb26704c79ee1cdc2cbcfee002223ab0e89709",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Gunche.2026.1080p.WEBRip.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026 WEBDL 1080P Eng Sub 7fans\nColony.2026.1080p.WEB-DL.AAC2.0.H264-7fans.mkv\n👤 147 💾 6.61 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇰🇷",
+          "infoHash": "52d5cbb8ffe3167bcdd571b451866e3e60897321",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Colony.2026.1080p.WEB-DL.AAC2.0.H264-7fans.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Gunche 2026 1080p WEBRip\n👤 143 💾 1.83 GB ⚙️ YTS",
+          "infoHash": "b41600e947e9464cc9db94d38fefcbf9e4c2f5ff",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Gunche.2026.1080p.WEBRip.x265.10bit.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026 1080p (DUAL) WEB-DL HEVC x265 BONE\n👤 142 💾 1.98 GB ⚙️ EXT\nDual Audio / 🇬🇧 / 🇰🇷",
+          "infoHash": "0fc83274e7765a9e8fe96e3bb9b9b0c7dbd4927f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Colony 2026 1080p (DUAL) WEB-DL HEVC x265 BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.1080p-dual-lat-cinecalidad.my.mp4\n👤 132 💾 2.19 GB ⚙️ EXT\nDual Audio / 🇲🇽",
+          "infoHash": "8c8850b32a9feb796bf02586fe7dd73e4ba7c9c1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p",
+            "filename": "Colony.2026.1080p-dual-lat-cinecalidad.my.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Gunche (2026) [1080p] [BluRay] [5.1]\n👤 81 💾 2.26 GB ⚙️ EXT",
+          "infoHash": "3056ed3591fa3cf83d7ac5beff7c76763f322d73",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Gunche.2026.1080p.BluRay.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.WEB-DL.1080p.X264\n👤 69 💾 2.66 GB ⚙️ EXT\n🇰🇷 / 🇨🇳",
+          "infoHash": "dbd48d183bc55c3679e177092a3b813982108f7e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "群体.Colony.2026.WEB-DL.1080p.X264.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.1080p.WEBRip.Dual.Audio.DD5.1.10bits.x265-Rapta\n👤 67 💾 1.7 GB ⚙️ EXT\nDual Audio",
+          "infoHash": "a506f35ea885fe442d3d734d2b271c84974da946",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Colony.2026.1080p.WEBRip.Dual.Audio.DD5.1.10bits.x265-Rapta.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026 1080p WebRip Opus 2 0 x265-Lootera\n👤 67 💾 2.73 GB ⚙️ ThePirateBay\n🇬🇧 / 🇰🇷",
+          "infoHash": "27dc27edb4d81214ea44714dafcdd42af2d29d96",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Colony 2026 1080p WebRip Opus 2 0 x265-Lootera.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony (2026) BluRay - 1080p - x264 - [Tamil + Telugu + Hindi + Kor] - (AAC 2.0) - 2.3GB - ESub\n👤 52 💾 2.37 GB ⚙️ EXT\n🇬🇧 / 🇰🇷 / 🇮🇳",
+          "infoHash": "ef3319141b0f70be29e09c824584e30cca2188ad",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "www.1TamilMV.solar - Colony (2026) BluRay - 1080p - x264 - [Tamil + Telugu + Hindi + Kor] - (AAC 2.0) - 2.3GB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony (2026) 1080p BluRay - x264 - [Tel + Tam + Hin + Kor]\n👤 40 💾 2.37 GB ⚙️ EXT\n🇬🇧 / 🇰🇷 / 🇮🇳",
+          "infoHash": "983b583e3f6b5347b9c83aa332d7b3a07b2b2648",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Colony (2026) 1080p BluRay - x264 - [Tel + Tam + Hin + Kor].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026.1080p.WEB-DL.AAC.x264-rothebehap\n👤 20 💾 5.25 GB ⚙️ TorrentGalaxy\n🇰🇷",
+          "infoHash": "6cd1ddd54947d5ead634f4eb74a3ca231c215d58",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Colony 2026.1080p.WEB-DL.AAC.x264-rothebehap.mp4.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026 1080p AMZN WEB-DL DDP5 1 H 264-KyoGo\n👤 19 💾 8.57 GB ⚙️ EXT\n🇬🇧 / 🇰🇷",
+          "infoHash": "f3a5b18c1a6c7649120d714cc43e6591623fb3a5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Colony 2026 1080p AMZN WEB-DL DDP5 1 H 264-KyoGo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026 1080p WebRip Opus 2 0 x265-Lootera\n👤 19 💾 2.73 GB ⚙️ ThePirateBay\n🇬🇧 / 🇰🇷",
+          "infoHash": "d4add5f2b28bc9084e6d5eaaab950c581af2e169",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Colony 2026 1080p WebRip Opus 2 0 x265-Lootera.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony (2026) 1080p UHD 10bit Bluray x265 HEVC [Org DDP 2.0 Hindi DDP EX 7.1 Korean] ESubs ~ TombDoc\n👤 13 💾 9.33 GB ⚙️ 1337x\n🇰🇷 / 🇮🇳",
+          "infoHash": "483ed3c1de721c9621ee562b8de327cfd8ddb2d8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Colony (2026) 1080p UHD 10bit Bluray x265 HEVC [Org DDP 2.0 Hindi + DDP EX 7.1 Korean] ESubs ~ TombDoc.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony (2026) [1080p] [WEBRip] [5.1]-BGF\nColony.2026.1080p.WEBRip.x264.AAC5.1-BGF.mp4\n👤 13 💾 2.83 GB ⚙️ TorrentGalaxy",
+          "infoHash": "1b8ad8bd0fdf15191b6884d9206b872edc1c68f1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Colony.2026.1080p.WEBRip.x264.AAC5.1-BGF.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.PL.1080p.WEB-DL.XviD.AC3-MAXX.mp4\n👤 12 💾 3.81 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "98edfd322a7c93e7e59a73dd8425e8fc5a53ae81",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|xvid",
+            "filename": "Colony.2026.PL.1080p.WEB-DL.XviD.AC3-MAXX.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026 1080p WEBRip 10bit AAC2 0 x265-FaS\n👤 12 💾 1.67 GB ⚙️ ThePirateBay\n🇬🇧 / 🇰🇷",
+          "infoHash": "3386dd7bcb4ac7d2315f844eed734f0698c46700",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Colony 2026 1080p WEBRip 10bit AAC2 0 x265-FaS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.PL.1080p.WEB-DL.x264.AC3-R22\n👤 5 💾 5.01 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "ff41e772f8ebd64274cb72dc179ccf46acfee960",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Colony.2026.PL.1080p.WEB-DL.x264.AC3-R22.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.1080p.10bit.AAC2.0.x265.dual.audio.EN.KO\n👤 5 💾 1.75 GB ⚙️ EXT\nDual Audio / 🇬🇧",
+          "infoHash": "89fe6a48bfada0ca9e279c4ce9ad29c29ed33b2a",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x265|10bit"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony (2026) WEB-DL Dual Audio 1080p 1.7GB\n👤 4 💾 1.75 GB ⚙️ EXT\nDual Audio / 🇬🇧 / 🇮🇳",
+          "infoHash": "c8f062f34d54b3823fb03668e00439a7a5e6dc1b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "Colony (2026) [Bolly4u.org] WEB-DL Dual Audio 1080p 1.7GB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Gunche (2026) WEB-DL 1080p [UKR_KOR] [Hurtom]\n👤 4 💾 8.42 GB ⚙️ EXT\n🇬🇧 / 🇰🇷 / 🇺🇦",
+          "infoHash": "940a12847bfdfc66072b2f1f7501916d0cd1ba8c",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026 m1080p BluRay x264-GeneMige\n👤 3 💾 2.69 GB ⚙️ EXT\n🇬🇧 / 🇰🇷 / 🇫🇷",
+          "infoHash": "7a8ec2032abdc5c33b68c18d40b824be14654d99",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Colony 2026 m1080p BluRay x264-GeneMige.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026 1080p DUAL WEB-DL HEVC x265-BONE\n👤 3 💾 1.98 GB ⚙️ EXT\nDual Audio / 🇬🇧 / 🇰🇷",
+          "infoHash": "8e31ea37cc1fc6cbca39121307b0506b81a6ec0b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Colony 2026 1080p DUAL WEB-DL HEVC x265-BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony (2026) 1080p [Dual Audio] English / Korean\n👤 3 💾 1.75 GB ⚙️ EXT\nDual Audio / 🇬🇧 / 🇰🇷",
+          "infoHash": "b880cd5fa16aa13992c7895682cfa1e55df5d711",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x265|10bit",
+            "filename": "Colony.2026.1080p.10bit.AAC2.0.x265.DualAudio.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.1080p.AMZN.WEB-DL.DDP5.1.H.264-KyoGo\n👤 2 💾 8.57 GB ⚙️ EXT",
+          "infoHash": "cc19a8dbec6f9a43a529adcd61ef2e6a3b5a64c0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Colony.2026.1080p.AMZN.WEB-DL.DDP5.1.H.264-KyoGo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Zona.cero.(2026).(Spanish.Korean.Subs).WEB-DL.1080p.x264-AC3\n👤 1 💾 5.05 GB ⚙️ EXT\n🇪🇸 / 🇰🇷",
+          "infoHash": "10ec8609a924826efe8ad2d4ccf107ebf213fd3b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Zona.cero.(2026).(Spanish.Korean.Subs).WEB-DL.1080p.x264-AC3.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Colony.2026.720p.WEB-DL.x264.Eng.YG⭐\n👤 212 💾 950.17 MB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸",
+          "infoHash": "82bc3519c5b75fe20bd1336ef3f273fca566a642",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|x264",
+            "filename": "Colony.2026.720p.WEB-DL.x264.Eng YG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Gunche 2026 720p WEBRip\n👤 76 💾 1.1 GB ⚙️ YTS",
+          "infoHash": "3a413fe071c42e10df6be16e0545fedb371e63f2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "Gunche.2026.720p.WEBRip.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Colony (2026) BluRay - 720p - x264 - [Tamil + Telugu + Hindi + Kor] - (AAC 2.0) - 1.4GB - ESub\n👤 42 💾 1.43 GB ⚙️ EXT\n🇬🇧 / 🇰🇷 / 🇮🇳",
+          "infoHash": "d118fefa75d845ff882b6b1378822fcb62c72a45",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "www.1TamilMV.solar - Colony (2026) BluRay - 720p - x264 - [Tamil + Telugu + Hindi + Kor] - (AAC 2.0) - 1.4GB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Colony (2026) 720p BluRay - x264 - [Tel + Tam + Hin + Kor]\n👤 38 💾 1.43 GB ⚙️ EXT\n🇬🇧 / 🇰🇷 / 🇮🇳",
+          "infoHash": "53921c9b7c3f9f9f665e0fbeea897c866b6a5908",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Colony (2026) 720p BluRay - x264 - [Tel + Tam + Hin + Kor].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Gunche (2026) [720p] [BluRay]\n👤 36 💾 1.1 GB ⚙️ EXT",
+          "infoHash": "d31a0fc1b4dd2e5df75759d1ba01d0be60a63151",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Gunche.2026.720p.BluRay.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Colony 2026 m720p BluRay x264-GeneMige\n👤 4 💾 1.47 GB ⚙️ EXT\n🇰🇷",
+          "infoHash": "fe5bfb4f672e10a853d5844fb5bfc818c169c5c1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Colony 2026 m720p BluRay x264-GeneMige.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Colony.2026.PL.720p.WEB-DL.XviD.AC3-R22\n👤 4 💾 3.04 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "b7b1ce55cdabf26a38941d3f8da431921565778c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|xvid",
+            "filename": "Colony.2026.PL.720p.WEB-DL.XviD.AC3-R22.avi"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Colony 2026 720p BluRay x264-VETO\n👤 2 💾 6.27 GB ⚙️ EXT\n🇬🇧 / 🇰🇷",
+          "infoHash": "71949a60f7992db9233d685bcf4832ef73e6c7e8",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "veto-colony.2026.720p.bluray.x264.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Colony.2026.Eng.720p.WEBRip.x264.AAC.Forced.Subs\n👤 2 💾 989.24 MB ⚙️ EXT",
+          "infoHash": "6ceba81eea6e40d8fbda715190afa999aaeb7a8b",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "Colony (2026).mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Gunche (2026) 720p BluRay-WORLD\n👤 2 💾 1.1 GB ⚙️ EXT",
+          "infoHash": "5e0184d029d9ca3da44dc127d08a2c4953c9815e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Gunche.2026.720p.BluRay.x264.AAC-WORLD.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Colony (2026) WEB-DL Dual Audio 720p 950MB\n👤 1 💾 985.87 MB ⚙️ EXT\nDual Audio",
+          "infoHash": "4498c0d5ddd0797168fe3fd4c833bce4b66b3e40",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL",
+            "filename": "Colony (2026) [Bolly4u.org] WEB-DL Dual Audio 720p 950MB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Colony 2026 720p BluRay x264-GeneMige\n👤 1 💾 4.78 GB ⚙️ EXT\n🇰🇷",
+          "infoHash": "cab0cdae3a803ccdc762a9cb18a190c6c012c4fc",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Colony 2026 720p BluRay x264-GeneMige.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n480p",
+          "title": "Colony (2026) WEB-DL Dual Audio 480p 400MB\n👤 1 💾 409.2 MB ⚙️ EXT\nDual Audio",
+          "infoHash": "1820771954493d0a21f02c375a60a77e6f335c54",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|480p|WEB-DL",
+            "filename": "Colony (2026) [Bolly4u.org] WEB-DL Dual Audio 480p 400MB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nBRRip",
+          "title": "Colony (2026) BR-Rip - x264 - [Tel + Tam + Hin]\n👤 52 💾 565.91 MB ⚙️ EXT\n🇬🇧 / 🇮🇳",
+          "infoHash": "f46c6c859347edfc57dcc48d72c85d58f0a1bdad",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BRRip|x264"
+          }
+        },
+        {
+          "name": "Torrentio\nBRRip",
+          "title": "Colony (2026) BR-Rip - x264 - [Tamil + Telugu + Hindi] - (AAC 2.0) - 500MB - ESub\n👤 14 💾 565.91 MB ⚙️ EXT\n🇮🇳",
+          "infoHash": "621a7807c1515e8009316cf26db79dbbc9d47ae0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BRRip|x264",
+            "filename": "www.1TamilMV.solar - Colony (2026) BR-Rip - x264 - [Tamil + Telugu + Hindi] - (AAC 2.0) - 500MB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nBDRip",
+          "title": "Gunche (2026) BDRip-AVC_grab777\n👤 2 💾 2.31 GB ⚙️ EXT\n🇬🇧 / 🇰🇷 / 🇺🇦",
+          "infoHash": "346e66302d33e04bb7320ac0facfcb5eddff18c4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BDRip|avc",
+            "filename": "Gunche (2026) BDRip-AVC_grab777.mkv"
+          }
+        }
+      ]
+    },
+    "torrentio-owner": {
+      "url": "https://torrentio.strem.fun/language=turkish|qualityfilter=threed,480p,scr,cam,unknown",
+      "streams": [
+        {
+          "name": "Torrentio\n4k",
+          "title": "Colony.Gunche.2026.2160p.WEB-DL.SDR.MULTi.ENG.LAT.FRE.RUS.KOR.H265.MP4-BTM\n👤 57 💾 19.49 GB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇲🇽 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇭🇷 / 🇺🇦 / 🇹🇷 / 🇸🇦 / 🇹🇭",
+          "infoHash": "c7594b96df9b9043936d464db3c9581d06570b13",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265",
+            "filename": "Colony.Gunche.2026.2160p.WEB-DL.SDR.MULTi[Ben The Men].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Colony.2026.2160p.x265.hdr.5.1-dual-lat-cinecalidad.my.mkv\n👤 40 💾 8.49 GB ⚙️ EXT\nDual Audio / 🇪🇸 / 🇲🇽 / 🇰🇷",
+          "infoHash": "3a1f9c6ab55650d2d292dc6d541623a5f0a44508",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|x265|HDR",
+            "filename": "Colony.2026.2160p.x265.hdr.5.1-dual-lat-cinecalidad.my.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Colony (2026) (2160p UHD BluRay x265 10bit TrueHD Atmos 7.1 r00t) [QxR]\n👤 107 💾 25.98 GB ⚙️ ThePirateBay\n🇰🇷",
+          "infoHash": "9394404f31b468646a80addf704ee4d1ffba7f37",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|x265|10bit",
+            "filename": "Colony (2026) (2160p UHD BluRay x265 10bit r00t).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Gunche (2026) [2160p] [WEBRip] [x265] [10bit] [5.1]\n👤 71 💾 5.48 GB ⚙️ EXT",
+          "infoHash": "caa6e1104e35f87ce5636ed9a4ceb6b8a444f172",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+            "filename": "Gunche.2026.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Zona cero (Gangchae) (2026) [4k 2160p][Esp]\n👤 64 💾 21.8 GB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "0bb67a9dbc0a3f6c1d0c41f7939936b74292743b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k",
+            "filename": "Zona cero (Gangchae) (2026) [4k 2160p][Esp].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Colony.2026.MULTi.2160p.WEB.H265-SUPERFLU\n👤 51 💾 17.78 GB ⚙️ Torrent9\nMulti Audio / 🇫🇷",
+          "infoHash": "d631d3ade786963b84e39d7b4165695de4603af4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB|h265",
+            "filename": "Colony.2026.MULTi.2160p.WEB.H265-SUPERFLU.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Zona.cero.2026.WEB-DL.4k-Dual-Lat\n👤 40 💾 18 GB ⚙️ Cinecalidad\nDual Audio / 🇲🇽",
+          "infoHash": "0bb3ab6011ff0c4ac32a3578e2339fcce3474295",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL",
+            "filename": "Zona.cero.2026.WEB-DL.4k-Dual-Lat.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Colony [Gunche] 2026 2160p UHD BDRip HEVC 10bit SDR TrueHD.7.1 Atmos MUSHR00M\n👤 39 💾 21.55 GB ⚙️ EXT\n🇬🇧 / 🇰🇷",
+          "infoHash": "4a59130801555de7972615c94f31371ba96e96cd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BDRip|hevc|10bit",
+            "filename": "Colony [Gunche] 2026 2160p UHD BDRip HEVC 10bit SDR TrueHD.7.1 Atmos MUSHR00M.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Колония / Gunche / Colony (2026) WEB-DL-HEVC 2160p | 4K | SDR | D L2\n👤 20 💾 18 GB ⚙️ Rutor\n🇷🇺 / 🇰🇷",
+          "infoHash": "45bfb049faf0f7d30b675573594272063cf1e91d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|hevc",
+            "filename": "Colony.2026.2160p.AMZN.WEB-DL.DDP5.1.H.265.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:45bfb049faf0f7d30b675573594272063cf1e91d",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Colony.2026.4K.SDR.2160p.BDRemux Kor Sub Ita x265-NAHOM\n👤 14 💾 69.87 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹 / 🇰🇷",
+          "infoHash": "24cb8884b59c2e8fe4faca2c8be9c588d484194f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay REMUX|x265",
+            "filename": "Colony.2026.4K.SDR.2160p.BDRemux Kor Sub Ita x265-NAHOM.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Colony.2026.2160p.UHD.Blu-ray.REMUX.HEVC.Atmos.TrueHD.7.1-Vivian@HDSky\n👤 13 💾 76.61 GB ⚙️ EXT",
+          "infoHash": "500cc431802ff589119f17c05aef26fb513ab251",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay REMUX|hevc",
+            "filename": "Colony.2026.2160p.UHD.Blu-ray.REMUX.HEVC.Atmos.TrueHD.7.1-Vivian@HDSky.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Colony 2026 UHD BluRay 2160p SDR HEVC TrueHD Atmos 7.1 x265-E\n👤 12 💾 32.09 GB ⚙️ EXT\n🇬🇧 / 🇰🇷",
+          "infoHash": "c1ae9e8e32b4d1bf7c459e9d54c7208f34986031",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|hevc",
+            "filename": "Colony 2026.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Колония / Gunche / Colony (2026) UHD BDRemux 2160p | 4K | SDR | D\n👤 12 💾 70.2 GB ⚙️ Rutor\n🇷🇺 / 🇰🇷",
+          "infoHash": "42bb487dadf170c482edda2e14e9e73871703c47",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay REMUX",
+            "filename": "Colony.2026.UHDBDRemux.SDR.2160p.W.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:42bb487dadf170c482edda2e14e9e73871703c47",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Colony.2026.2160p.BDRip.SDR.HEVC.DD5.1.jorgebelord\n👤 6 💾 20.98 GB ⚙️ EXT\n🇬🇧 / 🇷🇺 / 🇰🇷",
+          "infoHash": "ad365cc37483a06a51a22bec14f6f2eb6c9e1ea2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BDRip|hevc",
+            "filename": "Colony.2026.2160p.BDRip.SDR.HEVC.DD5.1.jorgebelord.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.1080p.Korean.WEBRip.10bit.AAC2.0.x265-FaS\n👤 1270 💾 1.67 GB ⚙️ ThePirateBay\n🇰🇷",
+          "infoHash": "6345315a91a4e2ea348a2c1cafdbb9441c84c22c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Colony.2026.1080p.WEBRip.10bit.AAC2.0.x265-FaS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony (2026) (1080p DS4K UHD BluRay x265 10bit EAC3 Atmos 7.1 K…\n👤 244 💾 8.97 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇷🇺 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇸🇦",
+          "infoHash": "8f08bd4621d4129c10c0a4548d0832e437fc9f23",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Colony (2026) (1080p DS4K UHD BluRay x265 10bit r00t).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony (2026) Eng 1080p WEBRip x265 AAC ESub\n👤 234 💾 2.42 GB ⚙️ TorrentGalaxy",
+          "infoHash": "4d00af877a4ad98e28a26376f1bc1dd014a91c09",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Colony (2026) Eng 1080p WEBRip x265 AAC ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Gunche 2026 1080p WEBRip\n👤 216 💾 2.04 GB ⚙️ YTS",
+          "infoHash": "61eb26704c79ee1cdc2cbcfee002223ab0e89709",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Gunche.2026.1080p.WEBRip.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026 WEBDL 1080P Eng Sub 7fans\nColony.2026.1080p.WEB-DL.AAC2.0.H264-7fans.mkv\n👤 147 💾 6.61 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇰🇷",
+          "infoHash": "52d5cbb8ffe3167bcdd571b451866e3e60897321",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Colony.2026.1080p.WEB-DL.AAC2.0.H264-7fans.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.MULTi.VFF.1080p.WEBRip.AC3.5.1.x264-GL0P\n👤 145 💾 5.99 GB ⚙️ Torrent9\nMulti Audio / 🇰🇷 / 🇫🇷",
+          "infoHash": "586ab04abe6516f84678cb7723e7ed783bfb4160",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Colony.2026.MULTi.VFF.1080p.WEBRip.AC3.5.1.x264-GL0P.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Gunche 2026 1080p WEBRip\n👤 143 💾 1.83 GB ⚙️ YTS",
+          "infoHash": "b41600e947e9464cc9db94d38fefcbf9e4c2f5ff",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Gunche.2026.1080p.WEBRip.x265.10bit.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026 1080p (DUAL) WEB-DL HEVC x265 BONE\n👤 142 💾 1.98 GB ⚙️ EXT\nDual Audio / 🇬🇧 / 🇰🇷",
+          "infoHash": "0fc83274e7765a9e8fe96e3bb9b9b0c7dbd4927f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Colony 2026 1080p (DUAL) WEB-DL HEVC x265 BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.1080p-dual-lat-cinecalidad.my.mp4\n👤 132 💾 2.19 GB ⚙️ EXT\nDual Audio / 🇲🇽",
+          "infoHash": "8c8850b32a9feb796bf02586fe7dd73e4ba7c9c1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p",
+            "filename": "Colony.2026.1080p-dual-lat-cinecalidad.my.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Колония / Gunche (2026) WEB-DL 1080p от ELEKTRI4KA | D | Flarrow Films\n👤 123 💾 4.71 GB ⚙️ Rutor\n🇷🇺",
+          "infoHash": "78e85455c180b4e61ce5fed649f7470bcd133c10",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "Koloniya.2026.D.WEB-DL.1080p.ELEKTRI4KA.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:78e85455c180b4e61ce5fed649f7470bcd133c10",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Zona.cero.2026.1080p-Dual-Lat\n👤 112 💾 2.55 GB ⚙️ Cinecalidad\nDual Audio / 🇲🇽",
+          "infoHash": "d2b06dd044aa7812a3d9d7b81faad19d18223514",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p",
+            "filename": "Zona.cero.2026.1080p-Dual-Lat.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Zona cero (Gangchae) (2026) [Bluray 1080p][Esp]\n👤 101 💾 15.72 GB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "9d745bfd4bb436938bc3d9f3169373868411cd6a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay",
+            "filename": "Zona cero (Gangchae) (2026) [Bluray 1080p][Esp].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Gunche (2026) [1080p] [BluRay] [5.1]\n👤 81 💾 2.26 GB ⚙️ EXT",
+          "infoHash": "3056ed3591fa3cf83d7ac5beff7c76763f322d73",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Gunche.2026.1080p.BluRay.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.WEB-DL.1080p.X264\n👤 69 💾 2.66 GB ⚙️ EXT\n🇰🇷 / 🇨🇳",
+          "infoHash": "dbd48d183bc55c3679e177092a3b813982108f7e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "群体.Colony.2026.WEB-DL.1080p.X264.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.1080p.WEBRip.Dual.Audio.DD5.1.10bits.x265-Rapta\n👤 67 💾 1.7 GB ⚙️ EXT\nDual Audio",
+          "infoHash": "a506f35ea885fe442d3d734d2b271c84974da946",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Colony.2026.1080p.WEBRip.Dual.Audio.DD5.1.10bits.x265-Rapta.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026 1080p WebRip Opus 2 0 x265-Lootera\n👤 67 💾 2.73 GB ⚙️ ThePirateBay\n🇬🇧 / 🇰🇷",
+          "infoHash": "27dc27edb4d81214ea44714dafcdd42af2d29d96",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Colony 2026 1080p WebRip Opus 2 0 x265-Lootera.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Колония / Gunche / Colony (2026) WEB-DL 1080p | L2 | Head Pack Films\n👤 53 💾 6.78 GB ⚙️ Rutor\n🇷🇺 / 🇰🇷",
+          "infoHash": "ea9dbf52313327dca5dfcec0d9d7d6cfd7181ec5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "Colony (2026) WEB-DL 1080p.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:ea9dbf52313327dca5dfcec0d9d7d6cfd7181ec5",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony (2026) BluRay - 1080p - x264 - [Tamil + Telugu + Hindi + Kor] - (AAC 2.0) - 2.3GB - ESub\n👤 52 💾 2.37 GB ⚙️ EXT\n🇬🇧 / 🇰🇷 / 🇮🇳",
+          "infoHash": "ef3319141b0f70be29e09c824584e30cca2188ad",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "www.1TamilMV.solar - Colony (2026) BluRay - 1080p - x264 - [Tamil + Telugu + Hindi + Kor] - (AAC 2.0) - 2.3GB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Zona.cero.2026.WEB-DL.1080p-Dual-Lat\n👤 47 💾 8.9 GB ⚙️ Cinecalidad\nDual Audio / 🇲🇽",
+          "infoHash": "3f80d1af2ae2be8210094b80457bce85b64b0a95",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Колония / Gunche / Colony [2026 BDRemux 1080p] Dub (Flarrow Films) + DVO (Head Pack Films) + MVO Ukr + Sub (Rus Eng Fra Spa) + Original Kor\n👤 44 💾 29.64 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺 / 🇪🇸 / 🇰🇷 / 🇫🇷 / 🇺🇦",
+          "infoHash": "8cd7562ed534e6b8bdb5f184aa91a94b98781d25",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay REMUX",
+            "filename": "Gunche.2026.REMUX.mkv"
+          },
+          "sources": [
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "dht:8cd7562ed534e6b8bdb5f184aa91a94b98781d25",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony (2026) 1080p BluRay - x264 - [Tel + Tam + Hin + Kor]\n👤 40 💾 2.37 GB ⚙️ EXT\n🇬🇧 / 🇰🇷 / 🇮🇳",
+          "infoHash": "983b583e3f6b5347b9c83aa332d7b3a07b2b2648",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Colony (2026) 1080p BluRay - x264 - [Tel + Tam + Hin + Kor].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Колония / Gunche / Colony (2026) WEB-DL 1080p от ELEKTRI4KA | D | Flarrow Films\n👤 25 💾 8.58 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺 / 🇰🇷",
+          "infoHash": "7b6b9bf2a0889ed1b1538a3ea00c4f8067800866",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "Colony.2026.DUB.AMZN.WEB-DL.1080p.ELEKTRI4KA.mkv"
+          },
+          "sources": [
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet",
+            "dht:7b6b9bf2a0889ed1b1538a3ea00c4f8067800866"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026.1080p.WEB-DL.AAC.x264-rothebehap\n👤 20 💾 5.25 GB ⚙️ TorrentGalaxy\n🇰🇷",
+          "infoHash": "6cd1ddd54947d5ead634f4eb74a3ca231c215d58",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Colony 2026.1080p.WEB-DL.AAC.x264-rothebehap.mp4.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026 1080p AMZN WEB-DL DDP5 1 H 264-KyoGo\n👤 19 💾 8.57 GB ⚙️ EXT\n🇬🇧 / 🇰🇷",
+          "infoHash": "f3a5b18c1a6c7649120d714cc43e6591623fb3a5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Colony 2026 1080p AMZN WEB-DL DDP5 1 H 264-KyoGo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026 1080p WebRip Opus 2 0 x265-Lootera\n👤 19 💾 2.73 GB ⚙️ ThePirateBay\n🇬🇧 / 🇰🇷",
+          "infoHash": "d4add5f2b28bc9084e6d5eaaab950c581af2e169",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Colony 2026 1080p WebRip Opus 2 0 x265-Lootera.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Колония / Gunche / Colony (2026) WEB-DL 1080p | D | Flarrow Films\n👤 15 💾 7.1 GB ⚙️ Rutor\n🇷🇺 / 🇰🇷",
+          "infoHash": "b2fb4854cf32921561786c987642e007cb9f279f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "Колония - Gunche - Colony (2026) WEB-DL 1080p.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:b2fb4854cf32921561786c987642e007cb9f279f",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony (2026) 1080p UHD 10bit Bluray x265 HEVC [Org DDP 2.0 Hindi DDP EX 7.1 Korean] ESubs ~ TombDoc\n👤 13 💾 9.33 GB ⚙️ 1337x\n🇰🇷 / 🇮🇳",
+          "infoHash": "483ed3c1de721c9621ee562b8de327cfd8ddb2d8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Colony (2026) 1080p UHD 10bit Bluray x265 HEVC [Org DDP 2.0 Hindi + DDP EX 7.1 Korean] ESubs ~ TombDoc.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony (2026) [1080p] [WEBRip] [5.1]-BGF\nColony.2026.1080p.WEBRip.x264.AAC5.1-BGF.mp4\n👤 13 💾 2.83 GB ⚙️ TorrentGalaxy",
+          "infoHash": "1b8ad8bd0fdf15191b6884d9206b872edc1c68f1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Colony.2026.1080p.WEBRip.x264.AAC5.1-BGF.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Колония / Gunche / Colony (2026) UHD BDRip 1080p | D\n👤 12 💾 12.09 GB ⚙️ Rutor\n🇷🇺 / 🇰🇷",
+          "infoHash": "df55cd7a840d5af56c3c37b1f481d2e07265615b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip",
+            "filename": "Colony.2026.UHDBDRip.1080p.W.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:df55cd7a840d5af56c3c37b1f481d2e07265615b",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.PL.1080p.WEB-DL.XviD.AC3-MAXX.mp4\n👤 12 💾 3.81 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "98edfd322a7c93e7e59a73dd8425e8fc5a53ae81",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|xvid",
+            "filename": "Colony.2026.PL.1080p.WEB-DL.XviD.AC3-MAXX.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony 2026 1080p WEBRip 10bit AAC2 0 x265-FaS\n👤 12 💾 1.67 GB ⚙️ ThePirateBay\n🇬🇧 / 🇰🇷",
+          "infoHash": "3386dd7bcb4ac7d2315f844eed734f0698c46700",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Colony 2026 1080p WEBRip 10bit AAC2 0 x265-FaS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.PL.1080p.WEB-DL.x264.AC3-R22\n👤 5 💾 5.01 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "ff41e772f8ebd64274cb72dc179ccf46acfee960",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Colony.2026.PL.1080p.WEB-DL.x264.AC3-R22.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.1080p.10bit.AAC2.0.x265.dual.audio.EN.KO\n👤 5 💾 1.75 GB ⚙️ EXT\nDual Audio / 🇬🇧",
+          "infoHash": "89fe6a48bfada0ca9e279c4ce9ad29c29ed33b2a",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x265|10bit"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Colony.2026.PL.AI.1080p.WEBRip.XviD.AC3-MAXX\n👤 5 💾 2.72 GB ⚙️ BestTorrents\n🇵🇱",
+          "infoHash": "cae86685cd994309aa4d75995f1b2364ae8b9475",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|xvid",
+            "filename": "Colony.2026.PL.AI.1080p.WEBRip.XviD.AC3-MAXX.avi"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Colony.2026.720p.WEB-DL.x264.Eng.YG⭐\n👤 212 💾 950.17 MB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸",
+          "infoHash": "82bc3519c5b75fe20bd1336ef3f273fca566a642",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|x264",
+            "filename": "Colony.2026.720p.WEB-DL.x264.Eng YG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Gunche 2026 720p WEBRip\n👤 76 💾 1.1 GB ⚙️ YTS",
+          "infoHash": "3a413fe071c42e10df6be16e0545fedb371e63f2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "Gunche.2026.720p.WEBRip.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Zona cero (Gangchae) (2026) [Bluray 720p][Esp]\n👤 72 💾 4.89 GB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "6e32630001cef097b4751dbf052f9ef3bd90c27e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay",
+            "filename": "Zona cero (Gangchae) (2026) [Bluray 720p][Esp].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Colony.2026.Multi.Vff.720P.WEBRIP-NOTAG\n👤 71 💾 3.08 GB ⚙️ Torrent9\nMulti Audio / 🇰🇷 / 🇫🇷",
+          "infoHash": "d75e77150be7f123051109ddb8e9745ba8ab1218",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip",
+            "filename": "Colony.2026.Multi.Vff.720P. WEBRIP.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Colony (2026) BluRay - 720p - x264 - [Tamil + Telugu + Hindi + Kor] - (AAC 2.0) - 1.4GB - ESub\n👤 42 💾 1.43 GB ⚙️ EXT\n🇬🇧 / 🇰🇷 / 🇮🇳",
+          "infoHash": "d118fefa75d845ff882b6b1378822fcb62c72a45",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "www.1TamilMV.solar - Colony (2026) BluRay - 720p - x264 - [Tamil + Telugu + Hindi + Kor] - (AAC 2.0) - 1.4GB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Colony (2026) 720p BluRay - x264 - [Tel + Tam + Hin + Kor]\n👤 38 💾 1.43 GB ⚙️ EXT\n🇬🇧 / 🇰🇷 / 🇮🇳",
+          "infoHash": "53921c9b7c3f9f9f665e0fbeea897c866b6a5908",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Colony (2026) 720p BluRay - x264 - [Tel + Tam + Hin + Kor].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Gunche (2026) [720p] [BluRay]\n👤 36 💾 1.1 GB ⚙️ EXT",
+          "infoHash": "d31a0fc1b4dd2e5df75759d1ba01d0be60a63151",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Gunche.2026.720p.BluRay.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Zona.cero.2026.720p-Dual-Lat\n👤 21 💾 1.35 GB ⚙️ Cinecalidad\nDual Audio / 🇲🇽",
+          "infoHash": "7fd9eaa3906812dcc3b33ba0c9ba51b9311d2875",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p",
+            "filename": "Zona.cero.2026.720p-Dual-Lat.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nWEBRip",
+          "title": "Colony.2026.Multi.Vff.WEBRIP-NOTAG\n👤 175 💾 1.24 GB ⚙️ Torrent9\nMulti Audio / 🇫🇷",
+          "infoHash": "fbb9780a66f8162ff0a196988b1d678f37d78649",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEBRip",
+            "filename": "Colony.2026.Multi.Vff.WEBRIP.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\nBluRay",
+          "title": "Zona cero (Gangchae) (2026) [Bluray][Esp]\n👤 103 💾 1.66 GB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "5f658aaa54448c7b10d30102edb5cce2a4a77463",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BluRay",
+            "filename": "Zona cero (Gangchae) (2026) [Bluray][Esp].avi"
+          }
+        },
+        {
+          "name": "Torrentio\nBRRip",
+          "title": "Colony (2026) BR-Rip - x264 - [Tel + Tam + Hin]\n👤 52 💾 565.91 MB ⚙️ EXT\n🇬🇧 / 🇮🇳",
+          "infoHash": "f46c6c859347edfc57dcc48d72c85d58f0a1bdad",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BRRip|x264"
+          }
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Колония / Gunche / Colony (2026) WEB-DLRip от ELEKTRI4KA | D | Flarrow Films\n👤 43 💾 1.46 GB ⚙️ Rutor\nDubbed",
+          "infoHash": "b408843092466ac42d2a91220ea8ce3d9918d30c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL",
+            "filename": "Colony.2026.DUB.AMZN.WEB-DLRip.ELEKTRI4KA.avi"
+          },
+          "sources": [
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet",
+            "dht:b408843092466ac42d2a91220ea8ce3d9918d30c"
+          ]
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Колония / Gunche (2026) WEB-DLRip от ELEKTRI4KA | D | Flarrow Films\n👤 41 💾 1.46 GB ⚙️ Rutor\n🇷🇺",
+          "infoHash": "8d8cd98298e7eaab886a0d3bb974fb0bcf3668dd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL",
+            "filename": "Koloniya.2026.D.WEB-DLRip.ELEKTRI4KA.avi"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:8d8cd98298e7eaab886a0d3bb974fb0bcf3668dd",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Колония / Gunche / Colony [2026 WEB-DLRip] Dub (Flarrow Films)\n👤 34 💾 1.46 GB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "47aeeba4d082d6aa85bac746df126abfc223b69c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL",
+            "filename": "Колония_2026_WEB-DLRip.avi"
+          },
+          "sources": [
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "dht:47aeeba4d082d6aa85bac746df126abfc223b69c",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Колония / Gunche [2026 WEB-DLRip] Dub (Flarrow Films)\n👤 32 💾 1.46 GB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "d21e5b807d1cb22de3769404c159ce1877fcdda1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL",
+            "filename": "Koloniya.2026.D.WEB-DLRip_ELEKTRI4KA.avi"
+          },
+          "sources": [
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet",
+            "dht:d21e5b807d1cb22de3769404c159ce1877fcdda1"
+          ]
+        },
+        {
+          "name": "Torrentio\nHDRip",
+          "title": "Колония / Gunche / Colony (2026) HDRip-AVC | D | Flarrow Films\n👤 23 💾 2.06 GB ⚙️ Rutor\n🇷🇺 / 🇰🇷",
+          "infoHash": "35058bcbda48e8fb07f8dcccfc010c32110eca39",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|HDRip|avc",
+            "filename": "Colony.2026.HDRip.AVC.TORRNADO.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:35058bcbda48e8fb07f8dcccfc010c32110eca39",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nBRRip",
+          "title": "Colony (2026) BR-Rip - x264 - [Tamil + Telugu + Hindi] - (AAC 2.0) - 500MB - ESub\n👤 14 💾 565.91 MB ⚙️ EXT\n🇮🇳",
+          "infoHash": "621a7807c1515e8009316cf26db79dbbc9d47ae0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BRRip|x264",
+            "filename": "www.1TamilMV.solar - Colony (2026) BR-Rip - x264 - [Tamil + Telugu + Hindi] - (AAC 2.0) - 500MB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Колония / Gunche (2026) WEB-DLRip-AVC от DoMiNo & селезень | D | Flarrow Films\n👤 9 💾 1.6 GB ⚙️ Rutor\n🇷🇺 / 🇰🇷",
+          "infoHash": "47bcb026f58e2ce4d03aef9b0e6fcec9e7a0f10d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL|avc",
+            "filename": "Колония.2026.DUB.WEB-DLRip.x264.seleZen.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:47bcb026f58e2ce4d03aef9b0e6fcec9e7a0f10d",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Zona.cero.2026.DVDRip-Lat\n👤 7 💾 784.66 MB ⚙️ Cinecalidad\n🇲🇽",
+          "infoHash": "b204408c33eaf9f8ca1e86399f485d6ed70e335d",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip"
+          }
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Gunche (2026) [WEB-DL] [XviD-R22] [Lektor PL]\n👤 5 💾 699.64 MB ⚙️ BestTorrents\n🇵🇱",
+          "infoHash": "ec058e2736944db8c9c9ee5fdaa1864141e13ba5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL|xvid",
+            "filename": "Colony.2026.PL.WEB-DL.XviD-R22.avi"
+          }
+        }
+      ]
+    }
+  }
+}

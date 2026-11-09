@@ -1,0 +1,516 @@
+{
+  "id": "tt30144839",
+  "type": "movie",
+  "season": null,
+  "episode": null,
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "One Battle After Another",
+    "year": "2025",
+    "releaseInfo": "2025",
+    "runtime": "162 min",
+    "country": "United States",
+    "language": null,
+    "episodeTitle": null,
+    "episodeReleased": null
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "One.Battle.After.Another.2025.bluray.hdr.2160p.av1.7.1.opus.subs-Dust\n👤 14 💾 7.34 GB ⚙️ 1337x",
+          "infoHash": "81209c4b8ae14d0a050f8619a04e89170408ba4a",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+            "filename": "One.Battle.After.Another.2025.bluray.hdr.2160p.av1.7.1.opus.subs-Dust.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "One Battle After Another 2025 2160p WEBRip\n👤 201 💾 7.22 GB ⚙️ YTS\n🇩🇰 / 🇸🇪 / 🇳🇴",
+          "infoHash": "4372376f3bb71bf0890dfc3620c943913982e96e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+            "filename": "One.Battle.After.Another.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "One Battle After Another (1080p DS4K BluRay x265 10bit HDR AAC 7.1) [Kris]\n👤 3 💾 10.12 GB ⚙️ 1337x",
+          "infoHash": "5df23c7c705a29bff84e89574791e37f61f79faa",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|HDR",
+            "filename": "One Battle After Another (1080p DS4K BluRay x265 10bit HDR AAC 7.1) [Kris].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 2025 1080p WEBRip\n👤 1623 💾 2.99 GB ⚙️ YTS",
+          "infoHash": "74fa03eb883c54727e555dc24782e175477f6513",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "One.Battle.After.Another.2025.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One.Battle.After.Another.2025.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir\n👤 652 💾 2.63 GB ⚙️ 1337x",
+          "infoHash": "719e670b93125c257ccb4e52764530fc40550ff4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "One.Battle.After.Another.2025.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One.Battle.After.Another.2025.1080p.AMZN.WEB-DL.DDP5.1.H.264-KyoGo\n👤 232 💾 11.12 GB ⚙️ 1337x",
+          "infoHash": "310110041b9909f5442ac4d012f75a602cd3ac2b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "One.Battle.After.Another.2025.1080p.AMZN.WEB-DL.DDP5.1.H.264-KyoGo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 2025 1080p WEBRip\n👤 221 💾 2.71 GB ⚙️ YTS",
+          "infoHash": "1ec92beceda89d3075cb321f3f65b85611579f25",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "One.Battle.After.Another.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 2025 1080p WEB-DL HEVC x265 5.1 BONE\n👤 193 💾 2 GB ⚙️ ThePirateBay",
+          "infoHash": "d3dbd7a584701b6fbccd772e8de76bf9f60f7906",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "One Battle After Another 2025 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another (2025) (1080p BluRay AV1 Opus 7.1) - Edlyn\n👤 157 💾 3.81 GB ⚙️ EXT",
+          "infoHash": "4a3fbeef55a8699e8ea485cf266f708efdae6683",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "One Battle After Another (2025) (1080p BluRay AV1 Opus 7.1) - Edlyn.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 2025 1080p BluRay\n👤 125 💾 2.98 GB ⚙️ YTS",
+          "infoHash": "6c99977cbf9c5a0731427540a3e58456318a85b3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "One.Battle.After.Another.2025.1080p.BluRay.x264.AAC5.1-[YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One.Battle.After.Another.2025.1080p.WEB.DDP5.1.Atmos.H.265-WAR\n👤 62 💾 5.18 GB ⚙️ 1337x",
+          "infoHash": "36cd51860f4c2a9ca78c20ade81027f39b5ec78d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h265",
+            "filename": "One.Battle.After.Another.2025.1080p.WEB.DDP5.1.Atmos.H.265-WAR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another (2025) V2 (1080p BluRay x265 10bit EAC3 Atmos 7.1 Silence)\nOne Battle After Another (2025) (1080p BluRay x265 EAC3 Silence).mkv\n👤 55 💾 8.68 GB ⚙️ 1337x",
+          "infoHash": "a450f8e3d1dff12496bc2c8e1e5964ea531d282a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "One Battle After Another (2025) (1080p BluRay x265 EAC3 Silence).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another (2025) (1080p BluRay x265 10bit EAC3 Atmos 7.1 Silence) [QxR]\n👤 52 💾 8.68 GB ⚙️ EXT\n🇬🇧 / 🇪🇸 / 🇫🇷",
+          "infoHash": "dce1b8cc25997e17eff22ec0aad4573a18e1b935",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "One Battle After Another (2025) (1080p BluRay x265 EAC3 Silence).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another (2025) (1080p MA WEB-DL x265 10bit EAC3 5.1 Silence) [QxR]\n👤 38 💾 7.65 GB ⚙️ 1337x",
+          "infoHash": "4504306c2607262f033a07012b9ac5b173289a57",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+            "filename": "One Battle After Another (2025) (1080p MA WEB-DL x265 10bit Silence).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One.Battle.After.Another.2025.MULTi.VFF.AD.1080p.WEBrip.EAC3.5.1.x265-TyHD (Une bataille après l'autre)\n👤 36 💾 3.42 GB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇫🇷",
+          "infoHash": "0fa97b5a7d49a524a5409c34620592e6067dde7f",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 2025 1080p Blu-ray iPad AAC x264-HDH\n👤 27 💾 4.18 GB ⚙️ ThePirateBay\n🇬🇧 / 🇨🇳",
+          "infoHash": "1f6909ddb0eb9cac744bd4e3ad8777859b2e9d3e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "One Battle After Another 2025 1080p Blu-ray iPad AAC x264-HDH.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 2025 BluRay 1080p DDP 7 1 x264-FZHD\n👤 26 💾 6.33 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇷🇸   / 🇭🇷 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "4c085d6d864ffcb7ba8ef8f44993249a9c0d8508",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "One Battle After Another 2025 BluRay 1080p DDP 7 1 x264-FZHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One.Battle.After.Another.2025.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA\n👤 26 💾 3.21 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷",
+          "infoHash": "cd06ccb1d6161c14ac4a6dbbbd86d09c627a262c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+            "filename": "One.Battle.After.Another.2025.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 2025 1080p 10bit WEBRip 6CH X265 HEVC-PSA\n👤 25 💾 3.21 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷",
+          "infoHash": "36294980fcfb11bfa55f0ecbcfa65eb86526aab4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+            "filename": "One Battle After Another 2025 1080p 10bit WEBRip 6CH X265 HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One.Battle.After.Another.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust\n👤 18 💾 1.77 GB ⚙️ 1337x",
+          "infoHash": "73b7b3084781bb6a9047c4fa1baaa1f4973ea3ce",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "One.Battle.After.Another.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One.Battle.After.Another.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta\n👤 18 💾 2.54 GB ⚙️ 1337x",
+          "infoHash": "48b0161c22c3636976bbb5fc2010d2d686875ff6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "One.Battle.After.Another.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 2025 1080p HMAX WEB-DL DDPA 5 1 H 265-PiRaTeS\n👤 15 💾 3.98 GB ⚙️ ThePirateBay",
+          "infoHash": "2ecdb0ae12e847f4e836d5c360e53a41ffe64d07",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+            "filename": "One Battle After Another 2025 1080p HMAX WEB-DL DDPA 5 1 H 265-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 2025 1080p WEBRip x264\n👤 13 💾 2.99 GB ⚙️ ThePirateBay",
+          "infoHash": "7a23518b7815bc16b989c548f1d5b62178d8d8d1",
+          "fileIdx": 36,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "video.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One.Battle.After.Another.2025.1080p.WEBRip.x265-KONTRAST\n👤 11 💾 3.66 GB ⚙️ 1337x",
+          "infoHash": "2beea5477150e0a2cbd991f99d48fd80d96b1119",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "One.Battle.After.Another.2025.1080p.WEBRip.x265-KONTRAST.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Chien 51 2025 FRENCH 1080p WEB H264-SUPPLY\n👤 10 💾 6.51 GB ⚙️ ThePirateBay\n🇫🇷",
+          "infoHash": "9d1a4445c590664765213cdbdabf235858342f8c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264",
+            "filename": "Chien 51 2025 FRENCH 1080p WEB H264-SUPPLY.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 2025 USA BluRay 1080p AV1 OPUS 7 1 2Audios-CMCT\n👤 10 💾 5.26 GB ⚙️ ThePirateBay",
+          "infoHash": "952ca9c5123393f8c025ab6fbe0214d0ead4c396",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "One Battle After Another 2025 USA BluRay 1080p AV1 OPUS 7 1 2Audios-CMCT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another (2025) 1080p WEBRip 5.1-LAMA\n👤 10 💾 2.99 GB ⚙️ ThePirateBay",
+          "infoHash": "d6ba8d789f71d79754717614003ed4bd53a946dc",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "One.Battle.After.Another.2025.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 2025 1080p HMAX WEB-DL H 264 DDP5 1 Atmos 2Audios-UBWEB\n👤 7 💾 6.89 GB ⚙️ ThePirateBay",
+          "infoHash": "efab4536d4dbf128d508b5053cb3ee541c2ee0b7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "One Battle After Another 2025 1080p HMAX WEB-DL H 264 DDP5 1 Atmos 2Audios-UBWEB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 2025 1080p MAX WEB-DL DDP5 1 Atmos H 265 2Audio-HDSWEB\n👤 6 💾 4.13 GB ⚙️ ThePirateBay",
+          "infoHash": "7a4cad7231f8420aefe5eb7001cc9850f243fa37",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+            "filename": "One Battle After Another 2025 1080p MAX WEB-DL DDP5 1 Atmos H 265 2Audio-HDSWEB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One.Battle.After.Another.2025.1080p.AMZN.WEB-DL.DD5.1.H265.MP4-BTM\n👤 6 💾 3.08 GB ⚙️ ThePirateBay",
+          "infoHash": "a5a77dbcfd25897f421f7b6fc8c4c7dc54c73f4f",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+            "filename": "One.Battle.After.Another.2025.1080p.AMZN.WEB-DL[Ben The Men].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 2025 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir\n👤 6 💾 2.63 GB ⚙️ ThePirateBay",
+          "infoHash": "7f034b55914d618af04ff7a6197e1a15c94de005",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "One Battle After Another 2025 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One.Battle.After.Another.2025.1080p.AMZN.WEB-DL.DDP5.1.H.264-KyoGo\n👤 5 💾 11.12 GB ⚙️ 1337x",
+          "infoHash": "2c736f8fd2082d34d7549893fae0ed44cdcafacc",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "One.Battle.After.Another.2025.1080p.AMZN.WEB-DL.DDP5.1.H.264-KyoGo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another (2025) 1080p 10bit BluRay English DDP 5.1 x265 HEVC ESub - ANNi\n👤 4 💾 10.37 GB ⚙️ 1337x",
+          "infoHash": "4ddca45b85b3828d07d34bfa5a40f97c056fd788",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "One Battle After Another (2025) 1080p 10bit BluRay English DDP 5.1 x265 HEVC ESub - ANNi.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One.Battle.After.Another.2025.1080p.iTunes.WEB-DL.DDP.5.1.Atmos.H.264-DreamHD\n👤 4 💾 12.13 GB ⚙️ ThePirateBay",
+          "infoHash": "905c3b89899c7c025c0265dce44e02ce67730833",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "One.Battle.After.Another.2025.1080p.iTunes.WEB-DL.DDP.5.1.Atmos.H.264-DreamHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 1080p WEB H264-SuccessfulCrab EZTV\n👤 4 💾 1.14 GB ⚙️ ThePirateBay",
+          "infoHash": "70ac9c9bec3d5bdc949a6ce2be446f2278f22164",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another (2025) [1080p] [ENG]\ndat/video.mkv\n👤 3 💾 232 MB ⚙️ ThePirateBay",
+          "infoHash": "709f16b97d7ca27ee2ffde7a4d81cbc22d122e24",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p",
+            "filename": "video.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Una.Battaglia.Dopo.L'Altra.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv\n👤 3 💾 14.9 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "68e9a2e5ff5b7ecf41172741a893640ce52efc99",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Una.Battaglia.Dopo.L'Altra.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another (2025) 1080p WEBRip x265 10bit 5.1-LAMA\n👤 3 💾 2.71 GB ⚙️ ThePirateBay",
+          "infoHash": "4764df68ef7d3a55b43046991f2a726011765689",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "One.Battle.After.Another.2025.1080p.WEBRip.x265.10bit.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 1080p WEB H264-SuccessfulCrab EZTV\n👤 3 💾 1.64 GB ⚙️ ThePirateBay",
+          "infoHash": "6e7d063a1afbbbc4e903f9b11fcaec5575a9cec7",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One.Battle.After.Another.2025.MULTi.1080p.WEB.H264-TFA\n👤 2 💾 8.92 GB ⚙️ EXT\nMulti Audio",
+          "infoHash": "db489782d8fbc6dbf1a0b2f015ef5a53dc8d293a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264",
+            "filename": "One.Battle.After.Another.2025.MULTi.1080p.WEB.H264-TFA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One.Battle.After.Another.2025.MULTI.VF2.1080p.WEB.DDP.Atmos.x265-Y4Y4\n👤 2 💾 9.42 GB ⚙️ EXT\nMulti Audio / 🇬🇧",
+          "infoHash": "10dc016b36f65d927039d75ae1ff35f17bafeaa2",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|x265"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another 2025 1080p WebRip EAC3 5 1 x265-Lootera\n👤 2 💾 3.23 GB ⚙️ ThePirateBay",
+          "infoHash": "0767b0355f6eb462ed6c764df57320a8b53e75cf",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "One Battle After Another 2025 1080p WebRip EAC3 5 1 x265-Lootera.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "One Battle After Another (2025 ITA/ENG) [1080p x265] [Paso77]\n👤 1 💾 9.13 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "52db1b6bf9a4a993b59fea71a33b8791b273587a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|x265",
+            "filename": "One Battle After Another 2025 BDRip ITA ENG 1080p x265 Paso77.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Jedna bitva za druhou / One Battle After Another (2025)(CZ)[1080p]\n👤 1 💾 2.58 GB ⚙️ EXT\n🇨🇿",
+          "infoHash": "ef25979b677357184af791b4e4d014c5c83726c9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p",
+            "filename": "Jedna bitva za druhou.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "One Battle After Another 2025 720p WEBRip\n👤 165 💾 1.46 GB ⚙️ YTS",
+          "infoHash": "eeaebd119024d60812dd2a5172ceb7297ea487d8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "One.Battle.After.Another.2025.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "One Battle After Another 2025 720p BluRay\n👤 50 💾 1.45 GB ⚙️ YTS",
+          "infoHash": "e720dec0bc8f70f5f9d0fce933d2f669bd72aad0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "One.Battle.After.Another.2025.720p.BluRay.x264.AAC-[YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "One Battle After Another (2025) 720p WEBRip-LAMA\n👤 24 💾 1.46 GB ⚙️ ThePirateBay",
+          "infoHash": "3860c9cae83b8bd9d8f5269b75ad02e528ac5473",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "One.Battle.After.Another.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "One Battle After Another 2025 720p 10bit WEBRip 6CH X265 HEVC-PSA\n👤 16 💾 1.31 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷",
+          "infoHash": "60c2c94c6c9fe42126c4b9bb4db1e3ba9d984749",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|hevc|10bit",
+            "filename": "One Battle After Another 2025 720p 10bit WEBRip 6CH X265 HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Una battaglia dopo l’altra (2025) .mkv 720p WEB-DL DDP 5.1 iTA ENG H264 - FHC_CREW.mkv\n👤 3 💾 9.11 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "96a32f973f0ef55df6d3f73c94a95b69046b8929",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "Una battaglia dopo l’altra (2025) .mkv 720p WEB-DL DDP 5.1 iTA ENG H264 - FHC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nBluRay",
+          "title": "One Battle After Another (2025) [Leonardo DiCaprio] BluRay H264 …\n👤 13 💾 3.28 GB ⚙️ TorrentGalaxy",
+          "infoHash": "7042839a33d399923313f7f92922ac1d83dd3590",
+          "fileIdx": 12,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BluRay|h264",
+            "filename": "One Battle After Another (2025) BluRay H264 DolbyD 5.1 + nickarad.mp4"
+          }
+        }
+      ]
+    }
+  }
+}

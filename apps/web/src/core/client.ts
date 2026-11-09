@@ -27,6 +27,7 @@ import type { TitleUpdate } from "./generated/TitleUpdate";
 import type { VersionsSnapshot } from "./generated/VersionsSnapshot";
 import type { Network } from "./generated/Network";
 import { webosDeviceCaps } from "./webos-caps";
+import { keepsAv1, probeAv1 } from "./av1-probe";
 import { webosTransport } from "./webos-transport";
 import { isWebOS } from "../lib/webos";
 
@@ -378,6 +379,8 @@ const DECODERS: [name: string, type: string][] = [
   ["vp9", 'video/webm; codecs="vp9"'],
 ];
 
+void probeAv1();
+
 const decodes = (type: string) =>
   (typeof MediaSource !== "undefined" && MediaSource.isTypeSupported(type)) || document.createElement("video").canPlayType(type) === "probably";
 // Plain types without codecs answer "maybe" at best.
@@ -415,7 +418,8 @@ export function displayCaps(): DeviceCaps {
   return {
     displayHeight: lines >= 2000 ? 2160 : lines > 720 ? 1080 : 720,
     hdr: matchMedia("(dynamic-range: high)").matches ? ["hdr10", "hlg"] : [],
-    decoders: DECODERS.filter(([, type]) => decodes(type)).map(([name]) => name),
+    // AV1 only where it decodes power-efficiently, when the browser can say (av1-probe.ts).
+    decoders: DECODERS.filter(([name, type]) => decodes(type) && (name !== "av1" || keepsAv1())).map(([name]) => name),
     tenBitHevc: decodes('video/mp4; codecs="hvc1.2.4.L120.90"'),
     audioDecoders: AUDIO.filter(([, type]) => plays(type)).map(([name]) => name),
     containers: CONTAINERS.filter(([name, type]) => plays(type) || (name === "m3u8" && mediaSource())).map(([name]) => name),

@@ -154,6 +154,16 @@ pub fn estimate(lib: &Library, network: Network, kind: Kind, now_ms: u64) -> Spe
     if last.is_empty() {
         return prior(kind);
     }
+    // A torrent sample is min(line, swarm): a slow swarm cannot drag the
+    // line down, so the higher of the last two counts, and a slower network
+    // of the same type shows after two plays (plans/stream-ranking.md 4.5).
+    if kind == Kind::P2p {
+        let recent = &last[last.len().saturating_sub(2)..];
+        return Speed {
+            mbps: recent.iter().map(|(mbps, _)| *mbps).fold(0.0, f32::max),
+            samples: last.len() as u32,
+        };
+    }
     let inverse: f32 = last.iter().map(|(mbps, _)| 1.0 / mbps).sum();
     Speed {
         mbps: last.len() as f32 / inverse,
@@ -541,6 +551,40 @@ mod tests {
     /// Research R2: a thin swarm measures itself, not the line. Its samples
     /// (under the wanted seeders, or with none listed) go to the
     /// small-swarm estimate, whose prior is 1.4 Mbit/s; the line's stays.
+    #[test]
+    fn the_torrent_line_is_the_higher_of_the_last_two_samples() {
+        // plans/stream-ranking.md 4.5 and 6.3: a slow swarm cannot drag the
+        // line down; a slower network of the same type shows after two plays.
+        let run = |samples: &[u64]| {
+            let lib = Library::temporary().unwrap();
+            for mbps in samples {
+                assert!(record(
+                    &lib,
+                    Network::Wifi,
+                    &sample(Kind::P2p, *mbps, 10.0),
+                    50,
+                    0
+                ));
+            }
+            estimate(&lib, Network::Wifi, Kind::P2p, 0).mbps
+        };
+        assert!((run(&[4, 40, 40]) - 40.0).abs() < 0.05);
+        assert!((run(&[40, 4]) - 40.0).abs() < 0.05);
+        assert!((run(&[60, 5, 5]) - 5.0).abs() < 0.05);
+        // HTTP keeps the harmonic mean: 40 and 4 give 7.3.
+        let lib = Library::temporary().unwrap();
+        for mbps in [40, 4] {
+            assert!(record(
+                &lib,
+                Network::Wifi,
+                &sample(Kind::Http, mbps, 10.0),
+                50,
+                0
+            ));
+        }
+        assert!((estimate(&lib, Network::Wifi, Kind::Http, 0).mbps - 7.27).abs() < 0.05);
+    }
+
     #[test]
     fn a_thin_swarm_measures_itself_not_the_line() {
         let lib = Library::temporary().unwrap();

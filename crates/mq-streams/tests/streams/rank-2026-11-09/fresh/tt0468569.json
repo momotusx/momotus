@@ -1,0 +1,514 @@
+{
+  "id": "tt0468569",
+  "type": "movie",
+  "season": null,
+  "episode": null,
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "The Dark Knight",
+    "year": "2008",
+    "releaseInfo": "2008",
+    "runtime": "152 min",
+    "country": "United States, United Kingdom",
+    "language": null,
+    "episodeTitle": null,
+    "episodeReleased": null
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "The Dark Knight 2008 Bluray IMAX 2160p AV1 HDR10 EN/ITA/FR/ES OPUS.5.1-UH [UserHEVC]\n👤 80 💾 9.54 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹 / 🇪🇸 / 🇫🇷",
+          "infoHash": "6ae0ed5ab38c545dd2ad37556c29e356e0d21ade",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|av1|10bit|HDR",
+            "filename": "The.Dark.Knight.2008.Bluray.2160p.AV1.HDR10.OPUS.5.1-UH.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "The.Dark.Knight.2008.IMAX.2160p.10bit.HDR.DV.BluRay.6CH.x265.HEVC-PSA\n👤 32 💾 5.68 GB ⚙️ 1337x",
+          "infoHash": "759ca07141be32f7bad81eccb3a2e914066c680f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|hevc|10bit|DV|HDR",
+            "filename": "The.Dark.Knight.2008.IMAX.2160p.10bit.HDR.DV.BluRay.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "The.Dark.Knight.2008.IMAX.2160p.10bit.HDR.DV.BluRay.6CH.x265.HEVC-PSA\n👤 14 💾 5.68 GB ⚙️ 1337x",
+          "infoHash": "7769f945cdcad618de9f414a9fc1160a50eeb3dd",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|hevc|10bit|DV|HDR",
+            "filename": "The.Dark.Knight.2008.IMAX.2160p.10bit.HDR.DV.BluRay.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "The Dark Knight.2008.2160p.HDR10.BRRip.OPUS5.1.AV1.BluBit\n👤 11 💾 1.5 GB ⚙️ TorrentGalaxy",
+          "infoHash": "916c9c6b4371d4c05ee36dfca9e196090a960f66",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BRRip|av1|10bit|HDR",
+            "filename": "The Dark Knight (2008).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "The.Dark.Knight.2008.bluray.hdr.2160p.av1.5.1.opus.subs-Dust\n👤 11 💾 9.78 GB ⚙️ 1337x",
+          "infoHash": "8cefabb6ec1d3915c49788057c126e4b15a3a867",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+            "filename": "The.Dark.Knight.2008.bluray.hdr.2160p.av1.5.1.opus.subs-Dust.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Il Cavaliere Oscuro - The Dark Knight IMAX (2008) 2160p H265 BluRay Rip 10 bit DV HDR10+ ita eng AC3 5.1 sub ita eng Licdom\n👤 11 💾 7.73 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+          "infoHash": "bc206fea859a3c25759e83badd5756696dbd4988",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BRRip|h265|10bit|DV|HDR10+",
+            "filename": "Il Cavaliere Oscuro - The Dark Knight IMAX (2008) 2160p H265 10 bit DV HDR10+ ita eng AC3 5.1 sub ita eng Licdom.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Rifftrax- The Dark Knight (2008) IMAX 2160p HDR + DV -Mesc\n👤 4 💾 7.87 GB ⚙️ TorrentGalaxy",
+          "infoHash": "aec9f7fb6dc9afcbf10cc97a2dd4e5d178690e76",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|h265|10bit|DV|HDR",
+            "filename": "Rifftrax-  The Dark Knight IMAX (2008) 2160p H265 10 bit DV HDR10+ AC3 5.1-Mesc.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "The Dark Knight (2008) [2160p] [4K] [BluRay] [5.1] [YTS] [YIFY]\n👤 112 💾 7.52 GB ⚙️ 1337x",
+          "infoHash": "61be42fb337b1b84f844b88fd904982a0a2330e3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|x265|10bit",
+            "filename": "The.Dark.Knight.2008.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "The Dark Knight (2008) 2160p BluRay x265 HEVC 10bit AAC 5.1 Joy\n👤 8 💾 6.76 GB ⚙️ ThePirateBay",
+          "infoHash": "58cb561e616fa4fcce3d5fe48ad4ab48101cddcb",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|hevc|10bit"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "The Dark Knight 2008 2160p Bluray x265 AC3 DTS-KiNGDOM\n👤 4 💾 13.32 GB ⚙️ 1337x",
+          "infoHash": "f51981972923aef6d821141efad743458dad3895",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|x265",
+            "filename": "The Dark Knight 2008 2160p Bluray x265 AC3 DTS-KiNGDOM.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "The Dark Knight (2008) (1080p DS4K BluRay x265 10-bit HDR AAC 5.1) [WeSLeY]\n👤 4 💾 6.52 GB ⚙️ 1337x",
+          "infoHash": "3c7c3f3a5cbc7a88816a2e56681fc0b575f55373",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|HDR",
+            "filename": "The Dark Knight (2008) (1080p DS4K BluRay x265 10-bit HDR AAC 5.1) [WeSLeY].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight (2008) 1080p BluRay x264 - 1.7GB - YIFY\n👤 710 💾 1.7 GB ⚙️ ThePirateBay",
+          "infoHash": "a54926c2e07b0e5f0243954330b599b31c804f0b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Batman.The.Dark.Knight.2008.1080p.BluRay.x264.YIFY.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Dark.Knight.2008.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265\n👤 214 💾 4.02 GB ⚙️ TorrentGalaxy",
+          "infoHash": "28fb373db2c936015e967544e50a7bffdbb5d3a1",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "The.Dark.Knight.2008.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight (2008) 1080p PROPER Bluray 10-bit x265 HEVC TrueHD AC3 5.1 [XannyFamily]\n👤 103 💾 8.39 GB ⚙️ 1337x",
+          "infoHash": "d65e4ea7c6404a026266da6b2845fe94cb9ce100",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "The Dark Knight (2008) 1080p PROPER Bluray 10-bit x265 HEVC TrueHD AC3 5.1 [XannyFamily].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Batman The Dark Knight 2008 (1080p X265 HEVC AAC 5.1 Joy) [UTR]\n👤 70 💾 1.87 GB ⚙️ MagnetDL",
+          "infoHash": "e7c2571e97b4f3937f2c3d2d1954b11ca8ef12de",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|hevc",
+            "filename": "Batman The Dark Knight 2008 (1080p x265 Joy).m4v"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Dark.Knight.2008.1080p.MA.WEB-DL.DDP5.1.H.264-Azkars\n👤 57 💾 8.72 GB ⚙️ ThePirateBay",
+          "infoHash": "e7aa68546a660907c232370789bccb7e016af0d6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "The.Dark.Knight.2008.1080p.MA.WEB-DL.DDP5.1.H.264-Azkars.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight (2008) (1080p BluRay x265 HEVC 10bit AAC 5.1 Tigole) [QxR]\n👤 50 💾 8.9 GB ⚙️ 1337x",
+          "infoHash": "ff638fdbad9301919ec5cf9acc6ebfe3a1dafd8c",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight 2008 IMAX 1080p AV1 10Bit DKong\n👤 44 💾 1.22 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇱",
+          "infoHash": "d94d910a8b8aacaebe064d51eb0473ce4d2c2b2c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|av1|10bit",
+            "filename": "The Dark Knight 2008 IMAX 1080p AV1 10Bit DKong.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight 2008 1080p AMZN WEB-DL DDP5 1 H 265-NINJACENTRAL\n👤 26 💾 3.96 GB ⚙️ ThePirateBay",
+          "infoHash": "e4d42a923688438130abc28546ca26bda227c2d0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+            "filename": "The Dark Knight 2008 1080p AMZN WEB-DL DDP5 1 H 265-NINJACENTRAL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight 2008 Bluray 1080p AV1 EN/FR/DE/ITA/ES OPUS 5.1-UH\n👤 26 💾 6.45 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇫🇷 / 🇩🇪",
+          "infoHash": "59fd33a647a3e4d122dd562682274e10976cf0af",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "The.Dark.Knight.2008.Bluray.1080p.AV1.OPUS.5.1-UH.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight 2008 BluRay 1080p DTS AC3 x264-3Li\n👤 24 💾 13.49 GB ⚙️ TorrentGalaxy",
+          "infoHash": "d3fc9ed860d87dbadd4fadf83aefa77ea3d6f3c3",
+          "fileIdx": 25,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The Dark Knight 2008 BluRay 1080p DTS AC3 x264-3Li.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Il cavaliere oscuro (2008) WEBRip 1080p x264 EAC3 ITA ENG SUB ITA ENG - Lullozzo\n👤 16 💾 6.42 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹",
+          "infoHash": "0dacdee0e77d913f3ecb4ecdcb287093aa1a5e47",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Il cavaliere oscuro (2008) WEBRip 1080p x264 EAC3 ITA ENG SUB ITA ENG - Lullozzo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight (2008) 1080p H264 AC-3.mkv\n👤 15 💾 6.75 GB ⚙️ TorrentGalaxy",
+          "infoHash": "7d250c58655ab1bb92870e6af094f0743dc98724",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h264",
+            "filename": "The Dark Knight (2008) 1080p H264 AC-3.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Dark.Knight.2008.IMAX.1080p.10bit.BluRay.6CH.x265.HEVC-PSA\n👤 14 💾 3.46 GB ⚙️ 1337x",
+          "infoHash": "ec5773bcf6c4b579894d49ca754dadb80dbb42ad",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "The.Dark.Knight.2008.IMAX.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight 2008 1080p BluRay x265\n👤 14 💾 2.37 GB ⚙️ KickassTorrents",
+          "infoHash": "9ef4b0086770cdd327481ee3b4940ed294efe0c3",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "The.Dark.Knight.2008.1080p.BluRay.x265-RARBG.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Amazing Films 11 - Mp4 x264 AC3 1080p\nDK2 The Dark Knight (2008) 1080p Surround.mp4\n👤 13 💾 4.43 GB ⚙️ ThePirateBay",
+          "infoHash": "3ef7e04f3c6e00e2621ea2ad9ad19440f2891c10",
+          "fileIdx": 12,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x264",
+            "filename": "DK2 The Dark Knight (2008) 1080p Surround.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight (2008) (1080p BluRay 10bit x265 HEVC DTS 5.1 Qman) [UTR]\n👤 12 💾 4.2 GB ⚙️ 1337x",
+          "infoHash": "157de2ebe06bafb043b0d54e2e7eef3aa86e6575",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "The.Dark.Knight.(2008).1080p.BluRay.10-bit.x265.DTS.5.1 Qman[UTR].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "IMDB TOP 001-050 BluRay 1080p x265 10bit MNHD-FRDS\n004.蝙蝠侠前传2黑暗骑士.The.Dark.Knight.2008.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS/The.Dark.Knight.2008.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv\n👤 11 💾 8.18 GB ⚙️ EXT",
+          "infoHash": "9351bcf9e7437f706549f8b60314c39259c420b4",
+          "fileIdx": 27,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "The.Dark.Knight.2008.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Il Cavaliere Oscuro - The Dark Knight IMAX (2008) 1080p H265 ita eng AC3 5.1 sub ita eng Licdom.mkv\n👤 10 💾 3.14 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+          "infoHash": "3aa61d8a2debf9aa6625eb4d4f0df28a1901a970",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h265",
+            "filename": "Il Cavaliere Oscuro - The Dark Knight IMAX (2008) 1080p H265 ita eng AC3 5.1 sub ita eng Licdom.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight Trilogy (2005-2012) IMAX DS4K 1080p BDRip [Hin-Eng] DDP 5.1 — PeruGuy\n02. The Dark Knight (2008) IMAX DS4K 1080p 10bit BDRip x265 [Hindi (NF) DDP 2.0 II English DDP 5.1] ESub — PeruGuy.mkv\n👤 9 💾 7.02 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+          "infoHash": "1fe3b1da0b04f67b37467d086f8f1f1fcdc549b3",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|x265|10bit",
+            "filename": "02. The Dark Knight (2008) IMAX DS4K 1080p 10bit BDRip x265 [Hindi (NF) DDP 2.0 II English DDP 5.1] ESub — PeruGuy.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight 2008 IMAX 1080p BluRay DD+ 5.1 x265-edge2020\n👤 9 💾 4.33 GB ⚙️ TorrentGalaxy",
+          "infoHash": "466b4abccee26bd97234ea0d20d0771c960165a9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "The.Dark.Knight.2008.IMAX.1080p.BluRay.DDP.5.1.H.265-EDGE2020.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight (2008) 1080p BluRay AV1 Opus Multi12 [GRAV1TY]\n👤 9 💾 6.24 GB ⚙️ 1337x",
+          "infoHash": "6a6796cc3a915416f0120a15e4a9942d6c41f702",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "The Dark Knight (2008) 1080p BluRay AV1 Opus Multi12 [GRAV1TY].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Dark.Knight.2008.1080p.REGRADED.70mm.IMAX.BluRay.x265.10Bit.HEVC.(English AAC 5.1).VITOENCODES\n👤 7 💾 5.58 GB ⚙️ 1337x",
+          "infoHash": "ea5a8d686284110ffaceadab23befbdea907dfe5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "The.Dark.Knight.2008.1080p.REGRADED.70mm.IMAX.BluRay.x265.10Bit.HEVC.(English AAC 5.1).VITOENCODES.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Batman - O Cavaleiro das Trevas (2008) 1080p Dublado / Dual Audi\n👤 7 💾 2.54 GB ⚙️ ThePirateBay\nDual Audio / 🇵🇹",
+          "infoHash": "3ed20a355091dc8e79d1a7b84b0cb4dc570bb093",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Dark.Knight.2008.1080p.NF.WEB-DL.H264-ETRG[EtHD]\n👤 6 💾 6.75 GB ⚙️ ThePirateBay",
+          "infoHash": "e42384d6a7710761540c4e31a2fc0ed7b16cc60c",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "The.Dark.Knight.2008.1080p.NF.WEB-DL.H264-ETRG[EtHD].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Il Cavaliere oscuro - The Dark Knight Trilogia 1080p H265 AC3 5.1 ITA.ENG sub ita.eng (2005-2012) Sp33dy94 MIRCrew\nIl Cavaliere oscuro 2 - The Dark Knight AC3 5.1 ITA.ENG 1080p H265 sub ita.eng (2008) Sp33dy94-MIRCrew.mkv\n👤 6 💾 3.23 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "05f443bc700b276c2853c5cbe7af862f63564083",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h265",
+            "filename": "Il Cavaliere oscuro 2 - The Dark Knight AC3 5.1 ITA.ENG 1080p H265 sub ita.eng (2008) Sp33dy94-MIRCrew.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight Trilogy 1080p 10bit BluRay x265 HEVC 6CH-MRN\nThe.Dark.Knight.2008.IMAX.1080p.10bit.BluRay.x265.HEVC.6CH-MRN.mkv\n👤 6 💾 2.24 GB ⚙️ 1337x",
+          "infoHash": "d9fc8c64e56641006cd97bd9ef0cf44453c242e7",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "The.Dark.Knight.2008.IMAX.1080p.10bit.BluRay.x265.HEVC.6CH-MRN.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight (2008) BDRip IMAX H264 AC3 AAC ENG ITA 1080p [ICV-MIRCrew]\n👤 6 💾 8.1 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "6885d743912aab42b1ff064f30e3578a7dcaf75d",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|h264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight 2008 IMAX Bluray 1080p AV1 OPUS 5.1-UH [UserHEVC]\n👤 5 💾 5.59 GB ⚙️ TorrentGalaxy",
+          "infoHash": "b3ad668b239b8ddf355f1ee71c1557b67cd9575e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "The.Dark.Knight.2008.IMAX.Bluray.1080p.AV1.OPUS.5.1-UH.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight 2008 IMAX BluRay 1080p DTS AC3 x264-MgB\n👤 5 💾 9.96 GB ⚙️ ThePirateBay",
+          "infoHash": "a3b5fdd23c3803a0287ca5c5a3e4b126e855ff98",
+          "fileIdx": 65,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The Dark Knight 2008 IMAX BluRay 1080p DTS AC3 x264-MgB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight 2008 1080p BluRay x264 DTS - 5-1 KINGDOM-RG\n👤 5 💾 5.27 GB ⚙️ TorrentGalaxy",
+          "infoHash": "bc3c9274eea83501c6d76fb9ff2e1cac79d146f0",
+          "fileIdx": 8,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The Dark Knight 2008 1080p BluRay x264 DTS - 5-1  KINGDOM-RG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Dark Knight (2008) 1080p IMAX BluRay AV1 10bit Opus 5.1 [SKYLake]\n👤 4 💾 2.81 GB ⚙️ 1337x",
+          "infoHash": "17d9a881623c5d9d328cc4676a283c61ad5e85e7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1|10bit",
+            "filename": "The Dark Knight (2008) IMAX Bluray [AV1 1080p 10bit OPUS 5.1] [SKYLake].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Dark Knight (2008) 720p BrRip x264 - YIFY\n👤 26 💾 949.99 MB ⚙️ ThePirateBay",
+          "infoHash": "f5d61bf3d57082ba2ee1305da5df8dcd10d34539",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BRRip|x264",
+            "filename": "The.Dark.Knight.2008.720p.BluRay.x264.YIFY.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Batman O Cavaleiro Das Trevas (2008) 720p Dublado Pt Br\n👤 15 💾 1.1 GB ⚙️ ThePirateBay\n🇵🇹",
+          "infoHash": "83af9dc022fb32f0f0ba7a7fcfd86d3d1ec0c923",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Batman.The.Dark.Knight.Trilogy.720p.BluRayx264 88\n2008 The Dark Knight 720p.BluRay.x264.mp4\n👤 14 💾 949.99 MB ⚙️ ThePirateBay",
+          "infoHash": "33d235fe2a2e1867d99c0e306a21574688ef0f7f",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "2008 The Dark Knight 720p.BluRay.x264.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Batman Collection (8 Films) 1989-2016 720p BluRay x264 Ganool\nThe Dark Knight 2008 720p BluRay x264 Ganool.mkv\n👤 10 💾 1.2 GB ⚙️ 1337x",
+          "infoHash": "9190ac70ad666ba19777c19a2ad3e44f46cd8e6e",
+          "fileIdx": 6,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "The Dark Knight 2008 720p BluRay x264 Ganool.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Dark (2026) 720p 10bit DS4K AMZN WEBRip x265 HEVC [Hindi DDP 5.1…\n👤 5 💾 787.26 MB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇳",
+          "infoHash": "a8cee9d258e9cfd3b5d4ca50ab8f3b30553282e6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|hevc|10bit",
+            "filename": "Dark (2026) 720p 10bit DS4K AMZN WEBRip x265 HEVC [Hindi DDP 5.1 + Tamil DDP 5.1] ESub - Immortal.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Dark Knight (2008) 720p BRRip x264 [Dual Audio] [Hindi DD 5.1 English DD 5.1]\n👤 5 💾 1010.82 MB ⚙️ 1337x\nDual Audio / 🇬🇧 / 🇮🇳",
+          "infoHash": "0a683702f52b1659df3c11c441e6f327c733bd64",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BRRip|x264",
+            "filename": "The Dark Knight (2008) [Worldfree4u.Wiki] 720p BRRip x264 [Dual Audio] [Hindi DD 5.1 + English DD 5.1].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nBDRip",
+          "title": "GARO (All Series Batch + Movies + Specials + Anime) [BD + WebRip]\nGARO Movies and Specials/[O-T-MCS]_KIBA_-_Dark_Knight_Apocrypha_[Hi10p][40F0ED69].mkv\n👤 11 💾 533.15 MB ⚙️ EXT",
+          "infoHash": "66e2ec8b626081990accf6f71eb2aa88dcb04aaf",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|66e2ec8b626081990accf6f71eb2aa88dcb04aaf",
+            "filename": "[O-T-MCS]_KIBA_-_Dark_Knight_Apocrypha_[Hi10p][40F0ED69].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Official IMDb Top 250 Movies Collection 6/17/2011\nBatman The Dark Knight [2008] dvd rip nlx.avi\n👤 8 💾 698.99 MB ⚙️ ThePirateBay",
+          "infoHash": "4986ace2ee7a564508e0d5cfdde2d9018b8af942",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip",
+            "filename": "Batman The Dark Knight [2008] dvd rip nlx.avi"
+          }
+        }
+      ]
+    }
+  }
+}

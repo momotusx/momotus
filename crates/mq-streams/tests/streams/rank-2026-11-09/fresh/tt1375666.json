@@ -1,0 +1,517 @@
+{
+  "id": "tt1375666",
+  "type": "movie",
+  "season": null,
+  "episode": null,
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "Inception",
+    "year": "2010",
+    "releaseInfo": "2010",
+    "runtime": "148 min",
+    "country": "United Kingdom, United States",
+    "language": null,
+    "episodeTitle": null,
+    "episodeReleased": null
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Inception 2010 PROPER Bluray 2160p AV1 HDR10 EN/ITA/FR/ES/DE OPUS 5.1-UH [UserHEVC]\n👤 317 💾 8.91 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹 / 🇪🇸 / 🇫🇷 / 🇩🇪",
+          "infoHash": "2849211f150e966ef7924f43aec22727a644e10d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|av1|10bit|HDR",
+            "filename": "Inception.2010.PROPER.Bluray.2160p.AV1.HDR10.OPUS.5.1-UH.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Inception (2010) 2160p UHD HDR Bluray AV1 Opus Multi7 [dAV1nci]\n👤 8 💾 9.21 GB ⚙️ 1337x",
+          "infoHash": "e207c4332567564215673d0e5183467f6c33194e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+            "filename": "Inception.2010.2160p.UHD.HDR.Bluray.AV1.Opus.Multi7-dAV1nci.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Inception 2010 Bluray 2160p AV1 HDR10 EN/FR/DE/ITA/ES AC3 5.1-UH\n👤 6 💾 8.48 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇫🇷 / 🇩🇪",
+          "infoHash": "6ee6e45b25adfd20c008722beca5d92ef830c09c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|av1|10bit|HDR",
+            "filename": "Inception.2010.Bluray.2160p.AV1.HDR10.AC3.5.1-UH.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Inception (2010) 2160p H265 BluRay Rip 10 bit HDR ita eng AC3 5.1 sub ita eng Licdom\n👤 6 💾 6.97 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "8f7f8a415d0b3881a69a8faebb3cefd161d5dba9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BRRip|h265|10bit|HDR",
+            "filename": "Inception (2010) 2160p H265 10 bit ita eng AC3 5.1 sub ita eng Licdom.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Inception 2010 2160p BluRay\n👤 79 💾 6.64 GB ⚙️ YTS",
+          "infoHash": "43e3691dc6f4172841e32b25b349e2b7a980b9c5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|x265|10bit",
+            "filename": "Inception.2010.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "Inception (2010) (1080p BluRay x265 HEVC 10bit HDR AAC 5.1 afm72) [QxR]\n👤 47 💾 5.7 GB ⚙️ 1337x",
+          "infoHash": "eab0e13da202b99800e431f3f91093cb8f0c9bd7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit|HDR",
+            "filename": "Inception (2010) (1080p BluRay x265 HDR afm72).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception (2010) 1080p BrRip x264 - 1.85GB - YIFY\n👤 607 💾 1.85 GB ⚙️ ThePirateBay",
+          "infoHash": "224bf45881252643dfc2e71abc7b2660a21c68c4",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BRRip|x264",
+            "filename": "Inception.2010.1080p.BrRip.x264.YIFY.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception.2010.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265\n👤 213 💾 2.87 GB ⚙️ MagnetDL",
+          "infoHash": "1c6b2179bcd73efd07fb8018268598c062cf95af",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Inception.2010.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception 2010 REPACK 1080p BluRay x265-YAWNTiC\n👤 75 💾 7.6 GB ⚙️ ThePirateBay",
+          "infoHash": "9b14e6bd490e2e0c1a8d4db45a31a2bff92c421d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Inception 2010 REPACK 1080p BluRay x265-YAWNTiC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception 2010 1080p BluRay HEVC x265 5.1 BONE\n👤 55 💾 1.99 GB ⚙️ ThePirateBay",
+          "infoHash": "2b4fba86244a317b5e607fbff1755cb4d8599281",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc",
+            "filename": "Inception 2010 1080p BluRay HEVC x265 5.1 BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception 2010 1080p AV1 10Bit DKong\n👤 31 💾 916.86 MB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇱",
+          "infoHash": "520f5bb299060c2cd62192e602f1c2157e9d277f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|av1|10bit",
+            "filename": "Inception 2010 1080p AV1 10Bit DKong.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "41 Movies To Watch While Stoned (all High IMDB) jZQ\nInception (2010) IMDB 8.8 [HEVC 2.00m 1920x800 02;28;08 2.3GB]/Inception.2010.1080p.BluRay.x265-RARBG.mp4\n👤 27 💾 2.31 GB ⚙️ TorrentGalaxy",
+          "infoHash": "4d1f7fab7348d5341d6262867910014e2c4608c1",
+          "fileIdx": 107,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc",
+            "filename": "Inception.2010.1080p.BluRay.x265-RARBG.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception (2010) (1080p BluRay x265 HEVC 10bit AAC 5.1 Tigole) [QxR]\nInception (2010) (1080p BluRay x265 10bit Tigole).mkv\n👤 22 💾 6.65 GB ⚙️ 1337x",
+          "infoHash": "56efc1ee2a4dd23d121f05ec13b5c6632e9dce27",
+          "fileIdx": 9,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Inception (2010) (1080p BluRay x265 10bit Tigole).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception 2010 BluRay 1080p AC3 ITA AC3 ENG x264 Wiggaz mkv\n👤 21 💾 7.96 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+          "infoHash": "c2ac63ee454496b310886cf5c91b612eb5a80137",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Inception.2010.BluRay.1080p.AC3.ITA.AC3.ENG.x264-Wiggaz.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception 2010 BluRay 1080p DDP 5 1 x264-hallowed\n👤 19 💾 11.09 GB ⚙️ ThePirateBay",
+          "infoHash": "8e1bbf74d8311760008136bc6eceb09d14eb5f8b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Inception 2010 BluRay 1080p DDP 5 1 x264-hallowed.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception (2010) 1080p Bluray AV1 Opus Multi4 [dAV1nci]\n👤 18 💾 2.91 GB ⚙️ 1337x",
+          "infoHash": "a2b384339f3dcdd9f18fc299311853ce6570ca4a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "Inception.2010.1080p.Bluray.AV1.Opus.Multi4-dAV1nci.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception (2010) 1080p MAX WEB-DL [EN-TR] DDP5.1 H.264-TURG\n👤 16 💾 3.42 GB ⚙️ 1337x",
+          "infoHash": "e456c6088bf34c06b8ec6443a00b128032989c3a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Inception.2010.1080p.MAX.WEB-DL.DDP5.1.H.264-TURG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception 2010 m1080p BluRay x264-GeneMige\n👤 15 💾 4.17 GB ⚙️ ThePirateBay",
+          "infoHash": "911f37b11fdc42b79a0c77aef2f9289e9d73ecd9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Inception 2010 m1080p BluRay x264-GeneMige.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception 2010 1080p MAX WEB-DL DDP 5 1 H 265-PiRaTeS\n👤 15 💾 2.55 GB ⚙️ ThePirateBay",
+          "infoHash": "b2bbf2f567f7dcbce81b1cf186ddadf2d56d9345",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+            "filename": "Inception 2010 1080p MAX WEB-DL DDP 5 1 H 265-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception 2010 1080p MGMP WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 13 💾 5.65 GB ⚙️ ThePirateBay",
+          "infoHash": "79bae78612fb7cd19bf9b667bb7c190ac49d3183",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Inception 2010 1080p MGMP WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Essential Films 2: MP4 X264 AC3 1080p\nInception (2010) 1080p Surround.mp4\n👤 13 💾 3.3 GB ⚙️ MagnetDL",
+          "infoHash": "bd15ea182a436a82cc37d2365b9cd5ac66fbf858",
+          "fileIdx": 12,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x264",
+            "filename": "Inception (2010) 1080p Surround.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception 2010 1080p AMZN WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 12 💾 8.79 GB ⚙️ ThePirateBay",
+          "infoHash": "3e6eac33377433135fd089ee06897877d266ed5a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Inception 2010 1080p AMZN WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception.2010.BONUS.1080p.BluRay.VC-1.DD2.0-FGT\n👤 12 💾 12.41 GB ⚙️ ThePirateBay",
+          "infoHash": "4e6cd637efd3c7fff41b325cf41a3f1f7ce98e96",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "IMDB TOP 001-050 BluRay 1080p x265 10bit MNHD-FRDS\n013.盗梦空间.Inception.2010.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS/Inception.2010.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv\n👤 11 💾 5.27 GB ⚙️ EXT",
+          "infoHash": "9351bcf9e7437f706549f8b60314c39259c420b4",
+          "fileIdx": 90,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Inception.2010.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception - Directors Cut 2010 Eng Ita Multi-Subs 4K 1080p\n👤 11 💾 5 GB ⚙️ ThePirateBay\nMulti Subs / 🇬🇧 / 🇮🇹",
+          "infoHash": "284499354b9280da45495cb8e2569b24842dff18",
+          "fileIdx": 11,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h264",
+            "filename": "Inception - Directors Cut 2010 Eng Ita Multi-Subs 4K 1080p [H264-mp4].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Amazing Films 7 - Mp4 x264 AC3 1080p\nInception (2010) 1080p Surround.mp4\n👤 9 💾 3.3 GB ⚙️ 1337x",
+          "infoHash": "ff1642be296645df51a5dc58633c18ebd9e5c441",
+          "fileIdx": 23,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x264",
+            "filename": "Inception (2010) 1080p Surround.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Epic Films 6 - Mp4 x264 AC3 1080p\nInception (2010) 1080p Surround.mp4\n👤 9 💾 3.3 GB ⚙️ ThePirateBay",
+          "infoHash": "93b968d8033ce026146c9c414ecdfb9ab7eb6092",
+          "fileIdx": 19,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x264",
+            "filename": "Inception (2010) 1080p Surround.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception (2010) MULTI 1080p BluRay AV1 Opus [AV1D]\n👤 9 💾 2.92 GB ⚙️ 1337x\nMulti Audio / 🇬🇧",
+          "infoHash": "e9e7b8c02bf0738f1a3579e5d8c62457f9949d49",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "Inception (2010) MULTI 1080p BluRay AV1 Opus [AV1D].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "A Origem (2010) 1080p Dublado / Dual Audio pt-BR\n👤 9 💾 2.15 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇵🇹",
+          "infoHash": "c301b175cae6ae4870076bd478680b6e3fc13743",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p",
+            "filename": "A Origem (2010) 1080p - 210GJI.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception.2010.1080p.HMAX.WEB-DL.DD+.5.1.H.265-TRB\n👤 8 💾 1.68 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇷🇸   / 🇭🇷",
+          "infoHash": "5630a342b0e06183eca44306d047778a71d7dfb0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+            "filename": "Inception.2010.1080p.HMAX.WEB-DL.DDP5.1.H.265-TRB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception 2010 1080p AMZN WEB-DL DDP5 1 H 265-ViSTA\n👤 8 💾 3.73 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇳",
+          "infoHash": "aac2293760e0bb60db966e755a2e34bbba26ed75",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+            "filename": "Inception 2010 1080p AMZN WEB-DL DDP5 1 H 265-ViSTA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception (2010) 1080p Rifftrax 6ch 2ch\n👤 8 💾 2.79 GB ⚙️ ThePirateBay",
+          "infoHash": "d94d994c5d25b6a6bf235904dc92f54367111764",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception (2010) 1080p H265 BluRay Rip ita eng AC3 5.1 sub ita eng Licdom\n👤 7 💾 4.52 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "e0e7638af7aa775f7b3f2cb3702489054f0078ed",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BRRip|h265",
+            "filename": "Inception (2010) 1080p H265 ita eng AC3 5.1 sub ita eng Licdom.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception.2010.1080p.10bit.BluRay.6CH.x265.HEVC-PSA\n👤 7 💾 2.21 GB ⚙️ 1337x",
+          "infoHash": "5500f6ee5ca29f04913dd69fc9fb45e6caefea08",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Inception.2010.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception.2010.1080p.BluRay.x264-REFiNED\n👤 7 💾 10.93 GB ⚙️ RARBG",
+          "infoHash": "7c5cef3523ad7f7a03ba9d0a51b44b6437d597dc",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "refined-inception-1080p.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception.2010.1080p.BluRay.x265-RARBG\n👤 6 💾 2.31 GB ⚙️ RARBG",
+          "infoHash": "d0f9c63fb7e72a4680f516ee83271382e417e244",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Inception.2010.1080p.BluRay.x265-RARBG.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception (2010 ITA/ENG) [1080p x265] [Paso77]\n👤 6 💾 4.3 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "b98c0e8a60f6c0043c8a14bab4e2e11f57542c3c",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x265"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception (2010) AV1 1080p 7RIP\n👤 5 💾 692.3 MB ⚙️ 1337x",
+          "infoHash": "d588cc403a38e891ea08c3f9e0365a7d71e2e629",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|av1",
+            "filename": "Inception (2010) AV1 1080p 7RIP.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception 2010 1080p BluRay DD+ 5.1 x265-edge2020\n👤 5 💾 3.16 GB ⚙️ TorrentGalaxy",
+          "infoHash": "014fad71e0b4ced57249e98fd436fd274c4969c3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Inception.2010.1080p.BluRay.DDP.5.1.x265-EDGE2020.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception.2010.1080p.BluRay.ENG.LATINO.CASTELLANO.HINDI.ITA.GER.FRE.CHI.RUS.UKR.THAI.H265-BEN.THE.MEN\n👤 5 💾 13.78 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇷🇺 / 🇮🇹 / 🇪🇸 / 🇲🇽 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇮🇳 / 🇺🇦 / 🇹🇭",
+          "infoHash": "5d1ef7452ccfbd46f5e8265eab372a083f3bf0ca",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|h265",
+            "filename": "Inception.2010.1080p.BluRay.ENG.LATINO.CASTELLANO.HINDI.ITA.GER.FRE.CHI.RUS.UKR.THAI.H265-BEN.THE.MEN.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception.2010.1080p.BluRay.REGRADED.DS4K.SDR.x265.10Bit.HEVC.(Eng DDP 5.1 - Hin DD 5.1 DDP 2.0).VITOENCODES\n👤 4 💾 5.61 GB ⚙️ 1337x\n🇬🇧 / 🇩🇪 / 🇮🇳",
+          "infoHash": "a1028ab7dfa9c48b0228e040abf95b8b06a256f7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Inception.2010.1080p.BluRay.REGRADED.DS4K.SDR.x265.10Bit.HEVC.(Eng DDP 5.1 - Hin DD 5.1 + DDP 2.0).VITOENCODES .mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Inception (2010) [Leonardo DiCaprio] 1080p BluRay H264 DolbyD 5.1 + nickarad\n👤 4 💾 2.27 GB ⚙️ ThePirateBay",
+          "infoHash": "c1f205f29550822dba125ef89c51cd907a67d9e6",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|h264",
+            "filename": "Inception (2010) 1080p BluRay H264 DolbyD 5.1 + nickarad.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Inception (2010) 720p - mkv - 1.0GB - YIFY\n👤 71 💾 1.07 GB ⚙️ ThePirateBay",
+          "infoHash": "ce9156eb497762f8b7577b71c0647a4b0c3423e1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|x264",
+            "filename": "Inception.2010.720p.x264.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Inception.2010.720p.BluRay.999MB.x265.10bit-GalaxyRG\n👤 16 💾 991.48 MB ⚙️ ThePirateBay",
+          "infoHash": "00a781baf81af07c73b96faceb3182eb260098f6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x265|10bit",
+            "filename": "Inception.2010.720p.BluRay.999MB.HQ.x265.10bit-GalaxyRG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "A.Origem.(Inception).2010.720p.HD.Dublado.PT-BR.210GJI\n👤 10 💾 860.62 MB ⚙️ ThePirateBay\n🇬🇧 / 🇵🇹",
+          "infoHash": "a7d717f9fb5b34162db85aeb95423213bc71679f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BRRip|x264",
+            "filename": "A.Origem.[2010].720p.BRrip-x264-210GJI.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Inception - Christopher Nolan 2010 Eng Ita Multi-Subs 4K 720p [H\n👤 6 💾 2.07 GB ⚙️ ThePirateBay\nMulti Subs / 🇬🇧 / 🇮🇹",
+          "infoHash": "29f382e5e9d3382f3dfe229dcb18306ca0eadd93",
+          "fileIdx": 11,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|h264",
+            "filename": "Inception - Christopher Nolan 2010 Eng Ita Multi-Subs 4K 720p [H264-mp4].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Inception (2010) RiffTrax dual audio 720p.10bit.BluRay.x265-budgetbits\n👤 5 💾 909.54 MB ⚙️ 1337x\nDual Audio / 🇬🇧",
+          "infoHash": "186e5c4ff1f2c298c015dd60b801b2717c8d10d9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x265|10bit",
+            "filename": "Inception (2010) RiffTrax dual audio 720p.10bit.BluRay.x265-budgetbits.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n3D",
+          "title": "75.3D.Movies\nInception.mp4\n👤 42 💾 2.19 GB ⚙️ MagnetDL",
+          "infoHash": "61826fc42681d1f7bcae235d1ff7699f85b9669b",
+          "fileIdx": 20,
+          "behaviorHints": {
+            "filename": "Inception.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Leonardo DiCaprio Filmografi 2002 - 2021 Part II Packs - iCMAL [TGx]\nInception[2010]DvDrip-aXXo/Inception[2010]DvDrip-aXXo.avi\n👤 15 💾 900.24 MB ⚙️ 1337x",
+          "infoHash": "34c47794632aa156d54d01a950b2bba0b368528c",
+          "fileIdx": 21,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip",
+            "filename": "Inception[2010]DvDrip-aXXo.avi"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Official IMDb Top 250 Movies Collection 6/17/2011\nInception [2010] DvDRiP XviD - ExtraTorrentRG.avi\n👤 8 💾 900.08 MB ⚙️ ThePirateBay",
+          "infoHash": "4986ace2ee7a564508e0d5cfdde2d9018b8af942",
+          "fileIdx": 55,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip|xvid",
+            "filename": "Inception [2010] DvDRiP XviD - ExtraTorrentRG.avi"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,525 @@
+{
+ "fetched": "2026-11-08T23:06:10.362Z",
+ "source": {
+  "torrentio": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/series/tt7366338:1:1.json",
+  "cinemeta": "https://v3-cinemeta.strem.io/meta/series/tt7366338.json"
+ },
+ "id": "tt7366338",
+ "type": "series",
+ "season": 1,
+ "episode": 1,
+ "meta": {
+  "name": "Chernobyl",
+  "year": "2019",
+  "runtime": "65 min",
+  "genres": [
+   "Drama",
+   "History",
+   "Thriller"
+  ],
+  "episodeTitle": "1:23:45",
+  "released": "2019-05-07T05:00:00.000Z"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k",
+   "title": "Chernobyl (2019) Season 01 S01 Featurettes (2160p Bluray x265 HEVC 10bit AAC 5.1 Joy) [UTR]\nChernobyl S01E01 1.23.45  [2160p x265 10bit Joy].mkv\n👤 17 💾 1.85 GB ⚙️ 1337x",
+   "infoHash": "fa574f509b7469e5a0ad8a3ff622c8a49c60c97b",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|fa574f509b7469e5a0ad8a3ff622c8a49c60c97b",
+    "filename": "Chernobyl S01E01 1.23.45  [2160p x265 10bit Joy].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Chernobyl.S01.1080p.DS4K.DV.HDR10.BDRip.AV1.Opus.mSubs-HeCviCu\nChernobyl.S01E01.1080p.DS4K.DV.HDR10.BDRip.AV1.Opus.mSubs-HeCviCu.mkv\n👤 4 💾 794.76 MB ⚙️ EXT\nMulti Subs",
+   "infoHash": "18aea3677c8fa11914dddd5579c38ff8cca3197d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|18aea3677c8fa11914dddd5579c38ff8cca3197d",
+    "filename": "Chernobyl.S01E01.1080p.DS4K.DV.HDR10.BDRip.AV1.Opus.mSubs-HeCviCu.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl (2019) Season 1 S01 (1080p BluRay x265 HEVC 10bit AAC 5.1 Silence) [QxR]\nChernobyl (2019) - S01E01 - 1.23.45 (1080p BluRay x265 Silence).mkv\n👤 402 💾 2.26 GB ⚙️ 1337x",
+   "infoHash": "9a4e6dad655a35834eb244df79a290997b12b67d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|9a4e6dad655a35834eb244df79a290997b12b67d",
+    "filename": "Chernobyl (2019) - S01E01 - 1.23.45 (1080p BluRay x265 Silence).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl - S01 Season 1 - 2019 - 1080p - AMZN WEB AAC5.1 x264-R\nChernobyl - S01E01 - 1.23.45.mkv\n👤 267 💾 1.1 GB ⚙️ ThePirateBay",
+   "infoHash": "cf4d26d37961dfcb8c681de15f442d9f67309d1d",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|cf4d26d37961dfcb8c681de15f442d9f67309d1d",
+    "filename": "Chernobyl - S01E01 - 1.23.45.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl.COMPLETE.Season.1.S01.1080p.AMZN.WEB-DL.x265-HETeam\nChernobyl.S01E01.1.23.45.1080p.AMZN.WEB-DL.x265-HETeam.mkv\n👤 178 💾 686.81 MB ⚙️ ThePirateBay",
+   "infoHash": "95e8d04e47f0d9cb8bf00ec8775c926126a65236",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|95e8d04e47f0d9cb8bf00ec8775c926126a65236",
+    "filename": "Chernobyl.S01E01.1.23.45.1080p.AMZN.WEB-DL.x265-HETeam.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl (2019) Season 1 S01 (1080p BluRay HEVC)\nChernobyl s01e01 - 1.23.45.mkv\n👤 51 💾 2.84 GB ⚙️ ThePirateBay",
+   "infoHash": "56e9414c7992391c14dccef09cbfdfa453da747e",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|56e9414c7992391c14dccef09cbfdfa453da747e",
+    "filename": "Chernobyl s01e01 - 1.23.45.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl.S01.1080p.AMZN.WEBRip.DDP5.1.x264-NTb\nChernobyl.S01E01.1.23.45.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb.mkv\n👤 42 💾 4.1 GB ⚙️ ThePirateBay",
+   "infoHash": "01180c9a718ecd2a90f85a48aabf03b70687c54e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|01180c9a718ecd2a90f85a48aabf03b70687c54e",
+    "filename": "Chernobyl.S01E01.1.23.45.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl - Season 01 (2019)[FULL SERIES] 1080p BDMux x265 ita eng AAC Sub ita eng[Pir8]\nChernobyl.1x01.01.23.45.ITA.ENG.1080p.BDMux.AAC.x265-Pir8.mkv\n👤 27 💾 898.82 MB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "04cfd7abfc2f5e4a4edda3e835447be2975570d3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|04cfd7abfc2f5e4a4edda3e835447be2975570d3",
+    "filename": "Chernobyl.1x01.01.23.45.ITA.ENG.1080p.BDMux.AAC.x265-Pir8.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl (2019) Season 1 S01 (1080p BluRay x265 HEVC 10bit AAC 5.1 Vyndros)\nChernobyl.S01E01.1.23.45.1080p.10bit.BluRay.AAC5.1.HEVC-Vyndros.mkv\n👤 26 💾 986.18 MB ⚙️ 1337x",
+   "infoHash": "b8bf202407968c174cfd5a67a36dbb9cbea2835b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|b8bf202407968c174cfd5a67a36dbb9cbea2835b",
+    "filename": "Chernobyl.S01E01.1.23.45.1080p.10bit.BluRay.AAC5.1.HEVC-Vyndros.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl (2019) Season 1 S01 (1080p AMZN WEB-DL x265 HEVC 10bit EAC3 5.1 RZeroX) [QxR]\nChernobyl (2019) - S01E01 - 1.23.45 (1080p AMZN WEB-DL x265 RZeroX).mkv\n👤 26 💾 2.16 GB ⚙️ TorrentGalaxy",
+   "infoHash": "5173781e7131c694fc2e898ecf029fc46295920e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|5173781e7131c694fc2e898ecf029fc46295920e",
+    "filename": "Chernobyl (2019) - S01E01 - 1.23.45 (1080p AMZN WEB-DL x265 RZeroX).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl.2019.S01.COMPLETE.1080p.AMZN.WEBRip.x265-PGW\nChernobyl.S01E01.1080p.AMZN-WEBRip.x265-PGW.mkv\n👤 24 💾 337.22 MB ⚙️ TorrentGalaxy",
+   "infoHash": "cbeb3aebda4f5b704a5a41ebe2d57b1d7fd24183",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|cbeb3aebda4f5b704a5a41ebe2d57b1d7fd24183",
+    "filename": "Chernobyl.S01E01.1080p.AMZN-WEBRip.x265-PGW.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl 2019 S01E01 1080p BluRay x265 SDR DDP 5 1 English DarQ-HONE\n👤 19 💾 2.99 GB ⚙️ ThePirateBay",
+   "infoHash": "4272c0c4118f68e71cb3ceb5c7b6971d40d2794b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|HONE",
+    "filename": "Chernobyl 2019 S01E01 1080p BluRay x265 SDR DDP 5 1 English DarQ-HONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl.SEASON.01.S01.COMPLETE.1080p.10bit.BluRay.6CH.x265.HEVC-PSA\nChernobyl.S01E01.1.23.45.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv\n👤 14 💾 629.26 MB ⚙️ 1337x",
+   "infoHash": "42346708cababf6ee44ce6598ba09f7e1eb527dd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|42346708cababf6ee44ce6598ba09f7e1eb527dd",
+    "filename": "Chernobyl.S01E01.1.23.45.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl.S01E01.1.23.45.REAL.REPACK.1080p.AMZN.WEB-DL.DDP5.1.H.\n👤 13 💾 4.17 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "a43a8a1bd415ff2bed6e315fad198d2631ee5f56",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|Tars",
+    "filename": "Chernobyl.S01E01.1.23.45.REAL.REPACK.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb.DUAL-Tars.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl.S01.1080p.BluRay.x265-RARBG\nChernobyl.S01E01.1080p.BluRay.x265-RARBG.mp4\n👤 11 💾 940.93 MB ⚙️ RARBG",
+   "infoHash": "641e616b454cd518e17a7746ad1a32ff3acb0d3c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|641e616b454cd518e17a7746ad1a32ff3acb0d3c",
+    "filename": "Chernobyl.S01E01.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl S01 1080p BluRay AV1 DDP 5.1 [dAV1nci]\nChernobyl.S01E01.1080p.BluRay.AV1.DDP.5.1-dAV1nci.mkv\n👤 10 💾 1.58 GB ⚙️ TorrentGalaxy",
+   "infoHash": "47623de97bd06dae8e21f79ee9049551e9609039",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|47623de97bd06dae8e21f79ee9049551e9609039",
+    "filename": "Chernobyl.S01E01.1080p.BluRay.AV1.DDP.5.1-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl - Complete Mini Series - Mp4 x264 AC3 1080p\nChernobyl S01E01.mp4\n👤 10 💾 1.54 GB ⚙️ ThePirateBay",
+   "infoHash": "da3f9c615695769e3dc2c039d5bf4062e102a5c9",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|da3f9c615695769e3dc2c039d5bf4062e102a5c9",
+    "filename": "Chernobyl S01E01.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl.S01.1080p.BluRay.AV1-PTNX\nChernobyl.S01E01.1080p.BluRay.AV1-PTNX.mkv\n👤 8 💾 776.58 MB ⚙️ 1337x",
+   "infoHash": "b749e6ed5bf4bdf44cfb116950696f5cb02c71c8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|b749e6ed5bf4bdf44cfb116950696f5cb02c71c8",
+    "filename": "Chernobyl.S01E01.1080p.BluRay.AV1-PTNX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl (2019) Season 1 - HEVC 1080p 7RIP\nChernobyl - S01E01 - 1.23.45.mkv\n👤 6 💾 189.79 MB ⚙️ 1337x",
+   "infoHash": "5b22753ba2c837aedf2a8cb6f643572af1176b2b",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|5b22753ba2c837aedf2a8cb6f643572af1176b2b",
+    "filename": "Chernobyl - S01E01 - 1.23.45.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl (2019) Season 01 S01 (1080p AMZN WEB-DL x265 HEVC 10bit AAC 5.1 Joy) [UTR]\nChernobyl S01E01 1.23.45  (1080p x265 10bit FS90 Joy).mkv\n👤 6 💾 597.8 MB ⚙️ 1337x",
+   "infoHash": "1bb7cf99949ff14ffadc0971117714585c5184a0",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1bb7cf99949ff14ffadc0971117714585c5184a0",
+    "filename": "Chernobyl S01E01 1.23.45  (1080p x265 10bit FS90 Joy).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl.2019.HBO.Series.1080p.x264.MKV.AVC.AC3.Web-DL [20.2GB]\nchernobyl.s01e01.internal.1080p.web.h264-memento.mkv\n👤 5 💾 4.31 GB ⚙️ TorrentGalaxy",
+   "infoHash": "36e0c255e2eec3fc0f60b44a9705baf00a8322cf",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|36e0c255e2eec3fc0f60b44a9705baf00a8322cf",
+    "filename": "chernobyl.s01e01.internal.1080p.web.h264-memento.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl.S01E01-05.ITA.ENG.1080p.AMZN.WEB-DLMux.DD5.1.H.264-TRiADE\nChernobyl.1x01.1.23.45.ITA.ENG.1080p.AMZN.WEB-DLMux.DD5.1.H.264-TRiADE.mkv\n👤 5 💾 4.13 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "7dd9ed38c2d57fd1d8102c270cef8234a5c6e1ef",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|7dd9ed38c2d57fd1d8102c270cef8234a5c6e1ef",
+    "filename": "Chernobyl.1x01.1.23.45.ITA.ENG.1080p.AMZN.WEB-DLMux.DD5.1.H.264-TRiADE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl S01 2019.1080p.BluRay.DTS.5.1.HEVC-DDR[EtHD]\nChernobyl.S01E01.1080p.BluRay.DTS.5.1-DDR.mkv\n👤 5 💾 2.47 GB ⚙️ ThePirateBay",
+   "infoHash": "b74b482a545a1e95fd634f64bbfd9e3ca5cfea15",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|b74b482a545a1e95fd634f64bbfd9e3ca5cfea15",
+    "filename": "Chernobyl.S01E01.1080p.BluRay.DTS.5.1-DDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl.S01E01.1.23.45.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb[TGx]\n👤 4 💾 4.09 GB ⚙️ ThePirateBay",
+   "infoHash": "0dfcf60498d6ae7fe0ff57c1447df382f6d30415",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|NTb",
+    "filename": "Chernobyl.S01E01.1.23.45.1080p.AMZN.WEB-DL.DDP5.1.H.264-NTb.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl.2019.HBO.Series.1080p.x264.MKV.AVC.AC3.Web-DL [20.2GB]\nchernobyl.s01e01.internal.1080p.web.h264-memento.mkv\n👤 3 💾 4.31 GB ⚙️ 1337x",
+   "infoHash": "5108051ec1c4c12f3d4efc8de5cd9d4b449dc467",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|5108051ec1c4c12f3d4efc8de5cd9d4b449dc467",
+    "filename": "chernobyl.s01e01.internal.1080p.web.h264-memento.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl.The.New.Evidence.S01.1080p.WEBRip.AAC2.0.x264-CBFM\nchernobyl.the.new.evidence.s01e01.1080p.web.h264-cbfm.mkv\n👤 3 💾 1.67 GB ⚙️ TorrentGalaxy",
+   "infoHash": "7a8a4e294e39f68208b7c67261316e3546130cda",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|7a8a4e294e39f68208b7c67261316e3546130cda",
+    "filename": "chernobyl.the.new.evidence.s01e01.1080p.web.h264-cbfm.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl.1x01.1.23.45.ITA.ENG.1080p.AMZN.WEB-DLMux.DD5.1.H.264-TRiADE.mkv\n👤 3 💾 4.13 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "b706e4e6451944db1a1aa21ba55528c7f187769a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|TRiADE",
+    "filename": "Chernobyl.1x01.1.23.45.ITA.ENG.1080p.AMZN.WEB-DLMux.DD5.1.H.264-TRiADE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl (2019) S01E01-E05\nChernobyl (2019) - S01E01 - 1.23.45 (1080p BluRay x265 Silence).mkv\n👤 2 💾 2.26 GB ⚙️ EXT",
+   "infoHash": "bd6a1a07d134198d978847d65d61028912fde3d0",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|bd6a1a07d134198d978847d65d61028912fde3d0",
+    "filename": "Chernobyl (2019) - S01E01 - 1.23.45 (1080p BluRay x265 Silence).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl.COMPLETE.Mini-Series.2019.Bluray.1080p.DTS-HD.x264-GrymEmpire\nExtras-GrymEmpire/Inside.The.Episodes-E01.1.23.45-GrymEmpire.mkv\n👤 2 💾 73.81 MB ⚙️ TorrentGalaxy",
+   "infoHash": "319bd4bca6304f12b08cdd3fe739af66ff69dd6a",
+   "fileIdx": 7,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|319bd4bca6304f12b08cdd3fe739af66ff69dd6a",
+    "filename": "Inside.The.Episodes-E01.1.23.45-GrymEmpire.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Chernobyl (2019) Season 01 S01 Featurettes (1080p Bluray x265 HEVC 10bit AAC 5.1 Joy) [UTR]\nChernobyl S01E01 1.23.45  [1080p x265 10bit Joy].mkv\n👤 2 💾 627.98 MB ⚙️ 1337x",
+   "infoHash": "14a71c01b3d1faac3464fa752a53f2e99909a05b",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|14a71c01b3d1faac3464fa752a53f2e99909a05b",
+    "filename": "Chernobyl S01E01 1.23.45  [1080p x265 10bit Joy].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Chernobyl.S01.COMPLETE.720p.AMZN.WEBRip.x264-GalaxyTV\nChernobyl.S01E01.720p.AMZN.WEBRip.x264-GalaxyTV.mkv\n👤 69 💾 360.6 MB ⚙️ ThePirateBay",
+   "infoHash": "f0e2ef1d5c196af306b907b57a30e926b3c46ad2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|f0e2ef1d5c196af306b907b57a30e926b3c46ad2",
+    "filename": "Chernobyl.S01E01.720p.AMZN.WEBRip.x264-GalaxyTV.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Chernobyl S01E01 720p WEBRip x264-TBS\n👤 17 💾 1.7 GB ⚙️ EZTV",
+   "infoHash": "c8e92834be0a326bfc8d2f1c833a1e79a94438b3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|tbs",
+    "filename": "chernobyl.s01e01.720p.webrip.x264-tbs[eztv].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Chernobyl.S01.Complete.BluRay.720p.x264.[Hindi.Tamil.Telugu.Kannada.English].AAC.ESub\nChernobyl.S01E01.BluRay.720p.x264.[Hindi.Tamil.Telugu.Kannada.English].AAC.ESub.mkv\n👤 13 💾 641.48 MB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "6130380e46bb94c1d6d27a2201dfcaced14b3575",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|6130380e46bb94c1d6d27a2201dfcaced14b3575",
+    "filename": "Chernobyl.S01E01.BluRay.720p.x264.[Hindi.Tamil.Telugu.Kannada.English].AAC.ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Chernobyl S01E01 1 23 45 720p AMZN WEB-DL DDP5 1 H 264-NTb\n👤 10 💾 2.16 GB ⚙️ EZTV",
+   "infoHash": "48b4b854f9c156c3573756b124b708ad041848b8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|NTb",
+    "filename": "Chernobyl.S01E01.1.23.45.720p.AMZN.WEB-DL.DDP5.1.H.264-NTb[eztv].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Chernobyl S01E01 1 23 45 720p AMZN WEB-DL DDP5 1 H 264-NTb\n👤 9 💾 2.16 GB ⚙️ ThePirateBay",
+   "infoHash": "3929d75c54c6254def5088939d8c9a1f11b0349e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|NTb",
+    "filename": "Chernobyl S01E01 1 23 45 720p AMZN WEB-DL DDP5 1 H 264-NTb.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Chernobyl.S01.MULTi.720p.WEB.H264-FRATERNiTY\nChernobyl.S01E01.MULTi.720p.WEB.H264-FRATERNiTY/Chernobyl.S01E01.MULTi.720p.WEB.H264-FRATERNiTY.mkv\n👤 9 💾 1.43 GB ⚙️ EXT\nMulti Audio",
+   "infoHash": "782ca6806a327aa74cdeb807b2b2be799fab76cc",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|782ca6806a327aa74cdeb807b2b2be799fab76cc",
+    "filename": "Chernobyl.S01E01.MULTi.720p.WEB.H264-FRATERNiTY.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Chernobyl.S01.720p.AMZN.WEB-DL.DDP5.1.H.264-NTb\nChernobyl.S01E01.1.23.45.720p.AMZN.WEB-DL.DDP5.1.H.264-NTb.mkv\n👤 8 💾 2.2 GB ⚙️ ThePirateBay",
+   "infoHash": "db7758e4b8a88c6ef3e747b16dbac84abca2ecf7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|db7758e4b8a88c6ef3e747b16dbac84abca2ecf7",
+    "filename": "Chernobyl.S01E01.1.23.45.720p.AMZN.WEB-DL.DDP5.1.H.264-NTb.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Chernobyl Season 1 Complete 720p WEB-DL x264 [i_c]\nChernobyl S01E01 12345.mkv\n👤 7 💾 674.34 MB ⚙️ ThePirateBay",
+   "infoHash": "6d818cf1fc8d994a4b71067c052e7eb65a092f3e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|6d818cf1fc8d994a4b71067c052e7eb65a092f3e",
+    "filename": "Chernobyl S01E01 12345.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Chernobyl.S01.720p.BluRay.X264-REWARD\nChernobyl.S01E01.720p.BluRay.X264-REWARD.mkv\n👤 6 💾 2.65 GB ⚙️ ThePirateBay",
+   "infoHash": "6e1f482d1c0c27544f5a7c91da22c85080622d25",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|6e1f482d1c0c27544f5a7c91da22c85080622d25",
+    "filename": "Chernobyl.S01E01.720p.BluRay.X264-REWARD.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Chernobyl S01e01-05 [720p Ita Eng][TNT-Village] byMetalh\nChernobyl.S01e01.Ita.Eng.720p.h264.byMetalh.mkv\n👤 6 💾 1.54 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "932079fbfc964a894e321c156faa2e712865e0cd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|932079fbfc964a894e321c156faa2e712865e0cd",
+    "filename": "Chernobyl.S01e01.Ita.Eng.720p.h264.byMetalh.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Chernobyl.S01E01.720p.WEBRip.x264-TBS[ettv]\n👤 4 💾 1.7 GB ⚙️ ThePirateBay",
+   "infoHash": "de8aeb4f83648f2e7c4a8f8f10e5e11a7deac914",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|tbs",
+    "filename": "chernobyl.s01e01.720p.webrip.x264-tbs[ettv].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Chernobyl.The.New.Evidence.S01.COMPLETE.720p.WEBRip.x264-GalaxyTV\nchernobyl.the.new.evidence.s01e01.720p.WEBRip.x264-GalaxyTV.mkv\n👤 3 💾 418.34 MB ⚙️ TorrentGalaxy",
+   "infoHash": "15660b1777499d482ef7cce9b60651140e5b87a1",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|15660b1777499d482ef7cce9b60651140e5b87a1",
+    "filename": "chernobyl.the.new.evidence.s01e01.720p.WEBRip.x264-GalaxyTV.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Chernobyl.COMPLETE.Season.1.S01.720p.AMZN.WEB-DL.x265-HETeam\nChernobyl.S01E01.1.23.45.720p.AMZN.WEB-DL.x265-HETeam.mkv\n👤 3 💾 308.67 MB ⚙️ ThePirateBay",
+   "infoHash": "4e2b2767480449d3938b39883eb14649554c4e67",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4e2b2767480449d3938b39883eb14649554c4e67",
+    "filename": "Chernobyl.S01E01.1.23.45.720p.AMZN.WEB-DL.x265-HETeam.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nWEB-DL",
+   "title": "Chernobyl S01E01 1 23 45 AMZN WEB-DL AAC2 0 H 264-BTW\n👤 9 💾 484.3 MB ⚙️ EZTV",
+   "infoHash": "5b79b58487ad0816bec22b6e660da24246f7f654",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|WEB-DL|BTW",
+    "filename": "Chernobyl.S01E01.1.23.45.AMZN.WEB-DL.AAC2.0.H.264-BTW[eztv].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nWEBRip",
+   "title": "Chernobyl.S01.FRENCH.WEBRip.x264-NEO\nChernobyl.S01E01.FRENCH.WEBRip.x264-NEO/Chernobyl.S01E01.FRENCH.WEBRip.x264-NEO.mkv\n👤 6 💾 370.47 MB ⚙️ EXT\n🇫🇷",
+   "infoHash": "c446733f87aee02e0615f13ecfd2440591419ae9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|c446733f87aee02e0615f13ecfd2440591419ae9",
+    "filename": "Chernobyl.S01E01.FRENCH.WEBRip.x264-NEO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nWEBRip",
+   "title": "Chernobyl S01E01 WEBRip x264-TBS\n👤 5 💾 302.04 MB ⚙️ EZTV",
+   "infoHash": "421eea93429e1fd413e790d409772a453c8da282",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|WEBRip|tbs",
+    "filename": "chernobyl.s01e01.webrip.x264-tbs[eztv].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nDLMux",
+   "title": "Chernobyl - Season 01 (2019)[FULL SERIES] SD DLMux XviD ita eng Mp3 Sub ita eng[Pir8]\nChernobyl.1x01.01.23.45.ITA.ENG.DLMux.XviD-Pir8.avi\n👤 3 💾 556.32 MB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "1e093e9f80b8e6672c401059139a059eab655dbd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1e093e9f80b8e6672c401059139a059eab655dbd",
+    "filename": "Chernobyl.1x01.01.23.45.ITA.ENG.DLMux.XviD-Pir8.avi"
+   }
+  },
+  {
+   "name": "Torrentio\nWEBRip",
+   "title": "Chernobyl.S01E01.WEBRip.x264-TBS[ettv]\n👤 3 💾 302.04 MB ⚙️ ThePirateBay",
+   "infoHash": "22c5c97da3c9ce7b38e1e8a3aa06ff298fa603d4",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|WEBRip|tbs",
+    "filename": "chernobyl.s01e01.webrip.x264-tbs[ettv].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nWEB",
+   "title": "Chernobyl.The.New.Evidence.S01.WEBRip.AAC2.0.x264-WEBTUBE[rartv]\nChernobyl.The.New.Evidence.S01E01.WEB.h264-WEBTUBE.mkv\n👤 2 💾 541.11 MB ⚙️ RARBG",
+   "infoHash": "144d03f1ade9d2a5fc88d9c53a36ed5bbc9dab4e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|144d03f1ade9d2a5fc88d9c53a36ed5bbc9dab4e",
+    "filename": "Chernobyl.The.New.Evidence.S01E01.WEB.h264-WEBTUBE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nBDRip",
+   "title": "Chernobyl.S01.BDRip.x265-ION265\nChernobyl.S01E01.BDRip.x265-ION265.mp4\n👤 2 💾 395.09 MB ⚙️ RARBG",
+   "infoHash": "605e8bf09b2dba6ec74048d3aee63e5852bba9a6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|605e8bf09b2dba6ec74048d3aee63e5852bba9a6",
+    "filename": "Chernobyl.S01E01.BDRip.x265-ION265.mp4"
+   }
+  }
+ ]
+}

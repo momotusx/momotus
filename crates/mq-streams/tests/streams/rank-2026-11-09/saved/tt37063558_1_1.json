@@ -1,0 +1,1087 @@
+{
+  "id": "tt37063558:1:1",
+  "type": "series",
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "R.J. Decker",
+    "year": "2026–",
+    "releaseInfo": "2026–",
+    "runtime": "43 min",
+    "episodeReleased": "2026-03-04T06:00:00.000Z",
+    "episodesInSeason": 9
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R J Decker 2026 S01-S02 1080p 10bit WEBRip 6CH x265 HEVC-PSA\nRJ.Decker.S01E01.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv\n👤 35 💾 696.09 MB ⚙️ EXT",
+          "infoHash": "c523d30d7a548423c7d3ea97a6b4a89c63703ae2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|c523d30d7a548423c7d3ea97a6b4a89c63703ae2",
+            "filename": "RJ.Decker.S01E01.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ Decker S01E01 1080p WEB h264-ETHEL\n👤 32 💾 1.84 GB ⚙️ EZTV",
+          "infoHash": "6b23e672602c27156d1380cc43f8d9340a522452",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|ETHEL",
+            "filename": "RJ.Decker.S01E01.1080p.WEB.h264-ETHEL[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J.Decker.S01.1080p.WEBRip.x265-KONTRAST\nR.J.Decker.S01E01.1080p.WEBRip.x265-KONTRAST.mkv\n👤 21 💾 1.06 GB ⚙️ 1337x",
+          "infoHash": "884edcd3b644132e02193f44ebbd1072770add86",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|884edcd3b644132e02193f44ebbd1072770add86",
+            "filename": "R.J.Decker.S01E01.1080p.WEBRip.x265-KONTRAST.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J. Decker S01 2026 COMPLETE 1080p DSNP Rip x265 Ita Eng AAC Sub Ita Eng [Pir8]\nR.J.Decker.1x01.Pilot.ITA.ENG.1080p.DSNP.WEBRip.AAC.x265-Pir8.mkv\n👤 20 💾 1.1 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹",
+          "infoHash": "e738823a5ef257267a7a293bed8287f67cde5729",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|e738823a5ef257267a7a293bed8287f67cde5729",
+            "filename": "R.J.Decker.1x01.Pilot.ITA.ENG.1080p.DSNP.WEBRip.AAC.x265-Pir8.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ Decker S01E01 1080p HEVC x265-MeGusta\n👤 16 💾 511.28 MB ⚙️ EZTV",
+          "infoHash": "3b92e3eef055bef0a62676b4197024351c8adea1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|MeGusta",
+            "filename": "RJ.Decker.S01E01.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ Decker S01E01 1080p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 13 💾 696.09 MB ⚙️ ThePirateBay",
+          "infoHash": "319a0e0b3aeed81ec32d46692c71fcce6cb00584",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|PSA",
+            "filename": "RJ Decker S01E01 1080p 10bit WEBRip 6CH x265 HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ.Decker.S01E01.1080p.x265-ELiTE\n👤 10 💾 983.88 MB ⚙️ ThePirateBay",
+          "infoHash": "06204bff75aec89bbbfa012e87b1ffa7dec0183c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|ELiTE",
+            "filename": "RJ.Decker.S01E01.1080p.x265-ELiTE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ Decker S01E01 1080p x265-ELiTE\n👤 7 💾 983.88 MB ⚙️ ThePirateBay",
+          "infoHash": "c66da0fc4cf40db3c91170b420b8d96ec142d029",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|ELiTE",
+            "filename": "RJ Decker S01E01 1080p x265-ELiTE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ Decker S01E01 Pilot 1080p DSNP WEB-DL DD 5 1 H 264-playWEB\n👤 5 💾 1.79 GB ⚙️ EZTV",
+          "infoHash": "ab22f5f371a3f44c3dcefe1a9bceb23079ef85a6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|playWEB",
+            "filename": "RJ Decker S01E01 Pilot 1080p DSNP WEB-DL DD 5 1 H 264-playWEB[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ.Decker.S01E01-E09.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA\nRJ.Decker.S01E01.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv\n👤 4 💾 696.09 MB ⚙️ EXT",
+          "infoHash": "5d35bc1717814fa62709b904239f6a9d203f9854",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|5d35bc1717814fa62709b904239f6a9d203f9854",
+            "filename": "RJ.Decker.S01E01.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J.Decker.S01E01-05.1080p.DSNP.WEB-DL.ITA.ENG.DDP5.1.H.265-G66\nR.J.Decker.S01E01.Pilot.1080p.DSNP.WEB-DL.ITA.ENG.DDP5.1.H.265-G66.mkv\n👤 4 💾 1.15 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "99b690900dd542a8c4259e186c7a6fda8eebc739",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|99b690900dd542a8c4259e186c7a6fda8eebc739",
+            "filename": "R.J.Decker.S01E01.Pilot.1080p.DSNP.WEB-DL.ITA.ENG.DDP5.1.H.265-G66.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R J Decker S01E01 Pilot 1080p DSNP WEB-DL DDP5 1 H 264-RAWR\n👤 4 💾 1.96 GB ⚙️ EZTV",
+          "infoHash": "0851ab885175b3241bf53ceb6ff09b2f42ec05b0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|RAWR",
+            "filename": "R J Decker S01E01 Pilot 1080p DSNP WEB-DL DDP5 1 H 264-RAWR[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ.Decker.S01E01.Pilot.1080p.DSNP.WEB-DL.ENG.ITA.DDP5.1.H264-TheBlackKing\n👤 3 💾 1.95 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "32a1eecce5c2cb214e8a1466f49de01fa84fe73c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|TheBlackKing",
+            "filename": "RJ.Decker.S01E01.Pilot.1080p.DSNP.WEB-DL.ENG.ITA.DDP5.1.H264-TheBlackKing.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ.Decker.S01E01.Pilot.1080p.HEVC.x265-MeGusta\n👤 3 💾 510.15 MB ⚙️ ThePirateBay",
+          "infoHash": "55c05e2af1ab2525cc957620467435681361760c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|MeGusta",
+            "filename": "RJ.Decker.S01E01.Pilot.1080p.HEVC.x265-MeGusta.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J.Decker.S01E01.MULTi.1080p.WEB.H264-AMB3R\n👤 2 💾 1.94 GB ⚙️ ThePirateBay\nMulti Audio",
+          "infoHash": "4d55d4ebf590747b24666f37e18686df7ff5f889",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|AMB3R",
+            "filename": "R.J.Decker.S01E01.MULTi.1080p.WEB.H264-AMB3R.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J.Decker.S01E01-05.1080p.DSNP.WEB-DL.ITA.ENG.DDP5.1.H.264-G66\nR.J.Decker.S01E01.Pilot.1080p.DSNP.WEB-DL.ITA.ENG.DDP5.1.H.264-G66.mkv\n👤 2 💾 1.94 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "c723eaa7faea5af4e5f6cfd78c0bcb566332ed0c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|c723eaa7faea5af4e5f6cfd78c0bcb566332ed0c",
+            "filename": "R.J.Decker.S01E01.Pilot.1080p.DSNP.WEB-DL.ITA.ENG.DDP5.1.H.264-G66.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R J Decker S01E01 Pilot REPACK 1080p DSNP WEB-DL DD 5 1 H 264-playWEB\n👤 2 💾 1.86 GB ⚙️ ThePirateBay",
+          "infoHash": "70609242462b3fd80e377e29779ac2cee08c5915",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|playWEB",
+            "filename": "R J Decker S01E01 Pilot REPACK 1080p DSNP WEB-DL DD 5 1 H 264-playWEB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R J Decker S01E01 2026 1080p DSNP WEB-DL DDP5 1 H 264-HHWEB\n👤 2 💾 1.86 GB ⚙️ EZTV",
+          "infoHash": "9e5c19884ba44044a8eb55f37e2b0603ae5b3cbc",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|HHWEB",
+            "filename": "R J Decker S01E01 2026 1080p DSNP WEB-DL DDP5 1 H 264-HHWEB[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ Decker S01E01 Pilot 1080p HEVC x265-MeGusta\n👤 2 💾 510.15 MB ⚙️ EZTV",
+          "infoHash": "9bcf7b8bb1a199a8f46aff5bf946334cfc29a1b0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|MeGusta",
+            "filename": "RJ.Decker.S01E01.Pilot.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R J Decker S01E01 2026 1080p DSNP WEB-DL DDP5 1 H 264-HHWEB\n👤 1 💾 1.86 GB ⚙️ TorrentGalaxy",
+          "infoHash": "0d185ac908737ebc46ece56a27e0bc25d0d104e9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|HHWEB",
+            "filename": "R J Decker S01E01 2026 1080p DSNP WEB-DL DDP5 1 H 264-HHWEB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ Decker S01E01 Pilot 1080p DSNP WEB-DL DD 5 1 H 264-playWEB\n👤 1 💾 1.79 GB ⚙️ TorrentGalaxy",
+          "infoHash": "034d133e9103cf30dade4d5202067396ace71bf3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|playWEB",
+            "filename": "RJ Decker S01E01 Pilot 1080p DSNP WEB-DL DD 5 1 H 264-playWEB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ Decker S01E01 720p HEVC x265-MeGusta\n👤 12 💾 322.95 MB ⚙️ EZTV",
+          "infoHash": "017ef4aee7a754e81fa804e2316196d9d6eae075",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|MeGusta",
+            "filename": "RJ.Decker.S01E01.720p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ.Decker.S01E01-E09.720p.10bit.WEBRip.2CH.x265.HEVC-PSA\nRJ.Decker.S01E01.720p.10bit.WEBRip.2CH.x265.HEVC-PSA.mkv\n👤 5 💾 306.42 MB ⚙️ EXT",
+          "infoHash": "9e956f4cabe5557c811bb29b20bec79b81d60f0b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|9e956f4cabe5557c811bb29b20bec79b81d60f0b",
+            "filename": "RJ.Decker.S01E01.720p.10bit.WEBRip.2CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "R J Decker S01E01 720p HDTV x264\n👤 5 💾 489.9 MB ⚙️ TorrentGalaxy",
+          "infoHash": "c0e81e622492da2f10307ce69dbb3017f660cf50",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p",
+            "filename": "R.J.Decker.S01E01.720p.HDTV.x264.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ Decker S01E01 Pilot 720p HEVC x265-MeGusta\n👤 4 💾 322.4 MB ⚙️ EZTV",
+          "infoHash": "76cad0eb115ba4a5bfaae61ef4a04f188fc6c258",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|MeGusta",
+            "filename": "RJ.Decker.S01E01.Pilot.720p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "R J Decker S01E01 Pilot REPACK 720p DSNP WEB-DL DD 5 1 H 264-playWEB\n👤 3 💾 1.02 GB ⚙️ EZTV",
+          "infoHash": "6ec0f9f185318f5abd712bf8879319d0071f9ec2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|playWEB",
+            "filename": "R J Decker S01E01 Pilot REPACK 720p DSNP WEB-DL DD 5 1 H 264-playWEB[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ Decker S01E01 720p x264-FENiX\n👤 3 💾 671.17 MB ⚙️ ThePirateBay",
+          "infoHash": "4b36233798ac114980360fc8784757c6fb2ee1cd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|FENiX",
+            "filename": "RJ Decker S01E01 720p x264-FENiX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ.Decker.S01E01.720p.x264-FENiX\n👤 3 💾 671.17 MB ⚙️ ThePirateBay",
+          "infoHash": "044a570551880e01820ddf90a0da1764a541854d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|FENiX",
+            "filename": "RJ.Decker.S01E01.720p.x264-FENiX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "R J Decker S01E01 Pilot 720p DSNP WEB-DL DDP5 1 H 264-RAWR\n👤 3 💾 1.14 GB ⚙️ EZTV",
+          "infoHash": "f1764fe594909f45981755f3e2ecf5d5b88a5628",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|RAWR",
+            "filename": "R J Decker S01E01 Pilot 720p DSNP WEB-DL DDP5 1 H 264-RAWR[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ Decker S01E01 720p WEB H264-JFF\n👤 3 💾 975.6 MB ⚙️ ThePirateBay",
+          "infoHash": "9331746abea3d1ed4ab45f70aeb4729a0dd80fb2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|JFF",
+            "filename": "RJ Decker S01E01 720p WEB H264-JFF.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ Decker S01E01 Pilot 720p DSNP WEB-DL DD 5 1 H 264-playWEB\n👤 3 💾 1.01 GB ⚙️ EZTV",
+          "infoHash": "fefa0f39f84d183b22b7c323f8eb72a38faa5f26",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|playWEB",
+            "filename": "RJ Decker S01E01 Pilot 720p DSNP WEB-DL DD 5 1 H 264-playWEB[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "R J Decker S01E01 720p WEB H264-iNSiDiOUS\n👤 2 💾 1.02 GB ⚙️ EZTV",
+          "infoHash": "8940de766aaa6471a983482efcb346f901f01cbc",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|insidious",
+            "filename": "r.j.decker.s01e01.720p.web.h264-insidious[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ Decker S01E01 720p WEB H264-JFF\n👤 2 💾 975.6 MB ⚙️ EZTV",
+          "infoHash": "6185ebb3f98215adc4db82d4a327764554119e24",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|JFF",
+            "filename": "RJ Decker S01E01 720p WEB H264-JFF[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ.Decker.S01E01.720p.HEVC.x265-MeGusta\n👤 2 💾 322.95 MB ⚙️ ThePirateBay",
+          "infoHash": "8d5ff5aabc93af7713fd8d8a1ef31ff01dbfd12c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|MeGusta",
+            "filename": "RJ.Decker.S01E01.720p.HEVC.x265-MeGusta.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "R.J.Decker.S01E01.720p.WEB.H264-iNSiDiOUS\n👤 1 💾 1.02 GB ⚙️ ThePirateBay",
+          "infoHash": "40b08e3249cba72852a828a4607d12362cc39cfa",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|insidious",
+            "filename": "r.j.decker.s01e01.720p.web.h264-insidious.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "R J Decker S01E01 Pilot 720p DSNP WEB-DL DDP5 1 H 264-RAWR\n👤 1 💾 1.14 GB ⚙️ ThePirateBay",
+          "infoHash": "f0db2c95084ec092bfc1583c1d97374ab5c8ccd5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|RAWR",
+            "filename": "R J Decker S01E01 Pilot 720p DSNP WEB-DL DDP5 1 H 264-RAWR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n480p",
+          "title": "RJ Decker S01E01 Pilot 480p x264-mSD\n👤 7 💾 230.48 MB ⚙️ EZTV",
+          "infoHash": "732e005047bd3a949105b8bc011ea31595d319da",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|480p|mSD",
+            "filename": "RJ.Decker.S01E01.Pilot.480p.x264-mSD[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n480p",
+          "title": "RJ Decker S01E01 480p x264-mSD\n👤 3 💾 230.74 MB ⚙️ EZTV",
+          "infoHash": "20809e1e0519417cc253cfedf6af66ca5cc112cb",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|480p|mSD",
+            "filename": "RJ.Decker.S01E01.480p.x264-mSD[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nXviD",
+          "title": "RJ Decker S01E01 Pilot XviD-AFG\n👤 5 💾 544.97 MB ⚙️ EZTV",
+          "infoHash": "2724b99b810c58361e00d04037ad7b64969b62d6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|XviD|AFG",
+            "filename": "RJ.Decker.S01E01.Pilot.XviD-AFG[EZTVx.to].avi"
+          }
+        }
+      ]
+    },
+    "torrentio-owner": {
+      "url": "https://torrentio.strem.fun/language=turkish|qualityfilter=threed,480p,scr,cam,unknown",
+      "streams": [
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J. Decker Saison 1 MULTI TRUEFRENCH HDTV 2026\nR.J.Decker.S01E01.Pilot.MULTi.1080p.DSNP.WEB.H264-BYOR.mkv\n👤 53 💾 1.98 GB ⚙️ Torrent9\nMulti Audio / 🇬🇧 / 🇫🇷",
+          "infoHash": "8707cb54015432bfff8ce9409c19821b39f6598d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|8707cb54015432bfff8ce9409c19821b39f6598d",
+            "filename": "R.J.Decker.S01E01.Pilot.MULTi.1080p.DSNP.WEB.H264-BYOR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Ар-Джей Декер / RJ Decker [S01] (2026) WEB-DL 1080p | HDrezka Studio\nR.J.Decker.S01E01.1080p.mkv\n👤 37 💾 2.02 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "23797170afe9d6b5d8d72c1a55424e5345ac16fb",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|23797170afe9d6b5d8d72c1a55424e5345ac16fb",
+            "filename": "R.J.Decker.S01E01.1080p.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:23797170afe9d6b5d8d72c1a55424e5345ac16fb",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R J Decker 2026 S01-S02 1080p 10bit WEBRip 6CH x265 HEVC-PSA\nRJ.Decker.S01E01.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv\n👤 35 💾 696.09 MB ⚙️ EXT",
+          "infoHash": "c523d30d7a548423c7d3ea97a6b4a89c63703ae2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|c523d30d7a548423c7d3ea97a6b4a89c63703ae2",
+            "filename": "RJ.Decker.S01E01.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ Decker S01E01 1080p WEB h264-ETHEL\n👤 32 💾 1.84 GB ⚙️ EZTV",
+          "infoHash": "6b23e672602c27156d1380cc43f8d9340a522452",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|ETHEL",
+            "filename": "RJ.Decker.S01E01.1080p.WEB.h264-ETHEL[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J.Decker.S01.1080p.WEBRip.x265-KONTRAST\nR.J.Decker.S01E01.1080p.WEBRip.x265-KONTRAST.mkv\n👤 21 💾 1.06 GB ⚙️ 1337x",
+          "infoHash": "884edcd3b644132e02193f44ebbd1072770add86",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|884edcd3b644132e02193f44ebbd1072770add86",
+            "filename": "R.J.Decker.S01E01.1080p.WEBRip.x265-KONTRAST.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J. Decker S01 2026 COMPLETE 1080p DSNP Rip x265 Ita Eng AAC Sub Ita Eng [Pir8]\nR.J.Decker.1x01.Pilot.ITA.ENG.1080p.DSNP.WEBRip.AAC.x265-Pir8.mkv\n👤 20 💾 1.1 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹",
+          "infoHash": "e738823a5ef257267a7a293bed8287f67cde5729",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|e738823a5ef257267a7a293bed8287f67cde5729",
+            "filename": "R.J.Decker.1x01.Pilot.ITA.ENG.1080p.DSNP.WEBRip.AAC.x265-Pir8.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ Decker S01E01 1080p HEVC x265-MeGusta\n👤 16 💾 511.28 MB ⚙️ EZTV",
+          "infoHash": "3b92e3eef055bef0a62676b4197024351c8adea1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|MeGusta",
+            "filename": "RJ.Decker.S01E01.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Ар-Джей Декер / RJ Decker / Сезон: 1 / Серии: 1-2 из 9 [2026 WEB-DL 1080p] MVO (HDRezka Studio LE-Production) + Original + Sub (Rus Eng)\nRJ.Decker.S01E01.1080p.WEB-DL.RGzsRutracker.mkv\n👤 15 💾 1.92 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "7e208fb8ada8452959f74614b04e355ccd533245",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|7e208fb8ada8452959f74614b04e355ccd533245",
+            "filename": "RJ.Decker.S01E01.1080p.WEB-DL.RGzsRutracker.mkv"
+          },
+          "sources": [
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "dht:7e208fb8ada8452959f74614b04e355ccd533245",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ Decker S01E01 1080p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 13 💾 696.09 MB ⚙️ ThePirateBay",
+          "infoHash": "319a0e0b3aeed81ec32d46692c71fcce6cb00584",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|PSA",
+            "filename": "RJ Decker S01E01 1080p 10bit WEBRip 6CH x265 HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ.Decker.S01E01.1080p.x265-ELiTE\n👤 10 💾 983.88 MB ⚙️ ThePirateBay",
+          "infoHash": "06204bff75aec89bbbfa012e87b1ffa7dec0183c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|ELiTE",
+            "filename": "RJ.Decker.S01E01.1080p.x265-ELiTE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J. Decker - Investigador Privado S01 2026 WEB-DL 1080p x264 DUAL 5.1\nR.J. Decker - Investigador Privado S01E01 WEB-DL 1080p x264 DUAL 5.1.mkv\n👤 7 💾 1.95 GB ⚙️ BluDV\nDual Audio / 🇬🇧 / 🇵🇹",
+          "infoHash": "7ab544221f1c8be3a1d411e1a81089f875ed6c11",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|7ab544221f1c8be3a1d411e1a81089f875ed6c11",
+            "filename": "R.J. Decker - Investigador Privado S01E01 WEB-DL 1080p x264 DUAL 5.1.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ Decker S01E01 1080p x265-ELiTE\n👤 7 💾 983.88 MB ⚙️ ThePirateBay",
+          "infoHash": "c66da0fc4cf40db3c91170b420b8d96ec142d029",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|ELiTE",
+            "filename": "RJ Decker S01E01 1080p x265-ELiTE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ Decker S01E01 Pilot 1080p DSNP WEB-DL DD 5 1 H 264-playWEB\n👤 5 💾 1.79 GB ⚙️ EZTV",
+          "infoHash": "ab22f5f371a3f44c3dcefe1a9bceb23079ef85a6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|playWEB",
+            "filename": "RJ Decker S01E01 Pilot 1080p DSNP WEB-DL DD 5 1 H 264-playWEB[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ.Decker.S01E01-E09.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA\nRJ.Decker.S01E01.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv\n👤 4 💾 696.09 MB ⚙️ EXT",
+          "infoHash": "5d35bc1717814fa62709b904239f6a9d203f9854",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|5d35bc1717814fa62709b904239f6a9d203f9854",
+            "filename": "RJ.Decker.S01E01.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J.Decker.S01E01-05.1080p.DSNP.WEB-DL.ITA.ENG.DDP5.1.H.265-G66\nR.J.Decker.S01E01.Pilot.1080p.DSNP.WEB-DL.ITA.ENG.DDP5.1.H.265-G66.mkv\n👤 4 💾 1.15 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "99b690900dd542a8c4259e186c7a6fda8eebc739",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|99b690900dd542a8c4259e186c7a6fda8eebc739",
+            "filename": "R.J.Decker.S01E01.Pilot.1080p.DSNP.WEB-DL.ITA.ENG.DDP5.1.H.265-G66.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R J Decker S01E01 Pilot 1080p DSNP WEB-DL DDP5 1 H 264-RAWR\n👤 4 💾 1.96 GB ⚙️ EZTV",
+          "infoHash": "0851ab885175b3241bf53ceb6ff09b2f42ec05b0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|RAWR",
+            "filename": "R J Decker S01E01 Pilot 1080p DSNP WEB-DL DDP5 1 H 264-RAWR[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J Decker [HDTV 1080p][Cap.101]\n👤 3 💾 1.94 GB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "5123d6871cf544f0248e40010996037e3afc2d44",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p",
+            "filename": "R.J Decker [HDTV 1080p][Cap.101].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ.Decker.S01E01.Pilot.1080p.DSNP.WEB-DL.ENG.ITA.DDP5.1.H264-TheBlackKing\n👤 3 💾 1.95 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "32a1eecce5c2cb214e8a1466f49de01fa84fe73c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|TheBlackKing",
+            "filename": "RJ.Decker.S01E01.Pilot.1080p.DSNP.WEB-DL.ENG.ITA.DDP5.1.H264-TheBlackKing.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ.Decker.S01E01.Pilot.1080p.HEVC.x265-MeGusta\n👤 3 💾 510.15 MB ⚙️ ThePirateBay",
+          "infoHash": "55c05e2af1ab2525cc957620467435681361760c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|MeGusta",
+            "filename": "RJ.Decker.S01E01.Pilot.1080p.HEVC.x265-MeGusta.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J.Decker.S01E01.2026.WEB-DL.1080p-Dual-Lat\n👤 2 💾 1.94 GB ⚙️ Cinecalidad\nDual Audio / 🇲🇽",
+          "infoHash": "583a1a13e700c301323afa2fa2bfd5f10622a161",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|Lat",
+            "filename": "R.J.Decker.S01E01.2026.WEB-DL.1080p-Dual-Lat.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J Decker [Sezon 1] [MULTi] [1080p] [DSNP] [WEB-DL] [H264] [DDP5.1-K83] [Lektor i Napisy PL]\nR.J.Decker.S01E01.MULTi.1080p.DSNP.WEB-DL.H264.DDP5.1-K83.mkv\n👤 2 💾 1.94 GB ⚙️ BestTorrents\nMulti Audio / 🇬🇧 / 🇵🇱",
+          "infoHash": "a10175ba590e206015a3aae0b61ffaeb2302cd13",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|a10175ba590e206015a3aae0b61ffaeb2302cd13",
+            "filename": "R.J.Decker.S01E01.MULTi.1080p.DSNP.WEB-DL.H264.DDP5.1-K83.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J.Decker.S01E01.MULTi.1080p.WEB.H264-AMB3R\n👤 2 💾 1.94 GB ⚙️ ThePirateBay\nMulti Audio",
+          "infoHash": "4d55d4ebf590747b24666f37e18686df7ff5f889",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|AMB3R",
+            "filename": "R.J.Decker.S01E01.MULTi.1080p.WEB.H264-AMB3R.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J.Decker.S01E01-05.1080p.DSNP.WEB-DL.ITA.ENG.DDP5.1.H.264-G66\nR.J.Decker.S01E01.Pilot.1080p.DSNP.WEB-DL.ITA.ENG.DDP5.1.H.264-G66.mkv\n👤 2 💾 1.94 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "c723eaa7faea5af4e5f6cfd78c0bcb566332ed0c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|c723eaa7faea5af4e5f6cfd78c0bcb566332ed0c",
+            "filename": "R.J.Decker.S01E01.Pilot.1080p.DSNP.WEB-DL.ITA.ENG.DDP5.1.H.264-G66.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R J Decker S01E01 Pilot REPACK 1080p DSNP WEB-DL DD 5 1 H 264-playWEB\n👤 2 💾 1.86 GB ⚙️ ThePirateBay",
+          "infoHash": "70609242462b3fd80e377e29779ac2cee08c5915",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|playWEB",
+            "filename": "R J Decker S01E01 Pilot REPACK 1080p DSNP WEB-DL DD 5 1 H 264-playWEB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Ар-Джей Декер / RJ Decker [01x01-08 из 09] (2026) WEB-DL 1080p | HDrezka Studio\nR.J.Decker.S01E01.1080p.mkv\n👤 2 💾 2.02 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "acd7bde4e2c8b65d3c1d54c272c9a61b9ed2c567",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|acd7bde4e2c8b65d3c1d54c272c9a61b9ed2c567",
+            "filename": "R.J.Decker.S01E01.1080p.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:acd7bde4e2c8b65d3c1d54c272c9a61b9ed2c567",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R J Decker S01E01 2026 1080p DSNP WEB-DL DDP5 1 H 264-HHWEB\n👤 2 💾 1.86 GB ⚙️ EZTV",
+          "infoHash": "9e5c19884ba44044a8eb55f37e2b0603ae5b3cbc",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|HHWEB",
+            "filename": "R J Decker S01E01 2026 1080p DSNP WEB-DL DDP5 1 H 264-HHWEB[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Ар-Джей Декер / RJ Decker [01x01-03 из 09] (2026) WEB-DL 1080p | HDrezka Studio\nR.J.Decker.S01E01.1080p.mkv\n👤 2 💾 2.02 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "9aff6d092d6f6f35eee3ee60a74462cc69d6e13d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|9aff6d092d6f6f35eee3ee60a74462cc69d6e13d",
+            "filename": "R.J.Decker.S01E01.1080p.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:9aff6d092d6f6f35eee3ee60a74462cc69d6e13d",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "RJ Decker S01E01 Pilot 1080p HEVC x265-MeGusta\n👤 2 💾 510.15 MB ⚙️ EZTV",
+          "infoHash": "9bcf7b8bb1a199a8f46aff5bf946334cfc29a1b0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|MeGusta",
+            "filename": "RJ.Decker.S01E01.Pilot.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R.J Decker [Sezon 1] [MULTi] [1080p] [DSNP] [WEB-DL] [H264] [DDP5.1-K83] [Lektor i Napisy PL]\nR.J.Decker.S01E01.MULTi.1080p.DSNP.WEB-DL.H264.DDP5.1-K83.mkv\n👤 1 💾 1.94 GB ⚙️ BestTorrents\nMulti Audio / 🇬🇧 / 🇵🇱",
+          "infoHash": "d8e4ff38c02c810bbe6be0fadbc90b3f8972090c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|d8e4ff38c02c810bbe6be0fadbc90b3f8972090c",
+            "filename": "R.J.Decker.S01E01.MULTi.1080p.DSNP.WEB-DL.H264.DDP5.1-K83.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Ар-Джей Декер / RJ Decker [01x01-07 из 09] (2026) WEB-DL 1080p | HDrezka Studio\nR.J.Decker.S01E01.1080p.mkv\n👤 1 💾 2.02 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "174a02db412bd64de5318612b491dc9dec68d205",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|174a02db412bd64de5318612b491dc9dec68d205",
+            "filename": "R.J.Decker.S01E01.1080p.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:174a02db412bd64de5318612b491dc9dec68d205",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "R J Decker S01E01 2026 1080p DSNP WEB-DL DDP5 1 H 264-HHWEB\n👤 1 💾 1.86 GB ⚙️ TorrentGalaxy",
+          "infoHash": "0d185ac908737ebc46ece56a27e0bc25d0d104e9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|HHWEB",
+            "filename": "R J Decker S01E01 2026 1080p DSNP WEB-DL DDP5 1 H 264-HHWEB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ Decker S01E01 720p HEVC x265-MeGusta\n👤 12 💾 322.95 MB ⚙️ EZTV",
+          "infoHash": "017ef4aee7a754e81fa804e2316196d9d6eae075",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|MeGusta",
+            "filename": "RJ.Decker.S01E01.720p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "R.J Decker [Sezon 1] [MULTi] [720p] [DSNP] [WEB-DL] [H264] [DDP5.1-K83] [Lektor i Napisy PL]\nR.J.Decker.S01E01.MULTi.720p.DSNP.WEB-DL.H264.DDP5.1-K83.mkv\n👤 7 💾 1.1 GB ⚙️ BestTorrents\nMulti Audio / 🇬🇧 / 🇵🇱",
+          "infoHash": "ba6c8fa7e776b434aa8fabf27c76e058f781706b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|ba6c8fa7e776b434aa8fabf27c76e058f781706b",
+            "filename": "R.J.Decker.S01E01.MULTi.720p.DSNP.WEB-DL.H264.DDP5.1-K83.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ.Decker.S01E01-E09.720p.10bit.WEBRip.2CH.x265.HEVC-PSA\nRJ.Decker.S01E01.720p.10bit.WEBRip.2CH.x265.HEVC-PSA.mkv\n👤 5 💾 306.42 MB ⚙️ EXT",
+          "infoHash": "9e956f4cabe5557c811bb29b20bec79b81d60f0b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|9e956f4cabe5557c811bb29b20bec79b81d60f0b",
+            "filename": "RJ.Decker.S01E01.720p.10bit.WEBRip.2CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "R.J Decker [HDTV 720p][Cap.101]\n👤 5 💾 1.31 GB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "68c0b8ca61ac0c3c2b2e3abb417e88a99a8656d7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p",
+            "filename": "R.J Decker [HDTV 720p][Cap.101].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "R J Decker S01E01 720p HDTV x264\n👤 5 💾 489.9 MB ⚙️ TorrentGalaxy",
+          "infoHash": "c0e81e622492da2f10307ce69dbb3017f660cf50",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p",
+            "filename": "R.J.Decker.S01E01.720p.HDTV.x264.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ Decker S01E01 Pilot 720p HEVC x265-MeGusta\n👤 4 💾 322.4 MB ⚙️ EZTV",
+          "infoHash": "76cad0eb115ba4a5bfaae61ef4a04f188fc6c258",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|MeGusta",
+            "filename": "RJ.Decker.S01E01.Pilot.720p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "R J Decker S01E01 Pilot REPACK 720p DSNP WEB-DL DD 5 1 H 264-playWEB\n👤 3 💾 1.02 GB ⚙️ EZTV",
+          "infoHash": "6ec0f9f185318f5abd712bf8879319d0071f9ec2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|playWEB",
+            "filename": "R J Decker S01E01 Pilot REPACK 720p DSNP WEB-DL DD 5 1 H 264-playWEB[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ Decker S01E01 720p x264-FENiX\n👤 3 💾 671.17 MB ⚙️ ThePirateBay",
+          "infoHash": "4b36233798ac114980360fc8784757c6fb2ee1cd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|FENiX",
+            "filename": "RJ Decker S01E01 720p x264-FENiX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ.Decker.S01E01.720p.x264-FENiX\n👤 3 💾 671.17 MB ⚙️ ThePirateBay",
+          "infoHash": "044a570551880e01820ddf90a0da1764a541854d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|FENiX",
+            "filename": "RJ.Decker.S01E01.720p.x264-FENiX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "R J Decker S01E01 Pilot 720p DSNP WEB-DL DDP5 1 H 264-RAWR\n👤 3 💾 1.14 GB ⚙️ EZTV",
+          "infoHash": "f1764fe594909f45981755f3e2ecf5d5b88a5628",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|RAWR",
+            "filename": "R J Decker S01E01 Pilot 720p DSNP WEB-DL DDP5 1 H 264-RAWR[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ Decker S01E01 720p WEB H264-JFF\n👤 3 💾 975.6 MB ⚙️ ThePirateBay",
+          "infoHash": "9331746abea3d1ed4ab45f70aeb4729a0dd80fb2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|JFF",
+            "filename": "RJ Decker S01E01 720p WEB H264-JFF.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ Decker S01E01 Pilot 720p DSNP WEB-DL DD 5 1 H 264-playWEB\n👤 3 💾 1.01 GB ⚙️ EZTV",
+          "infoHash": "fefa0f39f84d183b22b7c323f8eb72a38faa5f26",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|playWEB",
+            "filename": "RJ Decker S01E01 Pilot 720p DSNP WEB-DL DD 5 1 H 264-playWEB[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "R J Decker S01E01 720p WEB H264-iNSiDiOUS\n👤 2 💾 1.02 GB ⚙️ EZTV",
+          "infoHash": "8940de766aaa6471a983482efcb346f901f01cbc",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|insidious",
+            "filename": "r.j.decker.s01e01.720p.web.h264-insidious[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ Decker S01E01 720p WEB H264-JFF\n👤 2 💾 975.6 MB ⚙️ EZTV",
+          "infoHash": "6185ebb3f98215adc4db82d4a327764554119e24",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|JFF",
+            "filename": "RJ Decker S01E01 720p WEB H264-JFF[EZTVx.to].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "RJ.Decker.S01E01.720p.HEVC.x265-MeGusta\n👤 2 💾 322.95 MB ⚙️ ThePirateBay",
+          "infoHash": "8d5ff5aabc93af7713fd8d8a1ef31ff01dbfd12c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|MeGusta",
+            "filename": "RJ.Decker.S01E01.720p.HEVC.x265-MeGusta.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "R.J Decker [Sezon 1] [MULTi] [720p] [DSNP] [WEB-DL] [H264] [DDP5.1-K83] [Lektor i Napisy PL]\nR.J.Decker.S01E01.MULTi.720p.DSNP.WEB-DL.H264.DDP5.1-K83.mkv\n👤 1 💾 1.1 GB ⚙️ BestTorrents\nMulti Audio / 🇬🇧 / 🇵🇱",
+          "infoHash": "53ae35ab613fdd515d197480e44398c1f8518a26",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|53ae35ab613fdd515d197480e44398c1f8518a26",
+            "filename": "R.J.Decker.S01E01.MULTi.720p.DSNP.WEB-DL.H264.DDP5.1-K83.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Ар-Джей Декер / RJ Decker / Сезон: 1 / Серии: 1-9 из 9 [2026 WEB-DLRip] MVO (HDRezka Studio)\nАр-Джей Декер 01.WEB-DLRip.avi\n👤 24 💾 646.96 MB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "f265eb7af111733cc65a8541ac1003b35f6141c2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|f265eb7af111733cc65a8541ac1003b35f6141c2",
+            "filename": "Ар-Джей Декер 01.WEB-DLRip.avi"
+          },
+          "sources": [
+            "tracker:http://bt4.t-ru.org/ann?magnet",
+            "dht:f265eb7af111733cc65a8541ac1003b35f6141c2",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nXviD",
+          "title": "RJ Decker S01E01 Pilot XviD-AFG\n👤 5 💾 544.97 MB ⚙️ EZTV",
+          "infoHash": "2724b99b810c58361e00d04037ad7b64969b62d6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|XviD|AFG",
+            "filename": "RJ.Decker.S01E01.Pilot.XviD-AFG[EZTVx.to].avi"
+          }
+        },
+        {
+          "name": "Torrentio\nHDTV",
+          "title": "R.J Decker [HDTV][Cap.101]\n👤 3 💾 565.72 MB ⚙️ Wolfmax4k\n🇪🇸",
+          "infoHash": "5f93f30db5fd9cb898ae415db106537c2d10a8aa",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|HDTV",
+            "filename": "R.J Decker [HDTV][Cap.101].avi"
+          }
+        }
+      ]
+    }
+  }
+}

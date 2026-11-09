@@ -1,0 +1,1622 @@
+{
+  "id": "tt14173636",
+  "type": "movie",
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "The Invite",
+    "year": "2026",
+    "releaseInfo": "2026",
+    "runtime": "107 min",
+    "episodeReleased": null,
+    "episodesInSeason": null
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "The Invite (2026) MULTi.2160p.WEB-DL.DV.HDR.AV1.DDP5.1-MAXX [AUDIO #1 ENGLISH] [ AUDIO #0 POLISH]\n👤 12 💾 5.93 GB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇵🇱",
+          "infoHash": "02345b4cc573d5cdda198226c0013502b58ce73d",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|av1|DV|HDR"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "The Invite 2026 2160p WEBRip\n👤 362 💾 4.78 GB ⚙️ YTS",
+          "infoHash": "f8d4442e3e84c1ddac25aab223b4dc2e5a7abda8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+            "filename": "The.Invite.2026.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "The.Invite.2026.2160p.WEBRip.AVC.SDR.DDP5.1-Asmo\n👤 59 💾 12.71 GB ⚙️ ThePirateBay",
+          "infoHash": "8252bbeb9e7431b5a39a4e5f2f150cb3711185e8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|avc",
+            "filename": "The.Invite.2026.2160p.WEBRip.AVC.SDR.DDP5.1-Asmo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p WEBRip\n👤 2865 💾 1.97 GB ⚙️ YTS",
+          "infoHash": "683c8e8ff89f488ecb0d1e3acf584a501a06c9dc",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "The.Invite.2026.1080p.WEBRip.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p WEB-DL HEVC x265 5.1 BONE\n👤 267 💾 1.79 GB ⚙️ TorrentGalaxy",
+          "infoHash": "8fa681025431df62ce2e31acdee83fcda921e05a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "The Invite 2026 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) (1080p BluRay x265 10bit EAC3 5.1 Ghost) [QxR] ...\n👤 259 💾 5.86 GB ⚙️ EXT\n🇬🇧 / 🇪🇸 / 🇫🇷",
+          "infoHash": "a50a1dca92c2a31216cf5aa485236a66d00e0aaa",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "The Invite (2026) (1080p BluRay x265 Ghost).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p AMZN WEB-DL DDP5 1 H 264-BYNDR\n👤 250 💾 7.78 GB ⚙️ EXT",
+          "infoHash": "492cd9fb6e720d1a1f404a9f94d9da9b5c962384",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "The Invite 2026 1080p AMZN WEB-DL DDP5 1 H 264-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 REPACK 1080p WEBRip DDP 5 1 10bit H 265-iVy\n👤 227 💾 2.08 GB ⚙️ ThePirateBay",
+          "infoHash": "ccd2327368a469e7a0b2220f71135d4e0e94a520",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|h265|10bit",
+            "filename": "The Invite 2026 REPACK 1080p WEBRip DDP 5 1 10bit H 265-iVy.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) 1080p WEBRip x265 10bit 5.1 YTS YIFY\n👤 186 💾 1.79 GB ⚙️ EXT",
+          "infoHash": "d9dd9229743fa0c325dd7a86bf6f8d11473031a7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "The.Invite.2026.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080P AMZN WEB-DL DDP5.1. X265 POOTLED\n👤 186 💾 4.19 GB ⚙️ TorrentGalaxy",
+          "infoHash": "f7584ac08dea989b2b3b553ec2f91bc2a0d2f3a1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x265",
+            "filename": "The Invite 2026 1080P AMZN WEB-DL DDP5.1. X265 POOTLED.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p BluRay x265 DDP5.1-CSP\n👤 174 💾 4.15 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇪🇸 / 🇫🇷",
+          "infoHash": "4e18607ac0eb5c4014a60dd98f4685c6cda54c64",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "The Invite 2026 1080p BluRay x265 DDP5.1-CSP.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) [1080p] [BluRay] [5.1]\n👤 117 💾 1.97 GB ⚙️ EXT",
+          "infoHash": "61b75280af55e7fa846daa3a017b8bcb92709363",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The.Invite.2026.1080p.BluRay.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir\n👤 89 💾 1.75 GB ⚙️ ThePirateBay",
+          "infoHash": "21c0886a59b7876719bd634ac257e5ed8522031a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "The Invite 2026 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.1080p.WEBRip.x265-KONTRAST\n👤 53 💾 2.79 GB ⚙️ EXT",
+          "infoHash": "06c714c1f9f952ea5b546fc94ed0ea246717cb8e",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "The.Invite.2026.1080p.WEBRip.x265-KONTRAST.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.Bluray.1080p.TrueHD5.1.x264-DreamHD\n👤 40 💾 11.51 GB ⚙️ EXT\n🇬🇧 / 🇨🇳",
+          "infoHash": "78bf5f91d7946624e4f696707833630b6232a63e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The.Invite.2026.Bluray.1080p.TrueHD5.1.x264-DreamHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.1080p.WEB.h264-ETHEL\n👤 36 💾 7.83 GB ⚙️ EXT\n🇬🇧 / 🇪🇸",
+          "infoHash": "455a992d637e0c0151d66a5fb06df523b54d5a15",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264",
+            "filename": "The.Invite.2026.1080p.WEB.h264-ETHEL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p BluRay x265-YAWNTiC\n👤 33 💾 6.91 GB ⚙️ EXT",
+          "infoHash": "d603babf79232d1e420db7bda78139cc10305802",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "The Invite 2026 1080p BluRay x265-YAWNTiC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 MULTi CA 1080p WEB H264-SUPPLY\n👤 21 💾 8.24 GB ⚙️ ThePirateBay\nMulti Audio / 🇬🇧 / 🇫🇷",
+          "infoHash": "ed58358127057bc671a73f0550879ab8bba35cb9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264",
+            "filename": "The Invite 2026 MULTi CA 1080p WEB H264-SUPPLY.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.1080p.WEBRip.x265-INFINITY\n👤 20 💾 1.67 GB ⚙️ EXT",
+          "infoHash": "28f81e48bdd1addc03c3d2c974e78151a29fe7f9",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "The.Invite.2026.1080p.WEBRip.x265-INFINITY.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) BluRay - 1080p - x264 - [Telugu + Tamil + Hindi + Eng] - (DD+2.0 - 224Kbps) - 2.2GB - ESub\n👤 18 💾 2.28 GB ⚙️ EXT\n🇬🇧 / 🇮🇳",
+          "infoHash": "6792f3bc09d9c38e113c2c787ba92799c32edd24",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The Invite (2026) BluRay - 1080p - x264 - [Telugu + Tamil + Hindi + Eng] - (DD+2.0 - 224Kbps) - 2.2GB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) 1080p WEBRip 5.1-LAMA\n👤 17 💾 1.97 GB ⚙️ ThePirateBay",
+          "infoHash": "148f78de3f93603bebb486fe4dca419842d0ec5f",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "The.Invite.2026.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) BluRay - 1080p - x264 - [Tamil + Telugu + Hindi + Eng] - (DD+2.0 - 224Kbps)\n👤 16 💾 2.28 GB ⚙️ EXT\n🇬🇧 / 🇮🇳",
+          "infoHash": "c437e6990fb6a84e326aabab847c2a4e4ba260b5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "www.1TamilMV.solar - The Invite (2026) BluRay - 1080p - x264 - [Tamil + Telugu + Hindi + Eng] - (DD+2.0 - 224Kbps).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p WEBRip x265-DH\n👤 16 💾 5.56 GB ⚙️ ThePirateBay",
+          "infoHash": "dbf6a1f0d56e27daa46511179fe7bf559532cd7c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "The Invite 2026 1080p WEBRip x265-DH.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.1080p.WEBRip.LAT.DUB.1XBET.mp4\n👤 11 💾 3.17 GB ⚙️ EXT\n🇲🇽",
+          "infoHash": "41ccc64acc6b14c36f97d268dba91d0878c6a0e2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip",
+            "filename": "The.Invite.2026.1080p.WEBRip.LAT.DUB.1XBET.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pozvání/The Invite (2026)[WEB-DL][1080p]\n👤 11 💾 7.8 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+          "infoHash": "bac4100e359acaa8f7e729a1b8a0763a16c184b2",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pozvání / The Invite 2026 1080p WEBRip 10Bit DDP5 1 x265\n👤 11 💾 1.8 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+          "infoHash": "a8f7d8054c034434d934d3782df7079101bf0949",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 m1080p BluRay x264-GeneMige\n👤 9 💾 2.45 GB ⚙️ EXT\n🇬🇧 / 🇫🇷",
+          "infoHash": "85dd4ebdcbf4edf7498bf2030124005b26b7f314",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The Invite 2026 m1080p BluRay x264-GeneMige.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Zaproszenie / The Invite (2026) [PL.EN.1080p.H265.EAC3_5.1.LeGo] [Lektor PL] [mkv] [FIONA9]\n👤 9 💾 2.37 GB ⚙️ EXT\n🇬🇧 / 🇵🇱",
+          "infoHash": "143e09d10012d999ade70dc148f73e0fd7dbabfa",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h265"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) 1080p WEBRip x265 10bit 5.1-LAMA\n👤 9 💾 1.79 GB ⚙️ EXT",
+          "infoHash": "af7fd426bcc2268feb3ec2a606c9c9e685f34fc0",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "The.Invite.2026.1080p.WEBRip.x265.10bit.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.PL.1080p.AMZN.WEB-DL.H264.AC3-MAXX\n👤 8 💾 2.61 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "b831f4a0df7a4d3552fd1d69ff105c2f7fc1343f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "The.Invite.2026.PL.1080p.AMZN.WEB-DL.H264.AC3-MAXX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "O.Convite.2026.1080p.WEB-DL.DUAL.5.1\n👤 7 💾 2.26 GB ⚙️ EXT\nDual Audio / 🇬🇧 / 🇵🇹",
+          "infoHash": "bb5a73a752b97bde931d24ff84727dec4689e833",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "O.Convite.2026.1080p.WEB-DL.DUAL.5.1.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p BluRay x264-OFT\n👤 6 💾 4.64 GB ⚙️ EXT",
+          "infoHash": "159ca5df3cb79efcdd03ebe39385a8a1535a8f3d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The Invite 2026 1080p BluRay x264-OFT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p WEB-DL HEVC x265 5 1-BONE\n👤 6 💾 1.79 GB ⚙️ ThePirateBay",
+          "infoHash": "be9c899fe9ebde8ad3e581ffe8eb96fbcf676948",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "The Invite 2026 1080p WEB-DL HEVC x265 5 1-BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) 1080p Webrip x264 AAC 5.1 Lama Wt 11\n👤 5 💾 347.21 MB ⚙️ EXT",
+          "infoHash": "ca0400b5322981f83bdbceb6b593fb5fbe1bcc5b",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.MULTi.1080p.AMZN.WEB-DL.x264.AC3-KiT\n👤 5 💾 7.91 GB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇵🇱",
+          "infoHash": "45403aba5c92542ed68032575825e33bf59d2ac9",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "The.Invite.2026.MULTi.1080p.AMZN.WEB-DL.x264.AC3-KiT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p WebRip Opus 5 1 x265-Lootera\n👤 5 💾 2.44 GB ⚙️ ThePirateBay",
+          "infoHash": "3cdff61a29095e3afa9740b882a6d136908b223c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "The Invite 2026 1080p WebRip Opus 5 1 x265-Lootera.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p HMAX WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 4 💾 6.57 GB ⚙️ EXT",
+          "infoHash": "aa9b7daf1f927df9cc38bd63e89ae52e92004102",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "The Invite 2026 1080p HMAX WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The 2026 FANGORIA Chainsaw Awards 2026 1080p WEB H264-OUTPOST31\n👤 3 💾 5.71 GB ⚙️ EXT",
+          "infoHash": "b23ad09c613bf21bf76a8a4d9d89ea3522809b16",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264",
+            "filename": "The.2026.FANGORIA.Chainsaw.Awards.2026.1080p.WEB.h264-OUTPOST31.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Invite 2026 720p WEBRip\n👤 230 💾 983.85 MB ⚙️ YTS",
+          "infoHash": "d8bae15ae424607cfdcd1a1a7d0bce88aac118f3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "The.Invite.2026.720p.WEBRip.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Invite (2026) 720p WEBRip-LAMA\n👤 41 💾 983.85 MB ⚙️ ThePirateBay",
+          "infoHash": "b7041f24984f14f59cece79bcf2e4d6a996c0dde",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "The.Invite.2026.720p.WEBRip.x264.AAC-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Invite (2026) BluRay - 720p - x264 - [Tamil + Telugu + Hindi + Eng] - (AAC 2.0) - 1.2GB - ESub\n👤 36 💾 1.25 GB ⚙️ EXT\n🇬🇧 / 🇮🇳",
+          "infoHash": "6afa17667778aefef734e87202dc715c271fd02c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "www.1TamilMV.solar - The Invite (2026) BluRay - 720p - x264 - [Tamil + Telugu + Hindi + Eng] - (AAC 2.0) - 1.2GB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Invite (2026) BluRay - 720p - x264 - [Telugu + Tamil + Hindi + Eng] - (AAC 2.0) - 1.2GB - ESub\n👤 19 💾 1.25 GB ⚙️ EXT\n🇬🇧 / 🇮🇳",
+          "infoHash": "8188b066aefd6228bce48d91465ef08455a23803",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "The Invite (2026) BluRay - 720p - x264 - [Telugu + Tamil + Hindi + Eng] - (AAC 2.0) - 1.2GB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Invite (2026) 720p BluRay-LAMA\n👤 19 💾 982.99 MB ⚙️ EXT",
+          "infoHash": "c017109acd2dcfb36ac47a031d813b69c04e0e16",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "The.Invite.2026.720p.BluRay.x264.AAC-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Zaproszenie (2026) PL.720p.WEB-DL.XviD.AC3-OzW\n👤 11 💾 2.8 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "ce594859175b0e6ddc65ba0feed6fa26a2b7c6e0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|xvid",
+            "filename": "Zaproszenie (2026) PL.720p.WEB-DL.XviD.AC3-OzW.avi"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Invite 2026 720p AMZN WEB-DL DDP5 1 H 264-BYNDR\n👤 8 💾 4.74 GB ⚙️ TorrentGalaxy",
+          "infoHash": "5165d849863181416e2efae0305f1d51b99176db",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "The Invite 2026 720p AMZN WEB-DL DDP5 1 H 264-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Invite 2026.720p.WEB-DL.AAC.x264-rothebehap\n👤 7 💾 4.62 GB ⚙️ EXT",
+          "infoHash": "ced9e2872666462af2dd933056670679e9af64bb",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|x264",
+            "filename": "The Invite 2026.720p.WEB-DL.AAC.x264-rothebehap.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Zaproszenie / The Invite (2026) [PL.720p.WEB-DL.XviD.AC3-OzW] [Lektor PL] [avi] [FIONA9]\n👤 5 💾 2.8 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "08f512f201f78c2686636c00028d535ec092c2fa",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|xvid"
+          }
+        },
+        {
+          "name": "Torrentio\nBRRip",
+          "title": "The Invite (2026) BR-Rip - x264 - [Telugu + Tamil + Hindi] - (AAC 2.0) - 450MB - ESub\n👤 14 💾 495.84 MB ⚙️ EXT\n🇮🇳",
+          "infoHash": "e05e725c4bfd0188ac5374b4dd6f863ecd679dee",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BRRip|x264",
+            "filename": "The Invite (2026) BR-Rip - x264 - [Telugu + Tamil + Hindi] - (AAC 2.0) - 450MB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nBRRip",
+          "title": "The Invite (2026) BR-Rip - x264 - [Tamil + Telugu + Hindi] - (AAC 2.0) - 450MB - ESub\n👤 7 💾 495.84 MB ⚙️ EXT\n🇮🇳",
+          "infoHash": "5811109bb178538fcb73252bc62a1fe6a6378f36",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BRRip|x264",
+            "filename": "www.1TamilMV.solar - The Invite (2026) BR-Rip - x264 - [Tamil + Telugu + Hindi] - (AAC 2.0) - 450MB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "The.Invite.(2026).WEB-DLRip-AVC.2xUkr.Eng\n👤 7 💾 2.07 GB ⚙️ EXT\n🇬🇧 / 🇺🇦",
+          "infoHash": "01ef3b7d5c6374e605c383479f592d2e7f9b26c0",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL|avc"
+          }
+        }
+      ]
+    },
+    "torrentio-owner": {
+      "url": "https://torrentio.strem.fun/language=turkish|qualityfilter=threed,480p,scr,cam,unknown",
+      "streams": [
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "The.Invite.2026.2160p.iT.WEB-DL.DDP5.1.DV.HDR.H.265-BYNDR\n👤 496 💾 19.17 GB ⚙️ ThePirateBay",
+          "infoHash": "ef5399d255dd2b10e51d8c971721eb5afd818a35",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265|DV|HDR",
+            "filename": "The.Invite.2026.2160p.iT.WEB-DL.DDP5.1.DV.HDR.H.265-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Приглашение / The Invite (2026) UHD WEB-DL 2160p | 4K | HDR10+ | Dolby Vision P8 | D P\n👤 134 💾 19.6 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "1e09eb0e8e2bcd2a5d05c2db41fa68d7266823b1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|x265|10bit|DV|HDR10+",
+            "filename": "The.Invite.2026.x265.WEB-DL.2160p.HDR-DV.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:1e09eb0e8e2bcd2a5d05c2db41fa68d7266823b1",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "The.Invite.2026.2160p.iT.WEB-DL.DV.HDR10+.DDP5.1.H265.MP4-BTM\n👤 133 💾 19.42 GB ⚙️ ThePirateBay",
+          "infoHash": "adefe923013133952acfff37a1d1847118af89ff",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265|10bit|DV|HDR10+",
+            "filename": "The.Invite.2026.2160p.iT.WEB-DL.DV.HDR10+[Ben The Men].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "The.Invite.2026.MULTI.VFQ.2160p.WEB-DL.DV.HDR10PLUS.EAC3.5.1.H265-NEBULYX\n👤 24 💾 19.64 GB ⚙️ ThePirateBay\nMulti Audio / 🇬🇧 / 🇫🇷",
+          "infoHash": "332a69775af290f1cd8f03a20687f5cea5c08f93",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265|10bit|DV|HDR10+",
+            "filename": "The.Invite.2026.MULTI.VFQ.2160p.WEB-DL.DV.HDR10.H265.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "The Invite (2026) MULTi.2160p.WEB-DL.DV.HDR.AV1.DDP5.1-MAXX [AUDIO #1 ENGLISH] [ AUDIO #0 POLISH]\n👤 12 💾 5.93 GB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇵🇱",
+          "infoHash": "02345b4cc573d5cdda198226c0013502b58ce73d",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|av1|DV|HDR"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Pozvání / The Invite (2026)[WEB-DL][2160p][DV/HDR]\n👤 6 💾 19.4 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+          "infoHash": "b002008ce46bb969a277d431e5491ab61d0a5e7d",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|DV|HDR"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "The Invite 2026 2160p WEBRip\n👤 362 💾 4.78 GB ⚙️ YTS",
+          "infoHash": "f8d4442e3e84c1ddac25aab223b4dc2e5a7abda8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+            "filename": "The.Invite.2026.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "The.Invite.2026.2160p.WEBRip.AVC.SDR.DDP5.1-Asmo\n👤 59 💾 12.71 GB ⚙️ ThePirateBay",
+          "infoHash": "8252bbeb9e7431b5a39a4e5f2f150cb3711185e8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|avc",
+            "filename": "The.Invite.2026.2160p.WEBRip.AVC.SDR.DDP5.1-Asmo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "The.Invite.2026.1080p.iT.WEB-DL.10bit.DDP2.0.x265-FaS\n👤 27 💾 15.98 GB ⚙️ ThePirateBay",
+          "infoHash": "efc1a7cd00582706b41a791848a6cdb68d6a3efe",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|x265|10bit",
+            "filename": "The.Invite.2026.2160p.iT.WEB-DL.DDP5.1.H.265-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "The.Invite.(2026).WEB-DL.2160p.SDR.2xUkr.Eng.v2\n👤 13 💾 16.46 GB ⚙️ EXT\n🇬🇧 / 🇺🇦",
+          "infoHash": "4e7d5c198c18fb13f705f57816e8dcee899b31d2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL",
+            "filename": "The.Invite.(2026).WEB-DL.2160p.SDR.2xUkr.Eng.v2.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "The.Invite.(2026).WEB-DL.2160p.DV5.2xUkr.Eng.v2\n👤 8 💾 19.57 GB ⚙️ EXT",
+          "infoHash": "7fbaedc03ee97c22afd954336be161def091eede",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Zaproszenie / The Invite (2026) [MULTi.2160p.iT.WEB-DL.DDP5.1.H.265-R22] [Lektor PL] [mkv] [FIONA9]\n👤 6 💾 16.46 GB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇵🇱",
+          "infoHash": "46b23cd9b9c79e2bbf621a654c1068d053ff2e50",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p WEBRip\n👤 2865 💾 1.97 GB ⚙️ YTS",
+          "infoHash": "683c8e8ff89f488ecb0d1e3acf584a501a06c9dc",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "The.Invite.2026.1080p.WEBRip.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p WEB-DL HEVC x265 5.1 BONE\n👤 267 💾 1.79 GB ⚙️ TorrentGalaxy",
+          "infoHash": "8fa681025431df62ce2e31acdee83fcda921e05a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "The Invite 2026 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) (1080p BluRay x265 10bit EAC3 5.1 Ghost) [QxR] ...\n👤 259 💾 5.86 GB ⚙️ EXT\n🇬🇧 / 🇪🇸 / 🇫🇷",
+          "infoHash": "a50a1dca92c2a31216cf5aa485236a66d00e0aaa",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "The Invite (2026) (1080p BluRay x265 Ghost).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p AMZN WEB-DL DDP5 1 H 264-BYNDR\n👤 250 💾 7.78 GB ⚙️ EXT",
+          "infoHash": "492cd9fb6e720d1a1f404a9f94d9da9b5c962384",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "The Invite 2026 1080p AMZN WEB-DL DDP5 1 H 264-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 REPACK 1080p WEBRip DDP 5 1 10bit H 265-iVy\n👤 227 💾 2.08 GB ⚙️ ThePirateBay",
+          "infoHash": "ccd2327368a469e7a0b2220f71135d4e0e94a520",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|h265|10bit",
+            "filename": "The Invite 2026 REPACK 1080p WEBRip DDP 5 1 10bit H 265-iVy.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) 1080p WEBRip x265 10bit 5.1 YTS YIFY\n👤 186 💾 1.79 GB ⚙️ EXT",
+          "infoHash": "d9dd9229743fa0c325dd7a86bf6f8d11473031a7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "The.Invite.2026.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080P AMZN WEB-DL DDP5.1. X265 POOTLED\n👤 186 💾 4.19 GB ⚙️ TorrentGalaxy",
+          "infoHash": "f7584ac08dea989b2b3b553ec2f91bc2a0d2f3a1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x265",
+            "filename": "The Invite 2026 1080P AMZN WEB-DL DDP5.1. X265 POOTLED.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p BluRay x265 DDP5.1-CSP\n👤 174 💾 4.15 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇪🇸 / 🇫🇷",
+          "infoHash": "4e18607ac0eb5c4014a60dd98f4685c6cda54c64",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "The Invite 2026 1080p BluRay x265 DDP5.1-CSP.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Приглашение / The Invite [2026 BDRemux 1080p] Dub (HDRezka Studio) + MVO (2х HDRezka Studio) + Dub MVO Ukr + Sub (Rus Ukr Eng Fra Spa) + Original Eng\n👤 142 💾 24.92 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺 / 🇪🇸 / 🇫🇷 / 🇺🇦",
+          "infoHash": "5efa5ba6443bb852391920f4d7df0fb248b4dcab",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay REMUX",
+            "filename": "The.Invite.2026.REMUX.mkv"
+          },
+          "sources": [
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "dht:5efa5ba6443bb852391920f4d7df0fb248b4dcab",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Приглашение / The Invite (2026) WEB-DL 1080p | D P | HDRezka Studio\n👤 134 💾 8.21 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "72bccc46b3f4156469d098dba5512972d6e7c1ea",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "The_Invite.2026.1080p.TORRNADO.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:72bccc46b3f4156469d098dba5512972d6e7c1ea",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) [1080p] [BluRay] [5.1]\n👤 117 💾 1.97 GB ⚙️ EXT",
+          "infoHash": "61b75280af55e7fa846daa3a017b8bcb92709363",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The.Invite.2026.1080p.BluRay.x264.AAC5.1-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Приглашение / The Invite [2026 WEB-DL 1080p] 2x MVO (HDrezka) + Dub (HDrezka) + Original Eng + Sub (Rus Eng)\n👤 93 💾 8.21 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "a44a854a16b33efcb9aee13b4681d4f1dc2af25f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "The.Invite.2026.1080p.AMZN.WEB-DL[Rus.Eng]Rutracker.mkv"
+          },
+          "sources": [
+            "tracker:http://bt4.t-ru.org/ann?magnet",
+            "dht:a44a854a16b33efcb9aee13b4681d4f1dc2af25f",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir\n👤 89 💾 1.75 GB ⚙️ ThePirateBay",
+          "infoHash": "21c0886a59b7876719bd634ac257e5ed8522031a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "The Invite 2026 1080p WEBRip 10Bit DDP5 1 x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.1080p.WEBRip.x265-KONTRAST\n👤 53 💾 2.79 GB ⚙️ EXT",
+          "infoHash": "06c714c1f9f952ea5b546fc94ed0ea246717cb8e",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "The.Invite.2026.1080p.WEBRip.x265-KONTRAST.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.MULTi.CA.1080p.WEB.H264-SUPPLY (L'Invitation)\n👤 52 💾 8.24 GB ⚙️ Torrent9\nMulti Audio / 🇬🇧 / 🇫🇷",
+          "infoHash": "e74423265631100ee7f01488dda8da7a1d4c3965",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264",
+            "filename": "The.Invite.2026.MULTi.CA.1080p.WEB.H264-SUPPLY.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.REMUX.Bluray.1080p.AVC.TrueHD5.1-DreamHD\n👤 50 💾 24.86 GB ⚙️ EXT\n🇬🇧 / 🇨🇳 / 🇫🇷",
+          "infoHash": "8dc03755232312b14b8d31a0ff5938deca7cc4a2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay REMUX|avc",
+            "filename": "The.Invite.2026.REMUX.Bluray.1080p.AVC.TrueHD5.1-DreamHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "O Convite 2026 WEB-DL 1080p x264 DUAL 5.1\n👤 42 💾 2.64 GB ⚙️ BluDV\nDual Audio / 🇬🇧 / 🇵🇹",
+          "infoHash": "0fc59290bf718801be214dbe40b5e93967f214ab",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "O Convite 2026 WEB-DL 1080p x264 DUAL 5.1.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.Bluray.1080p.TrueHD5.1.x264-DreamHD\n👤 40 💾 11.51 GB ⚙️ EXT\n🇬🇧 / 🇨🇳",
+          "infoHash": "78bf5f91d7946624e4f696707833630b6232a63e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The.Invite.2026.Bluray.1080p.TrueHD5.1.x264-DreamHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.1080p.WEB.h264-ETHEL\n👤 36 💾 7.83 GB ⚙️ EXT\n🇬🇧 / 🇪🇸",
+          "infoHash": "455a992d637e0c0151d66a5fb06df523b54d5a15",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264",
+            "filename": "The.Invite.2026.1080p.WEB.h264-ETHEL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p BluRay x265-YAWNTiC\n👤 33 💾 6.91 GB ⚙️ EXT",
+          "infoHash": "d603babf79232d1e420db7bda78139cc10305802",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "The Invite 2026 1080p BluRay x265-YAWNTiC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Приглашение / The Invite (2026) BDRip 1080p | D P\n👤 27 💾 13.74 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "1aedf8721b377932597b3b8ada0600e197cabfc9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|x264",
+            "filename": "The.Invite.2026.1080p.BluRay.x264.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:1aedf8721b377932597b3b8ada0600e197cabfc9",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Приглашение / The Invite (2026) WEB-DL 1080p | Sub\n👤 22 💾 7.78 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "805dfd4bd37a501d17b628d9420c645fe6747bc0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "The_Invite_2026_1080p.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:805dfd4bd37a501d17b628d9420c645fe6747bc0",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 MULTi CA 1080p WEB H264-SUPPLY\n👤 21 💾 8.24 GB ⚙️ ThePirateBay\nMulti Audio / 🇬🇧 / 🇫🇷",
+          "infoHash": "ed58358127057bc671a73f0550879ab8bba35cb9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264",
+            "filename": "The Invite 2026 MULTi CA 1080p WEB H264-SUPPLY.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.1080p.WEBRip.x265-INFINITY\n👤 20 💾 1.67 GB ⚙️ EXT",
+          "infoHash": "28f81e48bdd1addc03c3d2c974e78151a29fe7f9",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "The.Invite.2026.1080p.WEBRip.x265-INFINITY.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) BluRay - 1080p - x264 - [Telugu + Tamil + Hindi + Eng] - (DD+2.0 - 224Kbps) - 2.2GB - ESub\n👤 18 💾 2.28 GB ⚙️ EXT\n🇬🇧 / 🇮🇳",
+          "infoHash": "6792f3bc09d9c38e113c2c787ba92799c32edd24",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The Invite (2026) BluRay - 1080p - x264 - [Telugu + Tamil + Hindi + Eng] - (DD+2.0 - 224Kbps) - 2.2GB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) 1080p WEBRip 5.1-LAMA\n👤 17 💾 1.97 GB ⚙️ ThePirateBay",
+          "infoHash": "148f78de3f93603bebb486fe4dca419842d0ec5f",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "The.Invite.2026.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) BluRay - 1080p - x264 - [Tamil + Telugu + Hindi + Eng] - (DD+2.0 - 224Kbps)\n👤 16 💾 2.28 GB ⚙️ EXT\n🇬🇧 / 🇮🇳",
+          "infoHash": "c437e6990fb6a84e326aabab847c2a4e4ba260b5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "www.1TamilMV.solar - The Invite (2026) BluRay - 1080p - x264 - [Tamil + Telugu + Hindi + Eng] - (DD+2.0 - 224Kbps).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p WEBRip x265-DH\n👤 16 💾 5.56 GB ⚙️ ThePirateBay",
+          "infoHash": "dbf6a1f0d56e27daa46511179fe7bf559532cd7c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "The Invite 2026 1080p WEBRip x265-DH.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.invite.2026.1080p-dual-lat-cinecalidad.ro.mp4\n👤 15 💾 1.91 GB ⚙️ Cinecalidad\nDual Audio / 🇲🇽",
+          "infoHash": "5a0180a663c2d0d13c2f8c5b6a1faaf65ad245b7",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.1080p.WEBRip.LAT.DUB.1XBET.mp4\n👤 11 💾 3.17 GB ⚙️ EXT\n🇲🇽",
+          "infoHash": "41ccc64acc6b14c36f97d268dba91d0878c6a0e2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip",
+            "filename": "The.Invite.2026.1080p.WEBRip.LAT.DUB.1XBET.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pozvání/The Invite (2026)[WEB-DL][1080p]\n👤 11 💾 7.8 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+          "infoHash": "bac4100e359acaa8f7e729a1b8a0763a16c184b2",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pozvání / The Invite 2026 1080p WEBRip 10Bit DDP5 1 x265\n👤 11 💾 1.8 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+          "infoHash": "a8f7d8054c034434d934d3782df7079101bf0949",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "O Convite 2026 WEB-DL 1080p x264 FULLHD DUAL 5.1\n👤 10 💾 8.11 GB ⚙️ BluDV\nDual Audio / 🇬🇧 / 🇵🇹",
+          "infoHash": "2164358b57488b7ff3983325649d253637f0a71d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "O Convite 2026 WEB-DL 1080p x264 FULLHD DUAL 5.1.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 m1080p BluRay x264-GeneMige\n👤 9 💾 2.45 GB ⚙️ EXT\n🇬🇧 / 🇫🇷",
+          "infoHash": "85dd4ebdcbf4edf7498bf2030124005b26b7f314",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The Invite 2026 m1080p BluRay x264-GeneMige.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Zaproszenie / The Invite (2026) [PL.EN.1080p.H265.EAC3_5.1.LeGo] [Lektor PL] [mkv] [FIONA9]\n👤 9 💾 2.37 GB ⚙️ EXT\n🇬🇧 / 🇵🇱",
+          "infoHash": "143e09d10012d999ade70dc148f73e0fd7dbabfa",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h265"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) 1080p WEBRip x265 10bit 5.1-LAMA\n👤 9 💾 1.79 GB ⚙️ EXT",
+          "infoHash": "af7fd426bcc2268feb3ec2a606c9c9e685f34fc0",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "The.Invite.2026.1080p.WEBRip.x265.10bit.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.PL.1080p.AMZN.WEB-DL.H264.AC3-MAXX\n👤 8 💾 2.61 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "b831f4a0df7a4d3552fd1d69ff105c2f7fc1343f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "The.Invite.2026.PL.1080p.AMZN.WEB-DL.H264.AC3-MAXX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "O.Convite.2026.1080p.WEB-DL.DUAL.5.1\n👤 7 💾 2.26 GB ⚙️ EXT\nDual Audio / 🇬🇧 / 🇵🇹",
+          "infoHash": "bb5a73a752b97bde931d24ff84727dec4689e833",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL",
+            "filename": "O.Convite.2026.1080p.WEB-DL.DUAL.5.1.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p BluRay x264-OFT\n👤 6 💾 4.64 GB ⚙️ EXT",
+          "infoHash": "159ca5df3cb79efcdd03ebe39385a8a1535a8f3d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The Invite 2026 1080p BluRay x264-OFT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p WEB-DL HEVC x265 5 1-BONE\n👤 6 💾 1.79 GB ⚙️ ThePirateBay",
+          "infoHash": "be9c899fe9ebde8ad3e581ffe8eb96fbcf676948",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "The Invite 2026 1080p WEB-DL HEVC x265 5 1-BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite (2026) 1080p Webrip x264 AAC 5.1 Lama Wt 11\n👤 5 💾 347.21 MB ⚙️ EXT",
+          "infoHash": "ca0400b5322981f83bdbceb6b593fb5fbe1bcc5b",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Invite.2026.MULTi.1080p.AMZN.WEB-DL.x264.AC3-KiT\n👤 5 💾 7.91 GB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇵🇱",
+          "infoHash": "45403aba5c92542ed68032575825e33bf59d2ac9",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "The.Invite.2026.MULTi.1080p.AMZN.WEB-DL.x264.AC3-KiT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Invite 2026 1080p WebRip Opus 5 1 x265-Lootera\n👤 5 💾 2.44 GB ⚙️ ThePirateBay",
+          "infoHash": "3cdff61a29095e3afa9740b882a6d136908b223c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "The Invite 2026 1080p WebRip Opus 5 1 x265-Lootera.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Invite 2026 720p WEBRip\n👤 230 💾 983.85 MB ⚙️ YTS",
+          "infoHash": "d8bae15ae424607cfdcd1a1a7d0bce88aac118f3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "The.Invite.2026.720p.WEBRip.x264.AAC-[YTS.GG - YTS.BZ].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Invite (2026) 720p WEBRip-LAMA\n👤 41 💾 983.85 MB ⚙️ ThePirateBay",
+          "infoHash": "b7041f24984f14f59cece79bcf2e4d6a996c0dde",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "The.Invite.2026.720p.WEBRip.x264.AAC-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Invite (2026) BluRay - 720p - x264 - [Tamil + Telugu + Hindi + Eng] - (AAC 2.0) - 1.2GB - ESub\n👤 36 💾 1.25 GB ⚙️ EXT\n🇬🇧 / 🇮🇳",
+          "infoHash": "6afa17667778aefef734e87202dc715c271fd02c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "www.1TamilMV.solar - The Invite (2026) BluRay - 720p - x264 - [Tamil + Telugu + Hindi + Eng] - (AAC 2.0) - 1.2GB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Приглашение / The Invite (2026) WEB-DL 720p от New-Team | D P | HDRezka Studio\n👤 33 💾 5.17 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "8f49896ceaa847ec90bb945d01d97d4e3bb93729",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "The.Invite.2026.720p.AMZN.WEB-DL.H264_New-Team_il68k.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:8f49896ceaa847ec90bb945d01d97d4e3bb93729",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The.Invite.2026.Multi.Ca.720P. WEBRIP-NOTAG (L'Invitation)\n👤 26 💾 2.71 GB ⚙️ Torrent9\nMulti Audio / 🇬🇧 / 🇫🇷",
+          "infoHash": "b8cff0727643b1da6c5c70a04d8df1ebc3f13cae",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip",
+            "filename": "The.Invite.2026.Multi.Ca.720P. WEBRIP.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Invite (2026) BluRay - 720p - x264 - [Telugu + Tamil + Hindi + Eng] - (AAC 2.0) - 1.2GB - ESub\n👤 19 💾 1.25 GB ⚙️ EXT\n🇬🇧 / 🇮🇳",
+          "infoHash": "8188b066aefd6228bce48d91465ef08455a23803",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "The Invite (2026) BluRay - 720p - x264 - [Telugu + Tamil + Hindi + Eng] - (AAC 2.0) - 1.2GB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Invite (2026) 720p BluRay-LAMA\n👤 19 💾 982.99 MB ⚙️ EXT",
+          "infoHash": "c017109acd2dcfb36ac47a031d813b69c04e0e16",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "The.Invite.2026.720p.BluRay.x264.AAC-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Приглашение / The Invite (2026) BDRip 720p от DoMiNo & селезень | D P | HDRezka Studio\n👤 15 💾 4.77 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "90bbfbbaa55a927413f182664a21910281b22d4d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BDRip|x264",
+            "filename": "Приглашение.2026.BDRip.720p.x264.seleZen.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:90bbfbbaa55a927413f182664a21910281b22d4d",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Zaproszenie (2026) PL.720p.WEB-DL.XviD.AC3-OzW\n👤 11 💾 2.8 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "ce594859175b0e6ddc65ba0feed6fa26a2b7c6e0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|xvid",
+            "filename": "Zaproszenie (2026) PL.720p.WEB-DL.XviD.AC3-OzW.avi"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Invite 2026 720p AMZN WEB-DL DDP5 1 H 264-BYNDR\n👤 8 💾 4.74 GB ⚙️ TorrentGalaxy",
+          "infoHash": "5165d849863181416e2efae0305f1d51b99176db",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "The Invite 2026 720p AMZN WEB-DL DDP5 1 H 264-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Invite 2026.720p.WEB-DL.AAC.x264-rothebehap\n👤 7 💾 4.62 GB ⚙️ EXT",
+          "infoHash": "ced9e2872666462af2dd933056670679e9af64bb",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|x264",
+            "filename": "The Invite 2026.720p.WEB-DL.AAC.x264-rothebehap.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Zaproszenie / The Invite (2026) [PL.720p.WEB-DL.XviD.AC3-OzW] [Lektor PL] [avi] [FIONA9]\n👤 5 💾 2.8 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "08f512f201f78c2686636c00028d535ec092c2fa",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|xvid"
+          }
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Приглашение / The Invite [2026 WEB-DLRip-AVC] Dub (HDRezka Studio 18+) + MVO (HDRezka Studio 18+) + Sub (Rus Eng) + Original Eng\n👤 716 💾 2.1 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "30d858e95daaad7f4a6d7d961582f648c6d85429",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL|avc",
+            "filename": "The Invite.2026.WEB-DLRip-AVC.x264.seleZen.mkv"
+          },
+          "sources": [
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "dht:30d858e95daaad7f4a6d7d961582f648c6d85429",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Приглашение / The Invite [2026 WEB-DLRip] MVO (HDRezka Studio)\n👤 123 💾 1.45 GB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "3cee6d7225d8679921d491d036bbd383d5a3ceb5",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL",
+            "filename": "Приглашение_2026_WEB-DLRip.avi"
+          },
+          "sources": [
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "dht:3cee6d7225d8679921d491d036bbd383d5a3ceb5",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Приглашение / The Invite (2026) WEB-DLRip | D P | HDRezka Studio\n👤 108 💾 1.46 GB ⚙️ Rutor\n🇷🇺",
+          "infoHash": "7e8966eb3ddf38e8be4658ff86cdcc404dc321d8",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL",
+            "filename": "The_Invite.2026.WEB-DLRip.TORRNADO.avi"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:7e8966eb3ddf38e8be4658ff86cdcc404dc321d8",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Приглашение / The Invite (2026) WEB-DLRip-AVC от DoMiNo & селезень | D P | HDRezka Studio\n👤 38 💾 2.24 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "23ab448813c4cd220800b47e5d1205fcddde9fe0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL|avc",
+            "filename": "The Invite.2026.WEB-DLRip.x264.seleZen.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:23ab448813c4cd220800b47e5d1205fcddde9fe0",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nWEBRip",
+          "title": "The.Invite.2026.Multi.Ca.WEBRIP-NOTAG (L'Invitation)\n👤 17 💾 808.04 MB ⚙️ Torrent9\nMulti Audio / 🇫🇷",
+          "infoHash": "cd15a09a3f45e0cef5227e98fe341b21e59ba660",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEBRip",
+            "filename": "The.Invite.2026.Multi.Ca.WEBRIP.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\nBRRip",
+          "title": "The Invite (2026) BR-Rip - x264 - [Telugu + Tamil + Hindi] - (AAC 2.0) - 450MB - ESub\n👤 14 💾 495.84 MB ⚙️ EXT\n🇮🇳",
+          "infoHash": "e05e725c4bfd0188ac5374b4dd6f863ecd679dee",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BRRip|x264",
+            "filename": "The Invite (2026) BR-Rip - x264 - [Telugu + Tamil + Hindi] - (AAC 2.0) - 450MB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "Приглашение / The Invite (2026) WEB-DLRip-AVC от DoMiNo & селезень | Sub\n👤 8 💾 1.81 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "a7681dd261ac15b927729afb2737f71872b1671d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL|avc",
+            "filename": "The Invite.2026.Sub.WEB-DLRip.x264.seleZen.mkv"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:a7681dd261ac15b927729afb2737f71872b1671d",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://tracker.torrent.eu.org:451/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://exodus.desync.com:6969/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.corpscorp.online:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://retracker01-msk-virt.corbina.net:80/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:http://tracker2.dler.org:80/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.farted.net:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nBRRip",
+          "title": "The Invite (2026) BR-Rip - x264 - [Tamil + Telugu + Hindi] - (AAC 2.0) - 450MB - ESub\n👤 7 💾 495.84 MB ⚙️ EXT\n🇮🇳",
+          "infoHash": "5811109bb178538fcb73252bc62a1fe6a6378f36",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BRRip|x264",
+            "filename": "www.1TamilMV.solar - The Invite (2026) BR-Rip - x264 - [Tamil + Telugu + Hindi] - (AAC 2.0) - 450MB - ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nWEB-DL",
+          "title": "The.Invite.(2026).WEB-DLRip-AVC.2xUkr.Eng\n👤 7 💾 2.07 GB ⚙️ EXT\n🇬🇧 / 🇺🇦",
+          "infoHash": "01ef3b7d5c6374e605c383479f592d2e7f9b26c0",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEB-DL|avc"
+          }
+        }
+      ]
+    }
+  }
+}

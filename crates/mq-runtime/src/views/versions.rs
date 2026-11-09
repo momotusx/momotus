@@ -2713,6 +2713,11 @@ fn relearn(core: &Core, s: &mut State, failed: Option<&str>) {
     s.rank.did_not_play = core.knowledge(|l| crate::speed::did_not_play(l, now));
     s.rank.wrong_file = core.knowledge(|l| crate::speed::wrong_file(l, now));
     s.rank.containers = core.knowledge(crate::speed::containers);
+    // A play that just stalled or failed may have measured the line: the
+    // next version is ranked with it (plans/stream-ranking.md 4.6).
+    s.rank.http = core.speed(crate::speed::Kind::Http);
+    s.rank.p2p = core.speed(crate::speed::Kind::P2p);
+    s.rank.p2p_thin = core.speed(crate::speed::Kind::P2pThin);
     let pick_failed = s
         .recommended
         .as_ref()

@@ -1,0 +1,292 @@
+{
+ "fetched": "2026-11-08T23:53:13.951Z",
+ "id": "tt2802850",
+ "type": "series",
+ "season": 2,
+ "episode": 1,
+ "meta": {
+  "name": "Fargo",
+  "year": "2014–2024",
+  "runtime": "52 min",
+  "episodeTitle": "Waiting for Dutch"
+ },
+ "streamUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/series/tt2802850:2:1.json",
+ "streams": [
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo.S02.1080p.BluRay.x265-RARBG\nFargo.S02E01.1080p.BluRay.x265-RARBG.mp4\n👤 52 💾 793.93 MB ⚙️ TorrentGalaxy",
+   "infoHash": "619f5b2161fe8a66851e3cd2063d37773de5c2ac",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|619f5b2161fe8a66851e3cd2063d37773de5c2ac",
+    "filename": "Fargo.S02E01.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo - Season 1 to 4 - Mp4 x264 AC3 1080p\nSeason 2/Fargo S02E01.mp4\n👤 24 💾 1.46 GB ⚙️ 1337x",
+   "infoHash": "da8fe194a854712f5c98e2ebedf41250f7b65877",
+   "fileIdx": 11,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|da8fe194a854712f5c98e2ebedf41250f7b65877",
+    "filename": "Fargo S02E01.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo S02E01 2014 1080p NF WEB-DL DDP5 1 H 264-HHWEB\n👤 20 💾 1.89 GB ⚙️ TorrentGalaxy",
+   "infoHash": "074a85d836701d6ea97944f84eb7641fc796bff8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|HHWEB",
+    "filename": "Fargo S02E01 2014 1080p NF WEB-DL DDP5 1 H 264-HHWEB.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo.SEASON.02.S02.COMPLETE.1080p.WEB-DL.6CH.x265.HEVC-PSA\nFargo.S02E01.Waiting.for.Dutch.1080p.WEB-DL.6CH.x265.HEVC-PSA.mkv\n👤 14 💾 476.42 MB ⚙️ ThePirateBay\n🇳🇱",
+   "infoHash": "9e3ebf0b86b36b03128287c631afd05f74115823",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|9e3ebf0b86b36b03128287c631afd05f74115823",
+    "filename": "Fargo.S02E01.Waiting.for.Dutch.1080p.WEB-DL.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo.S02.1080p.BluRay.x264-ROVERS[rartv]\nfargo.s02e01.1080p.bluray.x264-rovers.mkv\n👤 8 💾 3.97 GB ⚙️ RARBG",
+   "infoHash": "d2766f5a9da85efa557560b6307bb97b48fd6542",
+   "fileIdx": 22,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|d2766f5a9da85efa557560b6307bb97b48fd6542",
+    "filename": "fargo.s02e01.1080p.bluray.x264-rovers.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo.S02.MULTi.1080p.NF.WEB-DL.H265-THESYNDiCATE\nFargo.S02E01.En.attendant.Dutch.MULTi.1080p.NF.WEB.H265-THESYNDiCATE.mkv\n👤 7 💾 970.28 MB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇳🇱",
+   "infoHash": "c90ca70334677f12e5882cc5c50dccf26b63e894",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|c90ca70334677f12e5882cc5c50dccf26b63e894",
+    "filename": "Fargo.S02E01.En.attendant.Dutch.MULTi.1080p.NF.WEB.H265-THESYNDiCATE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo (2014) Season 2 S02 Extras (1080p BluRay x265 HEVC 10bit AAC 5.1 Silence) [QxR]\nFargo (2014) - S02E01 - Waiting for Dutch (1080p BluRay x265 Silence).mkv\n👤 7 💾 1.08 GB ⚙️ 1337x\n🇬🇧 / 🇳🇱",
+   "infoHash": "546f02fb8dfbc92f19c67cf29e7b090094a607ca",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|546f02fb8dfbc92f19c67cf29e7b090094a607ca",
+    "filename": "Fargo (2014) - S02E01 - Waiting for Dutch (1080p BluRay x265 Silence).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo.S02.Multi.Bluray.1080p.10Bit.x265-KFL\nFargo S02E01 En attendant Dutch.mkv\n👤 4 💾 990.6 MB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇳🇱",
+   "infoHash": "3e92257f56db1899217de2a9b5732cc4e679fd8e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|3e92257f56db1899217de2a9b5732cc4e679fd8e",
+    "filename": "Fargo S02E01 En attendant Dutch.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo S02 Season 2 Complete 1080p WEB-DL [rartv]\nFargo.S02E01.Waiting.For.Dutch.1080p.WEBRip.DD5.1.x264-NTb.mkv\n👤 4 💾 2.67 GB ⚙️ ThePirateBay\n🇳🇱",
+   "infoHash": "3d81f1a9f03574b75e9e31c3b0b704f37695c401",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|3d81f1a9f03574b75e9e31c3b0b704f37695c401",
+    "filename": "Fargo.S02E01.Waiting.For.Dutch.1080p.WEBRip.DD5.1.x264-NTb.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo.S02.1080p.BluRay.x265-RARBG\nFargo.S02E01.1080p.BluRay.x265-RARBG.mp4\n👤 3 💾 793.93 MB ⚙️ RARBG",
+   "infoHash": "495217d63ce36ef16fb214679facf8b7e88d88fa",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|495217d63ce36ef16fb214679facf8b7e88d88fa",
+    "filename": "Fargo.S02E01.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo Seasons 1-5 (torrenting)\nFargo-S2/Fargo-S02E01-Waiting for Dutch-1080p.H265.AAC.mkv\n👤 2 💾 191.63 MB ⚙️ ThePirateBay\n🇳🇱",
+   "infoHash": "f1495e6570d77a1d1ef924232dc8e214f7501de9",
+   "fileIdx": 78,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|f1495e6570d77a1d1ef924232dc8e214f7501de9",
+    "filename": "Fargo-S02E01-Waiting for Dutch-1080p.H265.AAC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo.S02E01.Waiting.For.Dutch.1080p.HEVC.x265-MeGusta\n👤 2 💾 480.21 MB ⚙️ ThePirateBay\n🇳🇱",
+   "infoHash": "fcf8401663bc5406ea2483568744231e06e1523d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|MeGusta",
+    "filename": "Fargo.S02E01.Waiting.For.Dutch.1080p.HEVC.x265-MeGusta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo Season 1 - 5 / S01-S05 (1080p and 4K) (AV1 Opus 5.1)\nS02 (1080p)/Fargo - S02E01 - Waiting for Dutch.mkv\n👤 1 💾 419.24 MB ⚙️ EXT\n🇬🇧 / 🇳🇱",
+   "infoHash": "7a2d929ae0b3ee69752200e0a1ffe2d1a7dc76e6",
+   "fileIdx": 90,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|7a2d929ae0b3ee69752200e0a1ffe2d1a7dc76e6",
+    "filename": "Fargo - S02E01 - Waiting for Dutch.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo (2014) Season 02 S02 (1080p BluRay x265 HEVC 10bit DTS 5.1 Qman) [UTR]\nFargo.S02E01.1080p.BluRay.x265.10bit.DTS.5.1-Qman[UTR].mkv\n👤 1 💾 1.65 GB ⚙️ 1337x",
+   "infoHash": "1d55aa4cea7083051f89da3ce84348282968c4c2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1d55aa4cea7083051f89da3ce84348282968c4c2",
+    "filename": "Fargo.S02E01.1080p.BluRay.x265.10bit.DTS.5.1-Qman[UTR].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo Season 1 & Season 2 1080p S01-S02 Complete WEB-DL DD5.1 H.264 MrKs\nFargo.S02E01.1080p.WEB-DL.DD5.1.H.264-DRACULA.mkv\n👤 1 💾 1.91 GB ⚙️ MagnetDL",
+   "infoHash": "14810ca235aea4dad3cf5318e11a5cab7f3e3df4",
+   "fileIdx": 10,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|14810ca235aea4dad3cf5318e11a5cab7f3e3df4",
+    "filename": "Fargo.S02E01.1080p.WEB-DL.DD5.1.H.264-DRACULA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo S02E01 Waiting For Dutch 1080p WEB-DL DD5.1 H264-Coo7 [rartv]\n👤 1 💾 1.97 GB ⚙️ MagnetDL\n🇳🇱",
+   "infoHash": "ce3ac65da19ebc6876961e8892dfbfc773b4445c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|Coo7",
+    "filename": "Fargo.S02E01.Waiting.for.Dutch.1080p.WEB-DL.DD5.1.H.264-Coo7.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Fargo S02E01 1080p WEB-DL DD5.1 H264-KBN Mkv\n👤 1 💾 1.95 GB ⚙️ MagnetDL",
+   "infoHash": "43a74b9f79eba9db23cffe58c0d1c9e0d0d21caf",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|KBN",
+    "filename": "Fargo.S02E01.1080p.WEB-DL.DD5.1.H.264-KBN.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Fargo.S02.COMPLETE.720p.BluRay.x264-GalaxyTV\nFargo.S02E01.720p.BluRay.x264-GalaxyTV.mkv\n👤 69 💾 232.05 MB ⚙️ ThePirateBay",
+   "infoHash": "48bece2d6a747eb6a7f5b1fe93ba51af860d69a8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|48bece2d6a747eb6a7f5b1fe93ba51af860d69a8",
+    "filename": "Fargo.S02E01.720p.BluRay.x264-GalaxyTV.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Fargo - Season 2 - 720p BluRay - x264 - ShAaNiG\nFargo.S02E01.720p.BluRay.x264.ShAaNiG.mkv\n👤 16 💾 398.86 MB ⚙️ ThePirateBay",
+   "infoHash": "4fd8deda1b9ef6905fcfdb66208253625660b9d9",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4fd8deda1b9ef6905fcfdb66208253625660b9d9",
+    "filename": "Fargo.S02E01.720p.BluRay.x264.ShAaNiG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Fargo S02 COMPLETE 720p BluRay x264\nFargo.S02E01.720p.BluRay.x264[EZTVx.to].mkv\n👤 13 💾 232.05 MB ⚙️ EZTV",
+   "infoHash": "dfc18fdd50a44534594db546d850ddf4843c7bf1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|dfc18fdd50a44534594db546d850ddf4843c7bf1",
+    "filename": "Fargo.S02E01.720p.BluRay.x264[EZTVx.to].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Fargo SEASON 1-4 S01-S04 720p Bluray/WEBRip 2CH 10bit x265 2CH - PSA [12.1GB]\nS02/Fargo.S02E01.720p.10bit.BluRay.x265.HEVC.2CH.mkv\n👤 6 💾 309.98 MB ⚙️ 1337x",
+   "infoHash": "90cc5ad2bcf722d8a5c8479a025e2814556ac102",
+   "fileIdx": 10,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|90cc5ad2bcf722d8a5c8479a025e2814556ac102",
+    "filename": "Fargo.S02E01.720p.10bit.BluRay.x265.HEVC.2CH.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Fargo.SEASON.02.S02.COMPLETE.720p.WEB.2CH.x265.HEVC-PSA\nFargo.S02E01.Waiting.for.Dutch.720p.WEB-DL.2CH.x265.HEVC-PSA.mkv\n👤 4 💾 176.63 MB ⚙️ ThePirateBay\n🇳🇱",
+   "infoHash": "d61b48c8995163f101cf05378813ca50797d1941",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|d61b48c8995163f101cf05378813ca50797d1941",
+    "filename": "Fargo.S02E01.Waiting.for.Dutch.720p.WEB-DL.2CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Fargo S02e01-10[BDMux - 720p - H264 - Ita Eng Ac3 - Sub Ita Eng Multi] BDMux GiuseppeTnT LittleLinx\nFargo.2x01.Waiting.for.Dutch.ITA.ENG.720p.BDMux.x.264-GiuseppeTnT.mkv\n👤 4 💾 1.85 GB ⚙️ 1337x\nMulti Audio / 🇬🇧 / 🇮🇹 / 🇳🇱",
+   "infoHash": "7c3e22e1bc0580847a871cfcd0bb3a976d4f7a10",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|7c3e22e1bc0580847a871cfcd0bb3a976d4f7a10",
+    "filename": "Fargo.2x01.Waiting.for.Dutch.ITA.ENG.720p.BDMux.x.264-GiuseppeTnT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Fargo (2014) Season 2 720p Web-Dl x264 MrLss\nS02E01- Waiting for Dutch.mkv\n👤 1 💾 351.91 MB ⚙️ 1337x\n🇬🇧 / 🇳🇱",
+   "infoHash": "11c4b1d3d078d0edb2c6dc7f0a3ffdc4160f5524",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|11c4b1d3d078d0edb2c6dc7f0a3ffdc4160f5524",
+    "filename": "S02E01- Waiting for Dutch.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Fargo: Sezon 2 [720p.WEB-DL.XviD.AC3-H3Q] [Lektor PL] [Pawulon]\nFargo S02E01 - Lektor PL - 720p.WEB-DL.XviD.AC3-H3Q.avi\n👤 1 💾 1.37 GB ⚙️ MagnetDL\n🇵🇱",
+   "infoHash": "dad04039c22d9d042874d77e9e0574d22c04a622",
+   "fileIdx": 6,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|dad04039c22d9d042874d77e9e0574d22c04a622",
+    "filename": "Fargo S02E01 - Lektor PL - 720p.WEB-DL.XviD.AC3-H3Q.avi"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Fargo Season 2 S02E01 720p Web-Dl x264\n👤 1 💾 351.91 MB ⚙️ ThePirateBay",
+   "infoHash": "629bcaa196bf792ffc25c4cca5972d493de8b732",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Fargo S02E01 720p HDTV x264-KILLERS\n👤 1 💾 892.61 MB ⚙️ EZTV",
+   "infoHash": "c72a11876fd575d122661862cc3ba4ac12a4ebf6",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|KILLERS"
+   }
+  },
+  {
+   "name": "Torrentio\n480p",
+   "title": "Fargo Season 2 Complete 480p MKVTV\nFargo.S02E01.480p.MKVTV.mkv\n👤 1 💾 296.78 MB ⚙️ 1337x",
+   "infoHash": "5fb1c8a13959c2fc88a1e952166f4d164768698f",
+   "fileIdx": 6,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|5fb1c8a13959c2fc88a1e952166f4d164768698f",
+    "filename": "Fargo.S02E01.480p.MKVTV.mkv"
+   }
+  }
+ ]
+}

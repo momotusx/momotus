@@ -1,0 +1,508 @@
+{
+  "id": "tt0110912",
+  "type": "movie",
+  "season": null,
+  "episode": null,
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "Pulp Fiction",
+    "year": "1994",
+    "releaseInfo": "1994",
+    "runtime": "154 min",
+    "country": "United States",
+    "language": null,
+    "episodeTitle": null,
+    "episodeReleased": null
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Pulp Fiction (1994) 2160p HDR Bluray AV1 Opus Multi5 [Kleinmike]\n👤 13 💾 8.86 GB ⚙️ 1337x",
+          "infoHash": "be3f380c849c92a6208267e8da0a2395e30c1da6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+            "filename": "Pulp.Fiction.1994.MULTi5.2160p.HDR.BluRay.AV1-Kleinmike.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Pulp Fiction (1994) MULTi VFI 2160p 10bit 4KLight DV HDR BluRay DDP 5.1 x265-QTZ\n👤 10 💾 7.08 GB ⚙️ EXT\nMulti Audio / 🇫🇷",
+          "infoHash": "b00efda0ce2cbf231f1b2157e8897a864a125353",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|x265|10bit|DV|HDR",
+            "filename": "Pulp Fiction (1994) MULTi VFI 2160p 10bit 4KLight DV HDR BluRay DDP 5.1 x265-QTZ.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Pulp Fiction (1994) [2160p] [BluRay] [5.1]\n👤 193 💾 7.3 GB ⚙️ ThePirateBay",
+          "infoHash": "592388870fd8e5c07ae5bb6508e96cf7e0a14b0b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|x265|10bit",
+            "filename": "Pulp.Fiction.1994.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Pulp Fiction (1994) Featurettes (2160p BluRay x265 HEVC AI 10bit AAC 5.1 Joy) [UTR]\nPulp Fiction (1994)  [2160p x265 10bit FS95 Joy].mkv\n👤 18 💾 7.02 GB ⚙️ 1337x",
+          "infoHash": "5de10055ec8fb44fb1b8855ae4e022728ec3bf06",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|hevc|10bit",
+            "filename": "Pulp Fiction (1994)  [2160p x265 10bit FS95 Joy].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Pulp.Fiction.1994.2160p.BluRay.3999MB.DDP5.1.x264-GalaxyRG\n👤 17 💾 4.41 GB ⚙️ ThePirateBay",
+          "infoHash": "77bfdf9ad4a694916025092a223f508e72e6da42",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|x264",
+            "filename": "Pulp.Fiction.1994.2160p.BluRay.3999MB.DDP5.1.x264-GalaxyRG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Pulp Fiction (1994) 2160p H265 Ita Ac3 5.1 Eng DTS 5.1 Sub Ita Eng NUEng SnakeSPL MIRCrew\n👤 8 💾 4.86 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+          "infoHash": "f33874138c9e7e75d3454aef87f8de891eb35437",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|h265",
+            "filename": "Pulp Fiction (1994) 2160p H265 Ita Ac3 5.1 Eng DTS 5.1 Sub Ita Eng NUEng SnakeSPl MIRCrew.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p DV | HDR",
+          "title": "Pulp Fiction 1994 BluRay 1080p DDP 5 1 DV HDR10 x265-SM737\n👤 11 💾 6.86 GB ⚙️ ThePirateBay",
+          "infoHash": "4edd9f372cca287233e8f39f7536271e64ce8a39",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+            "filename": "Pulp Fiction 1994 BluRay 1080p DDP 5 1 DV HDR10 x265-SM737.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction (1994) 1080p BrRip x264 - 1.4GB - YIFY\n👤 443 💾 1.4 GB ⚙️ ThePirateBay",
+          "infoHash": "3f8f219568b8b229581dddd7bc5a5e889e906a9b",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BRRip|x264",
+            "filename": "Pulp.Fiction.1994.1080p.BrRip.x264.YIFY.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction 1994 REMASTERED 1080p BluRay HEVC x265 5.1 BONE\n👤 410 💾 2.58 GB ⚙️ ThePirateBay",
+          "infoHash": "19777ac91de4e34cbf1cae266911c1e067d85dcb",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc",
+            "filename": "Pulp Fiction 1994 REMASTERED 1080p BluRay HEVC x265 5.1 BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction (1994) (1080p BluRay x265 HEVC 10bit AAC 5.1 Tigole) [QxR]\nPulp Fiction (1994) (1080p BluRay x265 10bit Tigole).mkv\n👤 80 💾 9.81 GB ⚙️ 1337x",
+          "infoHash": "b950f96fbb693f3f4b73c0dcd954103d5148563c",
+          "fileIdx": 12,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Pulp Fiction (1994) (1080p BluRay x265 10bit Tigole).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp.Fiction.1994.1080p.BluRay.DD.5.1.x265-edge2020\n👤 29 💾 3.31 GB ⚙️ MagnetDL",
+          "infoHash": "ffcf047847c1304fec1eaedc0d6224af66c2cb3c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Pulp.Fiction.1994.1080p.BluRay.DDP.5.1.x265-EDGE2020.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp.Fiction.1994.1080p.10bit.BluRay.6CH.x265.HEVC\n👤 20 💾 3.51 GB ⚙️ ThePirateBay",
+          "infoHash": "7da896787240bdee7ba3b33a3976f680538c5812",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Pulp.Fiction.1994.1080p.10bit.BluRay.6CH.x265.HEVC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction 1994 1080p ATVP WEB-DL DD 5 1 H 264-PiRaTeS\n👤 20 💾 7.55 GB ⚙️ ThePirateBay",
+          "infoHash": "e140a71a4c3115e11e762dc03468d91a8c6c3f65",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Pulp Fiction 1994 1080p ATVP WEB-DL DD 5 1 H 264-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Great Films 3: MP4 X264 AC3 1080p\nPulp Fiction (1994) 1080p Surround.mp4\n👤 20 💾 3.5 GB ⚙️ MagnetDL",
+          "infoHash": "40f15e970e6f21466402a1ec4fbd059097ad587a",
+          "fileIdx": 33,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x264",
+            "filename": "Pulp Fiction (1994) 1080p Surround.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction 1994 1080p BluRay x265 SDR DDP 5 1 English - DarQ-HONE\n👤 19 💾 8.25 GB ⚙️ ThePirateBay",
+          "infoHash": "63924aefb8c5552495c0d7606b7abfc10a5826f2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Pulp Fiction 1994 1080p BluRay x265 SDR DDP 5 1 English - DarQ-HONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp.Fiction.1994.1080p.10bit.BluRay.6CH.x265.HEVC-PSA\n👤 19 💾 2.32 GB ⚙️ 1337x",
+          "infoHash": "74b79fca6da45fa1fb6efcc55cf34252a9bfd553",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Pulp.Fiction.1994.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp.Fiction.1994.1080p.BluRay.x264.DTS-ETRG\n👤 17 💾 4.93 GB ⚙️ ThePirateBay",
+          "infoHash": "6657edf8c89b81f0bc4cbcdf0526f7816587bf9d",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Pulp.Fiction.1994.1080p.BluRay.x264.DTS-ETRG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp.Fiction.1994.1080p.BluRay.x265-RARBG\n👤 16 💾 2.41 GB ⚙️ RARBG",
+          "infoHash": "db4ddf886828c9077c7ef3946c6abd933df88083",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Pulp.Fiction.1994.1080p.BluRay.x265-RARBG.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp.Fiction.1994.1080p.BluRay.10bit.HEVC.6CH-MkvCage [GoodFilms\n👤 15 💾 4.01 GB ⚙️ ThePirateBay",
+          "infoHash": "6039f36e9388cec8e33cbae1a2617d12cb8a7c36",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Pulp.Fiction.1994.1080p.BluRay.10bit.HEVC.6CH-MkvCage.ws.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction (1994) ITA ENG Ac3 5.1 sub Ita BDRip 1080p H264 [ArMor]\n👤 14 💾 3.54 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "0bbaf8e9a7c8a6edea8335f74e9fb22bc835befb",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|h264",
+            "filename": "Pulp Fiction (1994) ITA ENG Ac3 5.1 sub Ita BDRip 1080p H264 [ArMor].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp.Fiction.1994.1080p.BluRay.x264-CiNEFiLE\n👤 14 💾 13.13 GB ⚙️ RARBG",
+          "infoHash": "ed29c4c89fe9af2dc6b4d6cec220f4e432a9a235",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Pulp.Fiction.1994.1080p.BluRay.x264-CiNEFiLE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction (1994) 1080p ita eng MIRCrew\n👤 12 💾 3.66 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹",
+          "infoHash": "37f96b2a9c63abc0e73ce56bae28e7011da7d2ad",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h264",
+            "filename": "Pulp Fiction (1994) 1080p h264 Ac3 5.1 Sub Ita Eng-MIRCrew.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "IMDB TOP 001-050 BluRay 1080p x265 10bit MNHD-FRDS\n008.低俗小说.Pulp.Fiction.1994.BluRay.1080p.x265.10bit.MNHD-FRDS/Pulp.Fiction.1994.BluRay.1080p.x265.10bit.MNHD-FRDS.mkv\n👤 11 💾 5.21 GB ⚙️ EXT",
+          "infoHash": "9351bcf9e7437f706549f8b60314c39259c420b4",
+          "fileIdx": 55,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Pulp.Fiction.1994.BluRay.1080p.x265.10bit.MNHD-FRDS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp.Fiction.1994.1080p.BluRay.x265.HEVC.EAC3-SARTRE [French BD]\nPulp.Fiction.1994.1080p.BluRay.x265.HEVC.EAC3-SARTRE.mkv\n👤 11 💾 7.84 GB ⚙️ ThePirateBay\n🇫🇷",
+          "infoHash": "230d819f257ba5bdeb326c5dda4611ef4a289b35",
+          "fileIdx": 12,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc",
+            "filename": "Pulp.Fiction.1994.1080p.BluRay.x265.HEVC.EAC3-SARTRE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction 1994 1080p AMZN WEB-DL H265 SDR DDP 5 1 English HONE\n👤 10 💾 6 GB ⚙️ ThePirateBay",
+          "infoHash": "340b518f1931cbfb156c1592d24a50a7ea522add",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+            "filename": "Pulp Fiction 1994 1080p AMZN WEB-DL H265 SDR DDP 5 1 English HONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp.Fiction.1994.1080p.BluRay.1600MB.DD5.1.x264-GalaxyRG\n👤 10 💾 2.01 GB ⚙️ TorrentGalaxy",
+          "infoHash": "529bbeb9ebd2501f02ab4e8ab77e2b59473d2bfd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Pulp.Fiction.1994.1080p.BluRay.1600MB.DD5.1.x264-GalaxyRG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction 1994 1080p NF WEB-DL DDP5 1 H 264-NINJACENTRAL\n👤 9 💾 1.4 GB ⚙️ ThePirateBay",
+          "infoHash": "655732f009d194d3b839afe66e90543bdef46c04",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Pulp Fiction 1994 1080p NF WEB-DL DDP5 1 H 264-NINJACENTRAL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction 1994 1080p DSNP WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 8 💾 6.15 GB ⚙️ ThePirateBay",
+          "infoHash": "49185736944b55f110bcb42cb4dedb8a558f4ee0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Pulp Fiction 1994 1080p DSNP WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction 1994 1080p NF WEB-DL AAC5 1 AV1-Saon\n👤 7 💾 1.35 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇭🇷 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+          "infoHash": "b1ace1c4e215d617957fd96c66044759f0bed920",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|av1",
+            "filename": "Pulp Fiction 1994 1080p NF WEB-DL AAC5 1 AV1-Saon.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction 1994 1080p PMTP WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 7 💾 5 GB ⚙️ ThePirateBay",
+          "infoHash": "ccfe1209f14bc1bdcc5e9dd8611e8405e5ab83f9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Pulp Fiction 1994 1080p PMTP WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp.Fiction.1994.1080p.WEB-DL.ENG.LATINO.DD.5.1.H264-BEN.THE.MEN\n👤 7 💾 5.01 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇲🇽",
+          "infoHash": "49db6f2f06b5457ad3495dc6d331678dd012aa6c",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Pulp.Fiction.1994.1080p.WEB-DL.ENG.LATINO.DD.5.1.H264-BEN.THE.MEN.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Quentin Tarantino's Movies Complete Collection 1080p 10Bit BluRay x265 HEVC MSub/ESubs [Dual Audio*] [Hindi DD 5.1/2.0 English DD5.1]\nPulp Fiction (1994) 1080p 10bit Bluray x265 HEVC [ English DTS-HD MA 5.1 ] ESubs [Www.MoviezAddiction.pro].mkv\n👤 7 💾 5.57 GB ⚙️ 1337x\nMulti Subs / Dual Audio / 🇬🇧 / 🇮🇳",
+          "infoHash": "93d7a81afd3d7d7d6d0f35bc5b1ed7a5b7b14847",
+          "fileIdx": 7,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Pulp Fiction (1994) 1080p 10bit Bluray x265 HEVC [ English DTS-HD MA 5.1 ] ESubs [Www.MoviezAddiction.pro].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction (1994) (1080p BluRay x265 SDR DDP 5 1 English - DarQ HONE)\n👤 6 💾 8.25 GB ⚙️ ThePirateBay",
+          "infoHash": "0725b9470df89132d3fd3df6ff7ba45b47996e72",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Pulp Fiction (1994) (1080p BluRay x265 SDR DDP 5 1 English - DarQ HONE).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction 1994 1080p PCOK WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 6 💾 7.31 GB ⚙️ ThePirateBay",
+          "infoHash": "66bba63c6eadb3b2c901882a9d038cba61228a6d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Pulp Fiction 1994 1080p PCOK WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction (1994) POL (1080p BluRay x265 HEVC 10bit AAC 5.1 Natty) [QxR]\n👤 6 💾 5.5 GB ⚙️ 1337x\n🇵🇱",
+          "infoHash": "98616a7ffb01f8c776332584c72b98aa505e2ed8",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction (1994) 1080p BluRay H264 DolbyD 5.1 [nickarad]\n👤 5 💾 2.03 GB ⚙️ TorrentGalaxy",
+          "infoHash": "76baad38c5ece489b8c4d1bcf022effc9fec4def",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|h264",
+            "filename": "Pulp Fiction (1994) 1080p BluRay H264 DolbyD 5.1 + nickarad.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Amazing Films 4 - Mp4 x264 AC3 1080p\nPulp Fiction (1994) 1080p Surround.mp4\n👤 5 💾 3.5 GB ⚙️ ThePirateBay",
+          "infoHash": "4e20131a166cee7614ce583330e0c0d2405bbce7",
+          "fileIdx": 49,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x264",
+            "filename": "Pulp Fiction (1994) 1080p Surround.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction.1994.1080p.NF.WebDL.AVC.DD.5.1-ETRG[EtHD]\n👤 5 💾 4.7 GB ⚙️ ThePirateBay",
+          "infoHash": "c8909e289ed1c1192ba9e07e30f9b9dac5a9df22",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|avc"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction: Tempo de Violência (1994) 1080p Dublado / Du\n👤 5 💾 2.25 GB ⚙️ ThePirateBay\n🇬🇧 / 🇵🇹",
+          "infoHash": "b87da5216a5da49da6b5de7095872bbd192104d8",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p",
+            "filename": "Pulp Fiction - Tempo de Violência (1994) 1080p - 210GJI.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp.Fiction.1994.1080p.10bit.DS4K.BluRay.AV1.English.Opus5.1.ESubs-DaddyCooL\n👤 4 💾 3.56 GB ⚙️ 1337x",
+          "infoHash": "83335e0a8d50bc4a9411a33a88847555e168649a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1|10bit",
+            "filename": "Pulp.Fiction.1994.1080p.10bit.DS4K.BluRay.AV1.English.Opus5.1.ESubs-DaddyCooL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction (1994) POL v2 (1080p BluRay x265 HEVC 10bit AAC 5.1 Natty) [QxR]\n👤 4 💾 5.72 GB ⚙️ 1337x\n🇵🇱",
+          "infoHash": "9bd2317a534951983f7ad10be34575eb5ad0e7be",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Pulp Fiction (1994) POL (1080p BluRay x265 Natty).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Pulp Fiction [1994]-Bruce Willis-1080p-H264-AC 3 (DTS 5.1) Remastered & nickarad\n👤 4 💾 2 GB ⚙️ 1337x",
+          "infoHash": "8ad4d9196f6742814c84357c20cdfa833dca3a17",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h264"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Pulp Fiction (1994) 720p BrRip x264 - 750MB - YIFY\n👤 82 💾 751.29 MB ⚙️ ThePirateBay",
+          "infoHash": "d55f1e840f1bd6576ead67a4d04e5d6ea294414b",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BRRip|x264",
+            "filename": "Pulp.Fiction.1994.720p.BrRip.x264.YIFY.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Pulp Fiction 1994 720p TUBI WEB-DL AAC 2 0 H 264-PiRaTeS\n👤 8 💾 1.96 GB ⚙️ ThePirateBay",
+          "infoHash": "b9f2e39b0ffdc7c9d3085319504cc54b270e9ff8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "Pulp Fiction 1994 720p TUBI WEB-DL AAC 2 0 H 264-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Pulp.Fiction.1994.720p.BluRay.999MB.HQ.x265.10bit-GalaxyRG ⭐\n👤 7 💾 1001.5 MB ⚙️ 1337x",
+          "infoHash": "6822f809abfefb9449dd8b64cbfcb705883a007c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x265|10bit",
+            "filename": "Pulp.Fiction.1994.720p.BluRay.999MB.HQ.x265.10bit-GalaxyRG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Pulp.Fiction.1994.720p.10bit.BluRay.6CH.x265.HEVC-PSA\n👤 6 💾 1.03 GB ⚙️ 1337x",
+          "infoHash": "af44a939fd0984f7d9044edaa6a47cec0de22582",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|hevc|10bit",
+            "filename": "Pulp.Fiction.1994.720p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Pulp.Fiction.1994.720p.10bit.BluRay.6CH.x265.HEVC\n👤 4 💾 1.75 GB ⚙️ ThePirateBay",
+          "infoHash": "1b5b312a6ac241e780d03235ee97dd3c7e013179",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|hevc|10bit",
+            "filename": "Pulp.Fiction.1994.720p.10bit.BluRay.6CH.x265.HEVC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Official IMDb Top 250 Movies Collection 6/17/2011\nPulp.Fiction.[1994].DvDrip[ENG]-P4DGE_[www.superfundo.org].avi\n👤 8 💾 700.46 MB ⚙️ ThePirateBay",
+          "infoHash": "4986ace2ee7a564508e0d5cfdde2d9018b8af942",
+          "fileIdx": 47,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip",
+            "filename": "Pulp.Fiction.[1994].DvDrip[ENG]-P4DGE_[www.superfundo.org].avi"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "Pulp Fiction (Chronological Order)\n👤 7 💾 1.78 GB ⚙️ ThePirateBay",
+          "infoHash": "3ee7c538f545f913aa27fd0b8b559dfbd692d1f6"
+        },
+        {
+          "name": "Torrentio",
+          "title": "PULP FICTION in chronological order !!!\n👤 7 💾 956.32 MB ⚙️ ThePirateBay",
+          "infoHash": "0a10c4bd4729d519c063091d77a76aae50468a92"
+        }
+      ]
+    }
+  }
+}

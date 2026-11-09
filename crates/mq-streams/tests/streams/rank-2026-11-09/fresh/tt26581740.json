@@ -1,0 +1,544 @@
+{
+  "id": "tt26581740",
+  "type": "movie",
+  "season": null,
+  "episode": null,
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "Weapons",
+    "year": "2025",
+    "releaseInfo": "2025",
+    "runtime": "128 min",
+    "country": "United States",
+    "language": null,
+    "episodeTitle": null,
+    "episodeReleased": null
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Weapons.2025.2160p.HMAX.WEB-DL.DUAL.DDP5.1.Atmos.DoVi.HDR.H.265-TURG\n👤 42 💾 8.33 GB ⚙️ ThePirateBay\nDual Audio",
+          "infoHash": "f0558bc3ca0d1b051b7c75d78cc59470c9347eea",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265|DV|HDR",
+            "filename": "Weapons.2025.2160p.HMAX.WEB-DL.DUAL.DDP5.1.Atmos.DoVi.HDR.H.265-TURG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "Weapons 2025 2160p HDR10Plus DV WEBRip 6CH x265 HEVC-PSA\n👤 25 💾 2.6 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇨🇳 / 🇫🇷 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇳🇴 / 🇸🇦 / 🇮🇩 / 🇹🇭",
+          "infoHash": "504cd97bc2dff6a136f3580822e2721f4ec2a39c",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|hevc|DV|HDR10+",
+            "filename": "Weapons.2025.2160p.HDR10Plus.DV.WEBRip.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "Weapons.2025.bluray.hdr.2160p.av1-7.1.opus-Dust\n👤 7 💾 3.19 GB ⚙️ 1337x",
+          "infoHash": "124ceeff512746750117d5b07e9f40acdef4a970",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+            "filename": "Weapons.2025.bluray.hdr.2160p.av1-7.1.opus-Dust.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV",
+          "title": "Weapons.2025.2160p.ATVP.WEB-DL.H.265.DV.DDP5.1.Atmos-PandaQT\n👤 5 💾 13.6 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇮🇩 / 🇹🇭",
+          "infoHash": "cb00ebc846edf02bba1b03512da285a8294e13fe",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265|DV"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Weapons 2025 2160p WEBRip\n👤 137 💾 5.73 GB ⚙️ YTS\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇨🇳 / 🇫🇷 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇳🇴 / 🇸🇦 / 🇮🇩 / 🇹🇭",
+          "infoHash": "913fd57638e247ad86035610665ef2146b6131ad",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+            "filename": "Weapons.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Weapons.2025.2160p.WEB-DL.DDP5.1.Atmos.SDR.H265-AOC\n👤 19 💾 14.03 GB ⚙️ 1337x",
+          "infoHash": "09a05e07e8386fdf2ae6f36df556efb6ae399188",
+          "fileIdx": 10,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265",
+            "filename": "Weapons.2025.2160p.WEB-DL.DDP5.1.Atmos.SDR.H265-AOC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Weapons.2025.2160p.iT.WEB-DL.SDR.ENG.LATINO.DDP5.1.H265.MP4-BTM\n👤 7 💾 12.47 GB ⚙️ ThePirateBay\nMulti Audio / 🇬🇧 / 🇲🇽",
+          "infoHash": "ef8e4702ac4a9b18b59dc6d0d9ab68b53f4114b3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|WEB-DL|h265",
+            "filename": "Weapons.2025.2160p.iT.WEB-DL.SDR.MULTi[Ben The Men].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "Weapons (2025) En 1080p HDR10 X265 HEVC 10 bit [LEET]\n👤 23 💾 2.88 GB ⚙️ EXT",
+          "infoHash": "00f5d1680e665946f57960f03bb1b3efc1e44319",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|hevc|10bit|HDR",
+            "filename": "Weapons (2025) En 1080p HDR10  X265 HEVC 10 bit.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p DV | HDR",
+          "title": "Weapons 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737\n👤 10 💾 5.69 GB ⚙️ ThePirateBay",
+          "infoHash": "91098962f04ab01f1d561a82fb196e0d980011ca",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+            "filename": "Weapons 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p DV | HDR",
+          "title": "Weapons.2025.1080p.UHD.ITunes.WEB-RIP.DV.HDR10.x265.10bit.HEVC.Eng.DDP5.1.ViTOENCODES\n👤 5 💾 5.04 GB ⚙️ 1337x",
+          "infoHash": "2dea559493286181a69b893b98d088e8bdb41626",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit|DV|HDR",
+            "filename": "Weapons.2025.1080p.UHD.ITunes.WEB-RIP.DV.HDR10.x265.10bit.HEVC.Eng.DDP5.1.ViTO.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 1080p WEBRip\n👤 1106 💾 2.37 GB ⚙️ YTS",
+          "infoHash": "4dc447b080ffdfee04789e338e3e7435c894d27b",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Weapons.2025.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons.2025.1080p.WEBRip.DD5.1.10bits.x265-Rapta\n👤 562 💾 1.23 GB ⚙️ 1337x",
+          "infoHash": "a2f4e1b91871d1304d1014c84f80d26329245466",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Weapons.2025.1080p.WEBRip.DD5.1.10bits.x265-Rapta.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 1080p WEBRip\n👤 166 💾 2.15 GB ⚙️ YTS",
+          "infoHash": "8221966ca422ec1d7a91bc8e2430d77ddd799403",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Weapons.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 1080p BluRay\n👤 105 💾 2.37 GB ⚙️ YTS",
+          "infoHash": "fb232adf6a5d024558e320e120fee4019596c62a",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Weapons.2025.HYBRID.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons (2025) (1080p BluRay x265 10bit EAC3 Atmos 7.1 Ghost) [QxR]\nWeapons (2025) (1080p BluRay x265 Ghost).mkv\n👤 100 💾 6.25 GB ⚙️ 1337x",
+          "infoHash": "49156a0d1ce58c7084b403fa1cd0afe7109788c2",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "Weapons (2025) (1080p BluRay x265 Ghost).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons.2025.1080p.WEB.h264-ETHEL\n👤 92 💾 6.29 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇨🇳 / 🇫🇷 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇳🇴 / 🇸🇦 / 🇮🇩 / 🇹🇭",
+          "infoHash": "edd7c0e073c37ae0536e5705c715573501288f19",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB|h264",
+            "filename": "Weapons.2025.1080p.WEB.h264-ETHEL.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 BluRay 1080p DDP Atmos 5 1 x264-hallowed\n👤 73 💾 9.92 GB ⚙️ ThePirateBay",
+          "infoHash": "f9f839b58b7530331bf0098d7dde2e227111b4c3",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Weapons 2025 BluRay 1080p DDP Atmos 5 1 x264-hallowed.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 REPACK 1080p WEB-DL HEVC x265-RMTeam\n👤 65 💾 1.35 GB ⚙️ 1337x",
+          "infoHash": "31883378673d5355a2caef536e0a51edb4567679",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+            "filename": "Weapons 2025 REPACK 1080p WEB-DL HEVC x265-RMTeam.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons.2025.1080p.MA.WEBRip.10Bit.DDP5.1.x265-NeoNoir\n👤 56 💾 1.74 GB ⚙️ ThePirateBay",
+          "infoHash": "07661239020bf5ef9ad79d810425f0bf1bb91a9e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Weapons.2025.1080p.MA.WEBRip.10Bit.DDP5.1.x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons (2025) (1080p MA WEB-DL x265 10bit EAC3 Atmos 5.1 Ghost) [QxR]\nWeapons (2025) (1080p MA WEB-DL x265 Ghost).mkv\n👤 46 💾 4.73 GB ⚙️ 1337x",
+          "infoHash": "482f535b8f6dd35ea0e288a88133e17eb9d2b19d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+            "filename": "Weapons (2025) (1080p MA WEB-DL x265 Ghost).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 REPACK 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 36 💾 7.76 GB ⚙️ ThePirateBay",
+          "infoHash": "8335a704acc287534e0930a67161aaccd121d12b",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Weapons 2025 REPACK 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 1080p AMZN WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 17 💾 7.02 GB ⚙️ ThePirateBay",
+          "infoHash": "83a771d762c56040cb3ad8bbfb1e55b8bbd63984",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Weapons 2025 1080p AMZN WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust\n👤 14 💾 1.77 GB ⚙️ 1337x",
+          "infoHash": "a4d96934125d444a0e1d4b15c70c1be570845546",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "Weapons.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Hodina zmizení / Weapons (2025)(CZ/EN)[1080p][WEB-DL]\n👤 14 💾 4.7 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+          "infoHash": "a445fb8643cc1f152d3d0be702ca783370fe210b",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons.2025.1080p.WEB-DL.MA.h265.EAC3\n👤 14 💾 7.58 GB ⚙️ 1337x",
+          "infoHash": "e1697384b853f0487d0d7ca5c00807273daa7e76",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+            "filename": "Weapons (2025) {tmdb-1078605} [MA][WEBDL-1080p][EAC3 Atmos 5.1][h265]-HONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 1080p AMZN WEB-DL DDP5 1 H 264-BYNDR\n👤 13 💾 7.02 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇫🇷 / 🇵🇱",
+          "infoHash": "3c0ed7cda52051cd8ecc9b2b2f1104af52c16b36",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Weapons 2025 1080p AMZN WEB-DL DDP5 1 H 264-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 1080p BluRay x265 HEVC 10bit AAC 7 1 HeVK Zach C\n👤 12 💾 12.29 GB ⚙️ TorrentGalaxy",
+          "infoHash": "691ad26bc6af09035ff530f7a9e99b62c52480fc",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Weapons.2025.1080p.BluRay.x265.hevc.10bit.AAC.7.1-HeVK.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 1080p REPACK WEBRip DDP 5 1 Atmos 10bit H 265-iVy\n👤 12 💾 1.83 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇸🇪 / 🇳🇴 / 🇸🇦 / 🇮🇩 / 🇹🇭",
+          "infoHash": "3137b3a033407a211818a50a5a645b963fdbd5bc",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|h265|10bit",
+            "filename": "Weapons 2025 1080p REPACK WEBRip DDP 5 1 Atmos 10bit H 265-iVy.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons.2025.1080p.DS4K.WEBRip.10Bit.DDP5.1.Atmos.x265-NeoNoir\n👤 12 💾 3.69 GB ⚙️ 1337x",
+          "infoHash": "ffff01b761f8bd9d4660e31a1c91536e4e1d29d1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+            "filename": "Weapons.2025.1080p.DS4K.WEBRip.10Bit.DDP5.1.Atmos.x265-NeoNoir.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons (2025) Eng 1080p WEBRip x264 AAC ESub\n👤 12 💾 1.98 GB ⚙️ 1337x",
+          "infoHash": "2d6a21aefca6ea57fd67efd6e6a8ea47a5f342c6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Weapons (2025) Eng 1080p WEBRip x264 AAC ESub.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 1080p Blu-Ray HEVC x265 10Bit DDP5.1 Subs KINGDOM\n👤 11 💾 6.09 GB ⚙️ 1337x",
+          "infoHash": "a29695b4bd7032f8fd9456e7f3ec50ba806650a5",
+          "fileIdx": 8,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Weapons 2025 1080p Blu-Ray HEVC x265 10Bit DDP5.1 Subs KINGDOM.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons.2025.1080p.WEBRip.x265-KONTRAST\n👤 11 💾 2.9 GB ⚙️ 1337x",
+          "infoHash": "53c3b674b5b874ed07932f3204fa95e12f30fbda",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x265",
+            "filename": "Weapons.2025.1080p.WEBRip.x265-KONTRAST.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 NORDiC 1080p WEB-DL H 264 DDP5 1 Atmos-NoTrace\n👤 10 💾 7.02 GB ⚙️ ThePirateBay\n🇬🇧 / 🇩🇰 / 🇫🇮 / 🇸🇪 / 🇳🇴",
+          "infoHash": "11f99e97720e222b7d1f4cf57cdc75b2b52ceba9",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Weapons 2025 NORDiC 1080p WEB-DL H 264 DDP5 1 Atmos-NoTrace.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 1080p 10bit BluRay 8CH X265 HEVC-PSA\n👤 10 💾 2.24 GB ⚙️ ThePirateBay",
+          "infoHash": "f128846df307a69cee3ee9195124fd816ce079a7",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "Weapons 2025 1080p 10bit BluRay 8CH X265 HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Hodina zmizení / Weapons (2025)[1080p][WEB-DL]\n👤 10 💾 6.5 GB ⚙️ EXT\n🇬🇧 / 🇨🇿",
+          "infoHash": "4c13f8cbb29eca0c9a85fafcabbeb6d089ba953c",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons.2025.1080p.HD.x264.ENG.YG\n👤 9 💾 640.5 MB ⚙️ ThePirateBay",
+          "infoHash": "7d7e9c9e2f5176c04f559dcbdaa6fe95bbe6b5ca",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv\n👤 8 💾 8.79 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "88b705515fb990c7a461c338f013f4d6e943faef",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Weapons.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons (2025) (1080p BluRay AV1 Opus 7.1) [AV1Core]\n👤 8 💾 2.71 GB ⚙️ 1337x",
+          "infoHash": "37c689776f28a165f02cb0cf5482966f2c9308b6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "Weapons.2025.1080p.BluRay.AV1.Opus.7.1-AV1Core.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons.2025.m1080p.BluRay.x264.DuaL-TURKO\n👤 6 💾 1.16 GB ⚙️ ThePirateBay\nDual Audio",
+          "infoHash": "a62a00fba779c984a679b129f801b3d7c2bc3d58",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Weapons.2025.m1080p.BluRay.x264.DuaL-TURKO.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons.2025.1080p.WEBRip.AAC.x264-skyflickz\n👤 6 💾 1.23 GB ⚙️ 1337x",
+          "infoHash": "792dc6ddb23f019188c2ef2c717c55c2b9007b43",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Weapons.2025.1080p.WEBRip.AAC.x264-skyflickz .mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 6 💾 7.64 GB ⚙️ ThePirateBay",
+          "infoHash": "403ba6c005236240af449b100a854297e67834c1",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Weapons 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 1080p HMAX WEB-DL H 265 10bit DDP5 1 Atmos 2Audios-UBWEB\n👤 5 💾 3.34 GB ⚙️ ThePirateBay",
+          "infoHash": "d5d6724b743c6fa72affca966cc95851a4491333",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h265|10bit",
+            "filename": "Weapons 2025 1080p HMAX WEB-DL H 265 10bit DDP5 1 Atmos 2Audios-UBWEB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Hodina zmizení / Weapons (2025)(CZ)[1080p]\n👤 5 💾 2.29 GB ⚙️ EXT\n🇨🇿",
+          "infoHash": "49b58b3c9827491298d9e670938561a49f3cbd2b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p",
+            "filename": "Hodina zmizeni - Weapons 2025 CZ DABING.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 1080p WEB-DL x264 6CH-Pahe in\n👤 5 💾 2.39 GB ⚙️ ThePirateBay",
+          "infoHash": "493da78ff6afe7fadaa66f3e0b15172280fe388b",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+            "filename": "Weapons 2025 1080p WEB-DL x264 6CH-Pahe in.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons 2025 1080p 10bit WEBRip 6CH X265 HEVC-PSA\n👤 5 💾 2.18 GB ⚙️ ThePirateBay",
+          "infoHash": "689a4f860910322e2bd6e4dc64813dca3a8128b4",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+            "filename": "Weapons 2025 1080p 10bit WEBRip 6CH X265 HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Weapons (2025) 1080p WEBRip 5.1-LAMA\n👤 5 💾 2.37 GB ⚙️ ThePirateBay",
+          "infoHash": "9e9a112afc398e955723c6138e880f0a41ba37a4",
+          "fileIdx": 20,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|x264",
+            "filename": "Weapons.2025.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Weapons 2025 720p WEBRip\n👤 96 💾 1.15 GB ⚙️ YTS",
+          "infoHash": "214c7dbf53a704366b5f16b3a815b942c41f2e1a",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "Weapons.2025.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Weapons 2025 720p BluRay\n👤 38 💾 1.15 GB ⚙️ YTS",
+          "infoHash": "8f416c7ea0b46f652805b329d4d4b0823c96ce79",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Weapons.2025.HYBRID.720p.BluRay.x264.AAC-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Weapons (2025) 720p WEBRip-LAMA\n👤 7 💾 1.15 GB ⚙️ ThePirateBay",
+          "infoHash": "9f9fa3342eb40047d80f1a2602b428e8f8a74c82",
+          "fileIdx": 20,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|x264",
+            "filename": "Weapons.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Weapons 2025 720p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 5 💾 1 GB ⚙️ ThePirateBay",
+          "infoHash": "0689a8e7f501549a4ca5b50b8cdaef5e4d6acdaf",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEBRip|hevc|10bit",
+            "filename": "Weapons 2025 720p 10bit WEBRip 6CH x265 HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n576p",
+          "title": "Weapons 2025 576p WEBRip x265 AAC-SSN\n👤 12 💾 1.57 GB ⚙️ ThePirateBay",
+          "infoHash": "82f1370c898a801bcfa1fe01a11efaead91a8196",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|576p|WEBRip|x265",
+            "filename": "Weapons 2025 576p WEBRip x265 AAC-SSN.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nWEBRip",
+          "title": "Weapons.2025.AMZN.WEBRip.x264.HUN-FULCRUM\n👤 5 💾 1.32 GB ⚙️ EXT\n🇬🇧 / 🇭🇺",
+          "infoHash": "201f6cca985c840a36bc76ff60f05685bbb8a94e",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|WEBRip|x264"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "101 Horror Movies Mega Pack Vol 16 Mixed x264 [i_c]\nWeapons 2025.mkv\n👤 19 💾 3.15 GB ⚙️ ThePirateBay",
+          "infoHash": "debe613422bd034cbe2e1e9b4678e59769c4500b",
+          "fileIdx": 92,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|x264",
+            "filename": "Weapons 2025.mkv"
+          }
+        }
+      ]
+    }
+  }
+}

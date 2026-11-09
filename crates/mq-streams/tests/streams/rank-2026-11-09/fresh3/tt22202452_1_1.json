@@ -1,0 +1,525 @@
+{
+ "fetched": "2026-11-08T23:16:50.380Z",
+ "id": "tt22202452",
+ "season": 1,
+ "episode": 1,
+ "type": "series",
+ "sources": {
+  "meta": "https://v3-cinemeta.strem.io/meta/series/tt22202452.json",
+  "streams": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/series/tt22202452:1:1.json"
+ },
+ "meta": {
+  "name": "Pluribus",
+  "year": "2025–",
+  "runtime": "49 min",
+  "genres": [
+   "Drama",
+   "Sci-Fi"
+  ],
+  "country": "United States",
+  "episodeTitle": "We Is Us",
+  "episodeReleased": "2025-11-08T05:00:00.000Z"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k DV | HDR10+",
+   "title": "Pluribus S01E01 2160p HDR10Plus DV WEBRip 6CH X265 HEVC-PSA\n👤 13 💾 1.38 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "f8be52113f87b7ca703135cabf69bcf3b696b7c4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|DV|HDR10+|PSA",
+    "filename": "Pluribus S01E01 2160p HDR10Plus DV WEBRip 6CH X265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Pluribus.2025.S01.2160p.10bit.ATVP.WEBRip.DDP5.1.HEVC.x265-Vyndros\nPluribus.S01E01.We.Is.Us.2160p.10bit.ATVP.WEB-DL.DDP5.1.HEVC-Vyndros.mkv\n👤 176 💾 3.05 GB ⚙️ ThePirateBay",
+   "infoHash": "2b9947cba680589fe36a4d856665167f7ae92f3e",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|2b9947cba680589fe36a4d856665167f7ae92f3e",
+    "filename": "Pluribus.S01E01.We.Is.Us.2160p.10bit.ATVP.WEB-DL.DDP5.1.HEVC-Vyndros.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Pluribus.S01E01-03.1080p.ATVP.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-G66\nPluribus.S01E01.We.Is.Us.1080p.ATVP.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-G66.mkv\n👤 2 💾 3.93 GB ⚙️ 1337x",
+   "infoHash": "083d8841848990b65a15f85aacc0619fcb1a7d49",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|083d8841848990b65a15f85aacc0619fcb1a7d49",
+    "filename": "Pluribus.S01E01.We.Is.Us.1080p.ATVP.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-G66.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus S01E01 1080p HEVC x265-MeGusta EZTV\n👤 660 💾 671.16 MB ⚙️ EZTV",
+   "infoHash": "c1165c16aae35dc3b1b4f159133a67e977fe821e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|MeGusta",
+    "filename": "Pluribus.S01E01.1080p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus S01 Season 1 2025 1080p ATVP WEBRip AAC5.1 10bits x265-Rapta\nPluribus - S01E01 - We Is Us.mkv\n👤 461 💾 685.6 MB ⚙️ ThePirateBay",
+   "infoHash": "582108f78d872397b0b3116d5b4225e5ceeadb3b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|582108f78d872397b0b3116d5b4225e5ceeadb3b",
+    "filename": "Pluribus - S01E01 - We Is Us.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus.S01E01.1080p.x265-ELiTE\n👤 308 💾 1.05 GB ⚙️ 1337x",
+   "infoHash": "aa145f3937e74aa9235a4ab00d5b9bcfdbb08c78",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|ELiTE",
+    "filename": "Pluribus.S01E01.1080p.x265-ELiTE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus S01E01 We Is Us REPACK 1080p ATVP WEB-DL DDP5 1 Atmos H 264-Kitsun\n👤 189 💾 4.26 GB ⚙️ ThePirateBay",
+   "infoHash": "c555a15c97f99ac1347e29491be7f017fb2811d1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|Kitsune",
+    "filename": "Pluribus S01E01 We Is Us REPACK 1080p ATVP WEB-DL DDP5 1 Atmos H 264-Kitsune.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus.S01E01.1080p.WEB.h264-ETHEL\n👤 157 💾 4.26 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "2f6853dc879253312c21c567af90d0ee76d6e634",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|ETHEL",
+    "filename": "Pluribus.S01E01.1080p.WEB.h264-ETHEL.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus.2025.S01.E01.E02.1080p.ATVP.WEB-DL.DDP5.1.Atmos.H264.Dual.YG⭐\nPluribus.S01E01 We Is Us 1080p.ATVP.WEB-DL.DDP5.1.Atmos.H264.Dual YG.mkv\n👤 84 💾 4.57 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "5bdaec2ef925bc1320888790a9a1b70e006d53f2",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|5bdaec2ef925bc1320888790a9a1b70e006d53f2",
+    "filename": "Pluribus.S01E01 We Is Us 1080p.ATVP.WEB-DL.DDP5.1.Atmos.H264.Dual YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus.S01.1080p.x265-ELiTE\nPluribus.S01E01.1080p.x265-ELiTE.mkv\n👤 76 💾 1.05 GB ⚙️ ThePirateBay",
+   "infoHash": "cfe10079252099184f20f16b9c769f0467a3dd65",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|cfe10079252099184f20f16b9c769f0467a3dd65",
+    "filename": "Pluribus.S01E01.1080p.x265-ELiTE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus - Season 1 - Mp4 x264 AC3 1080p\nPluribus S01E01.mp4\n👤 47 💾 1.28 GB ⚙️ ThePirateBay",
+   "infoHash": "279aeaf6bee814d4a75d9db758bf04bdd878d566",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|279aeaf6bee814d4a75d9db758bf04bdd878d566",
+    "filename": "Pluribus S01E01.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus.S01.Complete.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir\nPluribus.S01E01.We.Is.Us.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir.mkv\n👤 43 💾 641.88 MB ⚙️ ThePirateBay",
+   "infoHash": "7390ac6d7c52264b2b50cf793133230842655069",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|7390ac6d7c52264b2b50cf793133230842655069",
+    "filename": "Pluribus.S01E01.We.Is.Us.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus.S01E01-09.WEB-DL.1080p.E-AC3.ITA.ENG.SUBS.S-K\nPluribus.S01E01.Noi.siamo.noi.WEB-DL.1080p.E-AC3.ITA.ENG.SUBS.S-K.mkv\n👤 33 💾 4.27 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "bde8aef1d2430ddbce7009e5c2ab765ea05e282c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|bde8aef1d2430ddbce7009e5c2ab765ea05e282c",
+    "filename": "Pluribus.S01E01.Noi.siamo.noi.WEB-DL.1080p.E-AC3.ITA.ENG.SUBS.S-K.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "PLUR1BUS 2025 Season 1 Complete 1080p WEB x264 [i_c]\nPLUR1BUS - S01E01 - We is Us.mkv\n👤 33 💾 1.17 GB ⚙️ ThePirateBay",
+   "infoHash": "b3b987621800c8efd7a553d8aa9dd918bd8b40b2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|b3b987621800c8efd7a553d8aa9dd918bd8b40b2",
+    "filename": "PLUR1BUS - S01E01 - We is Us.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus S01E01 We Is Us 1080p ATVP WEB-DL DDP5 1 Atmos H 264-FLUX\n👤 26 💾 4.26 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "dccd89725cd5bded427a6e78fa199dcf4a82c13a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|FLUX",
+    "filename": "Pluribus S01E01 We Is Us 1080p ATVP WEB-DL DDP5 1 Atmos H 264-FLUX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus S01E01 1080p 10bit WEBRip 6CH X265 HEVC-PSA\n👤 25 💾 745.27 MB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "73f301160091f840408816a4804cefdc264178e5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|PSA",
+    "filename": "Pluribus S01E01 1080p 10bit WEBRip 6CH X265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus.S01.Complete.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir\nPluribus.S01E01.We.Is.Us.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir.mkv\n👤 22 💾 641.88 MB ⚙️ ThePirateBay",
+   "infoHash": "000d74808e639eb64d947204713db8e9975c319e",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|000d74808e639eb64d947204713db8e9975c319e",
+    "filename": "Pluribus.S01E01.We.Is.Us.1080p.WEBRip.10Bit.DDP5.1.x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus.S01.1080p.WEBRip.AV1.DDP.5.1-dAV1nci\nPluribus.S01E01.We.Is.Us.1080p.WEBRip.AV1.DDP.5.1-dAV1nci.mkv\n👤 18 💾 766.1 MB ⚙️ 1337x",
+   "infoHash": "2a2e036c3ccfd60966f09ceddba7618ed12526b5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|2a2e036c3ccfd60966f09ceddba7618ed12526b5",
+    "filename": "Pluribus.S01E01.We.Is.Us.1080p.WEBRip.AV1.DDP.5.1-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus S01E01 (2025)(EN)[1080p][WEB-DL]\n👤 18 💾 4.26 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "05d3533af7cfcb8287cef58b9973679bf3d012b2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|ETHEL",
+    "filename": "Pluribus.S01E01.1080p.WEB.h264-ETHEL.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus.S01.1080p.WEBRip.x265-KONTRAST\nPluribus.S01E01.1080p.WEBRip.x265-KONTRAST.mkv\n👤 15 💾 1.27 GB ⚙️ 1337x",
+   "infoHash": "22640381ad3929b018a45b02355a21c48fbb9c05",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|22640381ad3929b018a45b02355a21c48fbb9c05",
+    "filename": "Pluribus.S01E01.1080p.WEBRip.x265-KONTRAST.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus.S01E01.1080p.WEB-DL.H.264-[Feranki1980]\n👤 15 💾 704.87 MB ⚙️ 1337x",
+   "infoHash": "8c53c893d364349c1f8f9e211efa298b693fb516",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p",
+    "filename": "Pluribus.S01E01.1080p.WEB-DL.H.264-[Feranki1980].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus (2025) Complete Season - AV1 1080p 7RIP\nPluribus S01E01 We Is Us - AV1 1080p 7RIP.mkv\n👤 14 💾 218.31 MB ⚙️ 1337x",
+   "infoHash": "5b40396f1c05b45a89af7d170a7049e260e4c4c7",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|5b40396f1c05b45a89af7d170a7049e260e4c4c7",
+    "filename": "Pluribus S01E01 We Is Us - AV1 1080p 7RIP.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus S01e01-02 [1080p Ita Eng Spa h265 10bit SubS] byMe7alh [MIRCrew]\nPluribus.S01e01.Ita.Eng.Spa.1080p.h265.10bit.SubS-Me7alh.mkv\n👤 13 💾 984.21 MB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇪🇸",
+   "infoHash": "d72bf7949e37702e0e8898687aba00584107f760",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|d72bf7949e37702e0e8898687aba00584107f760",
+    "filename": "Pluribus.S01e01.Ita.Eng.Spa.1080p.h265.10bit.SubS-Me7alh.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus S01E01 MULTI 1080p WEB H264-HiggsBoson\n👤 11 💾 4.57 GB ⚙️ ThePirateBay\nMulti Audio",
+   "infoHash": "1239dc86eed40566026ae70f0d4493cbfe196174",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|HiggsBoson",
+    "filename": "Pluribus S01E01 MULTI 1080p WEB H264-HiggsBoson.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus.S01E01.1080p.AV1.10bit-MeGusta\n👤 9 💾 571.35 MB ⚙️ ThePirateBay",
+   "infoHash": "9be6d19a3d114d263eb2565620e15c0b54970e78",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|MeGusta",
+    "filename": "Pluribus.S01E01.1080p.AV1.10bit-MeGusta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus.S01E01-02.1080p.ATVP.WEB-DL.ITA-ENG.DDP5.1.Atmos.H.264-G66\nPluribus.S01E01.Noi.siamo.noi.1080p.ATVP.WEB-DL.DDP5.1.Atmos.H.264-G66.mkv\n👤 7 💾 4.57 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "da1c042500da9939adf73f7be608b5d11a1c4f0a",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|da1c042500da9939adf73f7be608b5d11a1c4f0a",
+    "filename": "Pluribus.S01E01.Noi.siamo.noi.1080p.ATVP.WEB-DL.DDP5.1.Atmos.H.264-G66.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus S01E01 We Is Us 1080p ATVP WEB-DL DDP5 1 Atmos H 264-STC\n👤 7 💾 4.26 GB ⚙️ ThePirateBay",
+   "infoHash": "d5b5b3e967418333e1c8bf702066600a42b600e9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|STC",
+    "filename": "Pluribus S01E01 We Is Us 1080p ATVP WEB-DL DDP5 1 Atmos H 264-STC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus.S01E01.1080p.HEVC.x265-MeGusta\n👤 7 💾 671.16 MB ⚙️ ThePirateBay",
+   "infoHash": "be5f7cf4458200db02e3c63d2910ed60eac8fac8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|MeGusta",
+    "filename": "Pluribus.S01E01.1080p.HEVC.x265-MeGusta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus.S01E01-09.WEB-DL.1080p.HEVC.E-AC3.ITA.ENG.SUBS\nPluribus.S01E01.Noi.siamo.noi.WEB-DL.1080p.E-AC3.ITA.ENG.SUBS.mkv\n👤 5 💾 1.54 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "735ed03b6c06b76400f85b9ae04f027468cc2a51",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|735ed03b6c06b76400f85b9ae04f027468cc2a51",
+    "filename": "Pluribus.S01E01.Noi.siamo.noi.WEB-DL.1080p.E-AC3.ITA.ENG.SUBS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus S01E01 We Is Us 1080p ATVP WEB-DL DD 5 1 Atmos H 264-playWEB\n👤 5 💾 4.26 GB ⚙️ ThePirateBay",
+   "infoHash": "fd76929c7d88b9887495c897ceb72b1b80e06be6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|playWEB",
+    "filename": "Pluribus S01E01 We Is Us 1080p ATVP WEB-DL DD 5 1 Atmos H 264-playWEB.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus S01E01 We Is Us 1080P ATVP WEB-DL DDP5 1 Atmos X265 POOTLED\n👤 4 💾 1.2 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇮🇳 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇻🇳 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "679f1b85ae5d0b286143ed9e1c13258f930b8d91",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p",
+    "filename": "Pluribus S01E01 We Is Us 1080P ATVP WEB-DL DDP5.1 Atmos. X265. POOTLED.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus S01E01 We Is Us with Audio Description 1080p ATVP WEB-DL DDP5 1 At\n👤 3 💾 4.26 GB ⚙️ ThePirateBay",
+   "infoHash": "c61dbac270d551c1b7451a948e7467cd030a6710",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|Kitsune",
+    "filename": "Pluribus S01E01 We Is Us with Audio Description 1080p ATVP WEB-DL DDP5 1 Atmos H 264-Kitsune.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus S01E01 We Is Us 1080p ATVP WEB-DL DDP5 1 Atmos H 264-Kitsune\n👤 3 💾 4.26 GB ⚙️ ThePirateBay",
+   "infoHash": "586f1f45414bed9bc9fdb39eac1b343680ea76fc",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|Kitsune",
+    "filename": "Pluribus S01E01 We Is Us 1080p ATVP WEB-DL DDP5 1 Atmos H 264-Kitsune.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus.S01E01.We.Is.Us.1080p.HEVC.x265-MeGusta\n👤 3 💾 671.15 MB ⚙️ ThePirateBay",
+   "infoHash": "775f1eae91f385a9ede8d5d6ecbf3a3073fb1f06",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|MeGusta",
+    "filename": "Pluribus.S01E01.We.Is.Us.1080p.HEVC.x265-MeGusta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus (2025) [tmdbid-225171]\nSeason 01/Pluribus - S01E01 - Nosotros es nosotros - [WEB-DL-1080p][Dolby Digital Plus with Dolby Atmos 5.1][AVC] - [spa, eng] - LasCositas.mkv\n👤 2 💾 4.87 GB ⚙️ EXT\n🇬🇧 / 🇪🇸",
+   "infoHash": "2ccc1cb3ccfa32356ac78b0038e0a2afae031cf2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|2ccc1cb3ccfa32356ac78b0038e0a2afae031cf2",
+    "filename": "Pluribus - S01E01 - Nosotros es nosotros - [WEB-DL-1080p][Dolby Digital Plus with Dolby Atmos 5.1][AVC] - [spa, eng] - LasCositas.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Pluribus S01E01 1080p x265-ELiTE\n👤 2 💾 1.05 GB ⚙️ ThePirateBay",
+   "infoHash": "73f94ab244ef7e78aa70ca72b78a63337e7ba24f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|ELiTE",
+    "filename": "Pluribus S01E01 1080p x265-ELiTE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Pluribus S01E01 We Is Us 720p ATVP WEB-DL DDP5 1 Atmos H 264-FLUX\n👤 68 💾 1.43 GB ⚙️ EZTV",
+   "infoHash": "bbefb9a2a4575cdb726aa2b56760fb18382f822c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|FLUX",
+    "filename": "Pluribus S01E01 We Is Us 720p ATVP WEB-DL DDP5 1 Atmos H 264-FLUX[EZTVx.to].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Pluribus S01E01 720p HEVC x265-MeGusta\n👤 37 💾 601.54 MB ⚙️ EZTV",
+   "infoHash": "d2dbc5d2bd57740b6bcfb5f421ca198ebb5054f6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|MeGusta",
+    "filename": "Pluribus.S01E01.720p.HEVC.x265-MeGusta[EZTVx.to].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Pluribus.S01.720p.x264-FENiX\nPluribus.S01E01.720p.x264-FENiX.mkv\n👤 36 💾 633.83 MB ⚙️ ThePirateBay",
+   "infoHash": "84fedc9d4ba4bf18b0d172604eb2f6da1de47c32",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|84fedc9d4ba4bf18b0d172604eb2f6da1de47c32",
+    "filename": "Pluribus.S01E01.720p.x264-FENiX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "PLUR1BUS 2025 Season 1 Complete 720p WEB x264 [i_c]\nPLUR1BUS - S01E01 - We is Us.mkv\n👤 20 💾 793.22 MB ⚙️ ThePirateBay",
+   "infoHash": "c5747cbd0910dec632845fe4a72c252f3c4ee197",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|c5747cbd0910dec632845fe4a72c252f3c4ee197",
+    "filename": "PLUR1BUS - S01E01 - We is Us.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Pluribus S01E01 720p x264-FENiX\n👤 15 💾 633.83 MB ⚙️ EZTV",
+   "infoHash": "0c05bb68198290b63a423a7ff315971597d0f81c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|FENiX",
+    "filename": "Pluribus S01E01 720p x264-FENiX[EZTVx.to].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Pluribus.S01E01.720p.x264-FENiX\n👤 11 💾 633.83 MB ⚙️ 1337x",
+   "infoHash": "441a4c7810661fc310b2fa8482ff8b79d5249288",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|FENiX",
+    "filename": "Pluribus.S01E01.720p.x264-FENiX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Pluribus S01E01 720p WEB x265 MiNX\n👤 9 💾 384.77 MB ⚙️ TorrentGalaxy",
+   "infoHash": "525b31e7c203d48a21e08faec04e60b31d828413",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|MiNX",
+    "filename": "Pluribus.S01E01.We.Is.Us.720p.WEB.x265-MiNX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Pluribus S01e01-02 [720p Ita Eng Spa SubS] byMe7alh [MIRCrew]\nPluribus.S01e01.Ita.Eng.Spa.720p.h264.SubS-Me7alh.mkv\n👤 8 💾 1.51 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹 / 🇪🇸",
+   "infoHash": "b48dddd842abe8479765bbb785f9e37005323cf2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|b48dddd842abe8479765bbb785f9e37005323cf2",
+    "filename": "Pluribus.S01e01.Ita.Eng.Spa.720p.h264.SubS-Me7alh.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "PLUR1BUS (2025) Season 1 S01 720p hevc x265 [WD-13]\nPLUR1BUS (2025) S01E01 720p hevc x265 [WD-13].mkv\n👤 5 💾 192.55 MB ⚙️ ThePirateBay",
+   "infoHash": "41e00e8e380c93593d209cb4bf27e75f7886a087",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|41e00e8e380c93593d209cb4bf27e75f7886a087",
+    "filename": "PLUR1BUS (2025) S01E01 720p hevc x265 [WD-13].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Pluribus S01E01 We Is Us 720p ATVP WEB-DL DD 5 1 Atmos H 264-playWEB\n👤 5 💾 1.43 GB ⚙️ ThePirateBay",
+   "infoHash": "fbf7878595ea4d495bb701633e69e4680daf6ca3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|playWEB",
+    "filename": "Pluribus S01E01 We Is Us 720p ATVP WEB-DL DD 5 1 Atmos H 264-playWEB.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Pluribus.S01E01.720p.HEVC.x265-MeGusta\n👤 5 💾 601.54 MB ⚙️ ThePirateBay",
+   "infoHash": "ab55a61a1577bbff4f212c5981ceac67b4bc4797",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|MeGusta",
+    "filename": "Pluribus.S01E01.720p.HEVC.x265-MeGusta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Pluribus.S01.720p.WEB-DL-[Feranki1980]\nPluribus.S01E01.720p.WEB-DL-[Feranki1980].mkv\n👤 4 💾 414.72 MB ⚙️ 1337x",
+   "infoHash": "8d98c90a60ff363a3ff429d98fdd1ce000fe1f4a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|8d98c90a60ff363a3ff429d98fdd1ce000fe1f4a",
+    "filename": "Pluribus.S01E01.720p.WEB-DL-[Feranki1980].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n480p",
+   "title": "Pluribus S01E01 480p x264-mSD\n👤 21 💾 449.22 MB ⚙️ EZTV",
+   "infoHash": "4f880d3ef3d33085ff62b34d97c35d2f9a8a7709",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|480p|mSD",
+    "filename": "Pluribus.S01E01.480p.x264-mSD[EZTVx.to].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nXviD",
+   "title": "Pluribus S01E01 XviD-AFG\n👤 9 💾 562.84 MB ⚙️ EZTV",
+   "infoHash": "d94c33f8ae94e6c18effaed0397fbc99f921094e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|XviD|AFG",
+    "filename": "Pluribus.S01E01.XviD-AFG[EZTVx.to].avi"
+   }
+  }
+ ]
+}

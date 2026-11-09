@@ -1,0 +1,511 @@
+{
+ "fetched": "2026-11-08T23:53:17.320Z",
+ "id": "tt1016150",
+ "type": "movie",
+ "meta": {
+  "name": "All Quiet on the Western Front",
+  "year": "2022",
+  "runtime": "147 min"
+ },
+ "streamUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt1016150.json",
+ "streams": [
+  {
+   "name": "Torrentio\n4k DV",
+   "title": "All.Quiet.On.The.Western.Front.2022.2160p.Dolby.Vision.ENG.DUBBED.Multi.Sub.DDP5.1.DV.x265.MP4-BEN.THE.MEN\n👤 14 💾 13.14 GB ⚙️ 1337x\nMulti Subs / 🇬🇧",
+   "infoHash": "f483f23b927ba80a53417b0581afe252f3a8569c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|x265|DV",
+    "filename": "All.Quiet.On.The.Western.Front.2022.2160p.Dolby.Vision.ENG.DUBBED.Multi.Sub.DDP5.1.DV.x265.MP4-BEN.THE.MEN.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "All Quiet on the Western Front (2022) 2160p HDR Bluray AV1 Opus Multi5 [Kleinmike]\n👤 9 💾 7.85 GB ⚙️ TorrentGalaxy\n🇩🇪",
+   "infoHash": "e1b1129d992a8dcb7314d541dba92e1e41a3ab6b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+    "filename": "All.Quiet.on.the.Western.Front.2021.MULTi5.2160p.HDR.BluRay.AV1-Kleinmike.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "All.Quiet.on.the.Western.Front.2022.DUBBED.2160p.UHD.BluRay.x265.10bit.HDR.DTS-HD.MA.5.1-RARBG\n👤 9 💾 10.56 GB ⚙️ RARBG\nDubbed",
+   "infoHash": "4706cbe62f1478c201520e62b8fe64407b1b62e7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|HDR",
+    "filename": "All.Quiet.on.the.Western.Front.2022.DUBBED.2160p.UHD.BluRay.x265.10bit.HDR.DTS-HD.MA.5.1-RARBG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k DV",
+   "title": "All.Quiet.on.the.Western.Front.2022.GERMAN.2160p.NF.WEB-DL.DDP5.1.Atmos.DV.MP4.x265-DVSUX\n👤 7 💾 14 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇩🇪",
+   "infoHash": "e145864f80545769892eaf3aad74cab321be1820",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|x265|DV",
+    "filename": "All.Quiet.on.the.Western.Front.2022.GERMAN.2160p.NF.WEB-DL.DDP5.1.Atmos.DV.MP4.x265-DVSUX.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "All.Quiet.on.the.Western.Front.2022.GERMAN.2160p.UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-RARBG\n👤 4 💾 11.85 GB ⚙️ RARBG\n🇩🇪",
+   "infoHash": "b97eac41046140cff6731ecd33169f7f4940d73e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|HDR",
+    "filename": "All.Quiet.on.the.Western.Front.2022.GERMAN.2160p.UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-RARBG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "All.Quiet.on.the.Western.Front.2022.GERMAN.2160p.NF.WEB-DL.x265.10bit.HDR.DDP5.1.Atmos-APEX\n👤 4 💾 13.93 GB ⚙️ RARBG\nDual Audio / 🇩🇪",
+   "infoHash": "fbcb22d720911c06eae944d59fa8c9eb35fb4349",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|x265|10bit|HDR",
+    "filename": "All.Quiet.on.the.Western.Front.2022.2160p.NF.WEB-DL.DUAL.DDP5.1.Atmos.DV.HDR.H.265-APEX.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "All.Quiet.on.the.Western.Front.2022.DUBBED.2160p.UHD.BluRay.x265.10bit.HDR.DDP5.1-RARBG\n👤 2 💾 8.91 GB ⚙️ RARBG\nDubbed",
+   "infoHash": "87be07e81fa92785658f0c540281a1571f72688c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|HDR",
+    "filename": "All.Quiet.on.the.Western.Front.2022.DUBBED.2160p.UHD.BluRay.x265.10bit.HDR.DDP5.1-RARBG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "All Quiet on the Western Front 2022 2160p WEBRip\n👤 34 💾 6.58 GB ⚙️ YTS\n🇩🇪",
+   "infoHash": "8d4e4a50564c4bbc1d7fe5729b2452a84165134f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "All.Quiet.On.The.Western.Front.2022.GERMAN.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "All Quiet on the Western Front 2022 REPACK UHD BluRay 1080p DUAL DD Atmos 5 1 DoVi HDR10 x265-SM737\n👤 38 💾 8.86 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "fa060dc6a108aa0cacbe3d8767bcfaf7cc6ba64a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "All Quiet on the Western Front 2022 REPACK UHD BluRay 1080p DUAL DD Atmos 5 1 DoVi HDR10 x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "All Quiet on the Western Front (2022) (BDRip 1080p HEVC HDR10 EAC3 Atmos) [OEP][2E22BC1A].mkv\n👤 3 💾 6.21 GB ⚙️ TorrentGalaxy\n🇩🇪",
+   "infoHash": "ebfa805bfa9f52ec56c241afa8639e30bf01e304",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|hevc|10bit|HDR",
+    "filename": "All Quiet on the Western Front (2022) (BDRip 1080p HEVC HDR10 EAC3 Atmos) [OEP][2E22BC1A].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Na Zachodzie bez zmian - Im Westen nichts Neues 2022 [HLG HDR SDR] [1080p.WEB-DL.H264.AC3.5.1.AS76-FT] [GER-ENG-Lektor PL] [Alusia]\n👤 2 💾 6.81 GB ⚙️ EXT\n🇬🇧 / 🇩🇪 / 🇵🇱",
+   "infoHash": "6e432f2a127334e3b8874e71173b623440211c99",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264|HDR",
+    "filename": "Na Zachodzie bez zmian - Im Westen nichts Neues 2022 [HLG HDR SDR] [1080p.WEB-DL.H264.AC3.5.1.AS76-FT] [GER-ENG-Lektor PL] [Alusia].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All Quiet on the Western Front 2022 1080p WEBRip\n👤 156 💾 2.74 GB ⚙️ YTS",
+   "infoHash": "12b1e8522b3158f0a56c0bc624dde3a697c4e60d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "All.Quiet.On.The.Western.Front.2022.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All.Quiet.on.the.Western.Front.2022.GERMAN.1080p.NF.WEBRip.DDP5.1.Atmos.x264-SMURF\n👤 66 💾 5.29 GB ⚙️ RARBG\nDual Audio / 🇩🇪",
+   "infoHash": "57b004e743a1645d42f91f39320186d42becfecf",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "All.Quiet.on.the.Western.Front.2022.1080p.NF.WEB-DL.DUAL.DDP5.1.Atmos.H.264-SMURF.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All.Quiet.on.the.Western.Front.2022.1080p.NF.WEBRip.1600MB.DD5.1\n👤 46 💾 1.61 GB ⚙️ ThePirateBay",
+   "infoHash": "0c2604b7b00d8b0eaf21a14d63369e72f8a0f947",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "All.Quiet.on.the.Western.Front.2022.1080p.NF.WEBRip.1600MB.DD5.1.x264-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All Quiet on the Western Front 2022 1080p BluRay\n👤 43 💾 2.45 GB ⚙️ YTS",
+   "infoHash": "cc2cd4ea9f612e6158a1a50e8e5453cefd9b3272",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "All.Quiet.On.The.Western.Front.2022.1080p.BluRay.x265.10bit.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All.Quiet.on.the.Western.Front.(2022).1080p.10Bit.HEVC.WEBRip.HIN-ENG-GER.DD5.1.H.265-themoviesboss\n👤 32 💾 2.87 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇩🇪 / 🇮🇳",
+   "infoHash": "5f5a27e52edc651047a9b2995c914983f6112cbf",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "TheMoviesBoss - All.Quiet.on.the.Western.Front.(2022).1080p.10Bit.HEVC.WEBRip.DD5.1.H.265-themoviesboss.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All Quiet on the Western Front (2022) (1080p BluRay x265 HEVC 10bit AAC 7.1 German Tigole) [QxR]\n👤 20 💾 8.75 GB ⚙️ 1337x\n🇩🇪",
+   "infoHash": "d50cf3b8e94585de192711ce1898602c6eab38e8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "All Quiet on the Western Front (2022) (1080p BluRay x265 10bit Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All Quiet on the Western Front 2022 1080p BluRay\n👤 17 💾 2.71 GB ⚙️ YTS\n🇩🇪",
+   "infoHash": "40628640f89fbaaae5bd1ceba3cc701474375068",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "All.Quiet.On.The.Western.Front.2022.GERMAN.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All.Quiet.on.the.Western.Front.A.K.A.Im.Westen.nichts.Neues.2022.DUAL-AUDIO.GER-ENG.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA\n👤 15 💾 2.26 GB ⚙️ 1337x\nDual Audio / 🇬🇧 / 🇩🇪",
+   "infoHash": "bc0529d965f72828c31b4251ec32b3fee8caa265",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "All.Quiet.on.the.Western.Front.A.K.A.Im.Westen.nichts.Neues.2022.DUAL-AUDIO.GER-ENG.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All.Quiet.on.the.Western.Front.A.K.A.Im.Westen.nichts.Neues.2022.DUAL-AUDIO.GER-ENG.1080p.10bit.BluRay.8CH.x265.HEVC-PSA\n👤 13 💾 2.46 GB ⚙️ 1337x\nDual Audio / 🇬🇧 / 🇩🇪",
+   "infoHash": "a9656e966d0fcb02f11c88c66ce288c3977078c7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "All.Quiet.on.the.Western.Front.A.K.A.Im.Westen.nichts.Neues.2022.DUAL-AUDIO.GER-ENG.1080p.10bit.BluRay.8CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All Quiet on the Western Front 2022 1080p BluRay\n👤 13 💾 1.26 GB ⚙️ YTS\n🇩🇪",
+   "infoHash": "f3b2b661f7836d804baad6eb84bec5e1ba9eaf99",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "All.Quiet.On.The.Western.Front.2022.GERMAN.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All Quiet on the Western Front 2022 1080p NF WEB-DL DDP5 1 Atmos H 264-playWEB\n👤 10 💾 4.62 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇭🇷 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇮🇩 / 🇲🇾 / 🇹🇭",
+   "infoHash": "5d0e883bec6780b0ef2adff3788aaba1d078dad6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "All Quiet on the Western Front 2022 1080p NF WEB-DL DDP5 1 Atmos H 264-playWEB.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All Quiet on the Western Front (2022) (1080p NF WEB-DL x265 HEVC 10bit EAC3 5.1 Atmos t3nzin) [QxR]\n👤 10 💾 8.48 GB ⚙️ 1337x\n🇩🇪",
+   "infoHash": "c67f846af151b59fe1876ba7ff0870419d851816",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc|10bit",
+    "filename": "All Quiet on the Western Front (2022) (1080p NF WEB-DL x265 10bit t3nzin).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All.Quiet.on.the.Western.Front.2022.1080p.WEBRip.DD5.1.x264-EVO[\n👤 10 💾 2.17 GB ⚙️ ThePirateBay\n🇩🇪",
+   "infoHash": "3d852f6442b20646ce4c84249621dbf649e2b57d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "All.Quiet.on.the.Western.Front.2022.1080p.WEBRip.DD5.1.x264-EVO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All Quiet On The Western Front (2022) GERMAN 1080p BluRay\n👤 8 💾 2.71 GB ⚙️ ThePirateBay\n🇩🇪",
+   "infoHash": "c3f88d5d002710a29f890025d7171156c3c0c1d2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "All.Quiet.On.The.Western.Front.2022.GERMAN.1080p.BluRay.x264.AAC5.1-WORLD.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Im.Westen.nichts.Neues.2022.1080p.WEBRip.x264.[ExYuSubs]\n👤 7 💾 2.54 GB ⚙️ ThePirateBay",
+   "infoHash": "6b7647f2989a6d88728972aadcd9685dc3297f15",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Im.Westen.nichts.Neues.2022.1080p.WEBRip.x264.[ExYuSubs].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Im.Westen.Nichts.Neues.2022.FRENCH-GER.1080p.WEB.x264-EXTREME.mkv\n👤 7 💾 5.29 GB ⚙️ ThePirateBay\n🇫🇷 / 🇩🇪",
+   "infoHash": "04931ae2ffbdf23bf995ea27577c5b05b4946a37",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|x264",
+    "filename": "Im.Westen.Nichts.Neues.2022.FRENCH-GER.1080p.WEB.x264-EXTREME.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All.Quiet.on.the.Western.Front.2022.DUBBED.1080p.BluRay.x265-RARBG\n👤 5 💾 2.29 GB ⚙️ RARBG\nDubbed",
+   "infoHash": "cd991c54ea8fa8355253d90ae56ed34a117a05b2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "All.Quiet.on.the.Western.Front.2022.DUBBED.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All Quiet on the Western Front (2022) GERMAN 1080p BluRay AV1 Opus MULTi6 [RAV1NE]\n👤 4 💾 3.24 GB ⚙️ 1337x\n🇩🇪",
+   "infoHash": "daa2ed67584f06c19df89b75238498a4ecfc5c18",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "All.Quiet.on.the.Western.Front.2022.GERMAN.1080p.BluRay.AV1.Opus.MULTi6-RAV1NE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All Quiet on the Western Front (2022)(FHD)(1080p)(Webdl)(x264)(Multi 6 lang)(MultiSub) PHDTeam\n👤 4 💾 4.94 GB ⚙️ TorrentGalaxy\nMulti Audio / Multi Subs",
+   "infoHash": "b35b582513d63d54c2bc47b29489e80de598e2af",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "All Quiet on the Western Front (2022).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All.Quiet.on.the.Western.Front.2022.GERMAN.1080p.BluRay.x265-VXT\n👤 3 💾 2.29 GB ⚙️ RARBG\n🇩🇪",
+   "infoHash": "839b10a036cc1c95bea3a95147b2c43fbb23beb7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "All.Quiet.on.the.Western.Front.2022.GERMAN.1080p.BluRay.x265-VXT.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All.Quiet.on.the.Western.Front.2022.GERMAN.1080p.WEBRip.x265-VXT\n👤 3 💾 2.32 GB ⚙️ ThePirateBay\n🇩🇪",
+   "infoHash": "fa8e683c29aeb097aa296c883b517bc7f68a71ea",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "All.Quiet.on.the.Western.Front.2022.GERMAN.1080p.WEBRip.x265-VXT.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Niente.Di.Nuovo.Sul.Fronte.Occidentale.2022.iTA-GER.WEBDL.1080p.x264-CYBER.mkv\n👤 3 💾 12 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹 / 🇩🇪",
+   "infoHash": "0122323c72b4be40a9a2901ccb8182c90936dca0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Niente.Di.Nuovo.Sul.Fronte.Occidentale.2022.iTA-GER.WEBDL.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Making All Quiet on the Western Front 2022 1080p NF WEB-DL AAC2 0 x264-OzONE\n👤 2 💾 658.91 MB ⚙️ ThePirateBay",
+   "infoHash": "c59610c4339707b2e5644851b02ac2d971dd31f7",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Making All Quiet on the Western Front 2022 1080p NF WEB-DL AAC2 0 x264-OzONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "ALL Best Picture Nominees 1080p BluRay Part 3 of 3 2015-2023 82 Movies jZQ\n2022/All Quiet on the Western Front (2022) IMDB 7.8/All.Quiet.on.the.Western.Front.2022.DUBBED.1080p.BluRay.x265-RARBG.mp4\n👤 2 💾 2.29 GB ⚙️ TorrentGalaxy\nDubbed",
+   "infoHash": "2c0c3ae5d663666759fcd10876b951bcfc7ccb8e",
+   "fileIdx": 512,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "All.Quiet.on.the.Western.Front.2022.DUBBED.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All.Quiet.on.the.Western.Front.2022.DUBBED.1080p.BluRay.H26\n👤 2 💾 2.8 GB ⚙️ ThePirateBay\nDubbed",
+   "infoHash": "d3bffa7a77849eba37969b695b5ccf131f14fb7c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264",
+    "filename": "All.Quiet.on.the.Western.Front.2022.DUBBED.1080p.BluRay.H264.AAC-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All Quiet On The Western Front (2022) 1080p WEBRip x265 Hindi DDP5.1 English DDP5.1 ESub - SP3LL\n👤 2 💾 3.32 GB ⚙️ TorrentGalaxy\nDual Audio / 🇬🇧 / 🇮🇳",
+   "infoHash": "9998ec422de77f48cdeec9f0c068b1d33cdc0207",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "All Quiet On The Western Front (2022) 1080p WEBRip x265 DUAL DDP5.1 ESub - SP3LL.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All Quiet on the Western Front (2022)(FHD)(1080p)(Webdl)(Hevc)(Multi 6 lang)(MultiSub) PHDTeam\n👤 2 💾 2.29 GB ⚙️ TorrentGalaxy\nMulti Audio / Multi Subs",
+   "infoHash": "d4e95d96bb75d4e5a2dcdb0fc797d29f1aa797fb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+    "filename": "All Quiet on the Western Front (2022).mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All.Quiet.On.The.Western.Front.2022.1080p.Webrip.X264.AAC-AOC\n👤 2 💾 2.62 GB ⚙️ TorrentGalaxy",
+   "infoHash": "4e2b03c5caeac8335e943196f9f2d7feae6ae87d",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "All.Quiet.On.The.Western.Front.2022.1080p.Webrip.X264.AAC-AOC.m4v"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "All.Quiet.on.the.Western.Front.2022.GERMAN.1080p.NF.WEBRip.1600M\n👤 2 💾 1.61 GB ⚙️ ThePirateBay\n🇩🇪",
+   "infoHash": "af815b4e7b2211fa158989bc66dbe8a664f979e8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "All.Quiet.on.the.Western.Front.2022.GERMAN.1080p.NF.WEBRip.1600MB.DD5.1.x264-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "War Movies Collection (1080p.AV1.AC3 encoded.muxed by VerbaL) (2026) [25 Movies]\nNiente Di Nuovo Sul Fronte Occidentale - Dietro Le Quinte (Making All Quiet On The Western Front) (2022) [1080p] [tmdb-1086967] [imdb-tt27531279].mkv\n👤 1 💾 2.47 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+   "infoHash": "ea04648b0d4caa539dad64eda2db457866d59ebb",
+   "fileIdx": 188,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|av1",
+    "filename": "Niente Di Nuovo Sul Fronte Occidentale - Dietro Le Quinte (Making All Quiet On The Western Front) (2022) [1080p] [tmdb-1086967] [imdb-tt27531279].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "All Quiet on the Western Front 2022 720p BluRay\n👤 23 💾 1.32 GB ⚙️ YTS\n🇩🇪",
+   "infoHash": "230a8e508f191d0a8800976df5794a1d2093d0bf",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "All.Quiet.On.The.Western.Front.2022.GERMAN.720p.BluRay.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "All.Quiet.on.the.Western.Front.2022.DUBBED.720p.NF.WEBRip.900MB.\n👤 17 💾 900.06 MB ⚙️ ThePirateBay\nDubbed",
+   "infoHash": "2bedad1910f61981114eb045e2e802d0309d6450",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "All.Quiet.on.the.Western.Front.2022.DUBBED.720p.NF.WEBRip.900MB.x264-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "All Quiet on the Western Front 2022 720p WEBRip\n👤 16 💾 1.33 GB ⚙️ YTS",
+   "infoHash": "56799a7e6b47b91f5c3ad7d1dc5771982555fa50",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "All.Quiet.On.The.Western.Front.2022.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "All.Quiet.on.the.Western.Front.2022.GERMAN.720p.NF.WEBRip.900MB.\n👤 7 💾 900.06 MB ⚙️ ThePirateBay\n🇩🇪",
+   "infoHash": "c1be1eb25966455df4553c18ce7e01319793a8ea",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "All.Quiet.on.the.Western.Front.2022.GERMAN.720p.NF.WEBRip.900MB.x264-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "All.Quiet.on.the.Western.Front.(2022).720p.10Bit.HEVC.WEBRip.HIN-ENG-GER.AAC.H.265-themoviesboss\n👤 4 💾 1.48 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇩🇪 / 🇮🇳",
+   "infoHash": "715abbf377d11dfcaf9a32bcf09b22ed84460391",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|hevc|10bit",
+    "filename": "TheMoviesBoss - All.Quiet.on.the.Western.Front.(2022).720p.10Bit.HEVC.WEBRip.AAC.H.265-themoviesboss.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "All.Quiet.on.the.Western.Front.2022.720p.NF.WEBRip.x264-Dual.YG⭐\n👤 2 💾 1.49 GB ⚙️ ThePirateBay\nDual Audio / 🇪🇸",
+   "infoHash": "cf021f25d9d332cf7461f22ff8c6d00fa33faf3d",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "All.Quiet.on.the.Western.Front.2022.720p.NF.WEBRip.x264-Dual.YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nBRRip",
+   "title": "All.Quiet.on.the.Western.Front.2022.DUBBED.BRRip.x264-LAMA\n👤 2 💾 1.4 GB ⚙️ ThePirateBay\nDubbed",
+   "infoHash": "cf0e419491f861aa6e133b09017d14b3749d1196",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BRRip|x264",
+    "filename": "All.Quiet.on.the.Western.Front.2022.DUBBED.BRRip.x264-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Jordan Peterson Daily Wire Complete Collection\nFoundations of the West/Symposium War on the West.mp4\n👤 6 💾 2.85 GB ⚙️ 1337x",
+   "infoHash": "4728de8b2b9d4b7cd8e00cd77bdeda3765989cab",
+   "fileIdx": 80,
+   "behaviorHints": {
+    "filename": "Symposium War on the West.mp4"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Evalions banned videos\nIM CONVERTING TO ISLAM!.mp4\n👤 2 💾 15.38 MB ⚙️ ThePirateBay",
+   "infoHash": "159c3cf47b5cb95cb4c55f8fca2a12c070df49b9",
+   "fileIdx": 19,
+   "behaviorHints": {
+    "filename": "IM CONVERTING TO ISLAM!.mp4"
+   }
+  }
+ ]
+}

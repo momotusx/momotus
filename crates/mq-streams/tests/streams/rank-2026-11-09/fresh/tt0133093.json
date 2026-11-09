@@ -1,0 +1,545 @@
+{
+  "id": "tt0133093",
+  "type": "movie",
+  "season": null,
+  "episode": null,
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "The Matrix",
+    "year": "1999",
+    "releaseInfo": "1999",
+    "runtime": "136 min",
+    "country": "United States",
+    "language": null,
+    "episodeTitle": null,
+    "episodeReleased": null
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "[PACK] The Matrix 4K UHD Collection (1999-2003) (2160p HDR BDRip x265 10bit DTS) [4KLiGHT]\nThe Matrix (1999) (2160p HDR BDRip x265 10bit DTS) [4KLiGHT].mkv\n👤 70 💾 4.98 GB ⚙️ 1337x",
+          "infoHash": "17e40c4a20a021a52f43550912879e19b75c2c47",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BDRip|x265|10bit|HDR",
+            "filename": "The Matrix (1999) (2160p HDR BDRip x265 10bit DTS) [4KLiGHT].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV | HDR10+",
+          "title": "The Matrix (1999) 2160p H265 BluRay Rip 10 bit DV HDR10+ ita eng AC3 5.1 sub ita eng Licdom\n👤 39 💾 4 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+          "infoHash": "c2bbb470f272cccdfae861f7836da13cdb7d14e6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BRRip|h265|10bit|DV|HDR10+",
+            "filename": "The Matrix (1999) 2160p H265 10 bit DV HDR10+ ita eg AC3 5.1 sub ita eng Licdom.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "The.Matrix.1999.2160p.HDR.UHD.BluRay.AV1.DDP5.1.Atmos.Multi4-dAV1nci\n👤 38 💾 12.26 GB ⚙️ 1337x",
+          "infoHash": "aa0fd381c944a72cabb3e962d5f727c8694d7dd6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+            "filename": "The.Matrix.1999.2160p.HDR.UHD.BluRay.AV1.DDP5.1.Atmos.Multi4-dAV1nci.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "The.Matrix.1999.2160p.BluRay.HDR.DDP5.1.x265-GalaxyUHD\n👤 37 💾 3.41 GB ⚙️ ThePirateBay",
+          "infoHash": "c392386c397245b6f3b88634f348afa72d88d6d0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|x265|HDR",
+            "filename": "The.Matrix.1999.2160p.BluRay.HDR.DDP5.1.x265-GalaxyUHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "The Matrix (1999) (2160p BluRay x265 HEVC 10bit HDR AAC 7.1 Tigole) [QxR]\n👤 33 💾 14.2 GB ⚙️ 1337x",
+          "infoHash": "12f8ca9709b357477612aaac7c6703503c410352",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|hevc|10bit|HDR"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "The Matrix.1999.4K.HDR.2160p.BDRip Ita Eng x265-NAHOM\n👤 9 💾 13.6 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "fc7669d9f9d6dc5a54f9d39ae6dd31beb04f4a83",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BDRip|x265|HDR"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "The.Matrix.1999.2160p.UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-RARBG\n👤 5 💾 12.28 GB ⚙️ TorrentGalaxy",
+          "infoHash": "6056026c737e31a2862c550e1f11bfe0cf0502b4",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|x265|10bit|HDR",
+            "filename": "The.Matrix.1999.2160p.UHD.BluRay.x265.10bit.HDR.TrueHD.7.1.Atmos-RARBG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k HDR",
+          "title": "The.Matrix.1999.2160p.10bit.HDR.BluRay.8CH.x265.HEVC-PSA\n👤 5 💾 2.12 GB ⚙️ ThePirateBay",
+          "infoHash": "2c35452e5bf87afdf78ea2986008086ff67c278c",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|hevc|10bit|HDR",
+            "filename": "The.Matrix.1999.2160p.10bit.HDR.BluRay.8CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "The Matrix 1999 2160p BluRay\n👤 119 💾 6.49 GB ⚙️ YTS",
+          "infoHash": "28dec3ac8cc8c5758730a334d98705dd698f7bc1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|BluRay|x265|10bit",
+            "filename": "The.Matrix.1999.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p DV | HDR",
+          "title": "The Matrix 1999 1080p UHD BluRay DD5 1 Atmos DV HDR x265-SQS\n👤 7 💾 11.54 GB ⚙️ ThePirateBay",
+          "infoHash": "58fcb5ef59ddb095669830b0382af06a3ea61a01",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|DV|HDR",
+            "filename": "The Matrix 1999 1080p UHD BluRay DD5 1 Atmos DV HDR x265-SQS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p DV | HDR",
+          "title": "The Matrix 1999 1080p UHD BluRay DD 5 1 Atmos DV HDR x265-SQS\n👤 6 💾 11.54 GB ⚙️ ThePirateBay",
+          "infoHash": "5affe1d9f06504f74799f00a9d66ec266e0f8d16",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|DV|HDR",
+            "filename": "The Matrix 1999 1080p UHD BluRay DD  5 1 Atmos DV HDR x265-SQS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix (1999) 1080p BrRip x264 - 1.85GB - YIFY\n👤 867 💾 1.86 GB ⚙️ ThePirateBay",
+          "infoHash": "d7a46713eaee18c746b3254b7d1492a50fd9d6ce",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BRRip|x264",
+            "filename": "The.Matrix.1999.1080p.BrRip.x264.YIFY.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix 1-4 Pack 1999-2021 REMASTERED 1080p BluRay HEVC x265 5.1 BONE\nThe Matrix 1999 REMASTERED 1080p BluRay HEVC x265 5.1 BONE.mkv\n👤 336 💾 2.28 GB ⚙️ ThePirateBay",
+          "infoHash": "e0593a3dab881080efecb54ba6551d4b2d329bf1",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc",
+            "filename": "The Matrix 1999 REMASTERED 1080p BluRay HEVC x265 5.1 BONE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Matrix.1999.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265\n👤 274 💾 3.03 GB ⚙️ ThePirateBay",
+          "infoHash": "90d3277aa33f639c3533a6d7015e3002c892e2d5",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "The.Matrix.1999.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Complete.Matrix.Trilogy.Bluray.1080p.BluRay.x264.anoXmous\nThe.Matrix.1999.Bluray.1080p.BluRay.x264.anoXmous.mp4\n👤 164 💾 2.22 GB ⚙️ ThePirateBay",
+          "infoHash": "88c11f24fe28e75edab4bc7d8b353bc4acb86e24",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The.Matrix.1999.Bluray.1080p.BluRay.x264.anoXmous.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix (1999) RM (1080p BluRay x265 HEVC 10bit AAC 7.1 Tigole) [QxR]\nThe Matrix (1999) RM (1080p BluRay x265 10bit Tigole).mkv\n👤 55 💾 5.73 GB ⚙️ 1337x",
+          "infoHash": "20be2d2f0ada29069428fe880ccb04197681af2a",
+          "fileIdx": 10,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "The Matrix (1999) RM (1080p BluRay x265 10bit Tigole).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix 1999 1080p YT WEB-DL DDP 5 1 H 264-PiRaTeS\n👤 35 💾 7.06 GB ⚙️ ThePirateBay",
+          "infoHash": "9370954b0fd021bde342c49bc157e6334c10440f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "The Matrix 1999 1080p YT WEB-DL DDP 5 1 H 264-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Great Films 3: MP4 X264 AC3 1080p\nM1 The Matrix (1999) 1080p Surround.mp4\n👤 33 💾 3 GB ⚙️ MagnetDL",
+          "infoHash": "40f15e970e6f21466402a1ec4fbd059097ad587a",
+          "fileIdx": 22,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x264",
+            "filename": "M1 The Matrix (1999) 1080p Surround.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix (1999) 1080p H265 BluRay Rip ita eng AC3 5.1 sub ita eng Licdom\n👤 30 💾 2.05 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+          "infoHash": "ae41fd85bc241788df159f5fffa64e31ac9319f8",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BRRip|h265",
+            "filename": "The Matrix (1999) 1080p H265 ita eg AC3 5.1 sub ita eng Licdom.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Matrix.1999.REMASTERED.PROPER.1080p.BluRay.H264.AAC-RARBG\n👤 30 💾 2.6 GB ⚙️ RARBG",
+          "infoHash": "c1da3c624c20c6fd698618ae0f4c2ffdc549db49",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|h264",
+            "filename": "The.Matrix.1999.REMASTERED.PROPER.1080p.BluRay.H264.AAC-RARBG.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix 1999 1080p AV1 10Bit DKong\n👤 26 💾 1.08 GB ⚙️ ThePirateBay",
+          "infoHash": "0978fcd65d2dee6256446c1c96536c9fedf90966",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|av1|10bit",
+            "filename": "The Matrix 1999 1080p AV1 10Bit DKong.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix 1999 1080p AMZN WEB-DL DDP5 1 H 264-GPRS\n👤 26 💾 9.46 GB ⚙️ ThePirateBay",
+          "infoHash": "b98950b895cac4f26d71cb31c62c5e01a46fa89a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "The Matrix 1999 1080p AMZN WEB-DL DDP5 1 H 264-GPRS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix 1999 1080p BluRay DD+ 7.1 x265-edge2020\n👤 26 💾 5.85 GB ⚙️ TorrentGalaxy",
+          "infoHash": "64377d9d98f877ed01ef4131382f2209a3217478",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "The.Matrix.1999.1080p.BluRay.DDP.7.1.x265-EDGE2020.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix Complete 5 Movie Collection - Sci-Fi 1999 - 2021 Eng Rus Multi-Subs 1080p [H264-mp4]\nThe Matrix Complete 5 Movie Collection 1999 - 2021/01 The Matrix Remastered - Sci-Fi 1999 Eng Rus Multi-Subs 1080p [H264-mp4].mp4\n👤 25 💾 6.5 GB ⚙️ TorrentGalaxy\nMulti Subs / 🇬🇧 / 🇷🇺",
+          "infoHash": "f154b8d18014263a965d822545ddc29bca09aad0",
+          "fileIdx": 34,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|h264",
+            "filename": "01 The Matrix Remastered - Sci-Fi 1999 Eng Rus Multi-Subs 1080p [H264-mp4].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Matrix.1999.REMASTERED.1080p.BluRay.x265-RARBG\n👤 20 💾 2.12 GB ⚙️ RARBG",
+          "infoHash": "ef3da8dfba03be6ff3dcbff9b8491c98f7478a27",
+          "fileIdx": 6,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "The.Matrix.1999.REMASTERED.1080p.BluRay.x265-RARBG.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Matrix.1999.HDTV.Hybrid.OPEN-MATTE.1080p.x265.10Bit.HEVC.(Eng AAC 7.1 - Hin DDP 5.1).VITOENCODES\n👤 15 💾 4.75 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+          "infoHash": "cb67502dd1c94b90a9b1ffc3a5d0dd5c1ffafc50",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|HDTV|hevc|10bit",
+            "filename": "The.Matrix.1999.HDTV.Hybrid.OPEN-MATTE.1080p.x265.10Bit.HEVC.(Eng AAC 7.1 - Hin DDP 5.1).VITOENCODES.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix 1999 Remastered BluRay 1080p DDP 5 1 x264-hallowed\n👤 14 💾 12.09 GB ⚙️ ThePirateBay",
+          "infoHash": "0d71c990ac8e7cfcf36fe6db731f105ee7f86820",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The Matrix 1999 Remastered BluRay 1080p DDP 5 1 x264-hallowed.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Matrix.1999.1080p.BluRay.AV1.DDP5.1.Multi4-dAV1nci\n👤 13 💾 4.66 GB ⚙️ 1337x",
+          "infoHash": "ce8257e3bbb0cd44ccae7f47012883bd210a401f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "The.Matrix.1999.1080p.BluRay.AV1.DDP5.1.Multi4-dAV1nci.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Matrix (1999) WEBRip 1080p HEVC AAC ITA ENG SUB ENG ITA - Lullozzo\n👤 13 💾 4.03 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+          "infoHash": "08e415d2b09f83caacd9385cb2da9dd286ab3b11",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEBRip|hevc",
+            "filename": "Matrix (1999) WEBRip 1080p HEVC AAC ITA ENG SUB ENG ITA - Lullozzo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix 1999 BluRay 1080p DTS AC3 x264-MgB\n👤 13 💾 7.34 GB ⚙️ 1337x",
+          "infoHash": "90f6df33ed61dc998f8601f465aacea093b6cd26",
+          "fileIdx": 17,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The Matrix 1999 BluRay 1080p DTS AC3 x264-MgB.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix 1999 1080p BluRay DTS x264-HiDt\n👤 12 💾 12.36 GB ⚙️ ThePirateBay",
+          "infoHash": "23ec85b3bff4cbee5896e25d2f40ecb5d7ccaf94",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Matrix.1999.1080p.BluRay.Denoised.AV1.DDP5.1.Multi4-dAV1nci\n👤 11 💾 3.39 GB ⚙️ 1337x",
+          "infoHash": "a3839910f03c606f055eac129623dd0f196019ec",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "The.Matrix.1999.1080p.BluRay.Denoised.AV1.DDP5.1.Multi4-dAV1nci.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix 1999 REMASTERED 1080p BluRay x265-YAWNTiC\n👤 11 💾 5.73 GB ⚙️ ThePirateBay",
+          "infoHash": "3d14c3605c5253256062ebff320da949d8d98e3c",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "The Matrix 1999 REMASTERED 1080p BluRay x265-YAWNTiC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix 1999 Remastered 1080p BluRay x264-OFT\n👤 10 💾 6.64 GB ⚙️ ThePirateBay",
+          "infoHash": "d56f7a92e00e11687c576afc85d86f55e5eafbe1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "The Matrix 1999 Remastered 1080p BluRay x264-OFT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix (1999) (1080p BluRay x265 SDR DDP 7.1 English - DarQ HONE)\n👤 10 💾 9.66 GB ⚙️ ThePirateBay",
+          "infoHash": "9f23769f665d558e9512e4151eb224867c7c80b7",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "The Matrix (1999) (1080p BluRay x265 SDR DDP 7.1 English - DarQ HONE).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Amazing Films 5 - Mp4 x264 AC3 1080p\nM1 The Matrix (1999) 1080p Surround.mp4\n👤 10 💾 3.04 GB ⚙️ ThePirateBay",
+          "infoHash": "9d34b41369168c08bba185cadc7e45fc4156e86f",
+          "fileIdx": 32,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x264",
+            "filename": "M1 The Matrix (1999) 1080p Surround.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix (1999) 1080p Br Rip x264 Yify_202610\n👤 9 💾 1.86 GB ⚙️ EXT",
+          "infoHash": "cb273d1d7ce938dedba1ff630e98fb72fd0405dd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BRRip|x264",
+            "filename": "The.Matrix.1999.1080p.BrRip.x264.YIFY.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Amazing Docs 6 - Mp4 x264 AC3 1080p\nBonus Films/The Matrix (1999) 1080p Surround.mp4\n👤 9 💾 3.04 GB ⚙️ 1337x",
+          "infoHash": "3ebdebf505b0ad7cd7a908ed750fec071a469657",
+          "fileIdx": 43,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x264",
+            "filename": "The Matrix (1999) 1080p Surround.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "IMDB TOP 001-050 BluRay 1080p x265 10bit MNHD-FRDS\n018.黑客帝国.The.Matrix.1999.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS/The.Matrix.1999.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv\n👤 8 💾 8.31 GB ⚙️ EXT",
+          "infoHash": "9351bcf9e7437f706549f8b60314c39259c420b4",
+          "fileIdx": 127,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+            "filename": "The.Matrix.1999.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix 1999 1080p MAX WEB-DL DDP5 1 Atmos H 264-TURG\n👤 8 💾 6.44 GB ⚙️ ThePirateBay",
+          "infoHash": "2ac3ed31b4cce475064a8a43b465ef01f80420eb",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "The Matrix 1999 1080p MAX WEB-DL DDP5 1 Atmos H 264-TURG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix (1999) - 1080p Bluray AV1 Opus Multi3 [dAV1nci]\n👤 8 💾 3.39 GB ⚙️ 1337x",
+          "infoHash": "ae076b7c1b3c1146399f13c28aea6f9c60a5f620",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "The.Matrix.1999.1080p.Bluray.AV1.Opus.Multi3-dAV1nci.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The.Matrix.1999.1080p.10bit.BluRay.6CH.x265.HEVC-PSA\n👤 7 💾 1.55 GB ⚙️ ThePirateBay",
+          "infoHash": "5a2a1c4c1620262798202d88837009b416e76964",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "The.Matrix.1999.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix 1999 1080p Bluray OPUS 7 1 AV1-WhiskeyJack\n👤 6 💾 5.16 GB ⚙️ ThePirateBay",
+          "infoHash": "15cf23ef5be63f724ec1a34dbc92ea0208fe22cc",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "The Matrix 1999 1080p Bluray OPUS 7 1 AV1-WhiskeyJack.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix 1999 1080p PTV WEB-DL AAC 2 0 H 264-PiRaTeS\n👤 5 💾 3.86 GB ⚙️ ThePirateBay",
+          "infoHash": "85f5da615983e1ca47c5b46155fbab6bdedca5e1",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "The Matrix 1999 1080p PTV WEB-DL AAC 2 0 H 264-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix 1999 1080p 10bit BluRay 6CH x265 HEVC-PSA\n👤 5 💾 1.55 GB ⚙️ ThePirateBay",
+          "infoHash": "60e8dd0e36b3e18ad4c05990a520723e15393f13",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+            "filename": "The Matrix 1999 1080p 10bit BluRay 6CH x265 HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "The Matrix 1999 REMASTERED 1080p BluRay AV1 Opus 7 1-onlyfaffs\n👤 5 💾 4.25 GB ⚙️ ThePirateBay",
+          "infoHash": "904148c0f357dfde84af11e696f75154d570e368",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|av1",
+            "filename": "The.Matrix.1999.REMASTERED.1080p.BluRay.AV1.Opus.7.1-onlyfaffs.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Matrix (1999) 720p BrRip x264 - 700mb - YIFY\n👤 81 💾 703.69 MB ⚙️ ThePirateBay",
+          "infoHash": "363bc6c534b1430c6758318d196ccd61db61b647",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BRRip|x264",
+            "filename": "The.Matrix.1999.720p.BrRip.264.YIFY.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Matrix Trilogy Complete (1999-2003) 720p 5.1 BRRiP x264 AAC\nThe Matrix (1999) 720p 5.1 BRRiP x264 AAC [Team Nanban].mp4\n👤 14 💾 1.04 GB ⚙️ ThePirateBay",
+          "infoHash": "fa8ae4bc6caec272ac57c7890d8f893aab3caa88",
+          "fileIdx": 6,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BRRip|x264",
+            "filename": "The Matrix (1999) 720p 5.1 BRRiP x264 AAC [Team Nanban].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The.Matrix.1999.REMASTERED.720p.BluRay.999MB.x265.10bit-Galax\n👤 11 💾 992.88 MB ⚙️ ThePirateBay",
+          "infoHash": "c4fcc532acf6fe877d1991fde909f79648452b4e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x265|10bit",
+            "filename": "The.Matrix.1999.REMASTERED.720p.BluRay.999MB.HQ.x265.10bit-GalaxyRG.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "The Matrix Collection (1999-2021) 720p 10bit BluRay x265 HEVC [Hindi English] ESub ~ Immortal\nThe Matrix (1999) 720p 10bit BluRay x265 HEVC [Hindi DDP 5.1 ~192Kbps + English DDP 5.1] ESub ~ Immortal.mkv\n👤 5 💾 1.16 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+          "infoHash": "ece8486b639bc4fb99e13317e2cb8be375bcbf6e",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|hevc|10bit",
+            "filename": "The Matrix (1999) 720p 10bit BluRay x265 HEVC [Hindi DDP 5.1 ~192Kbps + English DDP 5.1] ESub ~ Immortal.mkv"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "CONSPIRACY COLLECTION\nROSETTEDELACROIX/015-the-matrix-decoded.mp4\n👤 14 💾 152.76 MB ⚙️ 1337x",
+          "infoHash": "41f2c83d347dfcff92c33694cbf0ead7c8fda77d",
+          "fileIdx": 2444,
+          "behaviorHints": {
+            "filename": "015-the-matrix-decoded.mp4"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "David Icke: Secrets Of The Matrix\n👤 10 💾 1.69 GB ⚙️ MagnetDL",
+          "infoHash": "a8ad30bfd5486a9436de89da96434c3291703c40",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "filename": "David Icke - Secrets of the Matrix.mp4"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "Matrix Trilogia Dublado PT-BR.avi\nMatrix 1/Matrix 1999 By 210gji.avi\n👤 6 💾 1.24 GB ⚙️ ThePirateBay\n🇵🇹",
+          "infoHash": "b7c62de6694c1846d7cd26b310f717d23aee717f",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "filename": "Matrix 1999 By 210gji.avi"
+          }
+        }
+      ]
+    }
+  }
+}

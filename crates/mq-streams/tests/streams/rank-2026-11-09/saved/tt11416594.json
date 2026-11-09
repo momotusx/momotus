@@ -1,0 +1,45 @@
+{
+  "id": "tt11416594",
+  "type": "movie",
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "Karakomik Filmler: Deli",
+    "year": "2020",
+    "releaseInfo": "2020",
+    "runtime": "60 min",
+    "episodeReleased": null,
+    "episodesInSeason": null
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Karakomik.Filmler.Deli.1080p.NF.WEB-DL.DDP5.1.H.264-SomniWare\n👤 4 💾 1.48 GB ⚙️ ThePirateBay\n🇹🇷",
+          "infoHash": "bec4ad4b97af9d74eef7b6db1deb23994ba53951",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Karakomik.Filmler.Deli.1080p.NF.WEB-DL.DDP5.1.H.264-SomniWare.mkv"
+          }
+        }
+      ]
+    },
+    "torrentio-owner": {
+      "url": "https://torrentio.strem.fun/language=turkish|qualityfilter=threed,480p,scr,cam,unknown",
+      "streams": [
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Karakomik.Filmler.Deli.1080p.NF.WEB-DL.DDP5.1.H.264-SomniWare\n👤 4 💾 1.48 GB ⚙️ ThePirateBay\n🇹🇷",
+          "infoHash": "bec4ad4b97af9d74eef7b6db1deb23994ba53951",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Karakomik.Filmler.Deli.1080p.NF.WEB-DL.DDP5.1.H.264-SomniWare.mkv"
+          }
+        }
+      ]
+    }
+  }
+}

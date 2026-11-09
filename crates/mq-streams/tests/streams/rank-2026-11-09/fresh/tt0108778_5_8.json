@@ -1,0 +1,462 @@
+{
+  "id": "tt0108778",
+  "type": "series",
+  "season": 5,
+  "episode": 8,
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "Friends",
+    "year": "1994–2004",
+    "releaseInfo": "1994–2004",
+    "runtime": "22 min",
+    "country": "United States",
+    "language": null,
+    "episodeTitle": "The One With The Thanksgiving Flashbacks (a.k.a. The One With All The Thanksgivings)",
+    "episodeReleased": "1998-11-19T00:00:00.000Z"
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k DV | HDR",
+          "title": "Friends S05 2160p MAX WEB-DL DDP5 1 DV HDR H 265-XEBEC\nFriends.S05E08.The.One.with.the.Thanksgiving.Flashbacks.2160p.MAX.WEB-DL.DDP5.1.DV.HDR.H.265-XEBEC.mkv\n👤 10 💾 3.49 GB ⚙️ 1337x",
+          "infoHash": "beac2ccf4ca13aa294c9638269a55f1a6cfd1ae2",
+          "fileIdx": 7,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|beac2ccf4ca13aa294c9638269a55f1a6cfd1ae2",
+            "filename": "Friends.S05E08.The.One.with.the.Thanksgiving.Flashbacks.2160p.MAX.WEB-DL.DDP5.1.DV.HDR.H.265-XEBEC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k DV",
+          "title": "Friends S05E08 1994 2160p NF WEB-DL H 265 DV DDP5 1-HHWEB\n👤 1 💾 3.14 GB ⚙️ EXT\n🇬🇧 / 🇨🇳",
+          "infoHash": "44b7c8fe7404f4f012a3117455ef5cc8c67af60c",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|DV|HHWEB"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "Friends.1994.Season.5.Complete.2160p.BDRip.x265-CalicoSkies\nFriends - S05E08 - The One With The Thanksgiving Flashbacks [4K h265_10bit q22_5 AC3 CalicoSkies].mkv\n👤 3 💾 2.29 GB ⚙️ TorrentGalaxy",
+          "infoHash": "9d82c49a37096d8c8578832d21976d802ed67b8a",
+          "fileIdx": 8,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|9d82c49a37096d8c8578832d21976d802ed67b8a",
+            "filename": "Friends - S05E08 - The One With The Thanksgiving Flashbacks [4K h265_10bit q22_5 AC3 CalicoSkies].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1440p",
+          "title": "Przyjaciele (1994) [s05 e01-12] [WEB-DL.1440p.2k.HEVC.AAC] [Audi…\n👤 2 💾 2.94 GB ⚙️ TorrentGalaxy",
+          "infoHash": "7989e235ea560d5fe5dffcb2242f308d2cc31c59",
+          "fileIdx": 7,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1440p",
+            "filename": "Przyjaciele_S05E08_Ten ze wspomnieniami ze Świąt Dziękczynienia.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Friends (1994) Season 05 S05 (1080p BluRay x265 HEVC 10bit AAC 5.1 Joy) [UTR]\nFriends S05E08 The One With All The Thanksgivings  (1080p x265 10bit Joy) (C).mkv\n👤 326 💾 245.73 MB ⚙️ 1337x",
+          "infoHash": "064bd8a165965de8425c06c3e8f692ce04b31c92",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|064bd8a165965de8425c06c3e8f692ce04b31c92",
+            "filename": "Friends S05E08 The One With All The Thanksgivings  (1080p x265 10bit Joy) (C).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Friends (1994) Season 1-10 S01-S10 (1080p BluRay x265 HEVC 10bit AAC 5.1 Silence) REPACK [QxR]\nSeason 5/Friends (1994) - S05E08 - The One With The Thanksgiving Flashbacks (1080p BluRay x265 Silence).mkv\n👤 316 💾 582.06 MB ⚙️ 1337x",
+          "infoHash": "1a6558e514056c271eb9cd5cbd4433715da2ef67",
+          "fileIdx": 171,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1a6558e514056c271eb9cd5cbd4433715da2ef67",
+            "filename": "Friends (1994) - S05E08 - The One With The Thanksgiving Flashbacks (1080p BluRay x265 Silence).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Friends.S05.1080p.BluRay.x265\nFriends.S05E08.1080p.BluRay.x265-RARBG.mp4\n👤 22 💾 354 MB ⚙️ ThePirateBay",
+          "infoHash": "fe72e92c379be4b8db0f9a4782dd21e84bef5a85",
+          "fileIdx": 7,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|fe72e92c379be4b8db0f9a4782dd21e84bef5a85",
+            "filename": "Friends.S05E08.1080p.BluRay.x265-RARBG.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Friends 1994 Complete 1080p Bluray x265 HEVC AAC 5.1 LION [UTR]\nFriends.S05E08.1080p.Bluray.5.1.x265-LION[UTR].mkv\n👤 20 💾 499.41 MB ⚙️ ThePirateBay",
+          "infoHash": "650119ad667bf5c55f44d28a68be7dfd99effed4",
+          "fileIdx": 104,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|650119ad667bf5c55f44d28a68be7dfd99effed4",
+            "filename": "Friends.S05E08.1080p.Bluray.5.1.x265-LION[UTR].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Friends (1994) All Seasons (1-10) 1080p H264 (Spanish & English - Audio & Sub)\nS05/Friends_S05E08_The One with the Thanksgiving Flashbacks.mp4\n👤 16 💾 1.34 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇪🇸",
+          "infoHash": "3c3b1e4050b4373eee23639202d32faac9c0a308",
+          "fileIdx": 104,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|3c3b1e4050b4373eee23639202d32faac9c0a308",
+            "filename": "Friends_S05E08_The One with the Thanksgiving Flashbacks.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Friends.S05.1080p.BluRay.x264-TENEIGHTY[rartv]\nFriends.S05E08.1080p.BluRay.x264-TENEIGHTY.mkv\n👤 11 💾 2.18 GB ⚙️ RARBG",
+          "infoHash": "f2bff8afa4ec0dc1eece427681d86fbdeab9ddff",
+          "fileIdx": 7,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|f2bff8afa4ec0dc1eece427681d86fbdeab9ddff",
+            "filename": "Friends.S05E08.1080p.BluRay.x264-TENEIGHTY.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Friends S05 Season 5 1080p 5.1Ch BluRay ReEnc-DeeJayAhmed\nFriends.S05E08.1080p.5.1Ch.BluRay.ReEnc-DeeJayAhmed.mkv\n👤 7 💾 275.61 MB ⚙️ ThePirateBay",
+          "infoHash": "54aebbe2ce7957c587b11214c89289bac49994dd",
+          "fileIdx": 15,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|54aebbe2ce7957c587b11214c89289bac49994dd",
+            "filename": "Friends.S05E08.1080p.5.1Ch.BluRay.ReEnc-DeeJayAhmed.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Friends Season 05 S05 (1080p Bluray X265 HEVC AAC 5.1 Joy) [UTR]\nFriends S05E08 The One With All The Thanksgivings (1080p x265 Joy).m4v\n👤 6 💾 164.22 MB ⚙️ MagnetDL",
+          "infoHash": "4723eefd226ab88a4e2164cb3127d2c455898acb",
+          "fileIdx": 10,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4723eefd226ab88a4e2164cb3127d2c455898acb",
+            "filename": "Friends S05E08 The One With All The Thanksgivings (1080p x265 Joy).m4v"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Friends Season 1: 5 1080p BDrip X264 AC3 5.1\nFriends.S05.1998.BDRip.1080p.Ukr.Eng.AC3.Hurtom.TNU.Tenax555/Friends.s05.08.1998.BDRip.1080p.Ukr.Eng.AC3.Hurtom.TNU.Tenax555.mkv\n👤 6 💾 1.72 GB ⚙️ MagnetDL\n🇬🇧 / 🇺🇦",
+          "infoHash": "5b5fb42f8b1cd6cb0404f07f9b24c34c22d6ffbd",
+          "fileIdx": 104,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|5b5fb42f8b1cd6cb0404f07f9b24c34c22d6ffbd",
+            "filename": "Friends.s05.08.1998.BDRip.1080p.Ukr.Eng.AC3.Hurtom.TNU.Tenax555.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Friends Seasons 1 to 10 Complete Box Set [NetflixRip][NVEnc H265 1080p][AAC 6Ch]\nSeason 5/Friends S05E08 The One with All the Thanksgivings.mp4\n👤 4 💾 287.95 MB ⚙️ 1337x",
+          "infoHash": "c9d09670a65ae2d4714e792d0b7588e7e8af38ef",
+          "fileIdx": 122,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|c9d09670a65ae2d4714e792d0b7588e7e8af38ef",
+            "filename": "Friends S05E08 The One with All the Thanksgivings.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Friends (1994) Season 1-10 S01-S10 (1080p BluRay X265 HEVC 10bit AAC 5.1 Silence) [QxR]\nFriends (1994) - S05E08 - The One With The Thanksgiving Flashbacks (1080p BluRay x265 Silence).mkv\n👤 4 💾 582.1 MB ⚙️ MagnetDL",
+          "infoHash": "596303825c350d40fb6f7a14910de1659ab3b6a5",
+          "fileIdx": 171,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|596303825c350d40fb6f7a14910de1659ab3b6a5",
+            "filename": "Friends (1994) - S05E08 - The One With The Thanksgiving Flashbacks (1080p BluRay x265 Silence).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Friends Seasons 1 to 10 Complete Box Set [NetflixRip][NVEnc H265 1080p][AAC 6Ch]\nSeason 5/Friends S05E08 The One with All the Thanksgivings.mp4\n👤 3 💾 287.95 MB ⚙️ 1337x",
+          "infoHash": "30739def52cf705508f605c1e6a87cc42fe65775",
+          "fileIdx": 122,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|30739def52cf705508f605c1e6a87cc42fe65775",
+            "filename": "Friends S05E08 The One with All the Thanksgivings.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Friends S05 Season 5 Complete 1080p BluRay X264- [maximersk]\nFriends.S05E08.1080p.BluRay.X264-MRSK.mkv\n👤 3 💾 918.4 MB ⚙️ MagnetDL",
+          "infoHash": "72dc97f0e5a8574c6dfc81abdd3a9e6190ea6b54",
+          "fileIdx": 7,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|72dc97f0e5a8574c6dfc81abdd3a9e6190ea6b54",
+            "filename": "Friends.S05E08.1080p.BluRay.X264-MRSK.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Friends.S01-S10.COMPLETE.SERIES.1080p.Bluray.x265-HiQVE\nFriends.S05.1080p.Bluray.x265-HiQVE/Friends.S05E08.1080p.Bluray.x265-HiQVE.mkv\n👤 2 💾 671.32 MB ⚙️ 1337x",
+          "infoHash": "b2ddfe630463fd742adb390a31e8afa5a722213b",
+          "fileIdx": 109,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|b2ddfe630463fd742adb390a31e8afa5a722213b",
+            "filename": "Friends.S05E08.1080p.Bluray.x265-HiQVE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Friends.S05.1080p.BluRay.REMUX.AVC.DD5.1-NOGRP[rartv]\nFriends.S05E08.The.One.with.All.The.Thanksgivings.1080p.BluRay.REMUX.AVC.DD.5.1-NOGRP.mkv\n👤 1 💾 2.49 GB ⚙️ RARBG",
+          "infoHash": "1e23af386858d73fc96b45a87e8c98691d3a7367",
+          "fileIdx": 7,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1e23af386858d73fc96b45a87e8c98691d3a7367",
+            "filename": "Friends.S05E08.The.One.with.All.The.Thanksgivings.1080p.BluRay.REMUX.AVC.DD.5.1-NOGRP.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Friends.Complete.Series.S01-S10.720p.BluRay.2CH.x265.HEVC-PSA\nS05/Friends.S05E08.The.One.With.All.The.Thanksgivings.720p.BluRay.2CH.x265.HEVC-PSA.mkv\n👤 152 💾 76.01 MB ⚙️ ThePirateBay",
+          "infoHash": "09408d97dd210ba9835e566fd390c8ad09c177bf",
+          "fileIdx": 89,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|09408d97dd210ba9835e566fd390c8ad09c177bf",
+            "filename": "Friends.S05E08.The.One.With.All.The.Thanksgivings.720p.BluRay.2CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Friends 1994 Complete Seasons 1 to 10 720p BluRay x264 [i_c]\nSeason 5/Friends - S05E08 - The One with All the Thanksgivings.mkv\n👤 45 💾 265.08 MB ⚙️ ThePirateBay",
+          "infoHash": "2a964760bc6ee57d2b99120dab913ce9a86f45f0",
+          "fileIdx": 104,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|2a964760bc6ee57d2b99120dab913ce9a86f45f0",
+            "filename": "Friends - S05E08 - The One with All the Thanksgivings.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Friends Season 5 Complete 720p.BRrip.mrlss.sujaidr (pimprg)\nfriends.s05e08.720p.bluray.x264-mrs.sujaidr.mkv\n👤 37 💾 140.38 MB ⚙️ ThePirateBay",
+          "infoHash": "59edfa942325bbf240d26cac366d65f9baaedde4",
+          "fileIdx": 19,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|59edfa942325bbf240d26cac366d65f9baaedde4",
+            "filename": "friends.s05e08.720p.bluray.x264-mrs.sujaidr.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "FRIENDS - SEASON 1-10 - 720P - MP4\nSeason 5/Friends - 05x08 - The One with the Thanksgiving Flashbacks [BPDI].mp4\n👤 29 💾 170.18 MB ⚙️ ThePirateBay",
+          "infoHash": "ffccb399778ec56d7e6a1ec9954c1be56df260bf",
+          "fileIdx": 127,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|ffccb399778ec56d7e6a1ec9954c1be56df260bf",
+            "filename": "Friends - 05x08 - The One with the Thanksgiving Flashbacks [BPDI].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Friends.S05.720p.BluRay.Dual.Audio.x264-PSYCHD\nFriends.S05E08.720p.BluRay.Dual.Audio.x264-PSYCHD.mkv\n👤 15 💾 891.76 MB ⚙️ EXT\nDual Audio",
+          "infoHash": "4c85f14d84b35342d84727cf72bea49f2c5e04f1",
+          "fileIdx": 8,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4c85f14d84b35342d84727cf72bea49f2c5e04f1",
+            "filename": "Friends.S05E08.720p.BluRay.Dual.Audio.x264-PSYCHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "FRIENDS: Seasons 1-10: 720P: MP4\nSeason 5/Friends - 05x08 - The One with the Thanksgiving Flashbacks [BPDI].mp4\n👤 15 💾 170.18 MB ⚙️ MagnetDL",
+          "infoHash": "1bfa2fed201b25321a1c9f9f94e97089ac52eba3",
+          "fileIdx": 86,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1bfa2fed201b25321a1c9f9f94e97089ac52eba3",
+            "filename": "Friends - 05x08 - The One with the Thanksgiving Flashbacks [BPDI].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Friends.S05.Season.5.720p.BluRay.x264-PublicHD\nfriends.s05e08.720p.bluray.x264-psychd.mkv\n👤 13 💾 891.47 MB ⚙️ ThePirateBay",
+          "infoHash": "db17e6b6362097729c3e6c8e2f1360238a573386",
+          "fileIdx": 8,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|db17e6b6362097729c3e6c8e2f1360238a573386",
+            "filename": "friends.s05e08.720p.bluray.x264-psychd.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Friends 1994–2004 Complete Series BDRip 720p multisub-High\nS05/5x08 - The One With The Thanksgiving Flashbacks.mkv\n👤 11 💾 215.45 MB ⚙️ ThePirateBay\nMulti Subs",
+          "infoHash": "3655bdab89bdf76f9aabe660d9c77e443505bc68",
+          "fileIdx": 137,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|3655bdab89bdf76f9aabe660d9c77e443505bc68",
+            "filename": "5x08 - The One With The Thanksgiving Flashbacks.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Friends S01-10 BluRay 720p English AAC 5.1 x264 ESub - mkvCinemas [Telly]\nFriends S05 E01-24 BluRay/Friends S05 E08 BluRay 720p English AAC 5.1 x264 ESub - mkvCinemas.mkv\n👤 4 💾 197.45 MB ⚙️ 1337x",
+          "infoHash": "9f817b52c4a711febb5067018dd7387bdde8b13f",
+          "fileIdx": 104,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|9f817b52c4a711febb5067018dd7387bdde8b13f",
+            "filename": "Friends S05 E08 BluRay 720p English AAC 5.1 x264 ESub - mkvCinemas.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Friends Complete Series 720p EN-SUB Bluray x264-sujaidr\nSeason 05/friends.s05e08.720p.bluray.x264-sujaidr.mkv\n👤 3 💾 140.38 MB ⚙️ ThePirateBay",
+          "infoHash": "a1cfd3521cdce455bd33b6fdc4de4016f9c0d669",
+          "fileIdx": 106,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|a1cfd3521cdce455bd33b6fdc4de4016f9c0d669",
+            "filename": "friends.s05e08.720p.bluray.x264-sujaidr.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Friends.Season.5.720p.BluRay.[HashMiner]\nFriends.S05E08.The.One.With.All.The.Thanksgivings.mkv\n👤 2 💾 76.01 MB ⚙️ 1337x",
+          "infoHash": "40fac6c29e63b1db8f6ccce28066cc8f9ad66c15",
+          "fileIdx": 7,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|40fac6c29e63b1db8f6ccce28066cc8f9ad66c15",
+            "filename": "Friends.S05E08.The.One.With.All.The.Thanksgivings.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Friends Temporada 05 BRrip 720p Spanish (x264+aac)\nFriends 5x08 - El De Los Días De Acción De Gracias 720p (Spa)(x264+aac)(Hi10).mkv\n👤 2 💾 256.35 MB ⚙️ MagnetDL\n🇪🇸",
+          "infoHash": "5e639efed7c9238b5e8ba6762324c61c82d1e006",
+          "fileIdx": 7,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|5e639efed7c9238b5e8ba6762324c61c82d1e006",
+            "filename": "Friends 5x08 - El De Los Días De Acción De Gracias 720p (Spa)(x264+aac)(Hi10).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Friends TV Series 720p Seasons 1-10 Complete + Subs\nFriends Season 5 Complete 720p.BRrip.mrlss.sujaidr/friends.s05e08.720p.bluray.x264-mrs.sujaidr.mkv\n👤 1 💾 140.38 MB ⚙️ ThePirateBay",
+          "infoHash": "d403901f63f3d2d50d26856eb108ddcb7698f5d2",
+          "fileIdx": 195,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|d403901f63f3d2d50d26856eb108ddcb7698f5d2",
+            "filename": "friends.s05e08.720p.bluray.x264-mrs.sujaidr.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Friends ALL 10 Seasons 720p HDTV [SEEDBOX] Pimp4003\nSeason5/Friends.S05E08.DVDrip.XviD-SAiNTS.avi\n👤 1 💾 174.59 MB ⚙️ 1337x",
+          "infoHash": "225a796a4f52ea00af6f66c1c679ca6967f98254",
+          "fileIdx": 193,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|225a796a4f52ea00af6f66c1c679ca6967f98254",
+            "filename": "Friends.S05E08.DVDrip.XviD-SAiNTS.avi"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Friends: Season 5 Complete 720p HDTV MKV\nFriends - 05x08 - The One with the Thanksgiving Flashbacks [BPDI].mkv\n👤 1 💾 169.76 MB ⚙️ MagnetDL",
+          "infoHash": "102077690224f848729c6606b71955c944064523",
+          "fileIdx": 15,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|102077690224f848729c6606b71955c944064523",
+            "filename": "Friends - 05x08 - The One with the Thanksgiving Flashbacks [BPDI].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n480p",
+          "title": "Friends Complete Seasons 1-10 Uncut DVDRip - 480p - x264 - MKV b\nFriends Season 5/Friends - [5x08] - The One with the Thanksgiving Flashbacks + Audio Commentary.mkv\n👤 16 💾 85.93 MB ⚙️ ThePirateBay",
+          "infoHash": "ae79a46dbbd6747d412c61a53d794fa9c748f0cd",
+          "fileIdx": 235,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|ae79a46dbbd6747d412c61a53d794fa9c748f0cd",
+            "filename": "Friends - [5x08] - The One with the Thanksgiving Flashbacks + Audio Commentary.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n480p",
+          "title": "Friends Season 1-10 Cmplete 480p BluRay x264 MKVTV\nFriends S05 480p BluRay x264 mkvtv.net/Friends.S05E08.480p.MKVTV.mkv\n👤 2 💾 148.44 MB ⚙️ 1337x",
+          "infoHash": "d7c3b43d06103b5b93d5e78dbdeda2c8cdcfaa86",
+          "fileIdx": 115,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|d7c3b43d06103b5b93d5e78dbdeda2c8cdcfaa86",
+            "filename": "Friends.S05E08.480p.MKVTV.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n480p",
+          "title": "Friends Complete Seasons 1-10 Uncut DVDRip - Englishsubs - 480p\nFriends Season 5/Friends - [5x08] - The One with the Thanksgiving Flashbacks + Audio Commentary.mkv\n👤 1 💾 85.93 MB ⚙️ ThePirateBay",
+          "infoHash": "0cd605af3159e8f729a78f3971da741ce21907ba",
+          "fileIdx": 70,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|0cd605af3159e8f729a78f3971da741ce21907ba",
+            "filename": "Friends - [5x08] - The One with the Thanksgiving Flashbacks + Audio Commentary.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n360p",
+          "title": "Friends Season 1 2 3 4 5 6 7 8 9 10 Extended - threesixtyp\nFriends S05 (360p re-dvdrip)/Friends S05E08 The One with the Thanksgiving Flashbacks.mp4\n👤 14 💾 62.85 MB ⚙️ ThePirateBay",
+          "infoHash": "1b7001ceb4c69211fc812074db7f4bd01705df9f",
+          "fileIdx": 78,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1b7001ceb4c69211fc812074db7f4bd01705df9f",
+            "filename": "Friends S05E08 The One with the Thanksgiving Flashbacks.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Friends [Complete Series Boxset] UNCUT.DVDRip.XviD-SAiNTS-SiSO\nFriends.S05.UNCUT.DVDRip.XviD-SAiNTS/Friends.S05E08.UNCUT.DVDRip.XviD-SAiNTS.avi\n👤 4 💾 174.59 MB ⚙️ ThePirateBay",
+          "infoHash": "d98723c78445384699f4f3232f4587bd9cd9fd54",
+          "fileIdx": 102,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|d98723c78445384699f4f3232f4587bd9cd9fd54",
+            "filename": "Friends.S05E08.UNCUT.DVDRip.XviD-SAiNTS.avi"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Friends.S01-S10.German.DVDRiP.XviD-MIXED\nFriends.S05E08.Fatales.Gestaendnis.German.DVDRiP.XviD-ARCHiV.avi\n👤 1 💾 232.99 MB ⚙️ MagnetDL\n🇩🇪",
+          "infoHash": "0343a195b6eba6c77393776cdff00cb2a4da4b3d",
+          "fileIdx": 104,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|0343a195b6eba6c77393776cdff00cb2a4da4b3d",
+            "filename": "Friends.S05E08.Fatales.Gestaendnis.German.DVDRiP.XviD-ARCHiV.avi"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "Friends (Complete TV series in MP4 format) [En][Sp] [Lando18]\nFriends - Season 05/Friends - S05E08 (The One with the Thanksgiving Flashbacks).mp4\n👤 30 💾 275.68 MB ⚙️ TorrentGalaxy",
+          "infoHash": "146639b6a73572d25fba198097524326f1b6ed59",
+          "fileIdx": 104,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|146639b6a73572d25fba198097524326f1b6ed59",
+            "filename": "Friends - S05E08 (The One with the Thanksgiving Flashbacks).mp4"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "Friends Season 1 2 3 4 5 6 7 8 9 10 - threesixtyp\nFriends S05E08 The One with All the Thanksgivings.mp4\n👤 13 💾 67.07 MB ⚙️ ThePirateBay",
+          "infoHash": "8c718a111c86dd96fbae18f4183be09c94cb0212",
+          "fileIdx": 90,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|8c718a111c86dd96fbae18f4183be09c94cb0212",
+            "filename": "Friends S05E08 The One with All the Thanksgivings.mp4"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "Friends [Complete] Series S1-S10 Friends Reunion (2021)\nSeason 5/5x08.mkv\n👤 4 💾 140.38 MB ⚙️ 1337x",
+          "infoHash": "02eb8cad8c8a67aef369ed02174ef52a2ce5b350",
+          "fileIdx": 105,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|02eb8cad8c8a67aef369ed02174ef52a2ce5b350",
+            "filename": "5x08.mkv"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "Friends full season 1-10\nF.R.I.E.N.D.S. Season 5/F.R.I.E.N.D.S. 508 - The One With All The Thanksgivings.avi\n👤 4 💾 89.81 MB ⚙️ ThePirateBay",
+          "infoHash": "bf4c98dccd1a8009851b611ecba9be92013b8459",
+          "fileIdx": 128,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|bf4c98dccd1a8009851b611ecba9be92013b8459",
+            "filename": "F.R.I.E.N.D.S. 508 - The One With All The Thanksgivings.avi"
+          }
+        }
+      ]
+    }
+  }
+}

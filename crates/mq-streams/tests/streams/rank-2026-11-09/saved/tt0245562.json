@@ -1,0 +1,1258 @@
+{
+  "id": "tt0245562",
+  "type": "movie",
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "Windtalkers",
+    "year": "2002",
+    "releaseInfo": "2002",
+    "runtime": "134 min",
+    "episodeReleased": null,
+    "episodesInSeason": null
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "Szyfry wojny - Windtalkers 2002 [HLG HDR SDR] [1080p.BluRay.H264-AS76-FT] [Lektor PL] [Alusia]\n👤 12 💾 4.95 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "9a52bc75cbc4cd9f26da6746d13464f099052dbe",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|h264|HDR",
+            "filename": "Szyfry wojny - Windtalkers 2002 [HLG HDR SDR] [1080p.BluRay.H264-AS76-FT] [Lektor PL] [Alusia].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers 2002 1080p BluRay\n👤 39 💾 2.83 GB ⚙️ YTS",
+          "infoHash": "e0d1bce181c7dd933d956afb136a2c64ae2380eb",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Windtalkers.2002.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers (2002) (1080p x265 10bit Tigole)\n👤 19 💾 5.23 GB ⚙️ ThePirateBay",
+          "infoHash": "eddfd90b77663a51b998b8653f0bc6eff328f36a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x265|10bit",
+            "filename": "Windtalkers (2002) (1080p x265 10bit Tigole).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers 2002 NORDiC 1080p RKTN WEB-DL H 264-NORViNE\n👤 5 💾 5.02 GB ⚙️ ThePirateBay\n🇬🇧 / 🇵🇹 / 🇪🇸 / 🇩🇪 / 🇩🇰 / 🇫🇮 / 🇸🇪 / 🇳🇴",
+          "infoHash": "a4e064de07b798e337524a40f9bfc66d70520448",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Windtalkers 2002 NORDiC 1080p RKTN WEB-DL H 264-NORViNE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers.2002.DC.1080p.BluRay.x265\n👤 5 💾 2.39 GB ⚙️ ThePirateBay",
+          "infoHash": "35549976251ce94485f0c39cc89550bf4f21447a",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Windtalkers.2002.DC.1080p.BluRay.x265.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers 2002 1080p BluRay x264-OFT\n👤 3 💾 5.82 GB ⚙️ ThePirateBay",
+          "infoHash": "102b81452a849fa9ece586962e859397ce269183",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Windtalkers 2002 1080p BluRay x264-OFT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers 2002 1080p BluRay x264 DTS-FGT\n👤 3 💾 9.7 GB ⚙️ 1337x",
+          "infoHash": "a7248358c0f9dfdebc31742b03c84ffcccd594b3",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers.2002.DC.1080p.BluRay.x265 [CheerfulTomato]\n👤 2 💾 2.39 GB ⚙️ 1337x",
+          "infoHash": "357ee9a3975bd26b32187e2e5b3fcfd881e893a9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Windtalkers.2002.DC.1080p.BluRay.x265.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers.2002.DC.1080p.BluRay.x264.DD5.1-FGT\n👤 2 💾 12.74 GB ⚙️ RARBG",
+          "infoHash": "bd56ee70f9ab746c07bb00ae8841e41626c870b1",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Windtalkers.2002.DC.1080p.BluRay.x264.DTS-FGT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers 2002 1080p AMZN WEB-DL DDP5 1 H264-GPRS\n👤 1 💾 11.47 GB ⚙️ ThePirateBay",
+          "infoHash": "c4d9906fd555d5c50f4f6bbac72db8595a056ac2",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Windtalkers 2002 1080p AMZN WEB-DL DDP5 1 H264-GPRS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers.2002.1080p.BDRip.AVC.FLAC5.1.2h14m14s.DVD9-Asmo\n👤 1 💾 7.94 GB ⚙️ TorrentGalaxy",
+          "infoHash": "b584b57787f1621d7bac8692cd70a0726449f70d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|avc",
+            "filename": "Windtalkers.2002.1080p.BDRip.AVC.FLAC5.1.2h14m14s.DVD9-Asmo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers.2002.DC.1080p.BluRay.H264.AAC-RARBG\n👤 1 💾 2.93 GB ⚙️ RARBG",
+          "infoHash": "57d73ad77d0ddcc9c9d6c0f2ebcfbf7ec5cc6a5a",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|h264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers.2002.1080p.BluRay.x264.DTS-FGT\n👤 1 💾 9.72 GB ⚙️ RARBG",
+          "infoHash": "b1ff356db86a86059268f3cd9914410255b1e2a6",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Windtalkers.2002.1080p.BluRay.x264.DTS-FGT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers 2002 1080p BluRay X264 DTS-FGT\n👤 1 💾 9.72 GB ⚙️ MagnetDL",
+          "infoHash": "846487157708f0045412452fca04b643c55aaad1",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Windtalkers.2002.1080p.BluRay.x264.DTS-FGT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Windtalkers (2002) 720p BrRip x264 - 720mb - YIFY\n👤 14 💾 721.6 MB ⚙️ ThePirateBay",
+          "infoHash": "256482ae438b5d8ed33a65ffc63c90094acfccc6",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BRRip|x264",
+            "filename": "Windtalkers.2002.720p.BrRip.264.YIFY.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Nicolas Cage Collection 2000-2006 720p 5.1: PRL Waldek\n2002 - Windtalkers - BluRay 720p x264 DTS 5.1 - Waldek/Windtalkers 2002 BluRay 720p x264 DTS 5.1 - Waldek.mkv\n👤 3 💾 7.24 GB ⚙️ MagnetDL",
+          "infoHash": "36a3ae409ea6d9d700af9fca057b5a7a98b46e49",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Windtalkers 2002 BluRay 720p x264 DTS 5.1 - Waldek.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Windtalkers 2002 720p PTV WEB-DL AAC 2 0 H 264-PiRaTeS\n👤 1 💾 2.27 GB ⚙️ ThePirateBay",
+          "infoHash": "ff481ce21b462134f9e83120d4eaa392d638fc55",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "Windtalkers 2002 720p PTV WEB-DL AAC 2 0 H 264-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Windtalkers 2002 MKV ES 720P Ronbo\n👤 1 💾 1.85 GB ⚙️ TorrentGalaxy",
+          "infoHash": "37440baa4677699be40c6f1367094a8d4096f683",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p",
+            "filename": "Windtalkers 2002, MKV,ES, 720P, Ronbo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Szyfry wojny (2002) [DVDRip] [XviD] [AC3-GR4PE] [Lektor PL]\n👤 14 💾 1.37 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "be95bd97c8a129b3c2725113d09bd473ea9501b4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip|xvid",
+            "filename": "Szyfry wojny (2002) [DVDRip] [XviD] [AC3-GR4PE] [Lektor PL].avi"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Windtalkers.2002.WS.DVDRip.XViD.iNT-EwDp\n👤 1 💾 1.37 GB ⚙️ ThePirateBay",
+          "infoHash": "4f4fe454c97464ff4d6dd4cb6ef657b25fcfdb73",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip|xvid"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Windtalkers (2002) DVDrip V3nDetta\n👤 1 💾 701.18 MB ⚙️ ThePirateBay",
+          "infoHash": "0fe536421886b42625704b1be48a6a3b7a8e4ffc",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Windtalkers Extended Directors Cut [2002]DVDRip[Xvid]AC3 5.1[Eng]BlueLady\n👤 1 💾 1.8 GB ⚙️ 1337x",
+          "infoHash": "eefc422682534091bde0bafc1880b2af939c015b",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip|xvid"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Windtalkers.2002.SWESUB.DVDRip.XviD-HE3\n👤 1 💾 1.37 GB ⚙️ ThePirateBay\n🇸🇪",
+          "infoHash": "d79b4b0bdcfa23f049be07229c96ecc6d5bee81d",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip|xvid"
+          }
+        }
+      ]
+    },
+    "torrentio-owner": {
+      "url": "https://torrentio.strem.fun/language=turkish|qualityfilter=threed,480p,scr,cam,unknown",
+      "streams": [
+        {
+          "name": "Torrentio\n1080p HDR",
+          "title": "Szyfry wojny - Windtalkers 2002 [HLG HDR SDR] [1080p.BluRay.H264-AS76-FT] [Lektor PL] [Alusia]\n👤 12 💾 4.95 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "9a52bc75cbc4cd9f26da6746d13464f099052dbe",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|h264|HDR",
+            "filename": "Szyfry wojny - Windtalkers 2002 [HLG HDR SDR] [1080p.BluRay.H264-AS76-FT] [Lektor PL] [Alusia].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers 2002 1080p BluRay\n👤 39 💾 2.83 GB ⚙️ YTS",
+          "infoHash": "e0d1bce181c7dd933d956afb136a2c64ae2380eb",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Windtalkers.2002.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers (2002) (1080p x265 10bit Tigole)\n👤 19 💾 5.23 GB ⚙️ ThePirateBay",
+          "infoHash": "eddfd90b77663a51b998b8653f0bc6eff328f36a",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|x265|10bit",
+            "filename": "Windtalkers (2002) (1080p x265 10bit Tigole).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers.2002.MULTi.VF2.1080p.BluRay.HDLight.x264-PopHD.mkv\n👤 6 💾 3.51 GB ⚙️ Torrent9\nMulti Audio / 🇫🇷",
+          "infoHash": "3a1fd3a61f666d30b0f755dff64910be8710ae70",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Windtalkers.2002.MULTi.VF2.1080p.BluRay.HDLight.x264-PopHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers 2002 NORDiC 1080p RKTN WEB-DL H 264-NORViNE\n👤 5 💾 5.02 GB ⚙️ ThePirateBay\n🇬🇧 / 🇵🇹 / 🇪🇸 / 🇩🇪 / 🇩🇰 / 🇫🇮 / 🇸🇪 / 🇳🇴",
+          "infoHash": "a4e064de07b798e337524a40f9bfc66d70520448",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Windtalkers 2002 NORDiC 1080p RKTN WEB-DL H 264-NORViNE.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers.2002.DC.1080p.BluRay.x265\n👤 5 💾 2.39 GB ⚙️ ThePirateBay",
+          "infoHash": "35549976251ce94485f0c39cc89550bf4f21447a",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Windtalkers.2002.DC.1080p.BluRay.x265.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Говорящие с ветром / Windtalkers [2002 BDRip 1080p]\n👤 4 💾 11.5 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "a7a355bd8716f7b47eeffc468ed07e81521f90f0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip",
+            "filename": "Windtalkers (2002).BDRip.1080p.mkv"
+          },
+          "sources": [
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "dht:a7a355bd8716f7b47eeffc468ed07e81521f90f0",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers 2002 1080p BluRay x264-OFT\n👤 3 💾 5.82 GB ⚙️ ThePirateBay",
+          "infoHash": "102b81452a849fa9ece586962e859397ce269183",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Windtalkers 2002 1080p BluRay x264-OFT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers.2002.DC.1080p.BluRay.Remux.FLAC.2.0\n👤 3 💾 35.24 GB ⚙️ TorrentGalaxy",
+          "infoHash": "2cf7ec70b70a85436691f8f9f037c74c063448db",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay REMUX",
+            "filename": "Windtalkers.2002.DC.1080p.BluRay.Remux.FLAC.2.0.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Говорящие с ветром / Windtalkers [2002 HDTV 1080i] [Open Matte] [Театральная версия / Theatrical Cut] DVO (НТВ+) + Sub Eng + Original (Eng Nav Jpn)\n👤 3 💾 6.46 GB ⚙️ Rutracker\n🇬🇧 / 🇯🇵 / 🇷🇺",
+          "infoHash": "4c11b44ef06bb5b0f2f735db430cc965662efefe",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|HDTV",
+            "filename": "Windtalkers 2002 Open Matte 1080i HDTV MPEG4 MP2 2.0.mkv"
+          },
+          "sources": [
+            "tracker:http://bt4.t-ru.org/ann?magnet",
+            "dht:4c11b44ef06bb5b0f2f735db430cc965662efefe",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers 2002 1080p BluRay x264 DTS-FGT\n👤 3 💾 9.7 GB ⚙️ 1337x",
+          "infoHash": "a7248358c0f9dfdebc31742b03c84ffcccd594b3",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Говорящие с ветром / Windtalkers [2002 BDRemux 1080p] Dub + 2x MVO + AVO + Sub Rus Eng + Original Eng\n👤 3 💾 30.83 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "2e095eb7847919b3d8071c97901be79d24e7d834",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay REMUX"
+          },
+          "sources": [
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "dht:2e095eb7847919b3d8071c97901be79d24e7d834",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Говорящие с ветром / Windtalkers [1080p] [2002 Blu-Ray]\n👤 3 💾 23.26 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺 / 🇩🇪",
+          "infoHash": "6d9d6a1f85e28412a903e1384d4853fd6b72aee4",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay"
+          },
+          "sources": [
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "dht:6d9d6a1f85e28412a903e1384d4853fd6b72aee4",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers.2002.DC.1080p.BluRay.x265 [CheerfulTomato]\n👤 2 💾 2.39 GB ⚙️ 1337x",
+          "infoHash": "357ee9a3975bd26b32187e2e5b3fcfd881e893a9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x265",
+            "filename": "Windtalkers.2002.DC.1080p.BluRay.x265.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Говорящие с ветром / Windtalkers (2002) BDRip-HEVC 1080p от RIPS CLUB | D P A | IT Transfer\n👤 2 💾 14 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "c5ad299370c95f073fe389c604c183a7741dac9e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|hevc",
+            "filename": "Говорящие.с.ветром.Windtalkers.IT.Transfer.2002.BDRip-HEVC.1080p.mkv"
+          },
+          "sources": [
+            "tracker:http://retracker.local/announce",
+            "tracker:udp://opentor.org:2710",
+            "dht:c5ad299370c95f073fe389c604c183a7741dac9e",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers.2002.DC.1080p.BluRay.x264.DD5.1-FGT\n👤 2 💾 12.74 GB ⚙️ RARBG",
+          "infoHash": "bd56ee70f9ab746c07bb00ae8841e41626c870b1",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Windtalkers.2002.DC.1080p.BluRay.x264.DTS-FGT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers 2002 1080p AMZN WEB-DL DDP5 1 H264-GPRS\n👤 1 💾 11.47 GB ⚙️ ThePirateBay",
+          "infoHash": "c4d9906fd555d5c50f4f6bbac72db8595a056ac2",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+            "filename": "Windtalkers 2002 1080p AMZN WEB-DL DDP5 1 H264-GPRS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers.2002.1080p.BDRip.AVC.FLAC5.1.2h14m14s.DVD9-Asmo\n👤 1 💾 7.94 GB ⚙️ TorrentGalaxy",
+          "infoHash": "b584b57787f1621d7bac8692cd70a0726449f70d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BDRip|avc",
+            "filename": "Windtalkers.2002.1080p.BDRip.AVC.FLAC5.1.2h14m14s.DVD9-Asmo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Говорящие с ветром / Windtalkers (2002) BDRemux 1080p | D P A\n👤 1 💾 39.9 GB ⚙️ Rutor\n🇬🇧 / 🇷🇺",
+          "infoHash": "d9a7f8c101d48087fb744019884d8d2cbfa53f60",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay REMUX"
+          },
+          "sources": [
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://retracker.local/announce",
+            "dht:d9a7f8c101d48087fb744019884d8d2cbfa53f60",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers.2002.DC.1080p.BluRay.H264.AAC-RARBG\n👤 1 💾 2.93 GB ⚙️ RARBG",
+          "infoHash": "57d73ad77d0ddcc9c9d6c0f2ebcfbf7ec5cc6a5a",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|h264"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers.2002.1080p.BluRay.x264.DTS-FGT\n👤 1 💾 9.72 GB ⚙️ RARBG",
+          "infoHash": "b1ff356db86a86059268f3cd9914410255b1e2a6",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Windtalkers.2002.1080p.BluRay.x264.DTS-FGT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers [BluRay 1080p][DTS 5.1-AC3 5.1 Castellano AC3 5.1-Ingles+Subs][ES-EN]\n👤 1 💾 12.96 GB ⚙️ MejorTorrent\n🇬🇧 / 🇪🇸",
+          "infoHash": "2491a80da35ec4c9385ed5963f780b732ba22627",
+          "fileIdx": 6,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay",
+            "filename": "Windtalkers BD1080.www.newpct1.com.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Windtalkers 2002 1080p BluRay X264 DTS-FGT\n👤 1 💾 9.72 GB ⚙️ MagnetDL",
+          "infoHash": "846487157708f0045412452fca04b643c55aaad1",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|BluRay|x264",
+            "filename": "Windtalkers.2002.1080p.BluRay.x264.DTS-FGT.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Windtalkers (2002) 720p BrRip x264 - 720mb - YIFY\n👤 14 💾 721.6 MB ⚙️ ThePirateBay",
+          "infoHash": "256482ae438b5d8ed33a65ffc63c90094acfccc6",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BRRip|x264",
+            "filename": "Windtalkers.2002.720p.BrRip.264.YIFY.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Nicolas Cage Collection 2000-2006 720p 5.1: PRL Waldek\n2002 - Windtalkers - BluRay 720p x264 DTS 5.1 - Waldek/Windtalkers 2002 BluRay 720p x264 DTS 5.1 - Waldek.mkv\n👤 3 💾 7.24 GB ⚙️ MagnetDL",
+          "infoHash": "36a3ae409ea6d9d700af9fca057b5a7a98b46e49",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|BluRay|x264",
+            "filename": "Windtalkers 2002 BluRay 720p x264 DTS 5.1 - Waldek.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Windtalkers 2002 720p PTV WEB-DL AAC 2 0 H 264-PiRaTeS\n👤 1 💾 2.27 GB ⚙️ ThePirateBay",
+          "infoHash": "ff481ce21b462134f9e83120d4eaa392d638fc55",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|WEB-DL|h264",
+            "filename": "Windtalkers 2002 720p PTV WEB-DL AAC 2 0 H 264-PiRaTeS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Windtalkers 2002 MKV ES 720P Ronbo\n👤 1 💾 1.85 GB ⚙️ TorrentGalaxy",
+          "infoHash": "37440baa4677699be40c6f1367094a8d4096f683",
+          "fileIdx": 3,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p",
+            "filename": "Windtalkers 2002, MKV,ES, 720P, Ronbo.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Szyfry wojny (2002) [DVDRip] [XviD] [AC3-GR4PE] [Lektor PL]\n👤 14 💾 1.37 GB ⚙️ EXT\n🇵🇱",
+          "infoHash": "be95bd97c8a129b3c2725113d09bd473ea9501b4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip|xvid",
+            "filename": "Szyfry wojny (2002) [DVDRip] [XviD] [AC3-GR4PE] [Lektor PL].avi"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Говорящие с ветром / Windtalkers [2002 ; драма DVDRip]\nWINDTALKERS.cd1.avi\n👤 6 💾 700.38 MB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "5d3889663c41464fbce7e2753375b37e05da3c95",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip",
+            "filename": "WINDTALKERS.cd1.avi"
+          },
+          "sources": [
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "dht:5d3889663c41464fbce7e2753375b37e05da3c95",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Говорящие с ветром / Windtalkers [2002 ; драма DVDRip]\nWINDTALKERS.cd2.avi\n👤 6 💾 700.56 MB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "5d3889663c41464fbce7e2753375b37e05da3c95",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip",
+            "filename": "WINDTALKERS.cd2.avi"
+          },
+          "sources": [
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "dht:5d3889663c41464fbce7e2753375b37e05da3c95",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nBDRip",
+          "title": "Говорящие с ветром / Windtalkers [2002 BDRip-AVC] [Theatrical Cut] Dub + 3x MVO + AVO (Живов) + Original (Eng) + Sub (Rus Eng)\nWindtalkers.2002.Theatrical.BDRip.x264.DD5.1.Rus.Eng-E76.mkv\n👤 5 💾 4.37 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "a60a2ddb64436e2cb007d1b6186701bc764799d3",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BDRip|avc",
+            "filename": "Windtalkers.2002.Theatrical.BDRip.x264.DD5.1.Rus.Eng-E76.mkv"
+          },
+          "sources": [
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "dht:a60a2ddb64436e2cb007d1b6186701bc764799d3",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Говорящие с ветром / Windtalkers [2002 DVDRip] MVO Режиссерская версия\n👤 5 💾 1.46 GB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "ee449faf77c22112a693bb893436f55e30eeae40",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip",
+            "filename": "Govoryshie_s_vetrom_DVDRip_rej_[rutracker.org]_by_Scarabey.avi"
+          },
+          "sources": [
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "dht:ee449faf77c22112a693bb893436f55e30eeae40",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nHDRip",
+          "title": "Говорящие с ветром / Windtalkers [2002 HDRip-AVC] [Open Matte / Theatrical Cut] Dub (R5) + Sub Rus + Original Eng\n👤 4 💾 2.18 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "5d89f5bad07da5a2e6f903cbee9672e67b5cff9b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|HDRip|avc",
+            "filename": "Говорящие с ветром [2002].mkv"
+          },
+          "sources": [
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "dht:5d89f5bad07da5a2e6f903cbee9672e67b5cff9b",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nHDRip",
+          "title": "Говорящие с ветром / Windtalkers [2002 HDRip] Dub Театральная версия\n👤 4 💾 1.46 GB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "a1718c72698532ccbb69722b2f947e6d1f099bab",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|HDRip",
+            "filename": "Govoryajie_s_vetrom_HDRip_teatr_[rutracker.org]_by_Scarabey.avi"
+          },
+          "sources": [
+            "tracker:http://bt4.t-ru.org/ann?magnet",
+            "dht:a1718c72698532ccbb69722b2f947e6d1f099bab",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Говорящие с ветром / Windtalkers [2002 DVDRip] MVO Режиссерская версия\n👤 4 💾 2.19 GB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "7423f3978584ff085f531950b52e7d46f3194754",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip",
+            "filename": "Govoryajie_s_vetrom_DVDRip_rej_[rutracker.org]_by_Scarabey.avi"
+          },
+          "sources": [
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "dht:7423f3978584ff085f531950b52e7d46f3194754",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Windtalkers les messagers du vent FRENCH DVDRIP 2002\n👤 3 💾 698.9 MB ⚙️ Torrent9\n🇫🇷",
+          "infoHash": "c29489e5a696b8ebca98eb0e5e76eb9a941ce07f",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Говорящие с Ветром / Windtalkers [2002 VHSRip] [Театральная Версия] [Fullscreen] Dub\n👤 3 💾 1.46 GB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "2a49de32f6b18afccbea20cf0e3ab9fdbcb309a6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip",
+            "filename": "Говорящие с ветром - Windtalkers [by alenavova].avi"
+          },
+          "sources": [
+            "tracker:http://bt4.t-ru.org/ann?magnet",
+            "dht:2a49de32f6b18afccbea20cf0e3ab9fdbcb309a6",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nBDRip",
+          "title": "Говорящие с ветром / Windtalkers [2002 BDRip] [Театральная версия / Theatrical Cut] MVO (НТВ) + AVO (Дольский)\n👤 3 💾 2.19 GB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "4418552c5e8abe25570ff8aac40145118cd1b169",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BDRip",
+            "filename": "Говорящие с ветром (НТВ + Дольский).avi"
+          },
+          "sources": [
+            "tracker:http://bt4.t-ru.org/ann?magnet",
+            "dht:4418552c5e8abe25570ff8aac40145118cd1b169",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Говорящие с ветром / Windtalkers [2002 DVDRip] MVO Режиссерская версия\n👤 3 💾 2.91 GB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "db5341b6d3eb337bc70fca527bcf3a4e842fdda4",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip",
+            "filename": "Govoryashie_s_vetrom_DVDRip_rej_[rutracker.org]_by_Scarabey.avi"
+          },
+          "sources": [
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "dht:db5341b6d3eb337bc70fca527bcf3a4e842fdda4",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Говорящие с ветром / Windtalkers [2002 DVDRip-AVC] [Режиссерская версия / Director's cut] MVO + Original + Sub (Rus Eng)\n👤 3 💾 2.92 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "bb4a4c0927b00f24dd99e71c469df06f934ca378",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip|avc",
+            "filename": "(2002) Говорящие с ветром [Реж. верс].mkv"
+          },
+          "sources": [
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "dht:bb4a4c0927b00f24dd99e71c469df06f934ca378",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nBDRip",
+          "title": "Говорящие с ветром / Windtalkers [2002 BDRip] Dub + Original\nGovoryaschie.S.Vetrom.2002.RUS.BDRip.XviD.AC3.-HQCLUB.avi\n👤 3 💾 2.18 GB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "4af57b52030e953b5c173702d7773d28d492840f",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BDRip|xvid",
+            "filename": "Govoryaschie.S.Vetrom.2002.RUS.BDRip.XviD.AC3.-HQCLUB.avi"
+          },
+          "sources": [
+            "tracker:http://bt4.t-ru.org/ann?magnet",
+            "dht:4af57b52030e953b5c173702d7773d28d492840f",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nBDRip",
+          "title": "Говорящие с ветром / Windtalkers (Джон Ву /John Woo) [2002 BDRip]\n👤 3 💾 2.19 GB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "f26e4c9d11740ee28bd57c4646cb1b90ea702883",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BDRip",
+            "filename": "Windtalkers_[torrents.ru].avi"
+          },
+          "sources": [
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "dht:f26e4c9d11740ee28bd57c4646cb1b90ea702883",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Windtalkers.2002.WS.DVDRip.XViD.iNT-EwDp\n👤 1 💾 1.37 GB ⚙️ ThePirateBay",
+          "infoHash": "4f4fe454c97464ff4d6dd4cb6ef657b25fcfdb73",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip|xvid"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Windtalkers (2002) DVDrip V3nDetta\n👤 1 💾 701.18 MB ⚙️ ThePirateBay",
+          "infoHash": "0fe536421886b42625704b1be48a6a3b7a8e4ffc",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Windtalkers Extended Directors Cut [2002]DVDRip[Xvid]AC3 5.1[Eng]BlueLady\n👤 1 💾 1.8 GB ⚙️ 1337x",
+          "infoHash": "eefc422682534091bde0bafc1880b2af939c015b",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip|xvid"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Windtalkers.2002.SWESUB.DVDRip.XviD-HE3\n👤 1 💾 1.37 GB ⚙️ ThePirateBay\n🇸🇪",
+          "infoHash": "d79b4b0bdcfa23f049be07229c96ecc6d5bee81d",
+          "behaviorHints": {
+            "bingeGroup": "torrentio|DVDRip|xvid"
+          }
+        },
+        {
+          "name": "Torrentio\nBDRip",
+          "title": "Говорящие с ветром / Windtalkers (2002) BDRip от HQ-ViDEO\n👤 1 💾 2.18 GB ⚙️ Rutor\n🇷🇺",
+          "infoHash": "033af01b4683e9c454153508f6d598396f09b7f0",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|BDRip|xvid",
+            "filename": "Govoryaschie.S.Vetrom.2002.RUS.BDRip.XviD.AC3.-HQ-ViDEO.avi"
+          },
+          "sources": [
+            "tracker:http://retracker.local/announce",
+            "tracker:udp://opentor.org:2710",
+            "dht:033af01b4683e9c454153508f6d598396f09b7f0",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        }
+      ]
+    }
+  }
+}

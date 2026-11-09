@@ -43,7 +43,7 @@
           "sustains": true,
           "tier": 3,
           "viable": true,
-          "within": 545,
+          "within": 420,
           "yearOk": true
         },
         "sizeBytes": null,
@@ -118,7 +118,7 @@
           "sustains": true,
           "tier": 3,
           "viable": true,
-          "within": 545,
+          "within": 420,
           "yearOk": true
         },
         "sizeBytes": null,

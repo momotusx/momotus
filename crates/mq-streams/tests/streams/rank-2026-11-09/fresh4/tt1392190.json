@@ -1,0 +1,507 @@
+{
+ "fetched": "2026-11-08T23:53:05.756Z",
+ "id": "tt1392190",
+ "type": "movie",
+ "meta": {
+  "name": "Mad Max: Fury Road",
+  "year": "2015",
+  "runtime": "121 min"
+ },
+ "streamUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt1392190.json",
+ "streams": [
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Mad Max: Fury Road (2015) 2160p H265 BluRay Rip 10 bit HDR ita eng AC3 5.1 sub ita eng Licdom\n👤 11 💾 5.65 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "d365d31f08f8058876345df7659d8940915aa819",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BRRip|h265|10bit|HDR",
+    "filename": "Mad Max - Fury Road (2015) 2160p H265 10 bit ita eng AC3 5.1 sub ita eng Licdom.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Mad.Max.Fury.Road.2015.2160p.BluRay.HDR.DDP5.1.H265-SPICE[TGx]\n👤 9 💾 6.3 GB ⚙️ ThePirateBay",
+   "infoHash": "17f93b15716bbb676bad014bf1f0a5effa4b9421",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|h265|HDR",
+    "filename": "Mad.Max.Fury.Road.2015.2160p.BluRay.HDR.DDP5.1.H265-SPICE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Mad.Max.Fury.Road.2015.hdr.bluray.vmaf98.movie.2160p.x265.7.1.aac-Rosy\n👤 6 💾 8.77 GB ⚙️ TorrentGalaxy",
+   "infoHash": "6c0f96626bd7062de986113954d94f57b12d43b6",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|HDR",
+    "filename": "Mad.Max.Fury.Road.2015.hdr.bluray.vmaf98.movie.2160p.x265.7.1.aac-Rosy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Mad Max: Fury Road 2015 2160p BluRay\n👤 72 💾 5.44 GB ⚙️ YTS",
+   "infoHash": "98cf8e393247cfa39ee4b9aa2a3338a8b74d97d5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit",
+    "filename": "Mad.Max.Fury.Road.2015.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Mad Max Fury Road 2015 (2160p 4K x265 10bit AAC 7.1 Joy)[UTR]\nMad Max Fury Road 2015 (2160p x265 10bit Joy).mkv\n👤 45 💾 6.03 GB ⚙️ ThePirateBay",
+   "infoHash": "ed227262fa783e61bfa61201ec956bd04ce46cdb",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|x265|10bit",
+    "filename": "Mad Max Fury Road 2015 (2160p x265 10bit Joy).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Mad Max Fury Road 2015 2160p 4K BluRay x265 SDR HEVC DuaL-TURKO\n👤 16 💾 6.8 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇹🇷",
+   "infoHash": "78414022aff5af41a4d02b71dad5968d2809e676",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|hevc",
+    "filename": "Mad Max Fury Road 2015 2160p 4K BluRay x265 SDR HEVC DuaL-TURKO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Mad Max: Fury Road (2015) 1080p HDR BluRay AV1 Opus Multi4 [dAV1nci]\n👤 16 💾 4.6 GB ⚙️ 1337x",
+   "infoHash": "360a4622ebbed384c52cf7c79e8fcaabfe057408",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1|HDR",
+    "filename": "Mad.Max.Fury.Road.2015.1080p.HDR.Bluray.AV1.Opus.Multi4-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Mad Max: Fury Road (2015) (1080p DS4K BluRay x265 10-bit HDR AAC…\n👤 13 💾 7.12 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇧🇬 / 🇭🇷 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷 / 🇸🇦 / 🇮🇱 / 🇹🇭",
+   "infoHash": "8f3ee880335c22baae5c3b60ade17b4ff72b5efb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|HDR",
+    "filename": "Mad Max Fury Road (2015) (1080p DS4K BluRay x265 10-bit HDR AAC 7.1) [WeSLeY].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "All my AV1 Movies Done Encoding (Pick What You Want) 1080p and 2160 4K Updated 11/07/2026\nMad Max Fury Road (2015) (1080p HDR Bluray Opus 5.1) AV1.mkv\n👤 3 💾 4.6 GB ⚙️ EXT",
+   "infoHash": "024faf5349e9f4094fe09c01f859183551704ea4",
+   "fileIdx": 54,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1|HDR",
+    "filename": "Mad Max Fury Road (2015) (1080p HDR Bluray Opus 5.1) AV1.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max: Fury Road (2015) 1080p BrRip x264 - YIFY\n👤 304 💾 1.84 GB ⚙️ ThePirateBay",
+   "infoHash": "13241fe16a2797b2a41b7822bde970274d6b687c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x264",
+    "filename": "Mad.Max.Fury.Road.2015.1080p.BluRay.x264.YIFY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad.Max.Fury.Road.2015.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265\n👤 156 💾 3.69 GB ⚙️ 1337x",
+   "infoHash": "9d6e72305b77953c7c7cd88d3757380b9e9a0d60",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Mad.Max.Fury.Road.2015.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max: Fury Road 2015 1080p BluRay\n👤 60 💾 2.01 GB ⚙️ YTS",
+   "infoHash": "7914a55e8ffabc58d8b893da72b734ba68bc0398",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Mad.Max.Fury.Road.2015.1080p.BluRay.x265.10bit.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max - Fury Road (2015) (1080p BluRay x265 HEVC 10bit AAC 7.1 Tigole) [QxR]\nMad Max - Fury Road (2015) (1080p BluRay x265 10bit Tigole).mkv\n👤 48 💾 4.77 GB ⚙️ 1337x",
+   "infoHash": "5256e113673bb693781d384b1ffec79c1958fbc6",
+   "fileIdx": 7,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Mad Max - Fury Road (2015) (1080p BluRay x265 10bit Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max Fury Road 2015 REPACK 1080p BluRay x265-YAWNTiC\n👤 44 💾 6.68 GB ⚙️ ThePirateBay",
+   "infoHash": "e8c6cb590a0f6536c1ca89b890d9f74fc02e184d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Mad Max Fury Road 2015 REPACK 1080p BluRay x265-YAWNTiC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad.Max.Fury.Road.2015.1080p.BluRay.x265-RARBG\n👤 22 💾 1.87 GB ⚙️ RARBG",
+   "infoHash": "1f75244af866e0e8f68c68cc2be5d55336967b09",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Mad.Max.Fury.Road.2015.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max (1979 to 2015) 1080px264 BluRay vtwin88cube\nMad Max 4 Fury Road (2015) 1080px264 BluRay.mp4\n👤 20 💾 2.29 GB ⚙️ TorrentGalaxy",
+   "infoHash": "1e100e5ae35652bdb50a76d43ef018c0112b09f6",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Mad Max 4 Fury Road (2015) 1080px264 BluRay.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max- Fury Road 2015.1080p.WEB-DL.AAC.x264-rothebehap\n👤 18 💾 5.1 GB ⚙️ 1337x",
+   "infoHash": "48640a04ea345fd45c66ad760938f4a4be29060b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Mad Max- Fury Road 2015.1080p.WEB-DL.AAC.x264-rothebehap.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad.Max.Fury.Road.2015.Black.And.Chrome.Edition.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265\n👤 18 💾 3.7 GB ⚙️ 1337x",
+   "infoHash": "f992936165e9b18c5bdbbfda12aab7aa7ad3c4c7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Mad.Max.Fury.Road.2015.Black.And.Chrome.Edition.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max Fury Road (2015) Black and Chrome Edition 1080p H264 AC-3 BDE\n👤 18 💾 7.93 GB ⚙️ 1337x",
+   "infoHash": "2476615d1189170b39b23262668de1616e037f15",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h264",
+    "filename": "Mad Max Fury Road (2015) Black and Chrome Edition 1080p H264 AC-3.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max Fury Road 2015 1080p BluRay x264 DuaL-TURKO\n👤 17 💾 7.94 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇹🇷",
+   "infoHash": "13246bc49f7d599482d0344b2e864278619b9595",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Mad Max Fury Road 2015 1080p BluRay x264 DuaL-TURKO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max Fury Road 2015 1080p NF WEB-DL DDP5 1 AV1-Saon\n👤 13 💾 2.86 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇳",
+   "infoHash": "3577d5998b2cf28950df984dbbe51aaa1390633a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|av1",
+    "filename": "Mad Max Fury Road 2015 1080p NF WEB-DL DDP5 1 AV1-Saon.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max Fury Road (2015) AV1 O5.1 1080p 7RIP\n👤 12 💾 979.72 MB ⚙️ EXT",
+   "infoHash": "a2f4fadde1b2c65354714b519abd0c3c75d6c44c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|av1",
+    "filename": "Mad Max Fury Road (2015) AV1 O5.1 1080p 7RIP.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max Fury Road 2015 1080p DUAL HMAX WEB-DL x264 EAC3 5 1 - HdT\n👤 12 💾 6.34 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "169d31ba7f2e6f3de097b14b3666db1158270f91",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Mad Max Fury Road 2015 1080p DUAL HMAX WEB-DL x264 EAC3 5 1 - HdT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max Collection [1979-2024] 1080p BluRay HEVC x265 10Bit AC3 AAC (UKBandit)\nMad Max Fury Road 4 [2015].mkv\n👤 12 💾 4.36 GB ⚙️ 1337x",
+   "infoHash": "9c55589ebec5e01e7b7a9513cc2ccb1ee45007e1",
+   "fileIdx": 5,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Mad Max Fury Road 4 [2015].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max Fury Road (2015) 1080p H264 AC-3.mkv\n👤 12 💾 7.64 GB ⚙️ ThePirateBay",
+   "infoHash": "568557f732d11c1af3d03315a2950be4be1bd967",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h264",
+    "filename": "Mad Max Fury Road (2015) 1080p H264 AC-3.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max - Fury Road (2015) Black and Chrome (1080p BluRay x265 HEVC 10bit AAC 7.1 Tigole) [QxR]\n👤 10 💾 4.8 GB ⚙️ 1337x",
+   "infoHash": "a3eadf40c24a3be4db2a46943f5aa83a3a913f71",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad.Max.Fury.Road.2015.1080p.BluRay.ENG.LATINO.DD5.1.H264-BEN.THE.MEN\n👤 9 💾 4 GB ⚙️ ThePirateBay\n🇬🇧 / 🇲🇽",
+   "infoHash": "346180a655a7c8da19a44d8e91a8ee3ea4288bd8",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264",
+    "filename": "Mad.Max.Fury.Road.2015.1080p.BluRay.ENG.LATINO.DD5.1.H264-BEN.THE.MEN.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Amazing Films 9 - Mp4 x264 AC3 1080p\nMad Max Fury Road (2015) 1080p Surround.mp4\n👤 9 💾 2.68 GB ⚙️ ThePirateBay",
+   "infoHash": "37f048a1d5cc62f11fbac81185168eeb9d9101bf",
+   "fileIdx": 38,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Mad Max Fury Road (2015) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max 4 Fury Road (2015) BluRay 1080p H264 DolbyD 5.1 + nickarad\n👤 9 💾 2.31 GB ⚙️ ThePirateBay",
+   "infoHash": "e24f40d4d2f078e24d1eaf567e66c60890728e97",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264",
+    "filename": "Mad Max 4 Fury Road (2015) 1080p BluRay H264 DolbyD 5.1 + nickarad.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max Fury Road (2015) 1080p HEVC 7-Rip\n👤 9 💾 1.02 GB ⚙️ TorrentGalaxy",
+   "infoHash": "445abfc33c0b3c9332839ceae87777eb0b04270f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|hevc",
+    "filename": "Mad Max Fury Road (2015) 1080p HEVC 7-Rip.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max - Fury Road (2015) AC3 5.1 ITA.ENG 1080p H265 multisub Sp33dy94 MIRCrew\n👤 9 💾 2.79 GB ⚙️ 1337x\nMulti Subs / 🇬🇧 / 🇮🇹",
+   "infoHash": "c0abebf044b6b8d280db6cc8503fce39136b3ff7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h265",
+    "filename": "Mad Max - Fury Road (2015) AC3 5.1 ITA.ENG 1080p H265 multisub Sp33dy94-MIRCrew.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "IMDB TOP 201-250 BluRay 1080p x265 10bit MNHD-FRDS\n205.疯狂的麦克斯4狂暴之路.Mad.Max.Fury.Road.2015.BluRay.1080p.x265.10bit.MNHD-FRDS/Mad.Max.Fury.Road.2015.BluRay.1080p.x265.10bit.MNHD-FRDS.mkv\n👤 7 💾 8.22 GB ⚙️ EXT",
+   "infoHash": "35e9469bdc6de52611d9b2ba68ded04717bdef1e",
+   "fileIdx": 31,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Mad.Max.Fury.Road.2015.BluRay.1080p.x265.10bit.MNHD-FRDS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max: Fury Road (2015 ITA/ENG) [1080p x265] [Paso77]\n👤 5 💾 6.6 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "9d5e81f3237f967308dec909ea596d0a796701c3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|x265",
+    "filename": "Mad Max Fury Road 2015 BDRip ITA ENG 1080p x265 Paso77.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max Fury Road 2015 1080p BluRay x264-MonteDiaz\n👤 5 💾 14.89 GB ⚙️ ThePirateBay",
+   "infoHash": "2d79f5d0b927516e199f899256834c885d4d1ae7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Mad Max Fury Road 2015 1080p BluRay x264-MonteDiaz.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max - Fury Road (2015) (1080p BluRay x265 HEVC 10bit AAC 7 1 Tigole)\n👤 5 💾 4.77 GB ⚙️ ThePirateBay",
+   "infoHash": "5916cb86f52eaa269693409b1852624cd6b5965f",
+   "fileIdx": 8,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Mad Max - Fury Road (2015) (1080p BluRay x265 HEVC 10bit AAC 7 1 Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad.Max.Fury.Road.2015.1080p.BluRay.AV1-SWAXXON\n👤 5 💾 2.08 GB ⚙️ TorrentGalaxy",
+   "infoHash": "c3c2fafc547ec57c094937b9d1967ecc918fb399",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Mad.Max.Fury.Road.2015.1080p.BluRay.AV1-SWAXXON.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max 1 2 3 4 - Anthology Action 1979-2015 Eng Subs 1080p [H264-mp4]\nMad Max Anthology 1979-2015/04 Mad Max 4 Fury Road - Action Sci-Fi 2015 Eng Subs 1080p [H264-mp4].mp4\n👤 5 💾 2.92 GB ⚙️ 1337x",
+   "infoHash": "00863421f1e91944afcc841d20e48a5865c070f2",
+   "fileIdx": 13,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h264",
+    "filename": "04 Mad Max 4 Fury Road - Action Sci-Fi 2015 Eng Subs 1080p [H264-mp4].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad.Max.Fury.Road.2015.BLACK.N.CHROME.EDiTiON.1080p.BluRay.x2...\n👤 5 💾 7.93 GB ⚙️ ThePirateBay",
+   "infoHash": "450adc5d7164936644da9060555e9823ff2b731c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Mad.Max.Fury.Road.2015.BLACK.N.CHROME.EDiTiON.1080p.BluRay.x264-SADPANDA[EtHD].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max Estrada Da Fria 2015 WEB-DL 1080p Dual Udio Dublado\n👤 5 💾 2.49 GB ⚙️ MagnetDL\nDual Audio / 🇵🇹",
+   "infoHash": "368f1bbe088485cbff1ae45eee80a840b19b3cd5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL",
+    "filename": "Mad.Max.Estrada.da.Furia.2015.1080p.WEB-DL.Dual-WOLVERDONFILMES.COM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max: Fury Road (2015) Double Version Normal and Black and Chrome Edition.1080p.H264.ita.eng.Ac3-5.1.sub.ita.NUita.eng-MIRCrew\nMad Max Fury Road (2015).1080p.ita.eng.sub.ita.NUita.eng-MIRCrew/Mad Max Fury Road (2015).1080p.ita.eng.sub.ita.eng-MIRCrew.mkv\n👤 4 💾 4.01 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "580f96c1668ba1c1b18b5314e44b69d517d06a6a",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h264",
+    "filename": "Mad Max Fury Road (2015).1080p.ita.eng.sub.ita.eng-MIRCrew.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max: Fury Road (2015) Double Version Normal and Black and Chrome Edition.1080p.H264.ita.eng.Ac3-5.1.sub.ita.NUita.eng-MIRCrew\nMad Max Fury Road - Black and Chrome Edition (2015).1080p.ita.eng.sub.ita.NUita.eng-MIRCrew/Mad Max Fury Road - Black and Chrome Edition (2015).1080p.ita.eng.sub.ita.NUita.eng-MIRCrew.mkv\n👤 4 💾 4.09 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "580f96c1668ba1c1b18b5314e44b69d517d06a6a",
+   "fileIdx": 7,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h264",
+    "filename": "Mad Max Fury Road - Black and Chrome Edition (2015).1080p.ita.eng.sub.ita.NUita.eng-MIRCrew.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mr. Magoos Christmas Carol (1962) + Extras (1080p BluRay X265 HEVC 10bit AAC 5.1 FreetheFish) [..\nLord's Bright Blessing - Storyboard Sequence.mkv\n👤 4 💾 10 MB ⚙️ MagnetDL",
+   "infoHash": "b573a133a6db4a361347249fe70f403b4221f7fe",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Lord's Bright Blessing - Storyboard Sequence.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad.Max.Fury.Road.2015.Black.and.Chrome.Edition.1080p.BluRay.x264.DD5.1-FGT\n👤 4 💾 8.49 GB ⚙️ RARBG",
+   "infoHash": "29022f1594a357bc37f206a43c4ca9ef56b21235",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max Fury Road 2015 1080p NF WEB-DL DDP5 1 H 264-TURG\n👤 3 💾 5.5 GB ⚙️ ThePirateBay",
+   "infoHash": "b1cdc2687cd5d953d15d2f2e2f12b513e885b60d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Mad Max Fury Road 2015 1080p NF WEB-DL DDP5 1 H 264-TURG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Mad Max Fury Road 2015 1080p WEB-DL x264 AC3-JYK\n👤 3 💾 3.14 GB ⚙️ ThePirateBay",
+   "infoHash": "44ca7e516c49784c98fb206190ae751f86ea8f77",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Mad Max Fury Road 2015 1080p WEB-DL x264 AC3-JYK.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mad Max: Fury Road (2015) 720p BrRip x264 - YIFY\n👤 44 💾 867.67 MB ⚙️ ThePirateBay",
+   "infoHash": "60b101018a32fbddc264c1a2eb7b7e9a99dbfb6a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BRRip|x264",
+    "filename": "Mad.Max.Fury.Road.2015.720p.BluRay.x264.YIFY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mad Max Fury Road 2015 720p BluRay x264 DuaL-TURKO\n👤 11 💾 1.01 GB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇹🇷",
+   "infoHash": "3ebccaac14115f70dc97ce49b2f2e0917a19d77b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Mad Max Fury Road 2015 720p BluRay x264 DuaL-TURKO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mad Max_Furia en la Carretera 2015 [720p][Spanish]\n👤 4 💾 1.3 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸",
+   "infoHash": "54584ba8d3b148ac12e2dff24ca27bd681778eba",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Mad Max Fury Road (2015) 720p BRRip x264 [Dual Audio] [Hindi DD 5.1 English DD 5.1]\n👤 3 💾 1009.26 MB ⚙️ 1337x\nDual Audio / 🇬🇧 / 🇮🇳",
+   "infoHash": "5a84a41b8a1fd97af7422e63acd5ad4621e9ecf8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BRRip|x264",
+    "filename": "Mad Max Fury Road (2015) [Worldfree4u.Wiki] 720p BRRip x264 [Dual Audio] [Hindi DD 5.1 + English DD 5.1].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nWEB-DL",
+   "title": "Mad.Max.Fury.Road.2015.TUBI.WEB-DL.AAC.2.0.H.264-PiRaTeS[TGx]\n👤 3 💾 1.64 GB ⚙️ TorrentGalaxy",
+   "infoHash": "fa84650a06c28ede4b9ba821cbc45fe79fb909a4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|WEB-DL|h264",
+    "filename": "Mad.Max.Fury.Road.2015.TUBI.WEB-DL.AAC.2.0.H.264-PiRaTeS.mkv"
+   }
+  }
+ ]
+}

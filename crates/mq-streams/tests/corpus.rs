@@ -325,8 +325,9 @@ fn default_user(corpus: &str, profile: &str) -> bool {
 /// at most 5 GB (an episode of a pack) when a real one fits, at least 50
 /// seeders when a fitting real one has them, and no row of the pick's
 /// playability or better in a higher seeder band, the bands at and past
-/// the wanted seeders counting as one unless the row is as good on this
-/// screen (past them the better version wins, pick audit).
+/// the wanted seeders counting as one (past them the better version wins,
+/// pick audit; the 4 x band is said in the line, not ranked on,
+/// plans/stream-ranking.md 4.9 rule 10).
 fn owner_rule(ranked: &Ranked, prefs: &StreamPrefs, c: &Conditions) -> Vec<String> {
     use mq_relparse::Quality::{Cam, Screener, Telesync};
     let Some(pick) = ranked.best() else {
@@ -392,11 +393,10 @@ fn owner_rule(ranked: &Ranked, prefs: &StreamPrefs, c: &Conditions) -> Vec<Strin
         b => b.min(2),
     };
     let better = fitting.iter().find(|r| {
-        let same_screen = r.key.effective_height == pick.key.effective_height;
         r.key.playability >= pick.key.playability
             && r.key.year_ok
             && r.key.sustains
-            && (tier(r) > tier(pick) || (same_screen && band(r) > band(pick)))
+            && tier(r) > tier(pick)
     });
     if let Some(r) = better {
         out.push(format!("a higher seeder band: {}", describe(&r.stream)));

@@ -1,0 +1,520 @@
+{
+ "fetched": "2026-11-08T23:16:49.880Z",
+ "id": "tt10548174",
+ "type": "movie",
+ "sources": {
+  "meta": "https://v3-cinemeta.strem.io/meta/movie/tt10548174.json",
+  "streams": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt10548174.json"
+ },
+ "meta": {
+  "name": "28 Years Later",
+  "year": "2025",
+  "runtime": "115 min",
+  "genres": [
+   "Horror",
+   "Sci-Fi",
+   "Thriller"
+  ],
+  "country": "United Kingdom, Canada, United States"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k HDR10+",
+   "title": "28.Years.Later.2025.2160p.AMZN.WEB-DL.HDR10+.ENG.LATINO.DDP5.1.Atmos.H265-BTM\n👤 60 💾 12.63 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇲🇽 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇵🇱 / 🇨🇿 / 🇺🇦 / 🇹🇭",
+   "infoHash": "0e4ce903b53569436c5900f555f209e2492a1ac1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|h265|10bit|HDR10+",
+    "filename": "28.Years.Later.2025.2160p.AMZN.WEB-DL.HDR10+[Ben The Men].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR10+",
+   "title": "28.Years.Later.2025.2160p.iT.WEB-DL.DDP5.1.Atmos.HDR10+.H.265-WADU\n👤 23 💾 11.86 GB ⚙️ ThePirateBay",
+   "infoHash": "95639c8ea6fba7e941da150e13d4910599146536",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|h265|10bit|HDR10+",
+    "filename": "28.Years.Later.2025.2160p.iT.WEB-DL.DDP5.1.Atmos.HDR10+.H.265-WADU.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "28 Years Later 2025 2160p HDR UHD BluRay AV1 DDP5 1 Atmos Multi3\n👤 15 💾 7.28 GB ⚙️ TorrentGalaxy",
+   "infoHash": "f3c84542d6f3dd769ee0359aa0fcb7d40e3d3779",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+    "filename": "28.Years.Later.2025.2160p.HDR.UHD.BluRay.AV1.DDP5.1.Atmos.Multi3-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "28.Years.Later.2025.bluray.hdr.2160p.av1.7.1.opus.subs-Dust\n👤 9 💾 4.96 GB ⚙️ 1337x",
+   "infoHash": "f305168bbcde0de713d4d7d6d578f0ad970ed47d",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+    "filename": "28.Years.Later.2025.bluray.hdr.2160p.av1.7.1.opus.subs-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "28.Anni.Dopo.2025.iTA-ENG.Bluray.2160p.HEVC.HDR.x265-CYBER.mkv\n👤 5 💾 12.44 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "48194f6e082511ef8f796da6df0f28efdeb759c8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|hevc|HDR",
+    "filename": "28.Anni.Dopo.2025.iTA-ENG.Bluray.2160p.HEVC.HDR.x265-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "28 Years Later 2025 2160p WEBRip\n👤 113 💾 5.14 GB ⚙️ YTS",
+   "infoHash": "64d8697a988190f0544b1165e59afe14a1bb5bef",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "28.Years.Later.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "28.Years.Later.2025.2160p.AMZN.WEB-DL.DDP5.1.Atmos.H.265-BYNDR\n👤 87 💾 12.51 GB ⚙️ 1337x",
+   "infoHash": "b92174e706ca62459d26254790b9422efd9f4581",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|h265",
+    "filename": "28.Years.Later.2025.2160p.AMZN.WEB-DL.DDP5.1.Atmos.H.265-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "28.Years.Later.2025.2160p.AMZN.WEB-DL.SDR.ENG.LATINO.DDP5.1.Atmos.H265-BTM\n👤 27 💾 13.28 GB ⚙️ ThePirateBay\n🇬🇧 / 🇯🇵 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇲🇽 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇵🇱 / 🇨🇿 / 🇺🇦 / 🇹🇭",
+   "infoHash": "533a428a408f5b1373e7ab95cba616321c344b06",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|h265",
+    "filename": "28.Years.Later.2025.2160p.AMZN.WEB-DL.SDR[Ben The Men].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "28.Years.Later.2025.2160p.WEB-DL.DDP5.1.Atmos.SDR.H265-AOC\n👤 14 💾 12.51 GB ⚙️ ThePirateBay",
+   "infoHash": "65eeb46c2c22e7bac9e39e3af40ee7470e3e038a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|h265",
+    "filename": "28.Years.Later.2025.2160p.WEB-DL.DDP5.1.Atmos.SDR.H265-AOC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "28 Years Later 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737\n👤 6 💾 4.75 GB ⚙️ ThePirateBay",
+   "infoHash": "10361f0478fb74b85202f8574741bc6c7730c02b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "28 Years Later 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28.Years.Later.2025.Proper.1080p.WEB-DL.DDP5.1.x265-NeoNoir\n👤 514 💾 1.9 GB ⚙️ 1337x",
+   "infoHash": "2976448c1a5c514937341c17ba354cc988f49924",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265",
+    "filename": "28.Years.Later.2025.Proper.1080p.WEB-DL.DDP5.1.x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 1080p WEB-DL HEVC x265 5.1 BONE\n👤 401 💾 1.92 GB ⚙️ 1337x",
+   "infoHash": "42fc28b131bc31562c52fcb27021926761e14c4e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+    "filename": "28 Years Later 2025 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 1080p WEBRip\n👤 142 💾 2.12 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+   "infoHash": "fb6d9651f84467f62db76c9612a0e11db053d719",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "28.Years.Later.2025.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 1080p WEBRip\n👤 129 💾 1.92 GB ⚙️ YTS",
+   "infoHash": "4213702417634723c3e9221c8fee169e9fe512ae",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "28.Years.Later.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28.Years.Later.2025.1080p.AMZN.WEB-DL.DDP5.1.H.264-KyoGo.mkv\n👤 90 💾 6.41 GB ⚙️ ThePirateBay",
+   "infoHash": "821ef70713df860e3b2fee828284263638305536",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "28.Years.Later.2025.1080p.AMZN.WEB-DL.DDP5.1.H.264-KyoGo.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 1080p BluRay\n👤 70 💾 2.12 GB ⚙️ YTS",
+   "infoHash": "5d6699e40f841a074857c24a46e2417f4d86b198",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "28.Years.Later.2025.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 Proper 1080p WEB-DL DDP5 1 x265-NeoNoir\n👤 70 💾 1.9 GB ⚙️ ThePirateBay",
+   "infoHash": "2e98df8ea49a1681b59c88120289e216ce2a0c19",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265",
+    "filename": "28 Years Later 2025 Proper 1080p WEB-DL DDP5 1 x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later (2025) (1080p BluRay x265 10bit EAC3 7.1 Ghost) [QxR]\n28 Years Later (2025) (1080p BluRay x265 Ghost).mkv\n👤 51 💾 5.95 GB ⚙️ 1337x",
+   "infoHash": "2b65dcc0fde4505781c2e45474c43c43dcb48969",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "28 Years Later (2025) (1080p BluRay x265 Ghost).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 1080p BluRay x264-GeneMige\n👤 48 💾 10.47 GB ⚙️ ThePirateBay",
+   "infoHash": "5d358c560747b4e36b284d9431fb116e025a49b9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "28 Years Later 2025 1080p BluRay x264-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later (2025) (1080p MA WEB-DL x265 10bit EAC3 Atmos 5.1 Ghost) [QxR]\n👤 46 💾 4.64 GB ⚙️ 1337x",
+   "infoHash": "9533da10092913e1c7b16585ddad3a9f85baa1c5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+    "filename": "28 Years Later (2025) (1080p MA WEB-DL x265 Ghost).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR\n👤 34 💾 6.82 GB ⚙️ ThePirateBay",
+   "infoHash": "1c62f25c64e5b068f767021ef48e868e9ed2bf26",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "28 Years Later 2025 1080p MA WEB-DL DDP5 1 Atmos H 264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Classics-Disney Animations Collection (1937-2023) BDRip 1080p\n28.1989.The.Little.Mermaid.1920x1080.BDRip.x264.DTS-HD.MA.mkv\n👤 32 💾 12.07 GB ⚙️ ThePirateBay",
+   "infoHash": "4b78fe275fa2764025089e177c74a02074cf51ee",
+   "fileIdx": 27,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|x264",
+    "filename": "28.1989.The.Little.Mermaid.1920x1080.BDRip.x264.DTS-HD.MA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28.Years.Later.2025.1080p.WEBRip.DDP5.1.x265-NeoNoir\n👤 28 💾 1.9 GB ⚙️ 1337x",
+   "infoHash": "3455ef06085e1787afd38e1b3298d8ece4f4c5b9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "28.Years.Later.2025.1080p.WEBRip.DDP5.1.x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 1080p 10bit BluRay 8CH x265 HEVC-PSA\n👤 24 💾 2.17 GB ⚙️ ThePirateBay",
+   "infoHash": "1a53b00717637f6284c635275ae7c410566a71c0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "28.Years.Later.2025.1080p.10bit.BluRay.8CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 REPACK 1080p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 24 💾 1.89 GB ⚙️ ThePirateBay",
+   "infoHash": "ec9b6890ef1edbe88b60a99088606c8fcb29ee37",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "28.Years.Later.2025.REPACK.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Star Trek Complete Series in Stardate Watch Order - 1080p x265 - updated 20250608\n01 - ENT (2151-2156)  TOS The Cage (2254)/028 - 2002-10-02 - ENT S02 E03 - Minefield.mkv\n👤 24 💾 433.68 MB ⚙️ 1337x",
+   "infoHash": "9c820a5037707b3c83ec927aa094f2bcfc2df5e1",
+   "fileIdx": 28,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|9c820a5037707b3c83ec927aa094f2bcfc2df5e1",
+    "filename": "028 - 2002-10-02 - ENT S02 E03 - Minefield.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 1080p BluRay x265 10bit EAC3 Atmos 7 1 Gho\n28 Years Later (2025) (1080p BluRay x265 Ghost).mkv\n👤 23 💾 5.44 GB ⚙️ TorrentGalaxy",
+   "infoHash": "57645c421bd28be07534fb646a4419d8e56dc349",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "28 Years Later (2025) (1080p BluRay x265 Ghost).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later (2025) Eng 1080p WEBRip x264 DD 5.1 ESub\n👤 17 💾 2.47 GB ⚙️ 1337x",
+   "infoHash": "734f09e422c4321865f340da7882cdf4b64a3e7e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "28 Years  Later (2025) Eng 1080p WEBRip x264 DD 5.1 ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later.2025.1080p.AMZN.WEBRip.1400MB.DD5.1.x264\n👤 15 💾 1.4 GB ⚙️ ThePirateBay",
+   "infoHash": "a0ec67d344cd2e6ac7fc86f8c5270951192be882",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "28 Years Later.2025.1080p.AMZN.WEBRip.1400MB.DD5.1.x264.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "The Jackie Chan Collection (1976-1997) BDRip 1080p\n28.1992.Twin.Dragons.1920x808.BDRip.x264.DTS-HD.MA.mkv\n👤 15 💾 13.91 GB ⚙️ ThePirateBay",
+   "infoHash": "f67582fe74beb5d691584605caf29a099058fc44",
+   "fileIdx": 10,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|x264",
+    "filename": "28.1992.Twin.Dragons.1920x808.BDRip.x264.DTS-HD.MA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later.2025.1080p.WEB-DL.AAC.x264-skyflickz\n👤 14 💾 1.87 GB ⚙️ 1337x",
+   "infoHash": "d94249e520abed108d1e109460f1566c581b1b0b",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "28 Years Later.2025.1080p.WEB-DL.AAC.x264-skyflickz.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 1080p Blu-Ray HEVC x265 10Bit DDP5.1 Subs KINGDOM\n👤 13 💾 5.79 GB ⚙️ 1337x",
+   "infoHash": "9fa37f8ab24970417cb1152a435323253a648095",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "28 Years Later 2025 1080p Blu-Ray HEVC x265 10Bit DDP5.1 Subs KINGDOM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 MULTi 1080p WEB x264-FW\n👤 12 💾 3.39 GB ⚙️ ThePirateBay\nMulti Audio",
+   "infoHash": "5890fcab77a6af361f6f169d425de23fefbd6174",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|x264",
+    "filename": "28 Years Later 2025 MULTi 1080p WEB x264-FW.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 1080p WEBRip DDP5 1 x265-NeoNoir\n👤 12 💾 1.9 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇵🇹",
+   "infoHash": "9b7f46d089bff48cccba0df1fd6d2d9e1f3594d6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "28 Years Later 2025 1080p WEBRip DDP5 1 x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 1080p BluRay TrueHD 7 1 Atmos 10bit H 265-iVy\n👤 10 💾 5.2 GB ⚙️ ThePirateBay",
+   "infoHash": "afbd800deace04a3c78e1e3886ddbecb45bbd69c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h265|10bit",
+    "filename": "28 Years Later 2025 1080p BluRay TrueHD 7 1 Atmos 10bit H 265-iVy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28.Years.Later.2025.1080p.BluRay.AV1.DDP.5.1.Multi3-dAV1nci\n👤 9 💾 2.77 GB ⚙️ 1337x",
+   "infoHash": "a61429a413b6e4a7e55c86bb9b6379397fd0d026",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "28.Years.Later.2025.1080p.BluRay.AV1.DDP.5.1.Multi3-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 1080p BluRay AV1 DDP5 1 Multi3 dAV1nci\n👤 8 💾 2.78 GB ⚙️ TorrentGalaxy",
+   "infoHash": "3039dadc11c03bea9d81d6de5fc0bc42c4eb725c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "28.Years.Later.2025.1080p.BluRay.AV1.DDP5.1.Multi3-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 1080p BluRay DDP 5 1 10bit H 265-iVy\n👤 7 💾 2.42 GB ⚙️ ThePirateBay",
+   "infoHash": "14526069d90646184351f9b5ec8f963f9c916b78",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h265|10bit",
+    "filename": "28 Years Later 2025 1080p BluRay DDP 5 1 10bit H 265-iVy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Amazing Films 13 - Mp4 x264 AC3 1080p\n28 Years Later (2025) 1080p Surround.mp4\n👤 7 💾 2.27 GB ⚙️ 1337x",
+   "infoHash": "1cd4535f03f1035b0e20bd2196a99c62df1d7e45",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "28 Years Later (2025) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 7 💾 1.77 GB ⚙️ ThePirateBay",
+   "infoHash": "6a1ab266afdd09d59608c9f0ccb44d1fbeeead27",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "28 Years Later 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later The Bone Template 2026 1080p BluRayRIP x265 10bit DTS-HD-MA 5 1-UnKn0wn\n👤 6 💾 5.88 GB ⚙️ EXT",
+   "infoHash": "688c22d79d8d379a03977a38359b9c64b0f7adb0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x265|10bit",
+    "filename": "28 Years Later The Bone Template 2026 1080p BluRayRIP x265 10bit DTS-HD-MA 5 1-UnKn0wn.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28.Years.Later.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust\n👤 6 💾 1.79 GB ⚙️ 1337x",
+   "infoHash": "ded21111bebef5ae8e614dc4774a0b2de9830be2",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "28.Years.Later.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28.Years.Later.2025.1080p.BluRay.x264.DTS-WiKi\n👤 6 💾 11 GB ⚙️ ThePirateBay",
+   "infoHash": "d604e3527acc1c66957a3201f886f427623eeae7",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "28.Years.Later.2025.1080p.BluRay.x264.DTS-WiKi.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28 Years Later 2025 1080p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 6 💾 1.77 GB ⚙️ ThePirateBay",
+   "infoHash": "1d3042f64f4bff2ae780718a3d73b167c95b67e5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "28.Years.Later.2025.1080p.10bit.WEBRip.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "28.Years.Later.2025.MULTi.VF2.1080p.WEB-DL.H264-Slay3R (28 ans plus tard)\n👤 5 💾 6.49 GB ⚙️ EXT\nMulti Audio",
+   "infoHash": "332c825f261ffafde0cea15cef277f71c01ed20c",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "28 Years Later 2025 720p WEBRip\n👤 57 💾 1.03 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+   "infoHash": "d5859dcc293f73a393fdfc000abd7ac10e014a5a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "28.Years.Later.2025.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "28 Years Later 2025 720p BluRay\n👤 41 💾 1.03 GB ⚙️ YTS",
+   "infoHash": "31bfbd0221f65d6db6735cb4e7a6d98c045f9352",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "28.Years.Later.2025.720p.BluRay.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "28 Years Later (2025) 720p WEBRip-LAMA\n👤 10 💾 1.03 GB ⚙️ ThePirateBay",
+   "infoHash": "bb08583bf155828aa2dfa06f294b2cc937a87753",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "28.Years.Later.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "28 Years Later 2025 720p 10bit WEBRip 6CH x265 HEVC-PSA\n👤 5 💾 907.11 MB ⚙️ ThePirateBay",
+   "infoHash": "541ee0b4c7e38b9a9755e70ea745db491b819ecd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|hevc|10bit",
+    "filename": "28 Years Later 2025 720p 10bit WEBRip 6CH x265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "101 Horror Movies Mega Pack Vol 16 Mixed x264 [i_c]\n28 Years Later 2025.mkv\n👤 19 💾 3.3 GB ⚙️ ThePirateBay",
+   "infoHash": "debe613422bd034cbe2e1e9b4678e59769c4500b",
+   "fileIdx": 38,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|x264",
+    "filename": "28 Years Later 2025.mkv"
+   }
+  }
+ ]
+}

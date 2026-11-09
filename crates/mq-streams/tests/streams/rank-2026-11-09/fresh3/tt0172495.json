@@ -1,0 +1,511 @@
+{
+ "fetched": "2026-11-08T23:16:50.022Z",
+ "id": "tt0172495",
+ "type": "movie",
+ "sources": {
+  "meta": "https://v3-cinemeta.strem.io/meta/movie/tt0172495.json",
+  "streams": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt0172495.json"
+ },
+ "meta": {
+  "name": "Gladiator",
+  "year": "2000",
+  "runtime": "155 min",
+  "genres": [
+   "Action",
+   "Adventure",
+   "Drama"
+  ],
+  "country": "United Kingdom, Malta, Morocco, United States"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Gladiator 2000 Bluray 2160p AV1 HDR10 EN/FR OPUS 7.1-UH [UserHEVC]\n👤 62 💾 12.42 GB ⚙️ 1337x\n🇬🇧 / 🇫🇷",
+   "infoHash": "dfb1ea7172aa901b9ca94f70e7a8d69b951f1d49",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|av1|10bit|HDR",
+    "filename": "Gladiator.2000.Bluray.2160p.AV1.HDR10.OPUS.7.1-UH.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Gladiator.2000.Extended.2160p.UHD.BluRay.10bit.HDR.x265-HazMatt\n👤 7 💾 6.88 GB ⚙️ ThePirateBay",
+   "infoHash": "430efa2013dc846b711ff3410be4764067162511",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit|HDR",
+    "filename": "Gladiator.2000.Extended.2160p.UHD.BluRay.10bit.HDR.x265-HazMatt.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Gladiator 2000 2160p BluRay\n👤 73 💾 8.09 GB ⚙️ YTS",
+   "infoHash": "34037a882e86e721070226d459c592f4a5a589a9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit",
+    "filename": "Gladiator.2000.EXTENDED.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Gladiator.2000.EXTENDED.4K.UltraHD.BluRay.2160p.x264.DTS-X.7.1.A\n👤 4 💾 14.38 GB ⚙️ ThePirateBay",
+   "infoHash": "444aecff2d7734c1d349aa025657fc0ab266978f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x264",
+    "filename": "Gladiator.2000.EXTENDED.4K.UltraHD.BluRay.2160p.x264.DTS-X.7.1.AAC.7.1-POOP.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Gladiator (2000) Extended (1080p BluRay x265 HEVC 10bit HDR AAC 7.1 afm72) [QxR]\n👤 105 💾 7.77 GB ⚙️ 1337x",
+   "infoHash": "414ee48b809c652ccbefa9064ae31a949fda775a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit|HDR",
+    "filename": "Gladiator (2000) Extended (1080p BluRay x265 HDR afm72).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Gladiator 2000 Extended Cut PROPER UHD BluRay 1080p DDP 5 1 DoVi HDR10 x265-SM737\n👤 39 💾 8.56 GB ⚙️ ThePirateBay",
+   "infoHash": "2eeaa50ba29bda8af3157f235fb2402ef8eab415",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Gladiator 2000 Extended Cut PROPER UHD BluRay 1080p DDP 5 1 DoVi HDR10 x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Gladiator 2000 Extended UHD BluRay 1080p DDP 5 1 DoVi HDR10 x265-SM737\n👤 3 💾 7.67 GB ⚙️ ThePirateBay",
+   "infoHash": "00ca7aaa49896c29da0d702497fc4fca2a97f478",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Gladiator.2000.Extended.UHD.BluRay.1080p.DDP.5.1.DoVi.HDR10.x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Gladiator 2000 Extended 1080p BluRay HEVC H265 HDR 10-BIT 5.1 BO\n👤 3 💾 4.02 GB ⚙️ ThePirateBay",
+   "infoHash": "a27d37d5ff8c83764acf9d1a45516df10be9ec87",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit|HDR",
+    "filename": "Gladiator 2000 Extended 1080p BluRay HEVC H265 HDR 10-BIT 5.1 BONE.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator (2000) [EXTENDED] 1080p BrRip x264 - 1.6GB - YIFY\n👤 429 💾 1.6 GB ⚙️ ThePirateBay",
+   "infoHash": "9bfab920305925f9954d8c4b9dedcd4c6b12ffea",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x264",
+    "filename": "Gladiator.EXTENDED.2000.1080.BrRip.264.YIFY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Great Films 6: MP4 X264 AC3 1080p\nGladiator (2000) 1080p Surround.mp4\n👤 391 💾 3.9 GB ⚙️ MagnetDL",
+   "infoHash": "113f90cbe0af807c76c86655f571edb10ab8a589",
+   "fileIdx": 18,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Gladiator (2000) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator 2000 Extended Cut Remastered BluRay 1080p HEVC x265 5.1 BONE\n👤 66 💾 1.98 GB ⚙️ TorrentGalaxy",
+   "infoHash": "c8d9282c6ce0c540a7e4dc466878c56a843719ac",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "Gladiator 2000 Extended Cut Remastered BluRay 1080p HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator.2000.PARAMOUNT.REISSUE.EXTENDED.CUT.REMASTERED.1080p.10bit.BluRay.6CH.x265.HEVC-PSA\n👤 61 💾 3.22 GB ⚙️ 1337x",
+   "infoHash": "757c8b9c75e43e0ad0d442a42cf9dc7192c50b08",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Gladiator.2000.PARAMOUNT.REISSUE.EXTENDED.CUT.REMASTERED.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator.2000.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265\n👤 54 💾 4.8 GB ⚙️ ThePirateBay",
+   "infoHash": "e7bdc34dec0359581316140fdbf50e7dbaa7b95b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Gladiator.2000.1080p.BluRay.DDP5.1.x265.10bit-GalaxyRG265.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Il gladiatore (2000) WEBRip 1080p x264 EAC3 ITA ENG SUB ITA ENG - Lullozzo\n👤 18 💾 8.71 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇹",
+   "infoHash": "bc6ae5662b534bec60522e5336c791597efc84f5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Il gladiatore (2000) WEBRip 1080p x264 EAC3 ITA ENG SUB ITA ENG - Lullozzo.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator.2000.EXTENDED.1080p.BluRay.x265-RARBG\n👤 18 💾 2.66 GB ⚙️ RARBG",
+   "infoHash": "82db5057d1d0b8e4d6340e7efdca8a8806e00b30",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Gladiator.2000.EXTENDED.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator 2000 Theatrical Cut MULTi 1080p WEB H265-FW\n👤 16 💾 3.87 GB ⚙️ ThePirateBay\nMulti Audio",
+   "infoHash": "45d373aac5a9e308d241939cdb39be7a8002a6c0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h265",
+    "filename": "Gladiator 2000 Theatrical Cut MULTi 1080p WEB H265-FW.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator.2000.Theatrical.Cut.Open.Matte.1080p.WEBRip.x265.10bit-KONTRAST\n👤 15 💾 4.58 GB ⚙️ TorrentGalaxy",
+   "infoHash": "84e46e5a00bafc0c566845227cf821efb17263f2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Gladiator.2000.Theatrical.Cut.Open.Matte.1080p.WEBRip.x265.10bit-KONTRAST.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator.2000.EXTENDED.1080p.BluRay.H264.AAC-RARBG\n👤 13 💾 3.26 GB ⚙️ 1337x",
+   "infoHash": "433ee84834d255513c6660964d5a98708f7f2a92",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264",
+    "filename": "Gladiator.2000.EXTENDED.1080p.BluRay.H264.AAC-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator 2000 1080p YT WEB-DL AAC 2 0 H 264-PiRaTeS\n👤 12 💾 5.69 GB ⚙️ ThePirateBay",
+   "infoHash": "dc46ba06eee7e59dde5537d087809104f6b6a6de",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Gladiator 2000 1080p YT WEB-DL AAC 2 0 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "IMDB TOP 001-050 BluRay 1080p x265 10bit MNHD-FRDS\n047.角斗士.Gladiator.2000.Extended.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS/Gladiator.2000.Extended.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv\n👤 11 💾 12.93 GB ⚙️ EXT",
+   "infoHash": "9351bcf9e7437f706549f8b60314c39259c420b4",
+   "fileIdx": 333,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Gladiator.2000.Extended.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator 2000 Extended 1080p BluRay DD+ 5.1 x265-edge2020\n👤 11 💾 8.04 GB ⚙️ TorrentGalaxy",
+   "infoHash": "8312c7cd62592f1fdca4183714424bdc8f74f684",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Gladiator.2000.Extended.1080p.BluRay.DDP.5.1.H.265-EDGE2020.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator 2000 1080p ATVP WEB-DL DD 5 1 H 264-PiRaTeS\n👤 10 💾 7.63 GB ⚙️ ThePirateBay",
+   "infoHash": "ef57a884011d0a0d0bcc70be8e6df27c1025322b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Gladiator 2000 1080p ATVP WEB-DL DD 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator (2000) 10th Anniv (1080p BluRay x265 HEVC 10bit AAC 5.1 Tigole) [QxR]\nGladiator (2000) 10th Anniv (1080p x265 10bit Tigole).mkv\n👤 10 💾 6.19 GB ⚙️ 1337x",
+   "infoHash": "b83c38f126f9149609b6be7786c2bcfd36766a53",
+   "fileIdx": 23,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Gladiator (2000) 10th Anniv (1080p x265 10bit Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator 2000 EXTENDED 1080p BluRay x265-YAWNTiC\n👤 9 💾 7.7 GB ⚙️ ThePirateBay",
+   "infoHash": "0d5b845d20340a62ae6c51881c84ba1e27670455",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Gladiator 2000 EXTENDED 1080p BluRay x265-YAWNTiC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator 2000 Remastered Extended Cut 1080p BluRay DD5 1 x265-Chivaman\n👤 9 💾 5.93 GB ⚙️ ThePirateBay",
+   "infoHash": "bba06f5373f208f412e0f0bf38420d525e14f009",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Gladiator 2000 Remastered Extended Cut 1080p BluRay DD5 1 x265-Chivaman.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Amazing Films 5 - Mp4 x264 AC3 1080p\nGladiator (2000) 1080p Surround.mp4\n👤 9 💾 3.88 GB ⚙️ ThePirateBay",
+   "infoHash": "9d34b41369168c08bba185cadc7e45fc4156e86f",
+   "fileIdx": 23,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Gladiator (2000) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator (2000) Extended 10th Anniv (1080p BluRay x265 HEVC 10bit AAC 5.1 Tigole) [QxR]\n👤 9 💾 6.83 GB ⚙️ 1337x",
+   "infoHash": "8a8b376c7bffa5ae24c261a29161c6a3fc238e50",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Gladiator (2000) Extended 10th Anniv (1080p x265 10bit Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator 2000 REPACK EXTENDED 1080p BluRay x265-YAWNTiC\n👤 8 💾 8.23 GB ⚙️ ThePirateBay",
+   "infoHash": "f6160fda245dbe786da8fdbf447ba0166b337957",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Gladiator 2000 REPACK EXTENDED 1080p BluRay x265-YAWNTiC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator (2000)-Russell Crowe-1080p-H264-AC 3 (DolbyDigital-5.1) & nickarad\n👤 5 💾 3.8 GB ⚙️ 1337x",
+   "infoHash": "8ae3a402c9ae39c28897fd6b90d37b40396365ae",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|h264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Epic Films 5: MP4 X264 AC3 1080p\nGladiator (2000) 1080p Surround.mp4\n👤 4 💾 3.88 GB ⚙️ MagnetDL",
+   "infoHash": "fa35bde078b04070bc2cdc3223f68d8c7da71559",
+   "fileIdx": 29,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Gladiator (2000) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator.2000.Open.Matte.1080p.Hybrid.x265.HEVC.EAC3-SARTRE\n👤 4 💾 7.41 GB ⚙️ ThePirateBay",
+   "infoHash": "b6042df55bd26f2d53b3e88c0de520aa24b4205a",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|hevc",
+    "filename": "Gladiator.2000.Open.Matte.1080p.Hybrid.x265.HEVC.EAC3-SARTRE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator.2000.EXTENDED.1080p.BRRip.5.1.HEVC.x265-GIRAYS\n👤 4 💾 2.77 GB ⚙️ ThePirateBay",
+   "infoHash": "8361fad08dfc4719cddb5de7cb85dd82a971ef96",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|hevc",
+    "filename": "Gladiator.2000.1080p.BRRip.5.1.HEVC.x265-GIRAYS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator.2000.EXTENDED.1080p.BluRay.x264-CiNEFiLE\n👤 4 💾 13.12 GB ⚙️ RARBG",
+   "infoHash": "6da34aaf148314c49737c6a0530f078c4de8477d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Gladiator.2000.1080p.BluRay.x264-CiNEFiLE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator 2000 1080p ROKU WEB-DL DD 5 1 H 264-PiRaTeS\n👤 3 💾 4.24 GB ⚙️ ThePirateBay",
+   "infoHash": "6f8ec2790d946a61c5dad336ca11f3e224771bb6",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Gladiator 2000 1080p ROKU WEB-DL DD 5 1 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator (2000) Extended Cut - Mp4 x264 AC3 1080p\n👤 3 💾 3.88 GB ⚙️ 1337x",
+   "infoHash": "e352ac5e9de07aabc7ab2303b16719abb629f6e0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "Gladiator (2000) Extended Cut 1080p.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator.2000.Remastered.1080p.BluRay.264.5.1-RiPRG\n👤 3 💾 4.13 GB ⚙️ TorrentGalaxy",
+   "infoHash": "8f4a5f9c72fb5e9588576ac792093a0c75abacdb",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay",
+    "filename": "Gladiator.2000.Remastered.1080p.BluRay.264.5.1-RiPRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator (2000) Remastered Extended Cut 1080p 10bit Bluray x265…\n👤 2 💾 12.67 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇳",
+   "infoHash": "7f34b79be2065632a548c9efcd006db5683a2590",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Gladiator (2000) Remastered Extended Cut 1080p 10bit Bluray x265 HEVC [Org DDP 5.1 Hindi + DDP EX 7.1 English] ESubs ~ TombDoc.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Gladiator.2000.REPACK.EXTENDED.1080p.BluRay.x265-TRB\n👤 2 💾 8.3 GB ⚙️ TorrentGalaxy",
+   "infoHash": "0ed6a6947db74a7125c55be5dcd7f180eb42cf90",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Gladiator (2000) 720p BrRip x264 - YIFY\n👤 57 💾 1.1 GB ⚙️ ThePirateBay",
+   "infoHash": "3fbfacc87cc7108b60bb64d5c3a38fbb8226b21e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BRRip|x264",
+    "filename": "Gladiator.EXTENDED.REMASTERED.2000.720p.BrRip.x264.BOKUTOX.YIFY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Academy Awards Best Pictures (1927 - 2020)\n2000 - Gladiator - 720p.mp4\n👤 28 💾 1.1 GB ⚙️ ThePirateBay",
+   "infoHash": "c9cf60639e51947f0906f8545e6b9bc3d84a37d9",
+   "fileIdx": 72,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p",
+    "filename": "2000 - Gladiator - 720p.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Gladiator 2000 EXTENDED 720p BluRay HEVC H265 BONE\n👤 7 💾 1.36 GB ⚙️ ThePirateBay",
+   "infoHash": "53a0315fc89b8b8d4273b487d0d53d0bfd9233f3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|hevc",
+    "filename": "Gladiator 2000 EXTENDED 720p BluRay HEVC H265 BONE.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Gladiator.2000.PARAMOUNT.REISSUE.EXTENDED.CUT.REMASTERED.720p.10bit.BluRay.6CH.x265.HEVC-PSA\n👤 5 💾 1.47 GB ⚙️ 1337x",
+   "infoHash": "c67781879787899ac34d77a89984f4a9900997db",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|hevc|10bit",
+    "filename": "Gladiator.2000.PARAMOUNT.REISSUE.EXTENDED.CUT.REMASTERED.720p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Gladiator 2000 EXTENDED REMASTERED 720p BluRay Hindi English x26\n👤 5 💾 1.75 GB ⚙️ ThePirateBay\n🇬🇧 / 🇮🇳",
+   "infoHash": "c9bb4c3c7048fed0c5cdc3fadffb5391fde0cd29",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Gladiator 2000 720p BrRip x264 {The Hated}-ThumperDC\n👤 5 💾 1.19 GB ⚙️ ThePirateBay",
+   "infoHash": "5b411831f473924e5b8f9f91f4d867991d64ffe8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BRRip|x264",
+    "filename": "Gladiator.2000.720p.BRrip.x264.The_Hated.【ThumperDC】.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Gladiator 2000 720p TUBI WEB-DL AAC 2 0 H 264-PiRaTeS\n👤 4 💾 2.18 GB ⚙️ ThePirateBay",
+   "infoHash": "8adbcd8bcd6c616eed4f426490e3a4ea222ca2ae",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEB-DL|h264",
+    "filename": "Gladiator 2000 720p TUBI WEB-DL AAC 2 0 H 264-PiRaTeS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nHDRip",
+   "title": "Gladiator (El gladiador) (2000) [HDRip-AC3][Spanish]\n👤 13 💾 2.69 GB ⚙️ ThePirateBay\n🇪🇸",
+   "infoHash": "154ae2903cad1307e2d25d34c6285521ec3c8173",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|HDRip",
+    "filename": "Gladiator.HDrip.avi"
+   }
+  },
+  {
+   "name": "Torrentio\nBRRip",
+   "title": "Gladiator (El gladiador) Versión extendida [peliculasytor\n👤 4 💾 2.07 GB ⚙️ ThePirateBay\n🇪🇸",
+   "infoHash": "f8ad5aecbbe2bb82a032a2c97a0941f89e704a68",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BRRip",
+    "filename": "Gladiator (Version Extendida) [BluRayRip][Ac3 5.1 Español Castellano][2000][www.newpct.com].avi"
+   }
+  },
+  {
+   "name": "Torrentio\nBRRip",
+   "title": "Gladiator.Extended.Remastered.2000.BRRip.XViD.AC3-ETRG\n👤 3 💾 1.49 GB ⚙️ ThePirateBay",
+   "infoHash": "df503dc31a94c86433da4d88a38defca6f96a57d",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BRRip|xvid"
+   }
+  },
+  {
+   "name": "Torrentio\nDVDRip",
+   "title": "Gladiator.COLLECTORS.EDITION.SWESUB.RETAIL.DVDRip.XviD-franXter\n👤 3 💾 3.41 GB ⚙️ ThePirateBay\n🇸🇪",
+   "infoHash": "6235b1d1689d3f504eb16b74bbf7c9785fc0d842",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVDRip|xvid"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Official IMDb Top 250 Movies Collection 6/17/2011\nGladiator.avi\n👤 8 💾 1.01 GB ⚙️ ThePirateBay",
+   "infoHash": "4986ace2ee7a564508e0d5cfdde2d9018b8af942",
+   "fileIdx": 696,
+   "behaviorHints": {
+    "filename": "Gladiator.avi"
+   }
+  }
+ ]
+}

@@ -1,0 +1,516 @@
+{
+ "fetched": "2026-11-08T23:53:12.263Z",
+ "id": "tt0944947",
+ "type": "series",
+ "season": 3,
+ "episode": 9,
+ "meta": {
+  "name": "Game of Thrones",
+  "year": "2011–2019",
+  "runtime": "57 min",
+  "episodeTitle": "The Rains of Castamere"
+ },
+ "streamUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/series/tt0944947:3:9.json",
+ "streams": [
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Game.of.Thrones.S03.2160p.UHD.BluRay.10bit.HDR.x265-HazMatt\nGame.of.Thrones.S03E09.The.Rains.of.Castamere.2160p.UHD.BluRay.10bit.HDR.x265-HazMatt.mkv\n👤 5 💾 1.45 GB ⚙️ 1337x",
+   "infoHash": "b7149a7d0abce758fd58bddfb0b3418e82d6db56",
+   "fileIdx": 8,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|b7149a7d0abce758fd58bddfb0b3418e82d6db56",
+    "filename": "Game.of.Thrones.S03E09.The.Rains.of.Castamere.2160p.UHD.BluRay.10bit.HDR.x265-HazMatt.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Game of Thrones (2011) S01-S08 (2160p BDMux AV1 OPUS ENG OPUS ITA) [Vadirty]\nSeason 03/Game of Thrones - S03E09 - The Rains of Castamere.mkv\n👤 11 💾 1.1 GB ⚙️ EXT\n🇬🇧 / 🇮🇹",
+   "infoHash": "f21e4d6ad604728d020959673e1ee49d28a4e47d",
+   "fileIdx": 28,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|f21e4d6ad604728d020959673e1ee49d28a4e47d",
+    "filename": "Game of Thrones - S03E09 - The Rains of Castamere.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Game of Thrones S03E09 The Rains of Castamere 1080p MAX WEB-DL DDP5 1 Atmos\n👤 22 💾 2.88 GB ⚙️ ThePirateBay",
+   "infoHash": "c141edb2a99a5616259c61cdd92f21c833ed87e2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|DV|HDR|Kitsune",
+    "filename": "Game of Thrones S03E09 The Rains of Castamere 1080p MAX WEB-DL DDP5 1 Atmos DV HDR H 265-Kitsune.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Game of Thrones s01-s08 1080p HDR10/DV\nSeason 03/Game of Thrones - S03E09 - The Rains of Castamere.mkv\n👤 3 💾 2.87 GB ⚙️ 1337x",
+   "infoHash": "4ab6d762dd030503976971a6cdabf2eea1fc2739",
+   "fileIdx": 28,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4ab6d762dd030503976971a6cdabf2eea1fc2739",
+    "filename": "Game of Thrones - S03E09 - The Rains of Castamere.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game.of.Thrones.SEASON.03.S03.COMPLETE.1080p.10bit.BluRay.6CH.x265.HEVC-PSA\nGame.of.Thrones.S03E09.The.Rains.of.Castamere.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv\n👤 497 💾 744.24 MB ⚙️ 1337x",
+   "infoHash": "31a97af49496e2d1a63b6d23e1309782c1aacc8f",
+   "fileIdx": 8,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|31a97af49496e2d1a63b6d23e1309782c1aacc8f",
+    "filename": "Game.of.Thrones.S03E09.The.Rains.of.Castamere.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game.of.Thrones.Season.1-8.S01-08.COMPLETE.1080p.BluRay.WEB.x265.10bit.6CH.ReEnc-LUMI\nSeason 3/Game.of.Thrones.S03E09.1080p.BluRay.x265.10bit.6CH.ReEnc-LUMI.mkv\n👤 372 💾 1.39 GB ⚙️ 1337x",
+   "infoHash": "fba84caa1391fbd75698b131fb57321313e5f3c8",
+   "fileIdx": 65,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|fba84caa1391fbd75698b131fb57321313e5f3c8",
+    "filename": "Game.of.Thrones.S03E09.1080p.BluRay.x265.10bit.6CH.ReEnc-LUMI.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game Of Thrones S03 Season 3 1080p 5.1Ch BluRay ReEnc-DeeJayAhme\nGame.Of.Thrones.S03E09.1080p.5.1Ch.BluRay.ReEnc-DeeJayAhmed.mkv\n👤 90 💾 654.13 MB ⚙️ ThePirateBay",
+   "infoHash": "8e3a154bfe71ee1364761fa04cdf4fc0e4aa62d8",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|8e3a154bfe71ee1364761fa04cdf4fc0e4aa62d8",
+    "filename": "Game.Of.Thrones.S03E09.1080p.5.1Ch.BluRay.ReEnc-DeeJayAhmed.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game of Thrones 2011 S01-S08 1080p HMAX WEB-DL EAC3 Atmos 10-BIT H265\nS03/Game of Thrones_S03E09_The Rains of Castamere.mkv\n👤 44 💾 819.17 MB ⚙️ ThePirateBay",
+   "infoHash": "8a1b83493cb61a760633702ef2c4fc5fcdab1317",
+   "fileIdx": 28,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|8a1b83493cb61a760633702ef2c4fc5fcdab1317",
+    "filename": "Game of Thrones_S03E09_The Rains of Castamere.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game.of.Thrones.S01-S08.COMPLETE.SERIES.REPACK.1080p.Bluray.x265-HiQVE\nGame.of.Thrones.S03.1080p.Bluray.x265-HiQVE/Game.of.Thrones.S03E09.1080p.Bluray.x265-HiQVE.mkv\n👤 30 💾 1.2 GB ⚙️ 1337x",
+   "infoHash": "31dc5a9e2d92b34ef86e12e626df17368f898571",
+   "fileIdx": 32,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|31dc5a9e2d92b34ef86e12e626df17368f898571",
+    "filename": "Game.of.Thrones.S03E09.1080p.Bluray.x265-HiQVE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game.Of.Thrones.S03.Season.3.1080p.WEB-DL.H264-NTb [PublicHD]\nGame.of.Thrones.S03E09.The.Rains.of.Castamere.1080p.WEB-DL.DD5.1.H.264-NTb.mkv\n👤 26 💾 2.01 GB ⚙️ MagnetDL",
+   "infoHash": "72fc49de2ce9d1c8d6ccbc8d7ac8396b1b1b3743",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|72fc49de2ce9d1c8d6ccbc8d7ac8396b1b1b3743",
+    "filename": "Game.of.Thrones.S03E09.The.Rains.of.Castamere.1080p.WEB-DL.DD5.1.H.264-NTb.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game of Thrones S03E09 The Rains of Castameres 1080p BluRay x264-OFT\n👤 20 💾 2.2 GB ⚙️ ThePirateBay",
+   "infoHash": "ebcd072891b71dbce3cd54dafbad8d7a8ee41320",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|OFT",
+    "filename": "Game of Thrones S03E09 The Rains of Castameres 1080p BluRay x264-OFT.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game.of.Thrones.S03.1080p.BluRay.x265-RARBG\nGame.of.Thrones.S03E09.1080p.BluRay.x265-RARBG.mp4\n👤 20 💾 811.96 MB ⚙️ MagnetDL",
+   "infoHash": "2e83919ec39a05714abc2cd83a9704bb2bdf4ea5",
+   "fileIdx": 10,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|2e83919ec39a05714abc2cd83a9704bb2bdf4ea5",
+    "filename": "Game.of.Thrones.S03E09.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game.of.Thrones.S03.1080p.BluRay.x265-RARBG\nGame.of.Thrones.S03E09.1080p.BluRay.x265-RARBG.mp4\n👤 19 💾 811.96 MB ⚙️ RARBG",
+   "infoHash": "cf79db0ac70efdd02f0e7235898b96f8dad574ea",
+   "fileIdx": 8,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|cf79db0ac70efdd02f0e7235898b96f8dad574ea",
+    "filename": "Game.of.Thrones.S03E09.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game of Thrones (2011) Complete (1080p BluRay x265 HEVC 10bit TrueHD Atmos 7.1) [UTR]\nGame.of.Thrones.S03.1080p.BluRay.HEVC.TrueHD.Atmos.7.1/Game.of.Thrones.S03E09.The.Rains.of.Castamere.1080p.Bluray.10bit.x265.TrueHD.Atmos.7.1-UTR-HD.mkv\n👤 19 💾 3.81 GB ⚙️ 1337x",
+   "infoHash": "aaa3461902a5e44313d15900f40b947252a0fb76",
+   "fileIdx": 234,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|aaa3461902a5e44313d15900f40b947252a0fb76",
+    "filename": "Game.of.Thrones.S03E09.The.Rains.of.Castamere.1080p.Bluray.10bit.x265.TrueHD.Atmos.7.1-UTR-HD.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game of Thrones S03 1080p BluRay Multi (10 aud 24 sub) AV1 Opus [AV1D]\nGame of Thrones S03E09.mkv\n👤 18 💾 669.91 MB ⚙️ 1337x\nMulti Audio / 🇬🇧",
+   "infoHash": "0e5933630c4487414f1afd4cb430fe9d7b726762",
+   "fileIdx": 8,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|0e5933630c4487414f1afd4cb430fe9d7b726762",
+    "filename": "Game of Thrones S03E09.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game of Thrones.2011.S01-S08.1080p.AV1.10bit-Zero00\nS03/Game of Thrones S03E09  The Rains of Castamere.mkv\n👤 16 💾 421.75 MB ⚙️ TorrentGalaxy",
+   "infoHash": "af78886824c68cb0aaaf95f3bf1b21bbfbd7e549",
+   "fileIdx": 41,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|af78886824c68cb0aaaf95f3bf1b21bbfbd7e549",
+    "filename": "Game of Thrones S03E09  The Rains of Castamere.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game.of.Thrones.S03.1080p.BluRay.10bit.HEVC-MkvCage [Season 3]\nGame.of.Thrones.S03E09.The.Rains.of.Castamere.1080p.BluRay.10bit.HEVC.6CH-MkvCage.ws.mkv\n👤 15 💾 1.11 GB ⚙️ ThePirateBay",
+   "infoHash": "9491f211032e3bcbbc5b203c22eebac45a5ea55c",
+   "fileIdx": 6,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|9491f211032e3bcbbc5b203c22eebac45a5ea55c",
+    "filename": "Game.of.Thrones.S03E09.The.Rains.of.Castamere.1080p.BluRay.10bit.HEVC.6CH-MkvCage.ws.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game of Thrones (2011) Season 1-7 S01-S07 Steelbook (1080p BluRay x265 HEVC 10bit Atmos 7.1) [UTR]\nGame.of.Thrones.S03.1080p.BluRay.HEVC.TrueHD.Atmos.7.1/Game.of.Thrones.S03E09.1080p.Bluray.10bit.x265.TrueHD.Atmos.7.1-UTR-HD.mkv\n👤 13 💾 3.81 GB ⚙️ 1337x",
+   "infoHash": "ddc8c50f8f07cedce0f5a87b8dac3c5833573844",
+   "fileIdx": 28,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|ddc8c50f8f07cedce0f5a87b8dac3c5833573844",
+    "filename": "Game.of.Thrones.S03E09.1080p.Bluray.10bit.x265.TrueHD.Atmos.7.1-UTR-HD.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game of Thrones Season 01-08 Complete BDRip 1080p\nGOT.S03/GOT.S03E09.BDRip.1080p.mkv\n👤 12 💾 4.3 GB ⚙️ ThePirateBay\n🇬🇧 / 🇷🇺",
+   "infoHash": "ae4933dd54f523ce2722a7130e5d7bce55e126d8",
+   "fileIdx": 28,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|ae4933dd54f523ce2722a7130e5d7bce55e126d8",
+    "filename": "GOT.S03E09.BDRip.1080p.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game.of.Thrones.S03.1080p.BluRay.x264-ROVERS[rartv]\ngame.of.thrones.s03e09.1080p.bluray.x264-rovers.mkv\n👤 12 💾 4.37 GB ⚙️ RARBG",
+   "infoHash": "e5d7d6ec98e50d0975c106501166cdc48c0351f6",
+   "fileIdx": 19,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|e5d7d6ec98e50d0975c106501166cdc48c0351f6",
+    "filename": "game.of.thrones.s03e09.1080p.bluray.x264-rovers.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game.Of.Thrones.S03.1080p.10bit.DS4K.CRAV.WEBRip.[Org.Jio.DDP2.0-Hindi DDP5.1-English].Atmos.ESub.HEVC-The.PunisheR\nGame.Of.Thrones.S03E09.1080p.10bit.DS4K.CRAV.WEBRip.[Org.Jio.DDP2.0-Hindi+DDP5.1-English].Atmos.ESub.HEVC-The.PunisheR.mkv\n👤 11 💾 1.36 GB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "965392d6b63761b262a5ba33e217fa25e787de39",
+   "fileIdx": 8,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|965392d6b63761b262a5ba33e217fa25e787de39",
+    "filename": "Game.Of.Thrones.S03E09.1080p.10bit.DS4K.CRAV.WEBRip.[Org.Jio.DDP2.0-Hindi+DDP5.1-English].Atmos.ESub.HEVC-The.PunisheR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game of Thrones Season 1 to 8 The Complete Collection [NVEnc H265 1080p][AAC 6Ch][English Subs]\nGame of Thrones - Season 3/Game of Thrones - S03E09 - The Rains of Castamere.mp4\n👤 9 💾 689.38 MB ⚙️ 1337x",
+   "infoHash": "2b01c3f588cef67d999dc2aefef87678cb011213",
+   "fileIdx": 29,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|2b01c3f588cef67d999dc2aefef87678cb011213",
+    "filename": "Game of Thrones - S03E09 - The Rains of Castamere.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game.of.Thrones.S03.ITA.ENG.AC3.1080p.H265-BlackEgg\nIl.Trono.di.Spade.S03E09.Le.Piogge.di.Castamere.ITA.ENG.1080p.AC3.H265-BlackEgg.mkv\n👤 9 💾 1.83 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "38e660235b557080fa716ec6447e0f3dd16ac96b",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|38e660235b557080fa716ec6447e0f3dd16ac96b",
+    "filename": "Il.Trono.di.Spade.S03E09.Le.Piogge.di.Castamere.ITA.ENG.1080p.AC3.H265-BlackEgg.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game.of.Thrones.SEASON.01-07.COMPLETE.1080p.10bit.BluRay.6CH.x265.HEVC-PSA\nGame.of.Thrones.SEASON.03.S03.COMPLETE.1080p.10bit.BluRay.6CH.x265.HEVC-PSA/Game.of.Thrones.S03E09.The.Rains.of.Castamere.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv\n👤 7 💾 744.24 MB ⚙️ TorrentGalaxy",
+   "infoHash": "90297a8ab84b44732a99102a07b2e716e141b799",
+   "fileIdx": 28,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|90297a8ab84b44732a99102a07b2e716e141b799",
+    "filename": "Game.of.Thrones.S03E09.The.Rains.of.Castamere.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game of Thrones The Complete Seasons 1-8 MULTi [1080p] BluRay x264-PopHD\nGame Of Thrones S03 MULTi [1080p] BluRay x264-PopHD/Game Of Thrones S03E09 MULTi [1080p] BluRay x264-PopHD.mkv\n👤 7 💾 1.24 GB ⚙️ EXT\nMulti Audio / 🇬🇧 / 🇫🇷",
+   "infoHash": "6670a87fe2969482ddc31140a5a1647abefaebcc",
+   "fileIdx": 30,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|6670a87fe2969482ddc31140a5a1647abefaebcc",
+    "filename": "Game Of Thrones S03E09 MULTi [1080p] BluRay x264-PopHD.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game of Thrones s03e09 2013 1080p Rifftrax 6ch x264 AVC\n👤 6 💾 1.61 GB ⚙️ ThePirateBay",
+   "infoHash": "7cd6e656424225a817e94777d301ce3824926e78",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p",
+    "filename": "Game.of.Thrones.s03e09.2013.1080p.Rifftrax.6ch.x264.AVC.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game of Thrones S03 2013.MULTi.1080p.Blu-ray.HEVC.DTS-HDMA.5.1.[\nGame of Thrones S03E09 2013.MULTi.1080p.Blu-ray.HEVC.DTS-HDMA.5.1-DDR.mkv\n👤 6 💾 4.5 GB ⚙️ ThePirateBay\nMulti Audio",
+   "infoHash": "93f4da75c611f811b44a72ade2323af653c35d6d",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|93f4da75c611f811b44a72ade2323af653c35d6d",
+    "filename": "Game of Thrones S03E09 2013.MULTi.1080p.Blu-ray.HEVC.DTS-HDMA.5.1-DDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game of Thrones (2011) Season 03 S03 (1080p BluRay x265 HEVC 10bit AAC 5.1 Joy) [UTR]\nGame of Thrones S03E09 The Rains of Castamere (1080p x265 10bit Joy).mkv\n👤 6 💾 740.44 MB ⚙️ 1337x",
+   "infoHash": "39d93dbfaa466fb014614cf672f88da4a8f354e9",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|39d93dbfaa466fb014614cf672f88da4a8f354e9",
+    "filename": "Game of Thrones S03E09 The Rains of Castamere (1080p x265 10bit Joy).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game.of.Thrones.S03.MULTi.1080p.WEB.x264-FW\nGame.of.Thrones.S03E09.MULTi.1080p.WEB.x264-FW.mkv\n👤 5 💾 2.04 GB ⚙️ EXT\nMulti Audio",
+   "infoHash": "cd22929b3fbcba83d02c1530ea5d185ce31b4732",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|cd22929b3fbcba83d02c1530ea5d185ce31b4732",
+    "filename": "Game.of.Thrones.S03E09.MULTi.1080p.WEB.x264-FW.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game of Thrones Season 1-7 1 2 3 4 5 6 7 Complete 1080p\nGame Of Thrones S03E09.mkv\n👤 5 💾 654.13 MB ⚙️ ThePirateBay",
+   "infoHash": "e20efbee11972b4585387ed513de8fd29aeed0b3",
+   "fileIdx": 28,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|e20efbee11972b4585387ed513de8fd29aeed0b3",
+    "filename": "Game Of Thrones S03E09.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game of Thrones 2011 Season 3 S03 (1080p x265 10bit) Tigole\nGame of Thrones S03E09 The Rains of Castamere (1080p x265 10bit Tigole).mkv\n👤 5 💾 1.1 GB ⚙️ ThePirateBay",
+   "infoHash": "3e82cf7a5e57244f84f466c819f80811f2931bd6",
+   "fileIdx": 56,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|3e82cf7a5e57244f84f466c819f80811f2931bd6",
+    "filename": "Game of Thrones S03E09 The Rains of Castamere (1080p x265 10bit Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game.of.Thrones.Season.1-6.S01-S06.1080p.10bit.5.1.BluRay.x265\nGame.of.Thrones.S03E09.1080p.10bit.BluRay.5.1.x265.HEVC-MZABI.mkv\n👤 4 💾 802.98 MB ⚙️ ThePirateBay",
+   "infoHash": "66c914e7cfc5b53726391c0fc018df2e45f08e3f",
+   "fileIdx": 29,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|66c914e7cfc5b53726391c0fc018df2e45f08e3f",
+    "filename": "Game.of.Thrones.S03E09.1080p.10bit.BluRay.5.1.x265.HEVC-MZABI.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Game of Thrones S01-S05 1080p 10bit BluRay 6CH x265 HEVC \nGame_of_Thrones_S03E09_x265_1080p_BluRay_30nama_30NAMA.mkv\n👤 4 💾 691.59 MB ⚙️ ThePirateBay",
+   "infoHash": "995d57e19453c6cf0559ef36f79540677b2e9c92",
+   "fileIdx": 28,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|995d57e19453c6cf0559ef36f79540677b2e9c92",
+    "filename": "Game_of_Thrones_S03E09_x265_1080p_BluRay_30nama_30NAMA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Game of Thrones - Season 3 - 720p BluRay - x264 - ShAaNiG\nGame.of.Thrones.S03E09.720p.BluRay.450MB.ShAaNiG.com.mkv\n👤 88 💾 449.88 MB ⚙️ ThePirateBay",
+   "infoHash": "2e8ae806e9cbcd7fe3dfa2006b0f086a7add58d5",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|2e8ae806e9cbcd7fe3dfa2006b0f086a7add58d5",
+    "filename": "Game.of.Thrones.S03E09.720p.BluRay.450MB.ShAaNiG.com.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Game.of.Thrones.Complete.Series.Season.1.2.3.4.5.6.7.8.x264.720p\nGoT.S03E09.The.Rains.of.Castamere.720p.mkv\n👤 74 💾 447.4 MB ⚙️ ThePirateBay",
+   "infoHash": "36b0bb34fa1dc6a892b7b40707ff8f6f2b5d30b7",
+   "fileIdx": 148,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|36b0bb34fa1dc6a892b7b40707ff8f6f2b5d30b7",
+    "filename": "GoT.S03E09.The.Rains.of.Castamere.720p.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Game.Of.Thrones.S03.Season.3.COMPLETE.720p.HDTV.x264-PublicHD\nGame.of.Thrones.S03E09.720p.HDTV.x264-EVOLVE.mkv\n👤 14 💾 1.19 GB ⚙️ ThePirateBay",
+   "infoHash": "22fea8991a955799970d9bc634d05087fe76ba3b",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|22fea8991a955799970d9bc634d05087fe76ba3b",
+    "filename": "Game.of.Thrones.S03E09.720p.HDTV.x264-EVOLVE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Game Of Thrones Season 3 Complete 720p WEB.DL.sujaidr (pimprg)\ngame.of.thrones.s03e09.the.rains.of.castamere.720p.web-dl.sujaidr.mkv\n👤 9 💾 386.46 MB ⚙️ MagnetDL",
+   "infoHash": "861982cce20e5e26ac76546343a19ddb2f3a4e59",
+   "fileIdx": 9,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|861982cce20e5e26ac76546343a19ddb2f3a4e59",
+    "filename": "game.of.thrones.s03e09.the.rains.of.castamere.720p.web-dl.sujaidr.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Game Of Throne Season 3 720p\nGame.of.Thrones.S03E09.720p.HDTV.x264-EVOLVE.mkv\n👤 8 💾 1.19 GB ⚙️ ThePirateBay",
+   "infoHash": "417b8ffbd7f53ce38b22f1900fb4f0224caebc17",
+   "fileIdx": 6,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|417b8ffbd7f53ce38b22f1900fb4f0224caebc17",
+    "filename": "Game.of.Thrones.S03E09.720p.HDTV.x264-EVOLVE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Game of Thrones S03 Complete 720p BluRay x264 Hindi English MW\nGame of Thrones S03E09 720p BluRay x264 Dual Audio [Hindi-English] ESub [MW].mkv\n👤 5 💾 498.18 MB ⚙️ ThePirateBay\nDual Audio / 🇬🇧 / 🇮🇳",
+   "infoHash": "51bf920ca58f1abe87371c548f66fb541e038ea7",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|51bf920ca58f1abe87371c548f66fb541e038ea7",
+    "filename": "Game of Thrones S03E09 720p BluRay x264 Dual Audio [Hindi-English] ESub [MW].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Game.of.Thrones.S03E09.The.Rains.of.Castamere.720p.HEVC.x265-MeGusta\n👤 4 💾 373.99 MB ⚙️ ThePirateBay",
+   "infoHash": "faae7040d360a3ad1b26928723a9253786485d65",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|MeGusta",
+    "filename": "Game.of.Thrones.S03E09.The.Rains.of.Castamere.720p.HEVC.x265-MeGusta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Game.of.Thrones.S03.720p.BDRip.OL-IFA\nGame.of.Thrones.S03E09.The.Rains.of.Castamere.720p.BDRip.x264.AAC.OL-IFA.mp4\n👤 3 💾 349.45 MB ⚙️ EXT",
+   "infoHash": "32084077d2293d7f7756453bf8b6b09176661cea",
+   "fileIdx": 16,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|32084077d2293d7f7756453bf8b6b09176661cea",
+    "filename": "Game.of.Thrones.S03E09.The.Rains.of.Castamere.720p.BDRip.x264.AAC.OL-IFA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Game of Thrones S03 720p 10bit DS4K CRAV WEBRip x265 HEVC [Org JC Hindi DDP 2.0 ~192Kbps English DDP 2.0] ESub - Immortal\nGame of Thrones S03E09 720p 10bit DS4K CRAV WEBRip x265 HEVC [Org JC Hindi DDP 2.0 ~192Kbps + English DDP 2.0] ESub - Immortal.mkv\n👤 3 💾 376.9 MB ⚙️ 1337x\n🇬🇧 / 🇮🇳",
+   "infoHash": "66c5f601c1077c9d0724dac778d0456f3696a55b",
+   "fileIdx": 8,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|66c5f601c1077c9d0724dac778d0456f3696a55b",
+    "filename": "Game of Thrones S03E09 720p 10bit DS4K CRAV WEBRip x265 HEVC [Org JC Hindi DDP 2.0 ~192Kbps + English DDP 2.0] ESub - Immortal.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n406p",
+   "title": "Game Of Thrones Complete Season 1 2 3 4 5 6 7 406p mkv + Subs\nGame Of Thrones S03E09 The Rains Of Castamere.mkv\n👤 15 💾 201.24 MB ⚙️ ThePirateBay",
+   "infoHash": "af133f985ef4ab2e79306ee015788a1b8ab3b602",
+   "fileIdx": 116,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|af133f985ef4ab2e79306ee015788a1b8ab3b602",
+    "filename": "Game Of Thrones S03E09 The Rains Of Castamere.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n406p",
+   "title": "Game Of Thrones Complete Series S01-S08 x264 aac 2.0 406p (MKV)\nGame Of Thrones S03E09 The Rains Of Castamere.mkv\n👤 6 💾 201.2 MB ⚙️ ThePirateBay",
+   "infoHash": "f951671c0ee533b260dc942eca8fc6c5d53e5c90",
+   "fileIdx": 127,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|f951671c0ee533b260dc942eca8fc6c5d53e5c90",
+    "filename": "Game Of Thrones S03E09 The Rains Of Castamere.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nHDTV",
+   "title": "Game of Thrones - The Complete Season 3 [HDTV]\nGame.of.Thrones.S03E09.HDTV.x264-EVOLVE.mp4\n👤 8 💾 329.84 MB ⚙️ ThePirateBay",
+   "infoHash": "1196d87e533c9bb87927550a02a04bff1e9dce60",
+   "fileIdx": 8,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1196d87e533c9bb87927550a02a04bff1e9dce60",
+    "filename": "Game.of.Thrones.S03E09.HDTV.x264-EVOLVE.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\nBDRip",
+   "title": "Il Trono Di Spade: Stagione 3: BD Rip ITA-Eng HD\nIl Trono di Spade - 3x09 Le piogge di Castamere - BD Rip ITA-Eng HD.mkv\n👤 4 💾 1019.23 MB ⚙️ MagnetDL\n🇬🇧 / 🇮🇹",
+   "infoHash": "9b36e60d0bc95406e1a930ad8a23f4fc11bd5797",
+   "fileIdx": 8,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|9b36e60d0bc95406e1a930ad8a23f4fc11bd5797",
+    "filename": "Il Trono di Spade - 3x09 Le piogge di Castamere - BD Rip ITA-Eng HD.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nBDRip",
+   "title": "Game Of Thrones Season 1 2 3 & 4 + Extras BDRip TSV\nSeason 3/Game of Thrones Season 03 Episode 09 - The Rains of Castamere TSV.mkv\n👤 4 💾 549.21 MB ⚙️ MagnetDL",
+   "infoHash": "bb1bf86b946703be712b321a82daf48aeecd39d7",
+   "fileIdx": 213,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|bb1bf86b946703be712b321a82daf48aeecd39d7",
+    "filename": "Game of Thrones Season 03 Episode 09 - The Rains of Castamere TSV.mkv"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Game of Thrones Seasons 1-5 CENSORED\nSeason 3 Edited/S03E09 - The Rains of Castamere.mp4\n👤 8 💾 684.03 MB ⚙️ ThePirateBay",
+   "infoHash": "eeaee628e7cd199b9b5c64f668a99a02dc493824",
+   "fileIdx": 17,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|eeaee628e7cd199b9b5c64f668a99a02dc493824",
+    "filename": "S03E09 - The Rains of Castamere.mp4"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Game of Thrones Season 1 2 3 4 5 6 - threesixtyp\nGame of Thrones S03E09 The Rains of Castamere.mp4\n👤 6 💾 155.55 MB ⚙️ ThePirateBay",
+   "infoHash": "2e3133c457fe7731e8b183453665d2d9e899dbea",
+   "fileIdx": 54,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|2e3133c457fe7731e8b183453665d2d9e899dbea",
+    "filename": "Game of Thrones S03E09 The Rains of Castamere.mp4"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "game of thrones 1-4 temporada sub-español\nGame of Thrones Temporada 3 Latino/9. The Rains of Castamere.mp4\n👤 5 💾 446.81 MB ⚙️ ThePirateBay\n🇪🇸 / 🇲🇽",
+   "infoHash": "38211f64a97f3ec2711b5a8490fa2b34f7b66633",
+   "fileIdx": 29,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|38211f64a97f3ec2711b5a8490fa2b34f7b66633",
+    "filename": "9. The Rains of Castamere.mp4"
+   }
+  }
+ ]
+}

@@ -1,0 +1,1218 @@
+{
+  "id": "tt0121955:1:1",
+  "type": "series",
+  "fetched": "2026-11-09",
+  "meta": {
+    "name": "South Park",
+    "year": "1997–",
+    "releaseInfo": "1997–",
+    "runtime": "22 min",
+    "episodeReleased": "1997-08-14T06:00:00.000Z",
+    "episodesInSeason": 13
+  },
+  "addons": {
+    "torrentio-shipped": {
+      "url": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB",
+      "streams": [
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park Seasons 1 to 24 (S01-S24) (UNCENSORED) Including The Movie and More [NVEnc H265 1080p - 2160p for S24][AAC 6Ch]\nSeason 01 - UNCENSORED/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 465 💾 111.73 MB ⚙️ 1337x",
+          "infoHash": "ca58728d52a7de02e2bceadc167ef072586e93dd",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|ca58728d52a7de02e2bceadc167ef072586e93dd",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park - Seasons 1 to 24 (S01-S24) Collectors Edition [NVEnc 10Bit 1080p-2160p HEVC][AAC 5.1Ch][BDRip(S24-S25 WEBRip)]\nSeason 01/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 56 💾 208.35 MB ⚙️ 1337x",
+          "infoHash": "70c69c47397861d6b9a55e45a6705e25b92f3e8e",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|70c69c47397861d6b9a55e45a6705e25b92f3e8e",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park S01 2160p AMZN WEB-DL DD+ 5.1 HEVC-MZABI\nSouth Park - S01E01 - WEBDL.2160p.mkv\n👤 44 💾 2.4 GB ⚙️ ThePirateBay",
+          "infoHash": "42dac599757ec9c63831c0d9a89313d0b6a2466b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|42dac599757ec9c63831c0d9a89313d0b6a2466b",
+            "filename": "South Park - S01E01 - WEBDL.2160p.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park S01E01 Cartman Gets An Anal Probe 2160p HMAX WEB-DL DD5 1 H 265-XEBEC\n👤 11 💾 1.84 GB ⚙️ ThePirateBay",
+          "infoHash": "26051a619fd4a60ee934a9f19a5f170d14df3250",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|XEBEC",
+            "filename": "South Park S01E01 Cartman Gets An Anal Probe 2160p HMAX WEB-DL DD5 1 H 265-XEBEC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park - Seasons 1 to 25 (S01-S25) Collectors Edition The Movie and Extras [NVEnc 10Bit 1080p to 2160p HEVC][DD DDP & TrueHD 5.1Ch]\nSeason 01/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 10 💾 243.23 MB ⚙️ 1337x",
+          "infoHash": "4bbfac89f4f45f17516f2a08ee9e77b738cbb03f",
+          "fileIdx": 43,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4bbfac89f4f45f17516f2a08ee9e77b738cbb03f",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park Seasons 1 to 24 (UNCENSORED) Including the Movie and Extras [NVEnc H265 1080p but 2160p for S24][AAC 6Ch]\nSouth Park - Season 1 - UNCENSORED/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 9 💾 111.73 MB ⚙️ 1337x",
+          "infoHash": "72756a97cc29ed9e02c30d7a0bd2f393f4dfbf51",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|72756a97cc29ed9e02c30d7a0bd2f393f4dfbf51",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park Seasons 1 to 24 (S01-S24) Remastered Collection with the Movie [NVEnc H265 10Bit Bluray][1080p-2160p][AAC 6Ch]\nSeason 01/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 7 💾 208.35 MB ⚙️ 1337x",
+          "infoHash": "4be1f297496216c2b045fd478f6bea91ba48d5a0",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4be1f297496216c2b045fd478f6bea91ba48d5a0",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park - Seasons 1 to 25 (S01-S25) Master Collection The Movie & Extras [1080p-2160p NVEnc 10Bit HEVC][TrueHD DDP 5.1Ch][English Subs]\nSeason 01/South Park - S01E01 - Cartman Gets an Anal Probe.mkv\n👤 5 💾 935.8 MB ⚙️ 1337x",
+          "infoHash": "3c50a9e66077b0132047916f2ee862f4716adf59",
+          "fileIdx": 43,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|3c50a9e66077b0132047916f2ee862f4716adf59",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park - Seasons 01 to 25 (S01-S25) Master Collection The Movie & Extras [1080p-2160p NVEnc 10Bit HEVC][TrueHD DDP 5.1Ch]\nSeason 01/South Park - S01E01 - Cartman Gets an Anal Probe.mkv\n👤 4 💾 935.8 MB ⚙️ 1337x",
+          "infoHash": "9bbd5f51eabaf44f2ee9a2d872720bd25db51316",
+          "fileIdx": 43,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|9bbd5f51eabaf44f2ee9a2d872720bd25db51316",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park Seasons 1 to 24 (S01-S24) Complete Collection with the Movie [NVEnc H265 Bluray] [1080p to 2160p for S24][AAC 6Ch]\nSouth Park - Season 01/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 4 💾 186.35 MB ⚙️ 1337x",
+          "infoHash": "ce0fa6cc5f89e6d5082c64e84ecee317e51df117",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|ce0fa6cc5f89e6d5082c64e84ecee317e51df117",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park Seasons 1 to 24 (UNCENSORED) Including the Movie and Extras [NVEnc H265 1080p but 2160p for S24][AAC 6Ch]\nSouth Park - Season 1 - UNCENSORED/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 4 💾 111.73 MB ⚙️ 1337x",
+          "infoHash": "edefd177522b12e2dd20a62429f1af280784f9fc",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|edefd177522b12e2dd20a62429f1af280784f9fc",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park - Season 1 to 26 (Film & Specials) - Mp4 x264 AC3 1080p\nSeason 01/South Park S01E01.mp4\n👤 425 💾 417.36 MB ⚙️ 1337x",
+          "infoHash": "d9ffad690cacd5f4f45a52ac29cbe2785d1bfaa6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|d9ffad690cacd5f4f45a52ac29cbe2785d1bfaa6",
+            "filename": "South Park S01E01.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South.Park.S01.1080p.BluRay.x264-SHORTBREHD[rartv]\nSouth.Park.S01E01.1080p.BluRay.x264-SHORTBREHD.mkv\n👤 143 💾 1.09 GB ⚙️ RARBG",
+          "infoHash": "b390189bef91a4c219c9d2944906d3f26f85ec36",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|b390189bef91a4c219c9d2944906d3f26f85ec36",
+            "filename": "South.Park.S01E01.1080p.BluRay.x264-SHORTBREHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South.Park.S01.1080p.Bluray.AV1.Opus.AV1D\nSouth.Park.S01E01.Cartman.Gets.An.Anal.Probe.1080p.Bluray.AV1.Opus.AV1D.mkv\n👤 105 💾 166.17 MB ⚙️ 1337x",
+          "infoHash": "c682d8423aa5017f56bbbf798a5d4a5c16d2ded2",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|c682d8423aa5017f56bbbf798a5d4a5c16d2ded2",
+            "filename": "South.Park.S01E01.Cartman.Gets.An.Anal.Probe.1080p.Bluray.AV1.Opus.AV1D.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park (1997) S01 (1080p x265 10bit BD TrueHD 5.1) [Prof]\nS01E01 - Cartman Gets an Anal Probe.mkv\n👤 81 💾 2.27 GB ⚙️ TorrentGalaxy",
+          "infoHash": "394bbeea6501c94afe80d1e542999ca2745a307d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|394bbeea6501c94afe80d1e542999ca2745a307d",
+            "filename": "S01E01 - Cartman Gets an Anal Probe.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park Season 1 S01 (1080p Web x265 q22 10bit AACJoy)[UTR]\nSouth Park S01E01 Cartman Gets an Anal Probe (1080p x265 q22 Joy).mkv\n👤 64 💾 150.03 MB ⚙️ ThePirateBay",
+          "infoHash": "0cc57f0c06eb3fd70beec538e1b945b3c73ec819",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|0cc57f0c06eb3fd70beec538e1b945b3c73ec819",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe (1080p x265 q22 Joy).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park (1997) Complete Series - Season 1 - 26 WEBDL-1080p-AC3 5.1-h264\nSeason 01/South Park (1997) - S01E01 - Cartman Gets an Anal Probe [WEBDL-1080p][AC3 5.1][h264]-CtrlHD.mkv\n👤 57 💾 1.32 GB ⚙️ 1337x",
+          "infoHash": "8ba09a8f34f34a11c162501e59521789c1b14ad0",
+          "fileIdx": 307,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|8ba09a8f34f34a11c162501e59521789c1b14ad0",
+            "filename": "South Park (1997) - S01E01 - Cartman Gets an Anal Probe [WEBDL-1080p][AC3 5.1][h264]-CtrlHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park S01E01 Cartman Gets an Anal Probe 1080p WEB-DL AAC2 0 H 264-Ctrl\n👤 42 💾 870.64 MB ⚙️ ThePirateBay\n🇬🇧 / 🇨🇿",
+          "infoHash": "802b83198426a4fef29b8c6f7a82dfe0a9ff528d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|CtrlHD",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe 1080p WEB-DL AAC2 0 H 264-CtrlHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park Season 1 to 28 Megapack 1080p\nSeason 01/South Park S01E01.mp4\n👤 33 💾 417.36 MB ⚙️ ThePirateBay",
+          "infoHash": "c20efb5de4a6fea4337aacf35b431126352476ca",
+          "fileIdx": 48,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|c20efb5de4a6fea4337aacf35b431126352476ca",
+            "filename": "South Park S01E01.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park (1997) Season 1 S01 Extras (1080p BluRay x265 HEVC 10bit AAC 5.1 RCVR) [QxR]\nSouth Park (1997) - S01E01 - Cartman Gets an Anal Probe (1080p BluRay x265 RCVR).mkv\n👤 31 💾 357.41 MB ⚙️ 1337x",
+          "infoHash": "f319dcd182b5b0e8867f5b540a3d33149fe35c16",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|f319dcd182b5b0e8867f5b540a3d33149fe35c16",
+            "filename": "South Park (1997) - S01E01 - Cartman Gets an Anal Probe (1080p BluRay x265 RCVR).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park (1997) S01 - S22 Season 01 - 22 (1080p BluRay x265 HEVC 10bit AAC 5.1 Joy) [UTR]\nSouth Park Season 1  (1080p BD x265 10bit Joy)/South Park S01E01 Cartman Gets an Anal Probe  (1080p x265 10bit Joy).mkv\n👤 26 💾 180.57 MB ⚙️ 1337x",
+          "infoHash": "8c25522dd38752c424827dff483d29daf09556ea",
+          "fileIdx": 9,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|8c25522dd38752c424827dff483d29daf09556ea",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe  (1080p x265 10bit Joy).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park (1997) Season 01 - 21 (1080p BluRay x265 HEVC 10bit AAC 5.1 Q22 Joy) [UTR]\nSouth Park Season 1  (1080p BD x265 q22 Joy)/South Park S01E01 Cartman Gets an Anal Probe  (1080p x265 q22 Joy).mkv\n👤 23 💾 243.95 MB ⚙️ 1337x",
+          "infoHash": "c81365a6d53b7e55e90fcf6db98230a26a4c1edb",
+          "fileIdx": 9,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|c81365a6d53b7e55e90fcf6db98230a26a4c1edb",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe  (1080p x265 q22 Joy).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park (1997-2017) Seasons 01-21 & Movie [1080p] [Ultimate Batch] [HEVC] [x265] [pseudo]\nSeason 01/South Park - S01E01 [1080p] [x265] [pseudo].mkv\n👤 13 💾 218.58 MB ⚙️ 1337x",
+          "infoHash": "7553ed01c02116eb21f71d6e03d21f5c7ef5ad63",
+          "fileIdx": 27,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|7553ed01c02116eb21f71d6e03d21f5c7ef5ad63",
+            "filename": "South Park - S01E01 [1080p] [x265] [pseudo].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park S01E01 Cartman Gets an Anal Probe 1080p HMAX WEB-DL DD5 1 H 264-CtrlHD[TGx]\n👤 11 💾 1.32 GB ⚙️ TorrentGalaxy",
+          "infoHash": "9b318549deb1a4730ad51a347fd3bec9c4af9e58",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|CtrlHD",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe 1080p HMAX WEB-DL DD5 1 H 264-CtrlHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park Complete Seasons 1-19 Pack 1080p Uncensored-MultiGrp\nSouth.Park.S01E01.Cartman.Gets.an.Anal.Probe.1080p.WEB-DL.AAC2.0.H.264-CtrlHD.mkv\n👤 10 💾 842.25 MB ⚙️ ThePirateBay",
+          "infoHash": "678b1585561e13c3edb5f4fe2d8cd133fcd5ec73",
+          "fileIdx": 66,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|678b1585561e13c3edb5f4fe2d8cd133fcd5ec73",
+            "filename": "South.Park.S01E01.Cartman.Gets.an.Anal.Probe.1080p.WEB-DL.AAC2.0.H.264-CtrlHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park S01E01 Cartman Gets an Anal Probe 1080p TrueHD 5 1 AVC REMUX-Fra\n👤 9 💾 3.98 GB ⚙️ ThePirateBay\n🇫🇷",
+          "infoHash": "e991966f33bf812ef0e2de7d5309f477588c6292",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|FraMeSToR",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe 1080p TrueHD 5 1 AVC REMUX-FraMeSToR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park Season 1 to 24 (UNCENSORED) The Complete Collection Plus the Movie [NVEnc H265 1080p][AAC 2Ch to 6Ch]\nSouth Park - Season 1 - UNCENSORED/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 9 💾 120.21 MB ⚙️ 1337x",
+          "infoHash": "bb23c24916566c445e83d6af2e9e060058997e3c",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|bb23c24916566c445e83d6af2e9e060058997e3c",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park Complete Seasons 1 to 24 UNCENSORED And The Movie [NVEnc H265 1080p][AAC]\nSouth Park - Season 1 - UNCENSORED/South Park S01E01 Cartman Gets an Anal Probe.mp4\n👤 9 💾 120.21 MB ⚙️ 1337x",
+          "infoHash": "3e340e09a7a1c8a21675313d82b4947773c419ae",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|3e340e09a7a1c8a21675313d82b4947773c419ae",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park S01-23 BluRay 1080p 10bit AAC 5.1\nSeason 1/South Park S01E01 Cartman Gets an Anal Probe  (1080p x265 q22 Joy).mkv\n👤 8 💾 243.95 MB ⚙️ 1337x",
+          "infoHash": "274afc95ea8c80f756f41240dcba127cb61d9ff7",
+          "fileIdx": 9,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|274afc95ea8c80f756f41240dcba127cb61d9ff7",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe  (1080p x265 q22 Joy).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park Season 1 S01 (1080pWeb X265 HEVC AAC 2.0 Joy) [UTR]\nSouth Park S01E01 Cartman Gets an Anal Probe (1080p x265 Joy).m4v\n👤 7 💾 82.38 MB ⚙️ MagnetDL",
+          "infoHash": "8b1697378ecc1fd1d519fab4e302265e4d9e3ad8",
+          "fileIdx": 6,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|8b1697378ecc1fd1d519fab4e302265e4d9e3ad8",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe (1080p x265 Joy).m4v"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park Seasons 1 to 24 Special with The Movie and Extras [1080p NVEnc H265][AAC 2Ch]\nSouth Park Season 1/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 4 💾 164.01 MB ⚙️ 1337x",
+          "infoHash": "b328c29ad7bb0da45a1aa3b4c358d094492c28a5",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|b328c29ad7bb0da45a1aa3b4c358d094492c28a5",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park (1997) Season 01 S01 (1080p BluRay x265 HEVC 10bit AAC 5.1 Joy) [UTR]\nSouth Park S01E01 Cartman Gets an Anal Probe  (1080p x265 10bit Joy).mkv\n👤 4 💾 180.57 MB ⚙️ 1337x",
+          "infoHash": "5811c66f66a98db7faf8a526b9104435db7351dd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|5811c66f66a98db7faf8a526b9104435db7351dd",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe  (1080p x265 10bit Joy).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park (1997) Season 01 S01 (1080p BluRay X265 HEVC 10bit AAC 5.1 Q22 Joy) [UTR]\nSouth Park S01E01 Cartman Gets an Anal Probe (1080p x265 q22 Joy).mkv\n👤 4 💾 243.9 MB ⚙️ MagnetDL",
+          "infoHash": "d4086a899b3b51458ee1a3b3215b7cfb6e71f9ef",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|d4086a899b3b51458ee1a3b3215b7cfb6e71f9ef",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe (1080p x265 q22 Joy).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park Season 1 (1080p x265 HEVC 10bit)\n101 - Cartman Gets an Anal Probe.mkv\n👤 3 💾 385.33 MB ⚙️ TorrentGalaxy",
+          "infoHash": "06c48b31fb2a7fc0f694915a0aca092a84ba9f66",
+          "fileIdx": 11,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|06c48b31fb2a7fc0f694915a0aca092a84ba9f66",
+            "filename": "101 - Cartman Gets an Anal Probe.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South.Park.S01.1080p.HMAX.WEBRip.DD5.1.x264-CtrlHD[rartv]\nSouth.Park.S01E01.1080p.HMAX.WEB-DL.DD5.1.H.264-CtrlHD.mkv\n👤 3 💾 1.32 GB ⚙️ RARBG",
+          "infoHash": "e2b0197856050ebeb38d6b537199aacadf0efe36",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|e2b0197856050ebeb38d6b537199aacadf0efe36",
+            "filename": "South.Park.S01E01.1080p.HMAX.WEB-DL.DD5.1.H.264-CtrlHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p HDR",
+          "title": "South Park Complete Uncensored Version S01 to S24 720p x265 10bit\nSouth Park (1992) 720p x265 10bits [TGx] [mdc]/Season 01/South Park - S01E01 - Cartman Gets an Anal Probe - 720p h265 .hdr.10bit.mkv\n👤 3 💾 118.85 MB ⚙️ TorrentGalaxy",
+          "infoHash": "48c40eabe7bb31d865d4c1a243e61e70b07af7e8",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|48c40eabe7bb31d865d4c1a243e61e70b07af7e8",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe - 720p h265 .hdr.10bit.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "South Park Complete Season 1-16 420p 720p TinyMP4\n01.01 - Cartman Gets an Anal Probe.mp4\n👤 126 💾 90.55 MB ⚙️ MagnetDL",
+          "infoHash": "78601e9951c1832077fa72c4f00cbb4d45760e2a",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|78601e9951c1832077fa72c4f00cbb4d45760e2a",
+            "filename": "01.01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "South.Park.Uncensored.S01-S21.720p.BluRay.x265-HETeam\nSouth.Park.S01E01.720p.BluRay.x265-HETeam.mkv\n👤 27 💾 123.74 MB ⚙️ ThePirateBay",
+          "infoHash": "fd790fe74d263325b4106e14fb04635e54617f04",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|fd790fe74d263325b4106e14fb04635e54617f04",
+            "filename": "South.Park.S01E01.720p.BluRay.x265-HETeam.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "All Of South Park S1-S16 720p\nSeason 1/South Park E01 Cartman Gets an Anal Probe.avi\n👤 27 💾 174.75 MB ⚙️ MagnetDL",
+          "infoHash": "2ec15e8e236098bfdc49598aad9d964fb5c823e9",
+          "fileIdx": 147,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|2ec15e8e236098bfdc49598aad9d964fb5c823e9",
+            "filename": "South Park E01 Cartman Gets an Anal Probe.avi"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "South.Park.SEASON.01.S01.COMPLETE.720p.WEB-DL.2CH.x265.HEVC-PSA\nSouth.Park.S01E01.Cartman.Gets.an.Anal.Probe.720p.WEB-DL.2CH.x265.HEVC-PSA.mkv\n👤 20 💾 32.38 MB ⚙️ MagnetDL",
+          "infoHash": "b7bd664871a5e92e0fbb6ad2e594fff7ecdf0835",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|b7bd664871a5e92e0fbb6ad2e594fff7ecdf0835",
+            "filename": "South.Park.S01E01.Cartman.Gets.an.Anal.Probe.720p.WEB-DL.2CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "South.Park.S01E01.720p.WEB.x265-MiNX[TGx]\n👤 5 💾 69.03 MB ⚙️ TorrentGalaxy",
+          "infoHash": "26eab55e4dcd5f40699d030f6b806dda2642309b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|MiNX",
+            "filename": "South.Park.S01E01.720p.WEB.x265-MiNX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n480p",
+          "title": "South Park S01-S16 480p BluRay WEB-DL DVDRip x264-Sticky83\nSouth.Park.S01.480p.BluRay.WEB-DL.DVDRip.x264-Sticky83/[720pMkv.Com]_South.Park.S01E01.480p.DVDRip.x264-Sticky83.mkv\n👤 54 💾 149.92 MB ⚙️ ThePirateBay",
+          "infoHash": "34be98816403206f19a2e2de9dca149f080286c6",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|34be98816403206f19a2e2de9dca149f080286c6",
+            "filename": "[720pMkv.Com]_South.Park.S01E01.480p.DVDRip.x264-Sticky83.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n360p",
+          "title": "South Park Season 1-17 Movie 1999 - threesixtyp\nSouth Park S01 [Remastered] (360p re-webrip)/South Park S01E01 Cartman Gets an Anal Probe.mp4\n👤 9 💾 22.21 MB ⚙️ ThePirateBay",
+          "infoHash": "e8898c4dd2653928431716c927afd67cf088c0ea",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|e8898c4dd2653928431716c927afd67cf088c0ea",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\nBluRay",
+          "title": "South Park - S01-S17 Complete + Movie - BluRay\nSeason 1/South Park S01E01 -Cartman Gets an Anal Probe.mkv\n👤 14 💾 149.92 MB ⚙️ ThePirateBay",
+          "infoHash": "4b928326e7324f298b11ff38b92d944135e479d9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4b928326e7324f298b11ff38b92d944135e479d9",
+            "filename": "South Park S01E01 -Cartman Gets an Anal Probe.mkv"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "South Park Season 1 2 3 4 5 6 7 8 9 10 11 12 Movie - threesixtyp\nSouth Park S01E01 Cartman Gets an Anal Probe.mp4\n👤 69 💾 22.21 MB ⚙️ ThePirateBay",
+          "infoHash": "648733fce6f79891af93e7367125843b2455af9d",
+          "fileIdx": 180,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|648733fce6f79891af93e7367125843b2455af9d",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "Southpark - Season 1 [Complete]\nSouth Park [1x01] Cartman Gets An Anal Probe.avi\n👤 14 💾 48.14 MB ⚙️ ThePirateBay",
+          "infoHash": "e39048f9bf67975e88166a7da97f91488699a759",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|e39048f9bf67975e88166a7da97f91488699a759",
+            "filename": "South Park [1x01] Cartman Gets An Anal Probe.avi"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "Everything South Park {Episodes Movies Specials etc...}\nSouth Park Season 1/South Park.S01E01.Cartman Gets an Anal Probe.avi\n👤 12 💾 174.75 MB ⚙️ TorrentGalaxy",
+          "infoHash": "7061acc09200999ab608dcf3c725495707acf9b6",
+          "fileIdx": 16,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|7061acc09200999ab608dcf3c725495707acf9b6",
+            "filename": "South Park.S01E01.Cartman Gets an Anal Probe.avi"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "Southpark season 1-10\nDisc 1/101 - Cartman Gets an Anal Probe.avi\n👤 6 💾 149.92 MB ⚙️ ThePirateBay",
+          "infoHash": "244fac55e63d334c41632eef034de97a472d036e",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|244fac55e63d334c41632eef034de97a472d036e",
+            "filename": "101 - Cartman Gets an Anal Probe.avi"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "South Park Seasons 1-14 Complete + Movie MKV Compression - YIFY\nSeason 1/South Park - S01E01 - Cartman Gets an Anal Probe.mkv\n👤 4 💾 87.37 MB ⚙️ ThePirateBay",
+          "infoHash": "8ef296eabf843f2d5b3d68fe4451f6eec34698ae",
+          "fileIdx": 6,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|8ef296eabf843f2d5b3d68fe4451f6eec34698ae",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mkv"
+          }
+        },
+        {
+          "name": "Torrentio",
+          "title": "South.Park.S01E01.SWESUB.inXz.mkv\n👤 4 💾 173.75 MB ⚙️ ThePirateBay\n🇸🇪",
+          "infoHash": "8f44f7094cc1336bce866516cdae3e49c37f3229"
+        }
+      ]
+    },
+    "torrentio-owner": {
+      "url": "https://torrentio.strem.fun/language=turkish|qualityfilter=threed,480p,scr,cam,unknown",
+      "streams": [
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park Seasons 1 to 24 (S01-S24) (UNCENSORED) Including The Movie and More [NVEnc H265 1080p - 2160p for S24][AAC 6Ch]\nSeason 01 - UNCENSORED/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 465 💾 111.73 MB ⚙️ 1337x",
+          "infoHash": "ca58728d52a7de02e2bceadc167ef072586e93dd",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|ca58728d52a7de02e2bceadc167ef072586e93dd",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park - Seasons 1 to 24 (S01-S24) Collectors Edition [NVEnc 10Bit 1080p-2160p HEVC][AAC 5.1Ch][BDRip(S24-S25 WEBRip)]\nSeason 01/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 56 💾 208.35 MB ⚙️ 1337x",
+          "infoHash": "70c69c47397861d6b9a55e45a6705e25b92f3e8e",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|70c69c47397861d6b9a55e45a6705e25b92f3e8e",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park S01 2160p AMZN WEB-DL DD+ 5.1 HEVC-MZABI\nSouth Park - S01E01 - WEBDL.2160p.mkv\n👤 44 💾 2.4 GB ⚙️ ThePirateBay",
+          "infoHash": "42dac599757ec9c63831c0d9a89313d0b6a2466b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|42dac599757ec9c63831c0d9a89313d0b6a2466b",
+            "filename": "South Park - S01E01 - WEBDL.2160p.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park S01E01 Cartman Gets An Anal Probe 2160p HMAX WEB-DL DD5 1 H 265-XEBEC\n👤 11 💾 1.84 GB ⚙️ ThePirateBay",
+          "infoHash": "26051a619fd4a60ee934a9f19a5f170d14df3250",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4k|XEBEC",
+            "filename": "South Park S01E01 Cartman Gets An Anal Probe 2160p HMAX WEB-DL DD5 1 H 265-XEBEC.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park - Seasons 1 to 25 (S01-S25) Collectors Edition The Movie and Extras [NVEnc 10Bit 1080p to 2160p HEVC][DD DDP & TrueHD 5.1Ch]\nSeason 01/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 10 💾 243.23 MB ⚙️ 1337x",
+          "infoHash": "4bbfac89f4f45f17516f2a08ee9e77b738cbb03f",
+          "fileIdx": 43,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4bbfac89f4f45f17516f2a08ee9e77b738cbb03f",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park Seasons 1 to 24 (UNCENSORED) Including the Movie and Extras [NVEnc H265 1080p but 2160p for S24][AAC 6Ch]\nSouth Park - Season 1 - UNCENSORED/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 9 💾 111.73 MB ⚙️ 1337x",
+          "infoHash": "72756a97cc29ed9e02c30d7a0bd2f393f4dfbf51",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|72756a97cc29ed9e02c30d7a0bd2f393f4dfbf51",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park Seasons 1 to 24 (S01-S24) Remastered Collection with the Movie [NVEnc H265 10Bit Bluray][1080p-2160p][AAC 6Ch]\nSeason 01/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 7 💾 208.35 MB ⚙️ 1337x",
+          "infoHash": "4be1f297496216c2b045fd478f6bea91ba48d5a0",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4be1f297496216c2b045fd478f6bea91ba48d5a0",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park - Seasons 1 to 25 (S01-S25) Master Collection The Movie & Extras [1080p-2160p NVEnc 10Bit HEVC][TrueHD DDP 5.1Ch][English Subs]\nSeason 01/South Park - S01E01 - Cartman Gets an Anal Probe.mkv\n👤 5 💾 935.8 MB ⚙️ 1337x",
+          "infoHash": "3c50a9e66077b0132047916f2ee862f4716adf59",
+          "fileIdx": 43,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|3c50a9e66077b0132047916f2ee862f4716adf59",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park - Seasons 01 to 25 (S01-S25) Master Collection The Movie & Extras [1080p-2160p NVEnc 10Bit HEVC][TrueHD DDP 5.1Ch]\nSeason 01/South Park - S01E01 - Cartman Gets an Anal Probe.mkv\n👤 4 💾 935.8 MB ⚙️ 1337x",
+          "infoHash": "9bbd5f51eabaf44f2ee9a2d872720bd25db51316",
+          "fileIdx": 43,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|9bbd5f51eabaf44f2ee9a2d872720bd25db51316",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park Seasons 1 to 24 (S01-S24) Complete Collection with the Movie [NVEnc H265 Bluray] [1080p to 2160p for S24][AAC 6Ch]\nSouth Park - Season 01/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 4 💾 186.35 MB ⚙️ 1337x",
+          "infoHash": "ce0fa6cc5f89e6d5082c64e84ecee317e51df117",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|ce0fa6cc5f89e6d5082c64e84ecee317e51df117",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n4k",
+          "title": "South Park Seasons 1 to 24 (UNCENSORED) Including the Movie and Extras [NVEnc H265 1080p but 2160p for S24][AAC 6Ch]\nSouth Park - Season 1 - UNCENSORED/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 4 💾 111.73 MB ⚙️ 1337x",
+          "infoHash": "edefd177522b12e2dd20a62429f1af280784f9fc",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|edefd177522b12e2dd20a62429f1af280784f9fc",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park - Season 1 to 26 (Film & Specials) - Mp4 x264 AC3 1080p\nSeason 01/South Park S01E01.mp4\n👤 425 💾 417.36 MB ⚙️ 1337x",
+          "infoHash": "d9ffad690cacd5f4f45a52ac29cbe2785d1bfaa6",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|d9ffad690cacd5f4f45a52ac29cbe2785d1bfaa6",
+            "filename": "South Park S01E01.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Южный Парк / South Park / Сезон: 1-25 / Серии: 1-317 из 317 [1997-2022 BDRip 1080p] AVO (Гоблин) + 5 x DVO (MTV Paramount Comedy Ren-TV Кубик в кубе HDRezka) + 6 x MVO + 2 x VO + 3 x Ukr + Original + Sub (Rus+Eng)\nSeason 01/S01E01 - Cartman Gets an Anal Probe.mkv\n👤 176 💾 1.29 GB ⚙️ Rutracker\n🇬🇧 / 🇷🇺 / 🇺🇦",
+          "infoHash": "c9612c52933420d75cba0b34e55b0cd139871826",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|c9612c52933420d75cba0b34e55b0cd139871826",
+            "filename": "S01E01 - Cartman Gets an Anal Probe.mkv"
+          },
+          "sources": [
+            "tracker:http://bt4.t-ru.org/ann?magnet",
+            "dht:c9612c52933420d75cba0b34e55b0cd139871826",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South.Park.S01.1080p.BluRay.x264-SHORTBREHD[rartv]\nSouth.Park.S01E01.1080p.BluRay.x264-SHORTBREHD.mkv\n👤 143 💾 1.09 GB ⚙️ RARBG",
+          "infoHash": "b390189bef91a4c219c9d2944906d3f26f85ec36",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|b390189bef91a4c219c9d2944906d3f26f85ec36",
+            "filename": "South.Park.S01E01.1080p.BluRay.x264-SHORTBREHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South.Park.S01.1080p.Bluray.AV1.Opus.AV1D\nSouth.Park.S01E01.Cartman.Gets.An.Anal.Probe.1080p.Bluray.AV1.Opus.AV1D.mkv\n👤 105 💾 166.17 MB ⚙️ 1337x",
+          "infoHash": "c682d8423aa5017f56bbbf798a5d4a5c16d2ded2",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|c682d8423aa5017f56bbbf798a5d4a5c16d2ded2",
+            "filename": "South.Park.S01E01.Cartman.Gets.An.Anal.Probe.1080p.Bluray.AV1.Opus.AV1D.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park (1997) S01 (1080p x265 10bit BD TrueHD 5.1) [Prof]\nS01E01 - Cartman Gets an Anal Probe.mkv\n👤 81 💾 2.27 GB ⚙️ TorrentGalaxy",
+          "infoHash": "394bbeea6501c94afe80d1e542999ca2745a307d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|394bbeea6501c94afe80d1e542999ca2745a307d",
+            "filename": "S01E01 - Cartman Gets an Anal Probe.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park Season 1 S01 (1080p Web x265 q22 10bit AACJoy)[UTR]\nSouth Park S01E01 Cartman Gets an Anal Probe (1080p x265 q22 Joy).mkv\n👤 64 💾 150.03 MB ⚙️ ThePirateBay",
+          "infoHash": "0cc57f0c06eb3fd70beec538e1b945b3c73ec819",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|0cc57f0c06eb3fd70beec538e1b945b3c73ec819",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe (1080p x265 q22 Joy).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park (1997) Complete Series - Season 1 - 26 WEBDL-1080p-AC3 5.1-h264\nSeason 01/South Park (1997) - S01E01 - Cartman Gets an Anal Probe [WEBDL-1080p][AC3 5.1][h264]-CtrlHD.mkv\n👤 57 💾 1.32 GB ⚙️ 1337x",
+          "infoHash": "8ba09a8f34f34a11c162501e59521789c1b14ad0",
+          "fileIdx": 307,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|8ba09a8f34f34a11c162501e59521789c1b14ad0",
+            "filename": "South Park (1997) - S01E01 - Cartman Gets an Anal Probe [WEBDL-1080p][AC3 5.1][h264]-CtrlHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park S01E01 Cartman Gets an Anal Probe 1080p WEB-DL AAC2 0 H 264-Ctrl\n👤 42 💾 870.64 MB ⚙️ ThePirateBay\n🇬🇧 / 🇨🇿",
+          "infoHash": "802b83198426a4fef29b8c6f7a82dfe0a9ff528d",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|CtrlHD",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe 1080p WEB-DL AAC2 0 H 264-CtrlHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park Season 1 to 28 Megapack 1080p\nSeason 01/South Park S01E01.mp4\n👤 33 💾 417.36 MB ⚙️ ThePirateBay",
+          "infoHash": "c20efb5de4a6fea4337aacf35b431126352476ca",
+          "fileIdx": 48,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|c20efb5de4a6fea4337aacf35b431126352476ca",
+            "filename": "South Park S01E01.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park (1997) Season 1 S01 Extras (1080p BluRay x265 HEVC 10bit AAC 5.1 RCVR) [QxR]\nSouth Park (1997) - S01E01 - Cartman Gets an Anal Probe (1080p BluRay x265 RCVR).mkv\n👤 31 💾 357.41 MB ⚙️ 1337x",
+          "infoHash": "f319dcd182b5b0e8867f5b540a3d33149fe35c16",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|f319dcd182b5b0e8867f5b540a3d33149fe35c16",
+            "filename": "South Park (1997) - S01E01 - Cartman Gets an Anal Probe (1080p BluRay x265 RCVR).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park (1997) S01 - S22 Season 01 - 22 (1080p BluRay x265 HEVC 10bit AAC 5.1 Joy) [UTR]\nSouth Park Season 1  (1080p BD x265 10bit Joy)/South Park S01E01 Cartman Gets an Anal Probe  (1080p x265 10bit Joy).mkv\n👤 26 💾 180.57 MB ⚙️ 1337x",
+          "infoHash": "8c25522dd38752c424827dff483d29daf09556ea",
+          "fileIdx": 9,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|8c25522dd38752c424827dff483d29daf09556ea",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe  (1080p x265 10bit Joy).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Южный Парк / South Park / Сезон: 1-2 / Серии: 1-31 из 31 [1997 WEB-DL 1080p] DVO (Paramount Comedy) + DVO (MTV) + AVO (Гоблин) + DVO (Ren-TV) + Dub (Ukr) + Original\nSouth.Park.S01.1080p.WEB-DL.AAC2.0.H.264-SerGoLeOne/South.Park.S01E01.Cartman.Gets.an.Anal.Probe.1080p.WEB-DL.AAC2.0.H.264-SerGoLeOne.mkv\n👤 26 💾 965.76 MB ⚙️ Rutracker\n🇬🇧 / 🇷🇺 / 🇺🇦",
+          "infoHash": "33cdcced37b3724a7fedd8283dcbfe5ff27aec31",
+          "fileIdx": 2,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|33cdcced37b3724a7fedd8283dcbfe5ff27aec31",
+            "filename": "South.Park.S01E01.Cartman.Gets.an.Anal.Probe.1080p.WEB-DL.AAC2.0.H.264-SerGoLeOne.mkv"
+          },
+          "sources": [
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "dht:33cdcced37b3724a7fedd8283dcbfe5ff27aec31",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park (1997) Season 01 - 21 (1080p BluRay x265 HEVC 10bit AAC 5.1 Q22 Joy) [UTR]\nSouth Park Season 1  (1080p BD x265 q22 Joy)/South Park S01E01 Cartman Gets an Anal Probe  (1080p x265 q22 Joy).mkv\n👤 23 💾 243.95 MB ⚙️ 1337x",
+          "infoHash": "c81365a6d53b7e55e90fcf6db98230a26a4c1edb",
+          "fileIdx": 9,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|c81365a6d53b7e55e90fcf6db98230a26a4c1edb",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe  (1080p x265 q22 Joy).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South.Park.S01.MULTi.VF2.1080p.HDLight.AC3.2.0.H265-TARDiS\nSouth.Park.S01E01.MULTi.VF2.1080p.HDLight.AC3.2.0.H265-TARDiS.mkv\n👤 19 💾 540.45 MB ⚙️ Torrent9\nMulti Audio / 🇫🇷",
+          "infoHash": "cdc5fef90baabd7adef10762aa9fdc26ebe6ee64",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|cdc5fef90baabd7adef10762aa9fdc26ebe6ee64",
+            "filename": "South.Park.S01E01.MULTi.VF2.1080p.HDLight.AC3.2.0.H265-TARDiS.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park (1997-2017) Seasons 01-21 & Movie [1080p] [Ultimate Batch] [HEVC] [x265] [pseudo]\nSeason 01/South Park - S01E01 [1080p] [x265] [pseudo].mkv\n👤 13 💾 218.58 MB ⚙️ 1337x",
+          "infoHash": "7553ed01c02116eb21f71d6e03d21f5c7ef5ad63",
+          "fileIdx": 27,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|7553ed01c02116eb21f71d6e03d21f5c7ef5ad63",
+            "filename": "South Park - S01E01 [1080p] [x265] [pseudo].mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park S01E01 Cartman Gets an Anal Probe 1080p HMAX WEB-DL DD5 1 H 264-CtrlHD[TGx]\n👤 11 💾 1.32 GB ⚙️ TorrentGalaxy",
+          "infoHash": "9b318549deb1a4730ad51a347fd3bec9c4af9e58",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|CtrlHD",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe 1080p HMAX WEB-DL DD5 1 H 264-CtrlHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park Complete Seasons 1-19 Pack 1080p Uncensored-MultiGrp\nSouth.Park.S01E01.Cartman.Gets.an.Anal.Probe.1080p.WEB-DL.AAC2.0.H.264-CtrlHD.mkv\n👤 10 💾 842.25 MB ⚙️ ThePirateBay",
+          "infoHash": "678b1585561e13c3edb5f4fe2d8cd133fcd5ec73",
+          "fileIdx": 66,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|678b1585561e13c3edb5f4fe2d8cd133fcd5ec73",
+            "filename": "South.Park.S01E01.Cartman.Gets.an.Anal.Probe.1080p.WEB-DL.AAC2.0.H.264-CtrlHD.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South.Park.1997.S01-S09.1080p.WEB-DL.LAT.ENG\nSeason 1/South Park - S01E01 - Cartman consigue una sonda anal.mkv\n👤 9 💾 1.39 GB ⚙️ Cinecalidad\n🇬🇧 / 🇲🇽",
+          "infoHash": "6a30d219c58beb017797e1ad3b181cf15bb8fb6c",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|6a30d219c58beb017797e1ad3b181cf15bb8fb6c",
+            "filename": "South Park - S01E01 - Cartman consigue una sonda anal.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park S01E01 Cartman Gets an Anal Probe 1080p TrueHD 5 1 AVC REMUX-Fra\n👤 9 💾 3.98 GB ⚙️ ThePirateBay\n🇫🇷",
+          "infoHash": "e991966f33bf812ef0e2de7d5309f477588c6292",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|1080p|FraMeSToR",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe 1080p TrueHD 5 1 AVC REMUX-FraMeSToR.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Южный Парк / South Park / Сезон: 1-22 / Серии: 297 из 297 [1997-2018 WEB-DLRip-HEVC 1080p] DVO (MTV / Paramount Comedy) + Original (Eng) + Sub (Rus Eng)\nS01/S01E01 Cartman Gets an Anal Probe.mkv\n👤 9 💾 112.34 MB ⚙️ Rutracker\n🇬🇧 / 🇷🇺",
+          "infoHash": "2edc8d4583b147d91b8d029882e4ebd63700d61e",
+          "fileIdx": 26,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|2edc8d4583b147d91b8d029882e4ebd63700d61e",
+            "filename": "S01E01 Cartman Gets an Anal Probe.mkv"
+          },
+          "sources": [
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "dht:2edc8d4583b147d91b8d029882e4ebd63700d61e",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park Season 1 to 24 (UNCENSORED) The Complete Collection Plus the Movie [NVEnc H265 1080p][AAC 2Ch to 6Ch]\nSouth Park - Season 1 - UNCENSORED/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 9 💾 120.21 MB ⚙️ 1337x",
+          "infoHash": "bb23c24916566c445e83d6af2e9e060058997e3c",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|bb23c24916566c445e83d6af2e9e060058997e3c",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park Complete Seasons 1 to 24 UNCENSORED And The Movie [NVEnc H265 1080p][AAC]\nSouth Park - Season 1 - UNCENSORED/South Park S01E01 Cartman Gets an Anal Probe.mp4\n👤 9 💾 120.21 MB ⚙️ 1337x",
+          "infoHash": "3e340e09a7a1c8a21675313d82b4947773c419ae",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|3e340e09a7a1c8a21675313d82b4947773c419ae",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park S01-23 BluRay 1080p 10bit AAC 5.1\nSeason 1/South Park S01E01 Cartman Gets an Anal Probe  (1080p x265 q22 Joy).mkv\n👤 8 💾 243.95 MB ⚙️ 1337x",
+          "infoHash": "274afc95ea8c80f756f41240dcba127cb61d9ff7",
+          "fileIdx": 9,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|274afc95ea8c80f756f41240dcba127cb61d9ff7",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe  (1080p x265 q22 Joy).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park Season 1 S01 (1080pWeb X265 HEVC AAC 2.0 Joy) [UTR]\nSouth Park S01E01 Cartman Gets an Anal Probe (1080p x265 Joy).m4v\n👤 7 💾 82.38 MB ⚙️ MagnetDL",
+          "infoHash": "8b1697378ecc1fd1d519fab4e302265e4d9e3ad8",
+          "fileIdx": 6,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|8b1697378ecc1fd1d519fab4e302265e4d9e3ad8",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe (1080p x265 Joy).m4v"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "Южный Парк / South Park [S01-20] (1997-2016) WEB-DLRip-HEVC 1080p | MTV\nSouth Park S01/S01E01 Cartman Gets an Anal Probe.mkv\n👤 5 💾 112.34 MB ⚙️ Rutor\n🇷🇺",
+          "infoHash": "eb0b6afb328cd395c9a6e5fc7a31991fec699844",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|eb0b6afb328cd395c9a6e5fc7a31991fec699844",
+            "filename": "S01E01 Cartman Gets an Anal Probe.mkv"
+          },
+          "sources": [
+            "tracker:http://retracker.local/announce",
+            "tracker:udp://opentor.org:2710",
+            "dht:eb0b6afb328cd395c9a6e5fc7a31991fec699844",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park *1997-2022* ((25 SEZONOW)) [1080p.WEB-DL.AVC.h264 AC3] [Dubbing PL]\nS01 DUBBING PL/S01E01 DUBBING 1080p Sonda analna Cartmana/S01E01 DUBBING 1080p.Sonda analna Cartmana.mkv\n👤 4 💾 838.3 MB ⚙️ BestTorrents\n🇵🇱",
+          "infoHash": "222e35f0e3e75e77ccc41273ac08675538c2a6b2",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|222e35f0e3e75e77ccc41273ac08675538c2a6b2",
+            "filename": "S01E01 DUBBING 1080p.Sonda analna Cartmana.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park Seasons 1 to 24 Special with The Movie and Extras [1080p NVEnc H265][AAC 2Ch]\nSouth Park Season 1/South Park - S01E01 - Cartman Gets an Anal Probe.mp4\n👤 4 💾 164.01 MB ⚙️ 1337x",
+          "infoHash": "b328c29ad7bb0da45a1aa3b4c358d094492c28a5",
+          "fileIdx": 5,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|b328c29ad7bb0da45a1aa3b4c358d094492c28a5",
+            "filename": "South Park - S01E01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n1080p",
+          "title": "South Park (1997) Season 01 S01 (1080p BluRay x265 HEVC 10bit AAC 5.1 Joy) [UTR]\nSouth Park S01E01 Cartman Gets an Anal Probe  (1080p x265 10bit Joy).mkv\n👤 4 💾 180.57 MB ⚙️ 1337x",
+          "infoHash": "5811c66f66a98db7faf8a526b9104435db7351dd",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|5811c66f66a98db7faf8a526b9104435db7351dd",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe  (1080p x265 10bit Joy).mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "South Park Complete Season 1-16 420p 720p TinyMP4\n01.01 - Cartman Gets an Anal Probe.mp4\n👤 126 💾 90.55 MB ⚙️ MagnetDL",
+          "infoHash": "78601e9951c1832077fa72c4f00cbb4d45760e2a",
+          "fileIdx": 4,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|78601e9951c1832077fa72c4f00cbb4d45760e2a",
+            "filename": "01.01 - Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "South.Park.Uncensored.S01-S21.720p.BluRay.x265-HETeam\nSouth.Park.S01E01.720p.BluRay.x265-HETeam.mkv\n👤 27 💾 123.74 MB ⚙️ ThePirateBay",
+          "infoHash": "fd790fe74d263325b4106e14fb04635e54617f04",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|fd790fe74d263325b4106e14fb04635e54617f04",
+            "filename": "South.Park.S01E01.720p.BluRay.x265-HETeam.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "All Of South Park S1-S16 720p\nSeason 1/South Park E01 Cartman Gets an Anal Probe.avi\n👤 27 💾 174.75 MB ⚙️ MagnetDL",
+          "infoHash": "2ec15e8e236098bfdc49598aad9d964fb5c823e9",
+          "fileIdx": 147,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|2ec15e8e236098bfdc49598aad9d964fb5c823e9",
+            "filename": "South Park E01 Cartman Gets an Anal Probe.avi"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "Южный Парк / South Park / Сезон: 1 / Серии: 1-13 из 13 [1997-1998 WEB-DLRip 720p] AVO (Гоблин)\n01 Cartman Gets an Anal Probe.mkv\n👤 26 💾 291.82 MB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "c5a42b7fd87c5f65d04c968d0c96e5e29f51311b",
+          "fileIdx": 11,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|c5a42b7fd87c5f65d04c968d0c96e5e29f51311b",
+            "filename": "01 Cartman Gets an Anal Probe.mkv"
+          },
+          "sources": [
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "dht:c5a42b7fd87c5f65d04c968d0c96e5e29f51311b",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "South.Park.SEASON.01.S01.COMPLETE.720p.WEB-DL.2CH.x265.HEVC-PSA\nSouth.Park.S01E01.Cartman.Gets.an.Anal.Probe.720p.WEB-DL.2CH.x265.HEVC-PSA.mkv\n👤 20 💾 32.38 MB ⚙️ MagnetDL",
+          "infoHash": "b7bd664871a5e92e0fbb6ad2e594fff7ecdf0835",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|b7bd664871a5e92e0fbb6ad2e594fff7ecdf0835",
+            "filename": "South.Park.S01E01.Cartman.Gets.an.Anal.Probe.720p.WEB-DL.2CH.x265.HEVC-PSA.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "South.Park.S01E01.720p.WEB.x265-MiNX[TGx]\n👤 5 💾 69.03 MB ⚙️ TorrentGalaxy",
+          "infoHash": "26eab55e4dcd5f40699d030f6b806dda2642309b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|720p|MiNX",
+            "filename": "South.Park.S01E01.720p.WEB.x265-MiNX.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n720p",
+          "title": "South.Park.S01.ITA.AC3.720p.BDMux.x264-G4ME\nSouth.Park.S01E01.Cartman.si.becca.una.sonda.anale.ITA.AC3.720p.BDMux.x264-G4ME.mkv\n👤 5 💾 423.02 MB ⚙️ ilCorSaRoNeRo\n🇮🇹",
+          "infoHash": "b7629e0c350b0a2c6c490d9a108b58f47480cb8b",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|b7629e0c350b0a2c6c490d9a108b58f47480cb8b",
+            "filename": "South.Park.S01E01.Cartman.si.becca.una.sonda.anale.ITA.AC3.720p.BDMux.x264-G4ME.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\n360p",
+          "title": "South Park Season 1-17 Movie 1999 - threesixtyp\nSouth Park S01 [Remastered] (360p re-webrip)/South Park S01E01 Cartman Gets an Anal Probe.mp4\n👤 9 💾 22.21 MB ⚙️ ThePirateBay",
+          "infoHash": "e8898c4dd2653928431716c927afd67cf088c0ea",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|e8898c4dd2653928431716c927afd67cf088c0ea",
+            "filename": "South Park S01E01 Cartman Gets an Anal Probe.mp4"
+          }
+        },
+        {
+          "name": "Torrentio\nBluRay",
+          "title": "South Park - S01-S17 Complete + Movie - BluRay\nSeason 1/South Park S01E01 -Cartman Gets an Anal Probe.mkv\n👤 14 💾 149.92 MB ⚙️ ThePirateBay",
+          "infoHash": "4b928326e7324f298b11ff38b92d944135e479d9",
+          "fileIdx": 0,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|4b928326e7324f298b11ff38b92d944135e479d9",
+            "filename": "South Park S01E01 -Cartman Gets an Anal Probe.mkv"
+          }
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Южный Парк / South Park / Сезон: 1-10 [1997-2007 DVDRip]\n1 сезон/1x01-Картмэн и анальный зонд.avi\n👤 10 💾 293.33 MB ⚙️ Rutracker\n🇷🇺",
+          "infoHash": "8df8e4d3533481b861f8c0e196a2d3e4adc23591",
+          "fileIdx": 1,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|8df8e4d3533481b861f8c0e196a2d3e4adc23591",
+            "filename": "1x01-Картмэн и анальный зонд.avi"
+          },
+          "sources": [
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "dht:8df8e4d3533481b861f8c0e196a2d3e4adc23591",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        },
+        {
+          "name": "Torrentio\nDVDRip",
+          "title": "Южный Парк / South Park / 1~7 сезоны / Все серии бонусы / [1997-2003 DVDRip-AVC]\nSouth_Park_S01_Goblin_MTV_RenTV_Ukr_Eng_Sub_DvdRip_x264/South_Park_S01E01_Cartman_Gets_an_Anal_Probe_Goblin_MTV_Ukr_Eng_Sub_DvdRip_x264.mp4\n👤 8 💾 203.44 MB ⚙️ Rutracker\n🇬🇧 / 🇷🇺 / 🇺🇦",
+          "infoHash": "e6d8bf16a92d55bc8640486fd001cbb7100306c8",
+          "fileIdx": 29,
+          "behaviorHints": {
+            "bingeGroup": "torrentio|e6d8bf16a92d55bc8640486fd001cbb7100306c8",
+            "filename": "South_Park_S01E01_Cartman_Gets_an_Anal_Probe_Goblin_MTV_Ukr_Eng_Sub_DvdRip_x264.mp4"
+          },
+          "sources": [
+            "tracker:http://bt3.t-ru.org/ann?magnet",
+            "dht:e6d8bf16a92d55bc8640486fd001cbb7100306c8",
+            "tracker:udp://tracker.opentrackr.org:1337/announce",
+            "tracker:udp://open.stealth.si:80/announce",
+            "tracker:udp://open.demonii.com:1337/announce",
+            "tracker:udp://open.tracker.cl:1337/announce",
+            "tracker:udp://tracker.skynetcloud.site:6969/announce",
+            "tracker:udp://tracker.qu.ax:6969/announce",
+            "tracker:udp://tracker.theoks.net:6969/announce",
+            "tracker:udp://tracker-udp.gbitt.info:80/announce",
+            "tracker:udp://explodie.org:6969/announce",
+            "tracker:udp://tracker.ducks.party:1984/announce",
+            "tracker:udp://tracker.tryhackx.org:6969/announce",
+            "tracker:udp://tracker.nyaa.vc:6969/announce",
+            "tracker:udp://tracker.dler.org:6969/announce",
+            "tracker:udp://tracker2.dler.org:80/announce",
+            "tracker:http://tracker.dler.com:6969/announce",
+            "tracker:udp://tracker.gmi.gd:6969/announce",
+            "tracker:http://tracker.renfei.net:8080/announce",
+            "tracker:udp://tracker.peerfect.org:6969/announce",
+            "tracker:udp://tracker.opentrackr.com:6969/announce",
+            "tracker:udp://tracker.ilibr.org:6969/announce",
+            "tracker:udp://opentor.net:6969",
+            "tracker:http://bt.t-ru.org/ann?magnet",
+            "tracker:http://bt2.t-ru.org/ann?magnet",
+            "tracker:http://bt4.t-ru.org/ann?magnet"
+          ]
+        }
+      ]
+    }
+  }
+}

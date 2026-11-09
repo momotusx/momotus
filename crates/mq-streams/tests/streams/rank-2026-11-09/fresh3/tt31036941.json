@@ -1,0 +1,520 @@
+{
+ "fetched": "2026-11-08T23:16:49.746Z",
+ "id": "tt31036941",
+ "type": "movie",
+ "sources": {
+  "meta": "https://v3-cinemeta.strem.io/meta/movie/tt31036941.json",
+  "streams": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt31036941.json"
+ },
+ "meta": {
+  "name": "Jurassic World: Rebirth",
+  "year": "2025",
+  "runtime": "134 min",
+  "genres": [
+   "Action",
+   "Adventure",
+   "Sci-Fi"
+  ],
+  "country": "United States, United Kingdom, Malta, India, Taiwan, Japan"
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k DV | HDR10+",
+   "title": "Jurassic.World.Rebirth.2025.2160p.HDR10Plus.DV.WEBRip.6CH.x265.HEVC\n👤 63 💾 4.76 GB ⚙️ ThePirateBay",
+   "infoHash": "f61ae19219dd8441506870553bb06143514d2b51",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|hevc|DV|HDR10+",
+    "filename": "Jurassic.World.Rebirth.2025.2160p.HDR10Plus.DV.WEBRip.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Jurassic World: Rebirth 2025 2160p WEBRip\n👤 121 💾 5.97 GB ⚙️ YTS\n🇬🇧 / 🇪🇸 / 🇫🇷",
+   "infoHash": "54ae9e89e6e3128a9fca3d8044bd336f314ce68a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265|10bit",
+    "filename": "Jurassic.World.Rebirth.2025.2160p.4K.WEB.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Jurassic World Rebirth (2025) English TRUE WEB-DL - 4K SDR - HEVC - (DD+5.1 ATMOS - 768Kbps & AAC) - 12GB - ESub.mkv\n👤 41 💾 11.99 GB ⚙️ ThePirateBay",
+   "infoHash": "864b505a5a3c427cc91d428facf4ef9879f7b6e6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|hevc",
+    "filename": "Jurassic World Rebirth (2025) English TRUE WEB-DL - 4K SDR - HEVC - (DD+5.1 ATMOS - 768Kbps & AAC) - 12GB - ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Jurassic.World.Rebirth.2025.2160p.WEB.H265.AZO\n👤 19 💾 11.87 GB ⚙️ 1337x",
+   "infoHash": "3994302789977cba7866ebee5acfab73e1ea1216",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB|h265",
+    "filename": "Jurassic.World.Rebirth.2025.2160p.WEB.H265.AZO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Jurassic World Rebirth 2025 2160p iT WEB-DL DDP5.1 Atmos x265-TBMovies\n👤 6 💾 11.87 GB ⚙️ 1337x",
+   "infoHash": "884c4b6180dc33dc5785b25e193376b6b23687b0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEB-DL|x265",
+    "filename": "Jurassic World Rebirth 2025 2160p iT WEB-DL DDP5.1 Atmos x265-TBMovies.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Jurassic World Rebirth (2025) Eng 2160p SDR WEBRip x265 DD P 5.1 ESub\n👤 5 💾 6.23 GB ⚙️ 1337x",
+   "infoHash": "2421c7f1f55f21426b6f81b76f024a86504545f0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|WEBRip|x265",
+    "filename": "Jurassic World Rebirth (2025) Eng 2160p SDR WEBRip x265 DD P 5.1 ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Jurassic World Rebirth 2025 1080P Web-Dl Hybrid H265 Dv Hdr Ddp Atmos 5 1 English-CAPTCHA\n👤 16 💾 4.97 GB ⚙️ ThePirateBay",
+   "infoHash": "521b6c5f571da462595ebd457548b0f9c777214f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265|DV|HDR",
+    "filename": "Jurassic World Rebirth 2025 1080P Web-Dl Hybrid H265 Dv Hdr Ddp Atmos 5 1 English-CAPTCHA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Jurassic World Rebirth 2025 1080p BluRay DV HDR10 x265-GeneMige\n👤 11 💾 6.66 GB ⚙️ ThePirateBay",
+   "infoHash": "4e0bc2270596ea35f22cccf32fe362c81b612f65",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Jurassic World Rebirth 2025 1080p BluRay DV HDR10 x265-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Jurassic World Rebirth 2025 1080p DS4K BluRay x265 10 bit HDR\n👤 6 💾 8.47 GB ⚙️ TorrentGalaxy",
+   "infoHash": "3c1a0fd17a8c40c7e4fd95bbc627a4a4794e1b50",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|HDR",
+    "filename": "Jurassic World Rebirth (2025) (1080p DS4K BluRay x265 10-bit HDR AAC 7.1) [WeSLeY].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Jurassic World Rebirth 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737\n👤 6 💾 5.83 GB ⚙️ ThePirateBay",
+   "infoHash": "6212104f7f55b62eafd9eedfdb148fd4ba8c5abe",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Jurassic World Rebirth 2025 UHD BluRay 1080p DD Atmos 5 1 DoVi HDR10 x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic.World.Rebirth.2025.1080p.WEBRip.DDP5.1.x265-NeoNoir\n👤 334 💾 1.99 GB ⚙️ 1337x",
+   "infoHash": "91cc5d0c4cba2328a40208b1528888d293ac055b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Jurassic.World.Rebirth.2025.1080p.WEBRip.DDP5.1.x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic.World.Rebirth.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta.mkv\n👤 199 💾 2.39 GB ⚙️ ThePirateBay",
+   "infoHash": "543def35a0457e2314c804ad9f7107879d54aa0e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Jurassic.World.Rebirth.2025.1080p.WEBRip.AAC5.1.10bits.x265-Rapta.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World: Rebirth 2025 1080p WEBRip\n👤 175 💾 2.46 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+   "infoHash": "cc9ccd3d06240d86a046d8279c44127aad8c4c52",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Jurassic.World.Rebirth.2025.1080p.WEBRip.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World: Rebirth 2025 1080p WEBRip\n👤 128 💾 2.23 GB ⚙️ YTS",
+   "infoHash": "4218fb5403ce2b87302c76789f6bee436946626a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265|10bit",
+    "filename": "Jurassic.World.Rebirth.2025.1080p.WEBRip.x265.10bit.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World: Rebirth 2025 1080p BluRay\n👤 77 💾 2.46 GB ⚙️ YTS",
+   "infoHash": "102efc71504fe96b60684b2e62420df93ab4cd49",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Jurassic.World.Rebirth.2025.1080p.BluRay.x264.AAC5.1-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic.World.Rebirth.2025.1080p.AMZN.WEB-DL.DDP5.1.Atmos.H.264-BYNDR.mkv\n👤 47 💾 9.44 GB ⚙️ ThePirateBay",
+   "infoHash": "784f057edb6773cbceded5a6ccfe3b96fa6850c4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Jurassic.World.Rebirth.2025.1080p.AMZN.WEB-DL.DDP5.1.Atmos.H.264-BYNDR.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World: Rebirth (2025) (1080p BluRay x265 10bit EAC3 7.1 Silence) [QxR]\nJurassic World - Rebirth (2025) (1080p BluRay x265 10bit Silence).mkv\n👤 37 💾 6.33 GB ⚙️ 1337x",
+   "infoHash": "b0d98c469edbdfb89b07312dcf610e323a2b7443",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Jurassic World - Rebirth (2025) (1080p BluRay x265 10bit Silence).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World Rebirth (2025) English 1080p x264 (DD 5.1 ATMOS 768Kbps AAC) ESub\n👤 34 💾 2.89 GB ⚙️ 1337x",
+   "infoHash": "3e970c074a79b27bf0002f2152ec53eb4caf6835",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|HDRip|x264",
+    "filename": "Jurassic World Rebirth (2025) English HQ HDRip - 1080p - x264 - (DD+5.1 ATMOS - 768Kbps & AAC) - 2.8GB - ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World Rebirth (2025) 1080p BluRay 5.1-LAMA\n👤 31 💾 2.46 GB ⚙️ ThePirateBay",
+   "infoHash": "5fd633c3c8fc3712dfec457ce3934317db9e215f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Jurassic.World.Rebirth.2025.1080p.BluRay.x264.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World Rebirth 2025 BluRay 1080p DD 5 1 x264-BHDStudio\n👤 27 💾 8.03 GB ⚙️ ThePirateBay",
+   "infoHash": "a46a08762de66c4b578b4d53a20984fd5852d9e9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Jurassic World Rebirth 2025 BluRay 1080p DD 5 1 x264-BHDStudio.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic.World.Rebirth.2025.1080p.WEB-DL.H.264.Dual.YG⭐\n👤 26 💾 10.31 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "590cb096c8a6743889885fdb97eacea97685ce16",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Jurassic.World.Rebirth.2025.1080p.WEB-DL.H.264.Dual YG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World Rebirth 2025 BluRay 1080p DDP 5 1 x264-hallowed\n👤 15 💾 9.98 GB ⚙️ ThePirateBay",
+   "infoHash": "9f2e8c18e8b756e97a3082173a8353bcc4d3a71d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Jurassic World Rebirth 2025 BluRay 1080p DDP 5 1 x264-hallowed.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World Rebirth 2025 1080p WEB-DL HEVC x265 5.1 BONE\n👤 14 💾 2.23 GB ⚙️ 1337x",
+   "infoHash": "1bf720fa538a1cce520c0d08dd5a4fe095a8429c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|hevc",
+    "filename": "Jurassic World Rebirth 2025 1080p WEB-DL HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic.World.Rebirth.2025.bluray.sdr.1080p.av1.7.1.opus-Dust\n👤 13 💾 4.49 GB ⚙️ 1337x",
+   "infoHash": "f887291298dd8979d5fa558b8d401f498f05ce61",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Jurassic.World.Rebirth.2025.bluray.sdr.1080p.av1.7.1.opus-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World Rebirth 2025 1080p WEBRip x265-DH\n👤 12 💾 4.98 GB ⚙️ ThePirateBay",
+   "infoHash": "f5d7514f25375838c1cb9b2a557f155ab5fded2a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Jurassic World Rebirth 2025 1080p WEBRip x265-DH.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic.World.Rebirth.2025.1080p.WEBRip.x265-KONTRAST\n👤 11 💾 3.01 GB ⚙️ 1337x",
+   "infoHash": "8860d854960c440dcad290c4006a799228ae4c5d",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Jurassic.World.Rebirth.2025.1080p.WEBRip.x265-KONTRAST.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurský svět: Znovuzrození / Jurassic World: Rebirth (2025)[1080p][WEB-DL]\n👤 11 💾 9.4 GB ⚙️ EXT\n🇬🇧 / 🇪🇸 / 🇫🇷 / 🇨🇿",
+   "infoHash": "909edc7f9ffa49cfa10e6f7aecca8e171db6bbfe",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World Rebirth 2025 1080p WEB-DL x264 6CH-Pahe in\n👤 10 💾 2.64 GB ⚙️ ThePirateBay",
+   "infoHash": "804cffb2fa201907616923a2f19fffdbbb7a3cd5",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Jurassic World Rebirth 2025 1080p WEB-DL x264 6CH-Pahe in.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World Rebirth 2025 1080p WEBRip DDP5 1 x265-NeoNoir\n👤 10 💾 1.99 GB ⚙️ ThePirateBay",
+   "infoHash": "4373cbdd0dbec3fd1d095e98f624d207fef16256",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Jurassic World Rebirth 2025 1080p WEBRip DDP5 1 x265-NeoNoir.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic.World.Rebirth.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust\n👤 9 💾 1.79 GB ⚙️ 1337x",
+   "infoHash": "c61c0f5a6c661a4eb719c2a2f64bbf59cf1d3b38",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Jurassic.World.Rebirth.2025.bluray.sdr.1080p.av1.5.1.opus.subs.1900mb-Dust.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World Rebirth (2025) 1080p WEBRip x265 DD 5.1 Hin Multi Aud ESub\n👤 9 💾 2.6 GB ⚙️ 1337x\nMulti Audio / 🇮🇳",
+   "infoHash": "585bdd404840b82474bdffe2de1a0c416dc27cf0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x265",
+    "filename": "Jurassic World Rebirth (2025) 1080p WEBRip x265 DD 5.1 Hin Multi Aud ESub.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World Rebirth 2025 1080p 10bit WEBRip 6CH X265 HEVC-PSA\n👤 9 💾 2.56 GB ⚙️ ThePirateBay",
+   "infoHash": "5f7ac4e4c9d60cdafcdc9a8565dc40a38a986803",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|hevc|10bit",
+    "filename": "Jurassic World Rebirth 2025 1080p 10bit WEBRip 6CH X265 HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic.World.La.Rinascita.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv\n👤 8 💾 11.87 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "77bcf387d076020cb6dc2452f64975f1bfb136ef",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Jurassic.World.La.Rinascita.2025.iTA-ENG.WEBDL.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic.World.La.Rinascita.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv\n👤 7 💾 10.71 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "ac18c016b2cc721a8ebfcfe7925be34484adf8bf",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Jurassic.World.La.Rinascita.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Amazing Films 13 - Mp4 x264 AC3 1080p\nJP7 Jurassic World Rebirth (2025) 1080p Surround.mp4\n👤 7 💾 2.98 GB ⚙️ 1337x",
+   "infoHash": "1cd4535f03f1035b0e20bd2196a99c62df1d7e45",
+   "fileIdx": 35,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "JP7 Jurassic World Rebirth (2025) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World La Rinascita (2025) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv\n👤 7 💾 3.42 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "3058acef0bd4b583f63666d1dac40a5a1642e11a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x264",
+    "filename": "Jurassic World La Rinascita (2025) iTA-ENG.WEBDL.1080p.x264-Dr4gon.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic.World.Rebirth.2025.1080p.BluRay.x265.10bit.Atmos.TrueHD7.1-WiKi\n👤 6 💾 11.33 GB ⚙️ ThePirateBay",
+   "infoHash": "df53801b864284732524af8f951ff156c91a3be4",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Jurassic.World.Rebirth.2025.1080p.BluRay.x265.10bit.Atmos.TrueHD7.1-WiKi.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic.World.Rebirth.2025.1080p.iT.WEB-DL.LATINO.DDP5.1.Atmos.H264.MP4-BTM\n👤 6 💾 11.22 GB ⚙️ ThePirateBay\n🇲🇽",
+   "infoHash": "b42b1b2b3837d356461730242c8c44bc7ecb366c",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Jurassic.World.Rebirth.2025.1080p.iT.WEB-DL.[Ben The Men].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World Rebirth (2025) 1080p WEBRip 5.1-LAMA\n👤 6 💾 2.46 GB ⚙️ ThePirateBay",
+   "infoHash": "2ae11371e090ae53d3ea3b723fbb7755d61b79f4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Jurassic.World.Rebirth.2025.1080p.WEBRip.x264.AAC5.1-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World Rebirth 2025 HYBRID 1080p BluRay x265 DDPA5 1-R1GY3B\n👤 5 💾 4.86 GB ⚙️ ThePirateBay\n🇬🇧 / 🇷🇺 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇳🇱 / 🇺🇦 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇻🇳 / 🇮🇩 / 🇹🇭",
+   "infoHash": "a00aeea5a85469c82417fc23a27f6603173e8181",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Jurassic World Rebirth 2025 HYBRID 1080p BluRay x265 DDPA5 1-R1GY3B.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic.World.La.Rinascita.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv\n👤 5 💾 10.79 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "491b49f8def4f5a125a1649b05e793e85f3f0287",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Jurassic.World.La.Rinascita.2025.iTA-ENG.Bluray.1080p.x264-CYBER.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic.World.Rebirth.2025.1080p.MA.WEB-DL.DDP5.1.Atmos.H.264-ThisMovieIsDINOmite [CheerfulTomato]\n👤 5 💾 8.03 GB ⚙️ 1337x",
+   "infoHash": "e006f45a45f02aad90c57a6ecab8c04b5b82393f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Jurassic.World.Rebirth.2025.1080p.MA.WEB-DL.DDP5.1.Atmos.H.264-ThisMovieIsDINOmite.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World Rebirth 2025 1080p MA WEB-DL H265 SDR DDP Atmos 5 1 English HONE\n👤 4 💾 8.02 GB ⚙️ ThePirateBay",
+   "infoHash": "0a459c0a2b5ed5c6e5eb62faa9f547801d5dfd0f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265",
+    "filename": "Jurassic World Rebirth 2025 1080p MA WEB-DL H265 SDR DDP Atmos 5 1 English HONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World Rebirth 2025 1080p BluRay x264 AVC DDP5.1 - Gypsy\n👤 4 💾 12.63 GB ⚙️ 1337x",
+   "infoHash": "40d3df17d4d94ab60224243a692c9b093a72e267",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|avc",
+    "filename": "Jurassic World Rebirth 2025 1080p BluRay x264 AVC DDP5.1 - Gypsy.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Jurassic World Rebirth 2025 1080p BluRay X265 DDP 7 1-Chivaman\n👤 4 💾 5.62 GB ⚙️ ThePirateBay",
+   "infoHash": "77580e0281afd2df2c825085952f60c81a90fcc6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Jurassic World Rebirth 2025 1080p BluRay X265 DDP 7 1-Chivaman.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Jurassic World: Rebirth 2025 720p WEBRip\n👤 129 💾 1.2 GB ⚙️ YTS\n🇬🇧 / 🇵🇹",
+   "infoHash": "a87d36a8efd2924e9fb607722de5b453c625884a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Jurassic.World.Rebirth.2025.720p.WEBRip.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Jurassic World Rebirth (2025) 720p WEBRip-LAMA\n👤 93 💾 1.2 GB ⚙️ ThePirateBay",
+   "infoHash": "ad4ad1678e2245de0e740b391f5445f79bfea203",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|WEBRip|x264",
+    "filename": "Jurassic.World.Rebirth.2025.720p.WEBRip.x264.AAC-LAMA.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Jurassic World: Rebirth 2025 720p BluRay\n👤 42 💾 1.2 GB ⚙️ YTS",
+   "infoHash": "db019b9e596b5b93049a973b6ec21879b905bdf9",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Jurassic.World.Rebirth.2025.720p.BluRay.x264.AAC-[YTS.MX].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Jurassic.World.Rebirth.2025.REPACK.720p.BluRay.x264-KNiVES\n👤 14 💾 8.9 GB ⚙️ ThePirateBay",
+   "infoHash": "017f1105e92bba8a0e4b364b71ed3ec33afe5229",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "jurassic.world.rebirth.2025.repack.720p.bluray.x264-knives.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n576p",
+   "title": "Jurassic World Rebirth 2025 576p WEBRip x265 AAC-SSN\n👤 80 💾 1.46 GB ⚙️ ThePirateBay",
+   "infoHash": "7792c2a83ba7a89f450e5357ca4457ab0ee3dfe2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|576p|WEBRip|x265",
+    "filename": "Jurassic World Rebirth 2025 576p WEBRip x265 AAC-SSN.mkv"
+   }
+  }
+ ]
+}

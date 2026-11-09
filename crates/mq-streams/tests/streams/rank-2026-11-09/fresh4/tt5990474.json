@@ -1,0 +1,201 @@
+{
+ "fetched": "2026-11-08T23:53:19.041Z",
+ "id": "tt5990474",
+ "type": "movie",
+ "meta": {
+  "name": "Columbus",
+  "year": "2017",
+  "runtime": "104 min"
+ },
+ "streamUrl": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt5990474.json",
+ "streams": [
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Columbus 2017 1080p BluRay\n👤 39 💾 1.67 GB ⚙️ YTS",
+   "infoHash": "f0f31e0340c6d1e8e6b3429f8180726e9887fc9c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Columbus.2017.1080p.BluRay.x264-[YTS.AM].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Columbus.2017.1080p.WEB-DL.H264.AC3-EVO[EtHD]\n👤 33 💾 3.86 GB ⚙️ ThePirateBay",
+   "infoHash": "e9f52b4d7229b77eb8adcfc5d19668b986161819",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Columbus.2017.1080p.WEB-DL.H264.AC3-EVO[EtHD].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Columbus 2017 1080p AMZN WEB-DL DDP2 0 H 264-GPRS\n👤 14 💾 4.31 GB ⚙️ ThePirateBay",
+   "infoHash": "0e9ffba700e3cdea9fb4ec8f8a308204af1ffb20",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Columbus 2017 1080p AMZN WEB-DL DDP2 0 H 264-GPRS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Columbus.2017.1080p.BluRay.H264.AAC\n👤 9 💾 1.98 GB ⚙️ ThePirateBay",
+   "infoHash": "b32b466327c4560a0cfb8221d34b9b2940574a5f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264",
+    "filename": "Columbus.2017.1080p.BluRay.H264.AAC-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Columbus.2017.1080p.BluRay.x265-RARBG\n👤 5 💾 1.63 GB ⚙️ RARBG",
+   "infoHash": "d92797d0e03c4850e8e0c6582390bb5b9d3a4899",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Columbus.2017.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Columbus.2017.PROPER.1080p.WEBRip.x264-WEBTiFUL[EtHD]\n👤 5 💾 1.81 GB ⚙️ ThePirateBay",
+   "infoHash": "3f5ea2cccd69f71f1f0b538e6706b2913b3664ca",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Columbus 2017 1080p WEBRip\n👤 5 💾 1.49 GB ⚙️ YTS",
+   "infoHash": "b8d3cc43613edc4dc304d94eb7b9fd7bec3d2477",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEBRip|x264",
+    "filename": "Columbus.2017.1080p.WEBRip.x264-[YTS.AM].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Columbus.2017.1080p.BluRay.X264-AMIABLE[TGx]\n👤 3 💾 7.65 GB ⚙️ 1337x",
+   "infoHash": "8e6c665a186b1ccdc097cefa3b53e7339e9f5776",
+   "fileIdx": 3,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Columbus.2017.1080p.BluRay.X264-AMIABLE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Columbus.2017.Bluray.1080p.DTS-HD.x264-Grym\n👤 3 💾 11.46 GB ⚙️ ThePirateBay",
+   "infoHash": "ba69e06f983d623f5190ed0c591e8df74bed8b9c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Columbus.2017.Bluray.1080p.DTS-HD.x264-Grym.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Columbus 2017 1080p BluRay x264 DuaL-GeneMige\n👤 2 💾 7.79 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "f22a2fa0a40b62e73f864713a4750b657d4d80b3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Columbus 2017 1080p BluRay x264 DuaL-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Columbus (2017) (1080p BluRay x265 HEVC 10bit AAC 5.1 Tigole) [QxR]\n👤 2 💾 3.57 GB ⚙️ 1337x",
+   "infoHash": "ef0d2f7ae8bafd9a0dcf33a23041e3a645b08615",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Columbus (2017) (1080p BluRay x265 10bit Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Columbus.2017.1080p.BluRay.X264-AMIABLE[EtHD]\n👤 1 💾 7.65 GB ⚙️ 1337x",
+   "infoHash": "038ddbc92a726565b2af6140e8411d869fd2e802",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Columbus.2017.1080p.BluRay.X264-AMIABLE[EtHD].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Columbus.2017.1080p.BluRay.X264-AMIABLE\n👤 1 💾 7.66 GB ⚙️ ThePirateBay",
+   "infoHash": "16164408df0d65bbe41bb88886b0ab328d11372d",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Columbus 2017 720p BluRay\n👤 2 💾 894.71 MB ⚙️ YTS",
+   "infoHash": "3b0106bc1ad3a5e82431db87cd5ec04e617715ca",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Columbus.2017.720p.BluRay.x264-[YTS.AM].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Columbus.2017.720p.BluRay.X264-AMIABLE\n👤 2 💾 4.38 GB ⚙️ ThePirateBay",
+   "infoHash": "98c519c9ca48151fa2e2284b213e74afb7bfe56a",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Columbus.2017.720p.BRRip.XviD.AC3-XVID\n👤 2 💾 2.06 GB ⚙️ ThePirateBay",
+   "infoHash": "ba0193e6dcbf8eb093d3f84b680e8cd136050b68",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BRRip|xvid"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Columbus.2017.720p.10bit.BluRay.6CH.x265.HEVC-PSA\n👤 1 💾 676.9 MB ⚙️ 1337x",
+   "infoHash": "3e2432f161baffe5a5b55b9ece3a932b22578a6d",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|hevc|10bit"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Columbus.2017.HDRip.720p.x264.AAC.-.Hon3y\n👤 1 💾 855.71 MB ⚙️ ThePirateBay",
+   "infoHash": "e11a1becfb88f014d2482ec073c0624751f3e5bf",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|HDRip|x264",
+    "filename": "Columbus.2017.HDRip.720p.x264.AAC.-.Hon3y.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\nBRRip",
+   "title": "Columbus.2018.BRRip.XviD.AC3-EVO[TGx]\n👤 1 💾 1.32 GB ⚙️ TorrentGalaxy",
+   "infoHash": "e58ab29bfe290f2005fe4457ff73797afbc99480",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BRRip|xvid",
+    "filename": "Columbus.2018.BRRip.XviD.AC3-EVO.avi"
+   }
+  },
+  {
+   "name": "Torrentio\nBRRip",
+   "title": "Columbus.2017.BRRip.XviD.MP3-XVID\n👤 1 💾 720.86 MB ⚙️ ThePirateBay",
+   "infoHash": "74c3126217e0dd4830a512d631e9a3fba684c137",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BRRip|xvid"
+   }
+  }
+ ]
+}

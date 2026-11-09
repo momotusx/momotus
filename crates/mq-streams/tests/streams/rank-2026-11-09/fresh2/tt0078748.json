@@ -1,0 +1,599 @@
+{
+ "fetched": "2026-11-08T23:06:03.191Z",
+ "source": {
+  "torrentio": "https://torrentio.strem.fun/providers=yts,eztv,rarbg,1337x,ext,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,nekobt|qualityfilter=threed,scr,cam|sizefilter=15GB,5GB/stream/movie/tt0078748.json",
+  "cinemeta": "https://v3-cinemeta.strem.io/meta/movie/tt0078748.json"
+ },
+ "id": "tt0078748",
+ "type": "movie",
+ "meta": {
+  "name": "Alien",
+  "year": "1979",
+  "runtime": "117 min",
+  "genres": [
+   "Sci-Fi"
+  ]
+ },
+ "streams": [
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Alien (1979) 2160p UHD HDR Bluray AV1 Opus Multi6 [dAV1nci]\n👤 13 💾 7.6 GB ⚙️ 1337x",
+   "infoHash": "9846786190dd0c6db3971ee2a58f6836ffab0fa0",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|av1|HDR",
+    "filename": "Alien.Theatrical.Cut.1979.2160p.UHD.HDR.Bluray.AV1.Opus.Multi6-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k HDR",
+   "title": "Alien EXTENDED (1979) 2160p H265 BluRy Rip 10 bit HDR ita eng AC3 5.1 sub ita eng Licdom\n👤 10 💾 4.95 GB ⚙️ TorrentGalaxy\n🇬🇧 / 🇮🇹",
+   "infoHash": "4522676fceb2f30ed17e033f71b0b3161ab3cb18",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|h265|10bit|HDR",
+    "filename": "Alien EXTENDED (1979) 2160p H265 10 bit ita eng AC3 5.1 sub ita eng Licdom.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Alien 1979 2160p BluRay\n👤 70 💾 5.44 GB ⚙️ YTS",
+   "infoHash": "ef03a4b867ffe3b0d77b710a2dba49a237506ef2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265|10bit",
+    "filename": "Alien.1979.DC.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Alien (1979) DC Featurettes (2160p AI BluRay x265 HEVC 10bit AAC 5.1 Joy) [UTR]\nAlien (1979) DC  [2160p x265 10bit S91 Joy].mkv\n👤 47 💾 5.84 GB ⚙️ 1337x",
+   "infoHash": "7edd53f60869a75d2883119f94bec4e4c712b535",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|hevc|10bit",
+    "filename": "Alien (1979) DC  [2160p x265 10bit S91 Joy].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n4k",
+   "title": "Alien 1979 Directors Cut 2160p Bluray x265 DDP DTS-KiNGDOM\n👤 22 💾 12.32 GB ⚙️ 1337x",
+   "infoHash": "71cdda96d122f9c4d9c172e4988d6e9550b3cb78",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|4k|BluRay|x265",
+    "filename": "Alien 1979 Directors Cut 2160p Bluray x265 DDP+DTS-KiNGDOM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Alien (1979) (UHD BDRip 1080p AV1 HDR10 EAC3) [OEP][E5AE54E8].mkv\n👤 94 💾 4.87 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇮🇹 / 🇪🇸 / 🇰🇷 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇸🇦",
+   "infoHash": "1550a0e1a8a81b0a530443dc070ce784e7743aac",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|av1|10bit|HDR",
+    "filename": "Alien (1979) (UHD BDRip 1080p AV1 HDR10 EAC3) [OEP][E5AE54E8].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Alien (1979) DC (1080p BluRay x265 HEVC 10bit HDR AAC 5.1 afm72) [QxR]\n👤 59 💾 5.58 GB ⚙️ 1337x",
+   "infoHash": "46ab441583423a6c44c58942ffc0855ddf52dc51",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit|HDR",
+    "filename": "Alien (1979) DC (1080p BluRay x265 HDR afm72).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Alien 1979 Directors Cut UHD BluRay 1080p DDP 5 1 DoVi HDR10 x265-SM737\n👤 31 💾 6.67 GB ⚙️ ThePirateBay",
+   "infoHash": "4140f1657c96c27d2a798e5f1c98272cc5f6fcab",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Alien 1979 Directors Cut UHD BluRay 1080p DDP 5 1 DoVi HDR10  x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Alien (1979) Theatrical (1080p BluRay x265 HEVC 10bit HDR AAC 5.1 afm72) [QxR]\n👤 15 💾 6.05 GB ⚙️ 1337x",
+   "infoHash": "e3fd37648b4d38f1ef212e1ef88318a27165b61d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit|HDR",
+    "filename": "Alien (1979) Theatrical (1080p BluRay x265 HDR afm72).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV | HDR",
+   "title": "Alien 1979 Theatrical Cut UHD BluRay 1080p DDP 5 1 DoVi HDR10 x265-SM737\n👤 11 💾 6.89 GB ⚙️ ThePirateBay",
+   "infoHash": "19e4fb6cce2b9c2807d934acaddb1aa5a5a090d3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit|DV|HDR",
+    "filename": "Alien 1979 Theatrical Cut UHD BluRay 1080p DDP 5 1 DoVi HDR10  x265-SM737.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Alien.1979.Theatrical.HDR.1080p.UHD.BluRay.x265.HEVC.EAC3-SARTRE\n👤 10 💾 6.53 GB ⚙️ ThePirateBay",
+   "infoHash": "204da316cfebeab22b1bfd2ab3b23b73141fdd90",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|HDR"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p DV",
+   "title": "Alien 1979 1080p DSNP WEB-DL DDP5 1 DV H 265-OnlyWeb\n👤 8 💾 6.13 GB ⚙️ EXT\n🇬🇧 / 🇯🇵 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇨🇳 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇨🇿 / 🇭🇺 / 🇩🇰 / 🇸🇪 / 🇳🇴 / 🇹🇷",
+   "infoHash": "d7f58e5dcec463e8e409370f453d1ce7f7e406a2",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h265|DV",
+    "filename": "Alien 1979 1080p DSNP WEB-DL DDP5 1 DV H 265-OnlyWeb.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p HDR",
+   "title": "Kolekcja - Obcy - Alien [HLG HDR SDR] [1080p.BluRay.H264.AC3.5.1-AS76-FT] [ENG-Lektor PL] [Alusia]\nObcy - Alien 1979 [HLG HDR SDR] EXTENDED] [1080p.BluRay.H264.AC3.5.1-AS76-FT] [ENG-Lektor PL] [Alusia].mkv\n👤 6 💾 5.36 GB ⚙️ EXT\n🇬🇧 / 🇵🇱",
+   "infoHash": "e8bd6997e5511aa94c22ca1a739c5e9f2b514db7",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264|HDR",
+    "filename": "Obcy - Alien 1979 [HLG HDR SDR] EXTENDED] [1080p.BluRay.H264.AC3.5.1-AS76-FT] [ENG-Lektor PL] [Alusia].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien 1979 DC REMASTERED 1080p BluRay HEVC x265 5.1 BONE\n👤 299 💾 1.93 GB ⚙️ 1337x",
+   "infoHash": "03054d31f3c87018ac27a7e63bcb4cc7cda25f6a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "Alien 1979 DC REMASTERED 1080p BluRay HEVC x265 5.1 BONE.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien DC (1979) 1080p BrRip x264 - YIFY\n👤 281 💾 1.7 GB ⚙️ ThePirateBay",
+   "infoHash": "63dbb194903342cb1a674a56bb520f7f48366fa4",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BRRip|x264",
+    "filename": "Alien.Directors.Cut.1979.1080p.BRrip.x264.GAZ.YIFY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien.1979.Directors.Cut.1080p.BluRay.H264.AAC-RARBG\n👤 70 💾 2.21 GB ⚙️ ThePirateBay",
+   "infoHash": "1815a467da2820aea936b622c09966abed626c9c",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264",
+    "filename": "Alien.1979.Directors.Cut.1080p.BluRay.H264.AAC-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien.1979.DIRECTOR'S.CUT.1080p.10bit.BluRay.6CH.x265.HEVC-PSA\n👤 64 💾 2.41 GB ⚙️ 1337x",
+   "infoHash": "5eb690e444eaa93603b48532cf2e115f63484bb3",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Alien.1979.DIRECTOR'S.CUT.1080p.10bit.BluRay.6CH.x265.HEVC-PSA.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien 1979 Theatrical Cut BluRay 1080p DDP 5 1 x264-hallowed\n👤 49 💾 10.3 GB ⚙️ ThePirateBay\n🇬🇧 / 🇪🇸",
+   "infoHash": "d5e3a5f5bba41928efc1fa0aec8484b6a4249bc8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Alien 1979 Theatrical Cut BluRay 1080p DDP 5 1 x264-hallowed.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien (1979) - 1080p - BD AV1 Opus MULTi4 [V2] [dAV1nci]\n👤 47 💾 3.01 GB ⚙️ 1337x",
+   "infoHash": "32730bd776d08230d0936b8ac4063351d5493468",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|av1",
+    "filename": "Alien.Theatrical.Cut.1979.1080p.AV1.Opus.Multi4.V2-dAV1nci.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien 1979 1080p BluRay HEVC x265 10-Bit DDP5.1 Subs KINGDOM RG\n👤 33 💾 3.78 GB ⚙️ TorrentGalaxy",
+   "infoHash": "6ec7eec7ea1ff1e72ca3bcc790746b6c66012247",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Alien 1979 1080p BluRay HEVC  x265 10-Bit DDP5.1 Subs KINGDOM RG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien.1979.PROPER.REMASTERED.THEATRICAL.1080p.BluRay.x265-RARBG\n👤 32 💾 1.82 GB ⚙️ RARBG",
+   "infoHash": "97910fd1d89ce0a3874380fcd5874dae6d4763f6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Alien.1979.PROPER.REMASTERED.THEATRICAL.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien (1979) (RLM Jaboody Theatrical RM4k Hybrid 1080p BluRay x265 HEVC 10bit AAC 5.1 Commentary) Ridley Scott Tom Skerritt Sigourney Weaver Veronica Cartwright Harry Dean Stanton John Hurt Ian Holm Yaphet Kotto Bolaji Badejo Helen Horton\n👤 30 💾 13.41 GB ⚙️ 1337x",
+   "infoHash": "67cea2010c901066bef2e6e5f9a4daab48e93bb6",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Alien.1979.Theatrical.RM4k.Hybrid.1080p.BluRay.x265.hevc.10bit.AAC.5.1.commentary.RLM.jaboody-HeVK.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien (1979) Theatrical Cut MULTI 1080p BluRay AV1 Opus [AV1D]\n👤 21 💾 2.92 GB ⚙️ 1337x\nMulti Audio / 🇬🇧",
+   "infoHash": "789c223a1431e0d2abcd7be70dd887171f4f4e2f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|av1",
+    "filename": "Alien (1979) MULTI 1080p BluRay AV1 Opus [AV1D].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien - EXTENDED (1979) ITA ENG Ac3 5.1 Sub Ita BDRip 1080p H264 [ArMor]\n👤 14 💾 3.79 GB ⚙️ 1337x\n🇬🇧 / 🇮🇹",
+   "infoHash": "8a5a137c652dea71d7010cdd1ed2c11bff78398d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BDRip|h264",
+    "filename": "Alien - EXTENDED (1979) ITA ENG Ac3 5.1 Sub Ita BDRip 1080p H264 [ArMor].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien.1979.REMASTERED.DC.PROPER.1080p.BluRay.x265-RARBG\n👤 12 💾 1.8 GB ⚙️ RARBG",
+   "infoHash": "b1cceda1fbc62bf693f73ff6f2a58e6c8ff8d16b",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Alien.1979.REMASTERED.DC.PROPER.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien 1979 DC (1080p x265 10bit Tigole)\n👤 11 💾 2.37 GB ⚙️ ThePirateBay",
+   "infoHash": "d9c5121dfb34b19aa79564251566e0b18f46cca8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x265|10bit",
+    "filename": "Alien 1979 DC (1080p x265 10bit Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Amazing Films 2 - Mp4 x264 AC3 1080p\nA3 Alien (1979) 1080p Surround.mp4\n👤 10 💾 2.58 GB ⚙️ ThePirateBay",
+   "infoHash": "d98427aa3ebdac78bc2a690ac3ec2139280b7af7",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|x264",
+    "filename": "A3 Alien (1979) 1080p Surround.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien o 8° Passageiro (1979) BluRay 1080p Dublado\n👤 10 💾 1.73 GB ⚙️ ThePirateBay\n🇬🇧 / 🇵🇹",
+   "infoHash": "e9e542f90ad9537c2997d4016eb19b4dd524b0ef",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay",
+    "filename": "Alien o  8° Passageiro (1979) BluRay 1080p Dublado.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien 1979 1080p DSNP WEB-DL DDP5 1 SDR H 264-OnlyWeb\n👤 9 💾 5.81 GB ⚙️ EXT",
+   "infoHash": "12f3ebb5eacb9e238a9d37100ef5c60313012493",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|h264",
+    "filename": "Alien 1979 1080p DSNP WEB-DL DDP5 1 SDR H 264-OnlyWeb.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "IMDB TOP 051-100 BluRay 1080p x265 10bit MNHD-FRDS\n052.异形.Alien.1979.Directors.Cut.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS/Alien.1979.Directors.Cut.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv\n👤 9 💾 6.06 GB ⚙️ EXT",
+   "infoHash": "e6d934fd7e96efcb009c3372198360262bca2b65",
+   "fileIdx": 7,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265|10bit",
+    "filename": "Alien.1979.Directors.Cut.BluRay.1080p.x265.10bit.2Audio.MNHD-FRDS.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien 1979 Theatrical Cut 1080p MA WEB-DL x265 10bit EAC3 5 1-TimeDistortion\n👤 9 💾 5.42 GB ⚙️ ThePirateBay",
+   "infoHash": "a5b692b8a243cb077425ade68d20cc77d3705ae5",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB-DL|x265|10bit",
+    "filename": "Alien 1979 Theatrical Cut 1080p MA WEB-DL x265 10bit EAC3 5 1-TimeDistortion.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "[REUP] Alien 1979 (1080p Bluray x265 HEVC 10bit AAC 5.1 Tigole) [UTR]\n👤 9 💾 2.54 GB ⚙️ 1337x",
+   "infoHash": "56ea88fe249d4a24b5d9908190f87ba8bfe0a847",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Alien 1979 (1080p x265 10bit Tigole).mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien.1979.PROPER.REMASTERED.DC.1080p.BluRay.x265-RARBG\n👤 8 💾 1.8 GB ⚙️ RARBG",
+   "infoHash": "53d44af88beb8da5957f5ae078e443673df03c9a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Alien.1979.PROPER.REMASTERED.DC.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien 1979 MULTi 1080p WEB H264-SUPPLY\n👤 7 💾 4.41 GB ⚙️ EXT\nMulti Audio / 🇫🇷",
+   "infoHash": "b87ff232c39d304671d49f859866a234dacf71ec",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|WEB|h264",
+    "filename": "Alien 1979 MULTi 1080p WEB H264-SUPPLY.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien (Saga) Av1 A5.1 1080p 7RIP\n3 - Alien DC (1979) AV1 A5.1 1080p 7RIP.mkv\n👤 7 💾 366.64 MB ⚙️ TorrentGalaxy\n🇬🇧 / 🇯🇵 / 🇮🇹 / 🇵🇹 / 🇪🇸 / 🇰🇷 / 🇫🇷 / 🇩🇪 / 🇳🇱 / 🇵🇱 / 🇹🇷 / 🇸🇦 / 🇮🇩",
+   "infoHash": "ffe3813303c82aa79ce5bae601b541e5563449ab",
+   "fileIdx": 2,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|av1",
+    "filename": "3 - Alien DC (1979) AV1 A5.1 1080p 7RIP.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien.1979.REMASTERED.DC.1080p.BluRay.x265-RARBG\n👤 7 💾 1.8 GB ⚙️ RARBG",
+   "infoHash": "71f03dfde3ef79309c85c6bb9e57d8be53998a7f",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Alien.1979.REMASTERED.DC.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien.1979.REMASTERED.THEATRICAL.1080p.BluRay.H264.AAC-RARBG\n👤 7 💾 2.22 GB ⚙️ RARBG",
+   "infoHash": "953c0eef04887f386c18d7ee7443760804563e79",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|h264",
+    "filename": "Alien.1979.REMASTERED.THEATRICAL.1080p.BluRay.H264.AAC-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien Anthology DC & Special Edition 1979-1997 1080p DTS Hig\nAlien (1979) DC 1080p DTS multisub HighCode- PublicHD.mkv\n👤 7 💾 4.94 GB ⚙️ ThePirateBay\nMulti Subs",
+   "infoHash": "8437b851e448a7f2fa80b69085f666039020623a",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p",
+    "filename": "Alien (1979) DC 1080p DTS multisub HighCode- PublicHD.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien.1979.BluRay.1080p.HEVC.DTS-HD.MA.5.1.H265-PANAM\n👤 6 💾 13.02 GB ⚙️ 1337x",
+   "infoHash": "30b5f6b2c5f37cc42a0428abef1cf7cf65e4fafd",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc",
+    "filename": "Alien.1979.BluRay.1080p.HEVC.DTS-HD.MA.5.1.H265-PANAM.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien (1979) 1080p Rifftrax 6ch 2ch v2\n👤 6 💾 2.21 GB ⚙️ ThePirateBay",
+   "infoHash": "8df56f237e885c8b0ce7b8a7c98105ac9ff1b3ef",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien 1979 m1080p BluRay x264-GeneMige\n👤 5 💾 2.72 GB ⚙️ ThePirateBay",
+   "infoHash": "8a7b56070735255d8ef9754f048c377ac50feac1",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x264",
+    "filename": "Alien 1979 m1080p BluRay x264-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien (1979) DC (1080p BluRay AI x265 HEVC 10bit DTS 5.1 Q18 Joy) [UTR]\n👤 5 💾 3.53 GB ⚙️ 1337x",
+   "infoHash": "3d161ab5c79a1eebd5f593e4d965f6cb41454fda",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Alien (1979) DC  [1080p x265 q18 FS99 Joy].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien (1979) DC Featurettes (1080p BluRay AI x265 HEVC 10bit AAC 5.1 Q22 Joy) [UTR]\nAlien (1979) DC  [1080p x265 q22 S95 Joy].mkv\n👤 5 💾 2.36 GB ⚙️ 1337x",
+   "infoHash": "834f3ea0f561f9c3b38b33cd9963d03a17698143",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Alien (1979) DC  [1080p x265 q22 S95 Joy].mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien 6-Film Collection (1979-2017) 1080p 10bit Bluray x265 HEVC [Org DD 5.1 Hindi DD 5.1 English] MSubs ~ TombDoc\nAlien (1979) 1080p 10bit Bluray x265 HEVC [DD+ 2.0 Hindi + DD 5.1 English] MSubs ~ TombDoc.mkv\n👤 5 💾 3.81 GB ⚙️ 1337x\nMulti Subs / 🇬🇧 / 🇮🇳",
+   "infoHash": "75e8e606e72bf317e74139d1da96c96ec0999c23",
+   "fileIdx": 1,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|hevc|10bit",
+    "filename": "Alien (1979) 1080p 10bit Bluray x265 HEVC [DD+ 2.0 Hindi + DD 5.1 English] MSubs ~ TombDoc.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n1080p",
+   "title": "Alien.1979.REMASTERED.THEATRICAL.1080p.BluRay.x265-RARBG\n👤 5 💾 1.82 GB ⚙️ RARBG",
+   "infoHash": "373f20a4abe085954fe89272afa89ee27257f376",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|1080p|BluRay|x265",
+    "filename": "Alien.1979.REMASTERED.THEATRICAL.1080p.BluRay.x265-RARBG.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Alien Movie Collection - 9 Films DC SE Unrated 1979-2017 Eng Sub\nAlien 9 Movie Extended Collection/01 Alien Directors Cut - Sci-Fi 1979 Eng Subs 720p [H264-mp4].mp4\n👤 29 💾 1.54 GB ⚙️ ThePirateBay\n🇬🇧 / 🇸🇪",
+   "infoHash": "f7b1fcfd29d9f19dc69383e7ee54ca7dc3237c91",
+   "fileIdx": 5,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|h264",
+    "filename": "01 Alien Directors Cut - Sci-Fi 1979 Eng Subs 720p [H264-mp4].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Alien Directors Cut 1979 720p BrRip x264 - 700MB - YIFY\n👤 25 💾 699.65 MB ⚙️ ThePirateBay",
+   "infoHash": "622dca448c0015d1d559cbe96eba084fa5f1741e",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BRRip|x264",
+    "filename": "Alien Director's Cut 1979.720p.BrRip.x264.YIFY.mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Alien 1 2 3 4 5 6 7 - Sci-Fi DC SE Unrated 1979-2012 Eng S\nAlien Film Franchise [Directors Cut-Special Edition-Unrated] 1979-2012/01 Alien Directors Cut - Sci-Fi 1979 Eng Subs 720p [H264-mp4].mp4\n👤 16 💾 1.33 GB ⚙️ ThePirateBay\n🇬🇧 / 🇸🇪",
+   "infoHash": "1d44fd1bbdb8f1f1db7c03a01d96c734c4f3446f",
+   "fileIdx": 4,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|h264",
+    "filename": "01 Alien Directors Cut - Sci-Fi 1979 Eng Subs 720p [H264-mp4].mp4"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Alien.1979.REMASTERED.DC.720p.BluRay.999MB.x265.10bit-GalaxyR\n👤 14 💾 989.7 MB ⚙️ ThePirateBay",
+   "infoHash": "a21bf84e62a26601a11fcf7637c4f3c44f2a9ac8",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x265|10bit",
+    "filename": "Alien.1979.REMASTERED.DC.720p.BluRay.999MB.HQ.x265.10bit-GalaxyRG.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Alien 1979 Directors Cut 720p BluRay x264 DuaL-TURKO\n👤 12 💾 1.88 GB ⚙️ ThePirateBay\nDual Audio",
+   "infoHash": "684b970f40ceb3465404e009075fe4f209a0ce92",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Alien 1979 Directors Cut 720p BluRay x264 DuaL-TURKO.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n720p",
+   "title": "Alien 1979 720p BluRay x264-GeneMige\n👤 8 💾 4.71 GB ⚙️ ThePirateBay",
+   "infoHash": "670218d838c8fab1a1f4b05239af56558738952d",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|720p|BluRay|x264",
+    "filename": "Alien 1979 720p BluRay x264-GeneMige.mkv"
+   }
+  },
+  {
+   "name": "Torrentio\n360p",
+   "title": "Alien 1986 1986 1992 1997 Prometheus 2012 2017: Threesixtyp\nAlien M01 [Director's Cut] (1979 360p re-blurip).mp4\n👤 9 💾 350.38 MB ⚙️ MagnetDL",
+   "infoHash": "f1b3f76e91d1331ab8cbe5bba31aada6efd10196",
+   "fileIdx": 5,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|360p",
+    "filename": "Alien M01 [Director's Cut] (1979 360p re-blurip).mp4"
+   }
+  },
+  {
+   "name": "Torrentio\nBluRay",
+   "title": "Alien Theatrical Version (1979) Genuine Blu-Ray HEVC 10 Bit AC3 5.1 EN Subs EN\n👤 9 💾 2.4 GB ⚙️ 1337x",
+   "infoHash": "b57e9d246bbe66169123a3962d0849622bfa156e",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BluRay|hevc|10bit"
+   }
+  },
+  {
+   "name": "Torrentio\nDVDRip",
+   "title": "Official IMDb Top 250 Movies Collection 6/17/2011\nAlien (1979) DVDrip V3nDetta.avi\n👤 8 💾 698.45 MB ⚙️ ThePirateBay",
+   "infoHash": "4986ace2ee7a564508e0d5cfdde2d9018b8af942",
+   "fileIdx": 97,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVDRip",
+    "filename": "Alien (1979) DVDrip V3nDetta.avi"
+   }
+  },
+  {
+   "name": "Torrentio\nDVDRip",
+   "title": "Alien (1979) DVDrip xvid (The Director's Cut)\n👤 6 💾 1.28 GB ⚙️ ThePirateBay",
+   "infoHash": "fd221ea4729292a4daf7a0209ef31da89bdaf783",
+   "behaviorHints": {
+    "bingeGroup": "torrentio|DVDRip|xvid"
+   }
+  },
+  {
+   "name": "Torrentio\nBDRip",
+   "title": "Alien Predator COMPLETE Collection BDRip XviD AC3-RARBG\n1.Alien.Director.Cut.1979.BDRip.XviD.AC3.avi\n👤 5 💾 1.87 GB ⚙️ ThePirateBay",
+   "infoHash": "7e609a89693f7a9bef84f13fd80313070822e670",
+   "fileIdx": 0,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|BDRip|xvid",
+    "filename": "1.Alien.Director.Cut.1979.BDRip.XviD.AC3.avi"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "B Movie Bonanza Redux\n135_Alien_1979_DC.avi\n👤 22 💾 1.46 GB ⚙️ ThePirateBay",
+   "infoHash": "1bdff33ea1e91e7e50f832d68ee16803b5ccfdef",
+   "fileIdx": 92,
+   "behaviorHints": {
+    "filename": "135_Alien_1979_DC.avi"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "101 Horror Movies Mega Pack Vol 16 Mixed x264 [i_c]\nAlien 1979.mkv\n👤 19 💾 2.78 GB ⚙️ ThePirateBay",
+   "infoHash": "debe613422bd034cbe2e1e9b4678e59769c4500b",
+   "fileIdx": 5,
+   "behaviorHints": {
+    "bingeGroup": "torrentio|x264",
+    "filename": "Alien 1979.mkv"
+   }
+  },
+  {
+   "name": "Torrentio",
+   "title": "Sohier.Ramzy 68 Arabic Movies [Etcohod]\nAlMala3ine.1979.avi\n👤 5 💾 697.56 MB ⚙️ TorrentGalaxy\n🇸🇦",
+   "infoHash": "08c5619e151c5ef3f7172dac9185b33923ad7e65",
+   "fileIdx": 17,
+   "behaviorHints": {
+    "filename": "AlMala3ine.1979.avi"
+   }
+  }
+ ]
+}
