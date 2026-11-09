@@ -2186,7 +2186,9 @@ async fn a_stall_ends_with_its_source() {
 
 /// 2e, review 2026-10-23: playing on ends a stall whose "stalled: false"
 /// never came. The first stall's clock stops, and a later real stall gets
-/// its own 30 s instead of being taken for a repeat.
+/// its own 30 s instead of being taken for a repeat, less the first one's
+/// 5 s, which began within the last minute of playback
+/// (plans/stream-ranking.md 10): it moves 35 s after the first began.
 #[tokio::test]
 async fn playing_on_ends_a_stall_the_player_did_not_end() {
     let row = |name| (name, media_fixture("h264.mp4"));
@@ -2216,7 +2218,7 @@ async fn playing_on_ends_a_stall_the_player_did_not_end() {
     .await;
     let took = begun.elapsed();
     assert!(
-        took >= Duration::from_secs(39),
+        took >= Duration::from_secs(34),
         "the first stall's clock: {took:?}"
     );
     assert_eq!(playback.snapshot().resume_ms, Some(16_500));
@@ -2315,6 +2317,264 @@ async fn a_stall_of_the_resume_release_never_moves() {
     until("choose another", || resume.snapshot().choose_another).await;
     tokio::time::sleep(Duration::from_secs(3)).await;
     assert_eq!(resume.snapshot().key.as_ref(), Some(&keys[0]));
+}
+
+/// A stutter loop (plans/stream-ranking.md 10): `stalls` stalls of
+/// `stall` each after `play` of playback; with `pause_after`, a pause
+/// follows that stall.
+#[derive(Clone, Copy)]
+struct Stutter {
+    play: Duration,
+    stall: Duration,
+    stalls: u32,
+    pause_after: Option<u32>,
+}
+
+/// The race's Tears of Steel run (17 seeders, 21 stalls, 98 s stalled in
+/// 120 s played, `bench/m13/race.jsonl`), spread evenly.
+const TEARS_OF_STEEL: Stutter = Stutter {
+    play: Duration::from_millis(5_700),
+    stall: Duration::from_millis(4_670),
+    stalls: 21,
+    pause_after: None,
+};
+
+/// The race's Sintel run (22 seeders, 16 stalls, 92 s stalled), spread
+/// evenly.
+const SINTEL: Stutter = Stutter {
+    play: Duration::from_millis(7_500),
+    stall: Duration::from_millis(5_780),
+    stalls: 16,
+    pause_after: None,
+};
+
+/// The plan's own loop: an 11.6 Mbit/s file on a 5 Mbit/s line with a 3 s
+/// rebuffer stalls about 7 s after each 4 s of play.
+const SLOW_LINE: Stutter = Stutter {
+    play: Duration::from_secs(4),
+    stall: Duration::from_secs(7),
+    stalls: 8,
+    pause_after: None,
+};
+
+/// Plays `loop_` on `p` from position `from` as a player reports it, in
+/// real time: the stall during which the version moved or "Choose another
+/// version" showed, with the playback it began after; none if neither.
+async fn stutter(p: &mq_runtime::PlaybackView, from: u64, loop_: Stutter) -> Option<(u32, u64)> {
+    let key = p.snapshot().key;
+    let mut at = from;
+    for n in 1..=loop_.stalls {
+        tokio::time::sleep(loop_.play).await;
+        at += loop_.play.as_millis() as u64;
+        p.report_progress(at, 600_000, false);
+        p.stalled(true, at);
+        let ends = Instant::now() + loop_.stall;
+        while Instant::now() < ends {
+            let s = p.snapshot();
+            if s.key != key || s.choose_another {
+                return Some((n, at - from));
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        p.stalled(false, at);
+        if loop_.pause_after == Some(n) {
+            p.report_progress(at, 600_000, true);
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            p.report_progress(at, 600_000, true);
+            p.report_progress(at, 600_000, false);
+        }
+    }
+    None
+}
+
+/// Three versions of one episode, 1080p, 720p and 480p, in rank order.
+async fn three_versions() -> (Core, Server, Vec<String>) {
+    let row = |name| (name, media_fixture("h264.mp4"));
+    direct_rows(vec![
+        row("Show.S01E01.1080p.WEB-DL.x264-ONE"),
+        row("Show.S01E01.720p.WEB-DL.x264-TWO"),
+        row("Show.S01E01.480p.WEB-DL.x264-THREE"),
+    ])
+    .await
+}
+
+/// `p` plays, and has played steadily to 12 s.
+async fn playing(p: &mq_runtime::PlaybackView) {
+    until("ready", || p.snapshot().url.is_some()).await;
+    for at in [10_000, 12_000] {
+        p.report_progress(at, 600_000, false);
+    }
+}
+
+/// The recommendation left for the 720p at `resume_ms`, for a stall.
+fn moved_for_a_stall(p: &mq_runtime::PlaybackView, keys: &[String], resume_ms: u64) {
+    let s = p.snapshot();
+    assert_eq!(s.resume_ms, Some(resume_ms), "the position carries over");
+    assert_eq!(
+        (&s.attempts[0].key, s.attempts[0].error.as_str()),
+        (&keys[0], "The video stopped loading")
+    );
+}
+
+/// Plans/stream-ranking.md 10, test 1: no stall of the Tears of Steel
+/// stutter reaches 30 s, but the stalls that began within the last 60 s of
+/// playback do, during the 7th (7 x 4.67 = 32.7 s, at 39.9 s of play): the
+/// recommendation moves on there, its position carried over.
+#[tokio::test]
+async fn a_tears_of_steel_stutter_moves_on_at_about_40s_of_play() {
+    let (core, _server, keys) = three_versions().await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let p = play(&core, &view, &keys[0]);
+    playing(&p).await;
+    assert_eq!(stutter(&p, 12_000, TEARS_OF_STEEL).await, Some((7, 39_900)));
+    until("the move", || p.snapshot().key.as_ref() == Some(&keys[1])).await;
+    moved_for_a_stall(&p, &keys, 51_900);
+}
+
+/// Test 2: the Sintel stutter trips during its 6th stall (6 x 5.78 =
+/// 34.7 s), at 45 s of play.
+#[tokio::test]
+async fn a_sintel_stutter_moves_on_at_about_45s_of_play() {
+    let (core, _server, keys) = three_versions().await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let p = play(&core, &view, &keys[0]);
+    playing(&p).await;
+    assert_eq!(stutter(&p, 12_000, SINTEL).await, Some((6, 45_000)));
+    until("the move", || p.snapshot().key.as_ref() == Some(&keys[1])).await;
+    moved_for_a_stall(&p, &keys, 57_000);
+}
+
+/// Test 3, why the window counts playback: on wall-clock time no 60 s of
+/// the Tears of Steel stutter holds 30 s of stalls (28.0 s at most, 27.0 s
+/// on average), so a wall-clock window never trips it and fails test 1. By
+/// playback the stalls of 60 s pass 30 s at the 7th, as test 1 pins.
+#[test]
+fn a_wall_clock_window_never_fills_on_the_tears_of_steel_stutter() {
+    let (play, stall) = (5.7, 4.67);
+    // Stall n (from 0) on the wall clock.
+    let stalls: Vec<(f64, f64)> = (0..TEARS_OF_STEEL.stalls)
+        .map(|n| f64::from(n) * (play + stall) + play)
+        .map(|began| (began, began + stall))
+        .collect();
+    // The most stalled time in any 60 s: a window ending as a stall ends.
+    let most = stalls
+        .iter()
+        .map(|&(_, end)| {
+            let from = end - 60.0;
+            stalls
+                .iter()
+                .map(|&(b, e)| (e.min(end) - b.max(from)).max(0.0))
+                .sum::<f64>()
+        })
+        .fold(0.0, f64::max);
+    assert!((most - 28.02).abs() < 0.01, "{most}");
+    // By playback, every stall began within 60 s of play of the 7th.
+    let by_playback = |n: u32| f64::from(n) * stall;
+    assert!(by_playback(6) < 30.0 && by_playback(7) >= 30.0);
+    assert!(f64::from(7 - 1) * play <= 60.0);
+}
+
+/// Test 4, walk EW-3's shape: one 17 s stall right after a seek, then
+/// clean play and a steady 14 s stall: no move and no button. The seek's
+/// stall is no part of a stutter; with it the two would make 31 s.
+#[tokio::test]
+async fn a_stall_after_a_seek_is_no_part_of_a_stutter() {
+    let (core, _server, keys) = three_versions().await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let p = play(&core, &view, &keys[0]);
+    playing(&p).await;
+    p.report_progress(300_000, 600_000, false);
+    p.stalled(true, 300_000);
+    tokio::time::sleep(Duration::from_secs(17)).await;
+    p.stalled(false, 300_000);
+    for at in [302_000, 304_000] {
+        p.report_progress(at, 600_000, false);
+    }
+    p.stalled(true, 304_000);
+    tokio::time::sleep(Duration::from_secs(14)).await;
+    p.stalled(false, 304_000);
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let s = p.snapshot();
+    assert_eq!(s.key.as_ref(), Some(&keys[0]));
+    assert!(!s.choose_another && s.attempts.is_empty(), "{s:?}");
+}
+
+/// Test 5: a pause after the third Tears of Steel stall neither empties
+/// nor fills the window: it still trips during the 7th stall, at 39.9 s
+/// of play.
+#[tokio::test]
+async fn a_pause_in_a_stutter_neither_empties_nor_fills_its_window() {
+    let (core, _server, keys) = three_versions().await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let p = play(&core, &view, &keys[0]);
+    playing(&p).await;
+    let paused = Stutter {
+        pause_after: Some(3),
+        ..TEARS_OF_STEEL
+    };
+    assert_eq!(stutter(&p, 12_000, paused).await, Some((7, 39_900)));
+    until("the move", || p.snapshot().key.as_ref() == Some(&keys[1])).await;
+    moved_for_a_stall(&p, &keys, 51_900);
+}
+
+/// Test 6: a stutter on a version picked by hand shows "Choose another
+/// version" and never moves; so does one on a recommendation that already
+/// moved once (here for a single 30 s stall). The slow line's loop trips
+/// at its 5th stall (5 x 7 s), 20 s of play.
+#[tokio::test]
+async fn a_stutter_on_a_hand_pick_or_after_a_move_only_offers_another_version() {
+    let (core, _server, keys) = three_versions().await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let hand = play(&core, &view, &keys[1]);
+    let moved = play(&core, &view, &keys[0]);
+    for p in [&hand, &moved] {
+        playing(p).await;
+    }
+    let offers = |p: &mq_runtime::PlaybackView| {
+        let s = p.snapshot();
+        assert!(s.choose_another, "{s:?}");
+        assert_eq!(s.key.as_ref(), Some(&keys[1]));
+    };
+    moved.stalled(true, 12_500);
+    let at_720p = || moved.snapshot().key.as_ref() == Some(&keys[1]);
+    let (tripped, ()) = tokio::join!(
+        stutter(&hand, 12_000, SLOW_LINE),
+        until("the move", at_720p)
+    );
+    assert_eq!(tripped, Some((5, 20_000)));
+    offers(&hand);
+
+    playing(&moved).await;
+    assert_eq!(stutter(&moved, 12_000, SLOW_LINE).await, Some((5, 20_000)));
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    offers(&moved);
+    let attempts = moved.snapshot().attempts;
+    assert_eq!(attempts.len(), 1, "one move a play: {attempts:?}");
+}
+
+/// A stutter's "Choose another version" stays between its stalls instead
+/// of going at each one's end, and goes once a minute of playback holds
+/// less than 30 s of stalls.
+#[tokio::test]
+async fn a_stutters_button_stays_between_its_stalls() {
+    let (core, _server, keys) = three_versions().await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let hand = play(&core, &view, &keys[1]);
+    playing(&hand).await;
+    assert_eq!(stutter(&hand, 12_000, SLOW_LINE).await, Some((5, 20_000)));
+    // The 5th stall runs its 7 s, then it plays on to the next.
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    hand.stalled(false, 32_000);
+    assert!(hand.snapshot().choose_another, "at the stall's end");
+    for at in [34_000, 36_000] {
+        hand.report_progress(at, 600_000, false);
+    }
+    assert!(hand.snapshot().choose_another, "between stalls");
+    // A clean minute of playback.
+    for at in [51_000, 66_000, 81_000, 93_000] {
+        hand.report_progress(at, 600_000, false);
+    }
+    assert!(!hand.snapshot().choose_another, "after a clean minute");
 }
 
 /// QA r1 Q5 row 23: a file far off the title's runtime (52 min here) is

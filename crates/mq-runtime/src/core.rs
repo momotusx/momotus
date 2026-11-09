@@ -1049,9 +1049,11 @@ impl Core {
     /// uploads nothing: seeding the torrents viewers stream is what draws
     /// legal notices, and every live run played as well without it. The
     /// cache holds one file at the 5 GB default plus read-ahead, at most half
-    /// the free space (plans/m13-stream-choice.md 5).
+    /// the free space (plans/m13-stream-choice.md 5). Public for the CLI's
+    /// limited engine (`mq play --download-limit`).
     #[cfg(feature = "torrent")]
-    fn engine_config(&self) -> mq_engine::EngineConfig {
+    #[doc(hidden)]
+    pub fn engine_config(&self) -> mq_engine::EngineConfig {
         let budget: u64 = 6 << 30;
         mq_engine::EngineConfig {
             upload: false,

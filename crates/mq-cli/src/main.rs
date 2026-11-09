@@ -90,6 +90,10 @@ enum Command {
         /// Start from an empty torrent folder and delete it after the run.
         #[arg(long)]
         fresh_cache: bool,
+        /// The torrent engine's download limit in bytes per second (a slow
+        /// line, plans/stream-ranking.md 10).
+        #[arg(long)]
+        download_limit: Option<u32>,
     },
     /// Open Versions for a title as an app does, with no playback: the pick
     /// when every addon answered (what the apps play) and after the live
@@ -435,8 +439,9 @@ async fn main() {
             headless,
             seconds,
             pick,
+            download_limit,
             ..
-        } => play(&core, kind, id, headless, seconds, pick).await,
+        } => play(&core, kind, id, headless, seconds, pick, download_limit).await,
         Command::Versions {
             kind,
             id,
@@ -473,6 +478,7 @@ async fn main() {
                 seconds,
                 start_ms: None,
                 seeks: Vec::new(),
+                view: None,
             },
         )
         .await
@@ -631,8 +637,18 @@ async fn play(
     headless: bool,
     seconds: u64,
     arm: Arm,
+    download_limit: Option<u32>,
 ) -> Result<(), String> {
     let started = Instant::now();
+    // The core's own engine, limited, before anything starts it.
+    if let Some(limit) = download_limit.and_then(std::num::NonZeroU32::new) {
+        let mut config = core.engine_config();
+        config.limits.download_bps = Some(limit);
+        let engine = mq_engine::Engine::start(config)
+            .await
+            .map_err(|e| e.to_string())?;
+        core.set_torrent_engine(engine);
+    }
     core.set_debrid_keys(&StoreId::keys_from_env());
     let mut parts = id.split(':');
     let item_id = parts.next().unwrap_or_default().to_owned();
@@ -748,7 +764,8 @@ async fn play(
             "event": "race", "arm": arm, "key": key, "release": pick.release_name,
             "sizeBytes": pick.size_bytes, "seeders": seeders, "bitrateMbps": pick.bitrate_mbps,
             "line": pick.line, "readyMs": ready_ms, "firstFrameMs": first_frame.map(|f| ready_ms + f),
-            "stalls": played["stalls"], "stallMs": played["stall_ms"], "attempts": attempts.len(),
+            "stalls": played["stalls"], "stallMs": played["stall_ms"], "stallMove": played["moved"],
+            "attempts": attempts.len(),
             "failures": attempts.iter().map(|a| a.error.clone()).collect::<Vec<_>>(),
             "played": snap.key, "moved": moved.borrow().clone(),
             "versionsMs": versions_ms, "countedMs": counted_ms,
@@ -774,11 +791,28 @@ async fn play(
             seconds,
             start_ms: ready.resume_ms,
             seeks: Vec::new(),
+            view: Some(&playback),
         },
     )
     .await?;
-    emit(race(played["first_frame_ms"].as_u64(), &played, &ready));
-    playback.report_progress(ready.resume_ms.unwrap_or(0) + seconds * 1000, 0, false);
+    // After a stall move, the version it moved to, once it plays or fails.
+    let moved_to = if played["moved"].is_null() {
+        None
+    } else {
+        until(Duration::from_secs(120), || {
+            let s = playback.snapshot();
+            (s.phase != PlaybackPhase::Resolving).then_some(s)
+        })
+        .await
+    };
+    let snap = moved_to.as_ref().unwrap_or(&ready);
+    emit(race(played["first_frame_ms"].as_u64(), &played, snap));
+    // The position mpv last played, unless the view left that version.
+    if played["moved"].is_null()
+        && let Some(at) = played["position_ms"].as_u64()
+    {
+        playback.report_progress(at, 0, false);
+    }
     let subs = until(Duration::from_secs(10), || {
         let s = playback.snapshot();
         (!s.subtitles_pending).then_some(s.subtitles)

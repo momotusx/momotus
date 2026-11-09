@@ -1026,6 +1026,30 @@ async fn a_dead_swarm_ends_at_20s_closed_and_the_next_source_plays() {
 #[cfg(feature = "torrent")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_swarm_that_stalls_is_not_offered_first_again() {
+    let (later, a_key, b_key) = a_swarm_stalls(false).await;
+    assert_eq!(later.recommended.map(|r| r.key), Some(b_key));
+    let stalled = later.rows.iter().find(|r| r.key == a_key).unwrap();
+    assert_eq!(stalled.line, mq_streams::ReasonLine::Stalled);
+}
+
+/// Plans/stream-ranking.md 10, code review: a swarm that stutters (7 s
+/// stalls after each 4 s of play) moves the recommendation on too, but it
+/// is slow, not dead: a later Versions view does not say it stalled (it
+/// ranks with the speed its play measured instead).
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_swarm_that_stutters_is_not_remembered_as_stalled() {
+    let (later, a_key, _) = a_swarm_stalls(true).await;
+    let mut rows = later.recommended.iter().chain(&later.rows);
+    let slow = rows.find(|r| r.key == a_key).unwrap();
+    assert_ne!(slow.line, mq_streams::ReasonLine::Stalled);
+}
+
+/// The recommendation of two swarms stalls once for 30 s, or `stutters`,
+/// and moves to the other; after one stall the open view lets it go. A
+/// Versions view opened after, with the two keys.
+#[cfg(feature = "torrent")]
+async fn a_swarm_stalls(stutters: bool) -> (mq_runtime::VersionsSnapshot, String, String) {
     let first = support::swarm(true).await;
     let other = support::swarm_movie("other.mkv", vec![9u8; 3 << 20]).await;
     let engine = first.leecher.clone();
@@ -1070,7 +1094,23 @@ async fn a_swarm_that_stalls_is_not_offered_first_again() {
     for at in [10_000, 12_000] {
         play.report_progress(at, 600_000, false);
     }
-    play.stalled(true, 12_500);
+    if stutters {
+        // The 5th 7 s stall trips; it leaves the version within its 7 s.
+        let mut at = 12_000;
+        for _ in 0..5 {
+            tokio::time::sleep(Duration::from_secs(4)).await;
+            at += 4_000;
+            play.report_progress(at, 600_000, false);
+            play.stalled(true, at);
+            tokio::time::sleep(Duration::from_secs(7)).await;
+            if play.snapshot().key.as_ref() != Some(&a_key) {
+                break;
+            }
+            play.stalled(false, at);
+        }
+    } else {
+        play.stalled(true, 12_500);
+    }
     let deadline = std::time::Instant::now() + Duration::from_secs(50);
     while play.snapshot().key.as_ref() != Some(&b_key) {
         assert!(
@@ -1080,18 +1120,19 @@ async fn a_swarm_that_stalls_is_not_offered_first_again() {
         );
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
-    // Not offered first again, here and in a Versions view opened later.
-    until("the open view's pick", || {
-        versions
-            .snapshot()
-            .recommended
-            .is_some_and(|r| r.key == b_key)
-    })
-    .await;
+    // A dead swarm is not offered first again, here and in a Versions
+    // view opened later.
+    if !stutters {
+        until("the open view's pick", || {
+            versions
+                .snapshot()
+                .recommended
+                .is_some_and(|r| r.key == b_key)
+        })
+        .await;
+    }
     let later = settled(&VersionsView::open(&owner, params("movie", "tt1", "Up"))).await;
-    assert_eq!(later.recommended.map(|r| r.key), Some(b_key));
-    let stalled = later.rows.iter().find(|r| r.key == a_key).unwrap();
-    assert_eq!(stalled.line, mq_streams::ReasonLine::Stalled);
+    (later, a_key, b_key)
 }
 
 /// Plans/play-every-version.md 2a: with every source down, the version

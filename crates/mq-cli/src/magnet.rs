@@ -677,6 +677,7 @@ async fn run(
             seconds: o.seconds,
             start_ms: None,
             seeks: if o.seek { SEEKS.to_vec() } else { Vec::new() },
+            view: None,
         };
         play_url(&url, options).await?
     };

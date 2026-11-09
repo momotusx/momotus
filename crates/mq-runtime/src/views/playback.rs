@@ -803,6 +803,11 @@ struct State {
     /// The generation the stall now on began with: a repeated
     /// `stalled(true)` while it lasts keeps its clock.
     stall_on: Option<u64>,
+    /// The playing source's steady stalls: the progress (`played_ms`) each
+    /// began at and how long it lasted (plans/stream-ranking.md 10).
+    stutter: Vec<(u64, Duration)>,
+    /// The steady stall on: its progress and the instant it began.
+    stall_from: Option<(u64, Instant)>,
     /// The release a Resume plays (the title's remembered one, with a
     /// resume point): a stall never moves it.
     resume_key: Option<String>,
@@ -932,8 +937,43 @@ impl State {
             stall: 0,
             stall_moved: false,
             stall_on: None,
+            stutter: Vec::new(),
+            stall_from: None,
             resume_key: None,
         }
+    }
+
+    /// A steady stall begins `now`: how long it may last before it counts
+    /// as one `STALL_MOVE` stall. That is `STALL_MOVE` less the steady
+    /// stalls that began within the last `STUTTER_WINDOW` of playback
+    /// progress, so a stutter loop counts as one long stall
+    /// (plans/stream-ranking.md 10). Progress, not wall time: a loop spends
+    /// about half its wall time stalled, so a wall-clock window never fills.
+    fn stall_begins(&mut self, now: Instant) -> Duration {
+        self.stall_from = Some((self.played_ms, now));
+        STALL_MOVE.saturating_sub(self.held())
+    }
+
+    /// The steady stall on, if any, ended `now`; whether the version still
+    /// stutters: two or more held stalls make `STALL_MOVE` (one long stall
+    /// that ended is over). A stall counts for at most `STALL_MOVE`: a
+    /// pause inside one is wall time, not loading.
+    fn stall_ends(&mut self, now: Instant) -> bool {
+        if let Some((at, began)) = self.stall_from.take() {
+            let lasted = now.saturating_duration_since(began).min(STALL_MOVE);
+            self.stutter.push((at, lasted));
+        }
+        self.held() >= STALL_MOVE && self.stutter.len() > 1
+    }
+
+    /// The steady stalls that began within the last `STUTTER_WINDOW` of
+    /// playback progress, summed; older ones are let go.
+    fn held(&mut self) -> Duration {
+        let played = self.played_ms;
+        let window = STUTTER_WINDOW.as_millis() as u64;
+        self.stutter
+            .retain(|&(at, _)| played.saturating_sub(at) <= window);
+        self.stutter.iter().map(|&(_, lasted)| lasted).sum()
     }
 }
 
@@ -1655,8 +1695,16 @@ impl PlaybackView {
             if s.advancing && s.stall_on == Some(s.stall) {
                 s.stall += 1;
                 s.stall_on = None;
-                // No "Choose another version" over a video that plays.
-                if s.snapshot.choose_another {
+            }
+            if s.advancing {
+                let stutters = s.stall_ends(Instant::now());
+                // No "Choose another version" over a video that plays,
+                // unless it stutters: then the button stays until a minute
+                // of playback holds less than `STALL_MOVE` of stalls.
+                if s.snapshot.choose_another
+                    && !stutters
+                    && s.snapshot.phase == PlaybackPhase::Ready
+                {
                     s.snapshot.choose_another = false;
                     self.snapshot.set(s.snapshot.clone());
                 }
@@ -1715,15 +1763,19 @@ impl PlaybackView {
     /// for a stall yet, and the network is reachable (a lost one waits).
     /// Otherwise "Choose another version" shows over the stalled frame.
     /// Only transitions count: a repeated `stalled(true)` while the same
-    /// stall lasts keeps its clock.
+    /// stall lasts keeps its clock. A stutter counts as one stall: a
+    /// steady stall's `STALL_MOVE` is shortened by the steady stalls of the
+    /// last minute of playback (`State::stall_begins`).
     pub fn stalled(&self, on: bool, position_ms: u64) {
         let mut s = lock(&self.state);
         if on && s.stall_on == Some(s.stall) {
             return;
         }
+        let stutters = s.stall_ends(Instant::now());
         s.stall += 1;
         if !on || s.snapshot.phase != PlaybackPhase::Ready || s.closed {
-            if s.snapshot.choose_another && s.snapshot.phase == PlaybackPhase::Ready {
+            // A stutter's button stays between its stalls (no flicker).
+            if s.snapshot.choose_another && s.snapshot.phase == PlaybackPhase::Ready && !stutters {
                 s.snapshot.choose_another = false;
                 self.snapshot.set(s.snapshot.clone());
             }
@@ -1736,10 +1788,17 @@ impl PlaybackView {
                 position_ms >= was && position_ms - was <= PLAYED_STEP.as_millis() as u64
             });
         s.stall_on = Some(s.stall);
+        // A stall after a seek or a pause is not part of a stutter either.
+        let wait = if steady {
+            s.stall_begins(Instant::now())
+        } else {
+            STALL_MOVE
+        };
         let stall = Stalled {
             generation: s.stall,
             at: position_ms,
             steady,
+            wait,
         };
         drop(s);
         let mover = Mover {
@@ -1854,6 +1913,9 @@ fn spawn_resolve(
 /// A playing source's stall must last this long before it moves on, or
 /// before "Choose another version" shows over the frame (2e).
 const STALL_MOVE: Duration = Duration::from_secs(30);
+/// The steady stalls that began within this much playback progress count
+/// toward `STALL_MOVE` together (plans/stream-ranking.md 10).
+const STUTTER_WINDOW: Duration = Duration::from_secs(60);
 /// The network is reachable when a peer of the playing torrent is
 /// connected, or a source answers within this.
 const REACH: Duration = Duration::from_secs(5);
@@ -1861,12 +1923,13 @@ const REACH: Duration = Duration::from_secs(5);
 const STALLED: &str = "stopped loading here";
 
 /// One stall: its generation (`State::stall`), the position it began at,
-/// and whether it came during steady playback.
+/// whether it came during steady playback, and how long it may last.
 #[derive(Clone, Copy)]
 struct Stalled {
     generation: u64,
     at: u64,
     steady: bool,
+    wait: Duration,
 }
 
 /// What a stall's watcher needs of the view to move it on.
@@ -1879,12 +1942,13 @@ struct Mover {
     task: Arc<TaskSlot>,
 }
 
-/// After `STALL_MOVE`, a stall still on moves to the next version when it
-/// may (`PlaybackView::stalled`) and the network is reachable; while the
-/// network is lost it asks again every `REACH`. A stall that may not move
-/// shows "Choose another version" instead.
+/// After its `wait` (`STALL_MOVE`, less a stutter's), a stall still on
+/// moves to the next version when it may (`PlaybackView::stalled`) and the
+/// network is reachable; while the network is lost it asks again every
+/// `REACH`. A stall that may not move shows "Choose another version"
+/// instead.
 async fn watch_stall(m: Mover, stall: Stalled) {
-    tokio::time::sleep(STALL_MOVE).await;
+    tokio::time::sleep(stall.wait).await;
     loop {
         let Some(state) = m.state.upgrade() else {
             return;
@@ -2031,9 +2095,12 @@ fn move_stalled(m: &Mover, state: &Arc<Mutex<State>>, stall: Stalled) {
     };
     // Not offered first again: a swarm that stopped sending with the
     // network up is remembered as stalled here for a day (its line says
-    // so), and the open Versions view lets its frozen pick go.
+    // so), and the open Versions view lets its frozen pick go. A stutter's
+    // swarm is slow, not dead: it is not remembered.
     if let Some(stream) = &stalled {
-        if let Source::Torrent { info_hash, .. } = &stream.source {
+        if let Source::Torrent { info_hash, .. } = &stream.source
+            && stall.wait == STALL_MOVE
+        {
             remember_dead(&m.core, vec![info_hash.clone()]);
         }
         if let Some(pick) = &pick {
@@ -2342,6 +2409,8 @@ fn adopt(s: &mut State, run: u64, lease: Lease) -> bool {
     s.snapshot.attempt += 1;
     // A new source: no stall of an earlier one carries over.
     s.stall += 1;
+    s.stutter.clear();
+    s.stall_from = None;
     s.lease = Some(lease);
     // A source plays: what failed before it says nothing about a later
     // failure, and the move on that led here is over (code review
@@ -6107,6 +6176,74 @@ pub(crate) fn kept_stream(core: &Core, item_id: &str, key: &str) -> Option<Parse
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A stutter through `State::stall_begins` and `stall_ends` on a
+    /// synthetic clock: `stalls` stalls of `stall` after each `play_ms` of
+    /// playback, and a `pause` (after which stall, how much wall time). The
+    /// stall that outlasts its wait, with the playback it began after.
+    fn trips(
+        play_ms: u64,
+        stall: Duration,
+        stalls: u32,
+        pause: Option<(u32, Duration)>,
+    ) -> Option<(u32, u64)> {
+        let mut s = State::new(Vec::new(), None);
+        let mut now = Instant::now();
+        for n in 1..=stalls {
+            now += Duration::from_millis(play_ms);
+            s.played_ms += play_ms;
+            if s.stall_begins(now) <= stall {
+                return Some((n, s.played_ms));
+            }
+            now += stall;
+            s.stall_ends(now);
+            if let Some((after, wall)) = pause
+                && after == n
+            {
+                now += wall;
+            }
+        }
+        None
+    }
+
+    /// Plans/stream-ranking.md 10, tests 1, 2 and 5 on the production
+    /// window: Tears of Steel (4.67 s stalls after each 5.7 s of play)
+    /// trips at its 7th stall, 39.9 s of play, with or without a 5 minute
+    /// pause after the 3rd; Sintel (5.78 s after 7.5 s) at its 6th, 45 s;
+    /// the slow line (7 s after 4 s) at its 5th, 20 s. On a wall-clock
+    /// window none of them trips, and the pause empties it.
+    #[test]
+    fn a_stutter_trips_on_playback_progress_not_wall_time() {
+        let ms = Duration::from_millis;
+        assert_eq!(trips(5_700, ms(4_670), 21, None), Some((7, 39_900)));
+        let pause = Some((3, Duration::from_secs(300)));
+        assert_eq!(trips(5_700, ms(4_670), 21, pause), Some((7, 39_900)));
+        assert_eq!(trips(7_500, ms(5_780), 16, None), Some((6, 45_000)));
+        assert_eq!(trips(4_000, ms(7_000), 8, None), Some((5, 20_000)));
+    }
+
+    /// One unbroken stall waits `STALL_MOVE`; a stall counts for at most
+    /// that (a pause inside one is wall time); one long stall that ended is
+    /// no stutter, two held stalls of `STALL_MOVE` are; a minute of clean
+    /// playback lets them go.
+    #[test]
+    fn stalls_held_within_a_minute_of_playback_shorten_the_wait() {
+        let mut s = State::new(Vec::new(), None);
+        let now = Instant::now();
+        assert_eq!(s.stall_begins(now), STALL_MOVE);
+        assert!(!s.stall_ends(now + Duration::from_secs(600)), "one stall");
+        assert_eq!(s.stutter, vec![(0, STALL_MOVE)]);
+        s.played_ms += 1_000;
+        assert_eq!(s.stall_begins(now), Duration::ZERO);
+        assert!(s.stall_ends(now + Duration::from_secs(1)), "a stutter");
+        assert!(s.stall_ends(now), "no stall on: still a stutter");
+        assert_eq!(s.stutter.len(), 2);
+        s.played_ms += 60_000;
+        assert!(!s.stall_ends(now), "the first stall is a minute behind");
+        assert_eq!(s.stutter, vec![(1_000, Duration::from_secs(1))]);
+        s.played_ms += 1;
+        assert!(!s.stall_ends(now) && s.stutter.is_empty());
+    }
 
     /// A play record keeps the addon's poster for Continue Watching, never
     /// RPDB's cover the app sent back: that link carries the user's key
