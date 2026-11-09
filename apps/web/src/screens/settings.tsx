@@ -626,7 +626,7 @@ export default function SettingsScreen() {
               <div class="sgroup">
                 {/* A TV signs in with the phone's QR, from the first-run sign-in. */}
                 <Show when={signIn()}>
-                  <Row href={form() === "tv" ? "/welcome" : "/sign-in"} fkey="settings:sign-in" tone="blue" icon={<LogIn />} title={accountWords.signInTitle} text={accountWords.libraryAdded} />
+                  <Row href={form() === "tv" ? "/welcome?step=login" : "/sign-in"} fkey="settings:sign-in" tone="blue" icon={<LogIn />} title={accountWords.signInTitle} text={accountWords.libraryAdded} />
                 </Show>
                 <Row href="/sync" fkey="settings:sync" tone="sky" icon={<MonitorSmartphone />} title={syncWords.title} text={syncLine()} />
                 {/* The Account page opens with Google's button ready: its window needs that page's own click. */}

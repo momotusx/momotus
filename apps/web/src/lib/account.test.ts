@@ -68,6 +68,9 @@ const NOT_ON_THE_WEB = {
   approving: ["approveWarning", "scanAgainHere", "codeFound", "otherRelayCode", "otherRelayCodeActions", "approveAsk", "approveAskTv", "approveAskOther", "approveButton", "approveNear", "approveUnnamed", "approveScanHere", "approveDone", "approveNotYou", "approveSlow", "approveAnswered", "approveExpired", "approveKids"],
   // The TV's screen before plans/tv-qr-login.md, still read by the native apps until their phases.
   retired: ["tvSignInHow", "tvWithoutAccount"],
+  // The QR's title on the Login sheet is first-run-words.json's qrTitle (plans/first-screens.md 3.3).
+  // First run has no Browse first (plans/first-screens.md 3.2, WEAK 3).
+  loginSheet: ["tvSignIn", "browseFirst"],
   // The native first run's passkey probe: the web shows Create at once (D11).
   nativeFirstRun: ["continue"],
 };

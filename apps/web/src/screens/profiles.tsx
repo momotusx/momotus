@@ -18,7 +18,9 @@ import { createKidsProfile, kidsKeys, makeStandard, removeTitle } from "../core/
 import type { KidsTitlesSnapshot } from "../core/generated/KidsTitlesSnapshot";
 import type { ProfileInfo } from "../core/generated/ProfileInfo";
 import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
-import { ackIncognitoEnded, markChosen, pickOnOpen, profiles, switchProfile, takePick, unlockProfile } from "../core/profiles";
+import { ackIncognitoEnded, markChosen, pickOnOpen, profiles, switchProfile, takePick, unlockProfile, whoLine } from "../core/profiles";
+import { Sheet, WallPage } from "../components/wall";
+import { firstRunWords as fw } from "../lib/first-run";
 import { autoFocusSoon, goBack } from "../focus/dom";
 import { holdModal } from "../focus/modal";
 import { markBack, setLeaveGuarded, takeAfterBack, takeBack } from "../history";
@@ -342,20 +344,24 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
   const forgot = () =>
     target()?.isOwner ? "Forgot the PIN? Reset it from Momotus on your phone or TV, in Settings, Profiles. This device gets the change at its next sync." : undefined;
 
-  return (
-    <main class="profiles page" data-vscroll>
+  // After a first run's join (plans/first-screens.md 3.4): the start picker as a sheet over the still wall, its line
+  // saying how this device signed in, and Add profile after the tiles.
+  const overWall = () => props.mode !== "switch" && whoLine();
+  const addsHere = () => !!overWall() && owner() && !locked() && (s()?.profiles.length ?? 0) < (s()?.max ?? 0);
+  const body = () => (
       <Show
         when={target()}
         fallback={
           <section class="picker" aria-label="Profiles">
-            <h1>Who's watching?</h1>
+            <h1 tabindex="-1">Who's watching?</h1>
+            <Show when={overWall()}>{(line) => <p class="sub">{line()}</p>}</Show>
             <Show when={lockLine()}>
               <p class="lede">This profile is locked. Choose a profile, then enter its PIN.</p>
             </Show>
             <div class="pgrid" data-fgroup="profiles">
               <For each={s()?.profiles ?? []}>{(p) => <Tile p={p} active={p.id === s()?.active} onPick={() => void pick(p)} />}</For>
               {/* Incognito: quiet, drawn as Add profile is, after the profiles (plans/batch-10-incognito.md 5.1). */}
-              <Show when={offersIncognito()}>
+              <Show when={offersIncognito() && !overWall()}>
                 <button
                   class="ptile"
                   data-f={`profile:${INCOGNITO}`}
@@ -369,6 +375,14 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
                   </span>
                   <span class="pname">{incognitoWords.name}</span>
                 </button>
+              </Show>
+              <Show when={addsHere()}>
+                <A class="ptile add" href="/profiles/new?then=home" data-f="profile:add" aria-label={fw.addProfile} onClick={() => markChosen()}>
+                  <span class="avatar avatar-l add-art">
+                    <Plus aria-hidden />
+                  </span>
+                  <span class="pname">{fw.addProfile}</span>
+                </A>
               </Show>
               <Show when={canAdd()}>
                 <A class="ptile add" href="/profiles/new" data-f="profile:add" aria-label="Add profile">
@@ -410,7 +424,15 @@ export function Picker(props: { mode: "start" | "locked" | "switch" }) {
           />
         )}
       </Show>
-    </main>
+  );
+  return (
+    <Show when={overWall()} fallback={<main class="profiles page" data-vscroll>{body()}</main>}>
+      <WallPage label="Profiles">
+        <Sheet size="narrow" class="who">
+          {body()}
+        </Sheet>
+      </WallPage>
+    </Show>
   );
 }
 
@@ -595,7 +617,8 @@ export function EditProfile() {
   const save = async (e: Event) => {
     e.preventDefault();
     const adding = isNew();
-    if ((await commit()) && adding) leave("/profiles/manage");
+    // From first run's picker (`then=home`), Home once the profile is made.
+    if ((await commit()) && adding) leave(new URLSearchParams(location.search).get("then") === "home" ? "/" : "/profiles/manage");
   };
   // The router put the page back with a second popstate (which marked a Back again), and a Back from the TV rail left
   // its "then Home" behind: staying clears both, or a later Save would open its page as a Back.

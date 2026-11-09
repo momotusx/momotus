@@ -78,30 +78,42 @@ test("phone: a double tap on Continue answers no question on the next step", asy
   const context = await browser.newContext(PHONE);
   const page = await context.newPage();
   const ops: string[] = [];
-  // The addons step's install is answered here: the shared core keeps its addons.
+  // The profile step's write is answered here: the shared core keeps its owner. Its addons view says `fresh`, so first
+  // run goes on to setup.
   await page.routeWebSocket(/\/ws$/, (ws) => {
     const server = ws.connectToServer();
+    const asks = new Set<number>();
+    let sub = -1;
+    server.onMessage((raw) => {
+      const m = JSON.parse(String(raw));
+      if (asks.has(m.id) && m.result?.snapshot) {
+        sub = m.result.sub;
+        m.result.snapshot.fresh = true;
+      } else if (m.sub === sub && Array.isArray(m.updates)) for (const u of m.updates) u.fresh = true;
+      ws.send(JSON.stringify(m));
+    });
     ws.onMessage((raw) => {
       const m = JSON.parse(String(raw));
       ops.push(m.op);
-      if (m.op === "installDefaults") ws.send(JSON.stringify({ id: m.id, ok: true, result: null }));
+      if (m.op === "subscribe" && m.view === "addons") asks.add(m.id);
+      if (m.op === "finishProfileStep") ws.send(JSON.stringify({ id: m.id, ok: true, result: null }));
       else server.send(raw);
     });
   });
-  await page.goto("/welcome?step=2&form=phone");
-  const next = page.locator('[data-f="welcome:next"]');
-  await expect(next).toHaveAttribute("aria-disabled", "false", { timeout: 30_000 });
-  await next.scrollIntoViewIfNeeded();
+  await page.goto("/welcome?step=profile&form=phone");
+  const next = page.locator('[data-f="profile:continue"]');
+  await expect(next).toBeVisible({ timeout: 30_000 });
   await page.waitForTimeout(300);
-  const at = await centre(page, '[data-f="welcome:next"]');
+  const at = await centre(page, '[data-f="profile:continue"]');
   await page.touchscreen.tap(at.x, at.y);
   await page.waitForTimeout(150);
   await page.touchscreen.tap(at.x, at.y);
-  await expect(page).toHaveURL(/step=choice/);
+  await expect(page).toHaveURL(/step=setup/);
   await page.waitForTimeout(600);
-  // The stream question is still asked: no door was pressed for the viewer.
+  // The setup sheet is still open: its Start watching was not pressed for the viewer.
   expect(ops).not.toContain("setPrefs");
-  await expect(page).toHaveURL(/step=choice/);
+  expect(ops).not.toContain("installDefaults");
+  await expect(page).toHaveURL(/step=setup/);
   await context.close();
 });
 

@@ -21,8 +21,22 @@ export const incognito = () => inIncognito(profiles());
  * A reload in the same tab is not a cold start: the tab remembers which profile it chose. */
 const [chosen, setChosen] = createSignal(false);
 const CHOSEN = "mq.profileChosen";
+/** A first run's join with a choice to make (plans/first-screens.md D2): the start picker over the wall, with its line
+ * ("Signed in with Google. Pick your profile."), until a profile is chosen. */
+const [whoLine, setWhoLine] = createSignal<string | null>(null);
+export { whoLine };
+export function askWho(line: string) {
+  setChosen(false);
+  setWhoLine(line);
+  try {
+    sessionStorage.removeItem(CHOSEN);
+  } catch {
+    // Nothing was remembered.
+  }
+}
 function choose(active: string | undefined) {
   setChosen(true);
+  setWhoLine(null);
   try {
     const remembered = choiceToRemember(active);
     if (remembered) sessionStorage.setItem(CHOSEN, remembered);
@@ -43,7 +57,7 @@ export const markChosen = () => choose(profiles()?.active);
 export function gateOpen(): boolean {
   const s = profiles();
   if (!s) return false;
-  return !s.locked && (chosen() || !startsOnPicker(s));
+  return !s.locked && !whoLine() && (chosen() || !startsOnPicker(s));
 }
 
 const resets = new Set<() => void | Promise<void>>();

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { DefaultAddonInfo } from "../core/generated/DefaultAddonInfo";
 import { readFileSync } from "node:fs";
-import { afterContinue, cardOffer, catalogMissing, choicesFor, defaultsWords, grouped } from "./defaults";
+import { cardOffer, catalogMissing, choicesFor, defaultsWords, grouped } from "./defaults";
 
 const row = (key: string, group: string, installed: DefaultAddonInfo["installed"] = "absent"): DefaultAddonInfo => ({
   key,
@@ -64,11 +64,6 @@ test("the Home card offers the missing ones once per list version, never on a ki
 test("the Home card says how many, never which", () => {
   expect(defaultsWords.cardLine(1)).toBe("Momotus recommends 1 addon you do not have yet.");
   expect(defaultsWords.cardLine(8)).toBe("Momotus recommends 8 addons you do not have yet.");
-});
-
-test("Browse first and Review go Home, the doors go to the setup check", () => {
-  expect(afterContinue("home")).toBe("/");
-  expect(afterContinue(undefined)).toBe("/welcome?step=3");
 });
 
 test("an empty Home and Discover point to the recommended addons, not the old standard catalog", () => {

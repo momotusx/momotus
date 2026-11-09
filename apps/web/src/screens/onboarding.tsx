@@ -1,43 +1,46 @@
-/** Welcome: one decision per step. 1: the doors. 2: the recommended addons,
- * a switch each (Start fresh, Browse first and a finished import all lead
- * here; nothing is installed before Continue). "choice": how Marquee picks
- * what to play, asked once (plans/m13-stream-choice.md 4.5). "subs": the
- * language subtitles start in (plans/m13-subtitle-languages.md 7). 3: the
- * setup check, run on its own with a fix per row. The step lives in the URL, so Back walks back
- * through the steps. The Settings page of the same switches is at the end. */
+/** First run, the Poster Wall (plans/first-screens.md 2 and 3, round2.html combo A): Welcome over a drifting wall of
+ * real posters, then sheets over the same wall held still: Login (`step=login`), Make your first profile
+ * (`step=profile`), the one-page setup (`step=setup`), then Home. The order is lib/first-run.ts's, held equal to the
+ * Android and Apple apps by apps/shared/fixtures/first-run-vectors.json. The step lives in the URL, so Back walks back
+ * through the sheets. Outside first run: the recommended addons' Review (`step=2&review=1`), the setup check
+ * (`step=3`) and the Settings page of the same switches. */
 
 import { A, useNavigate, useSearchParams } from "@solidjs/router";
-import ChevronLeft from "lucide-solid/icons/chevron-left";
 import ChevronRight from "lucide-solid/icons/chevron-right";
-import DoorOpen from "lucide-solid/icons/door-open";
 import Gem from "lucide-solid/icons/gem";
+import Layers from "lucide-solid/icons/layers";
 import Link2 from "lucide-solid/icons/link-2";
 import PackageSearch from "lucide-solid/icons/package-search";
-import QrCode from "lucide-solid/icons/qr-code";
 import SearchIcon from "lucide-solid/icons/search";
-import Sparkle from "lucide-solid/icons/sparkle";
 import Zap from "lucide-solid/icons/zap";
-import { createEffect, createSignal, For, Index, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Index, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { displayCaps, link, liveView, op, ping, prefsView, reasonOf } from "../core/client";
+import { deviceLanguage, displayCaps, link, liveView, op, ping, prefsView, reasonOf } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { DefaultAddonInfo } from "../core/generated/DefaultAddonInfo";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
+import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
+import { profiles } from "../core/profiles";
+import { signInServer } from "../core/sign-in";
+import * as sync from "../core/sync";
+import { AvatarArt } from "../components/avatar";
+import Brand from "../components/brand";
+import { askWall, MotionToggle, Sheet, SheetHead, WallPage } from "../components/wall";
 import { autoFocusSoon, goBack } from "../focus/dom";
 import { screenChanged } from "../focus/ghost-tap";
-import type { FirstRunStill } from "../core/generated/FirstRunStill";
 import { form } from "../form";
 import { resetHistoryBase } from "../history";
-import { accountWords } from "../lib/account";
-import { afterContinue, catalogMissing, choicesFor, defaultsWords, grouped, switchable } from "../lib/defaults";
-import { choiceWords, findAddons, type Tone } from "../lib/words";
-import * as sync from "../core/sync";
-import { InstallField } from "./addons";
-import { firstChoice, LanguageOverlay, LanguageSearch, NoneFlag, type Pickable, preChosen } from "./language-picker";
+import { type AvatarColor, formatAvatar, parseAvatar } from "../lib/avatar";
+import { catalogMissing, choicesFor, defaultsWords, grouped, switchable } from "../lib/defaults";
+import { firstRunWords as fw, MORE, nextStep, NONE, setupChips, setupPatch, type Step } from "../lib/first-run";
+import { kidsSession, ownerOf } from "../lib/kids";
+import { profileProblem } from "../lib/profiles";
+import { choiceWords, findAddons, languageName, type Tone } from "../lib/words";
 import { Flag } from "../player/flags";
-import { SignInStart, TvSignIn, tvQrShows } from "./sign-in";
+import { InstallField } from "./addons";
+import { LanguageOverlay, LanguageSearch, NoneFlag } from "./language-picker";
+import { SignInStart, TvSignIn } from "./sign-in";
 import "./browse.css";
-import Brand from "../components/brand";
 import "./settings.css";
 import "./onboarding.css";
 
@@ -69,37 +72,47 @@ function useDefaults() {
   return { addons, defaults, error, reload: load };
 }
 
-/** Leaving the welcome steps: the step never stays under the next one, and
- * Home opens as the root, so Back never walks back into Setup or the stream
- * question (whose doors would rewrite the stream preferences). */
+/** Leaving first run: the step never stays under the next one, and Home opens as the root, so Back never walks back
+ * into the sheets. */
 function leave(navigate: (to: string, o?: { replace?: boolean }) => void, to: string) {
   if (to === "/") resetHistoryBase();
   navigate(to, { replace: true });
 }
 
-/** The subtitles step, after the stream question: Home or the setup check next, as the question's `then` says. */
-const subsStep = (then: string | undefined) => `/welcome?step=subs${then ? `&then=${then}` : ""}`;
-/** The subtitles step's Continue is saving: its Skip waits, so the step never leaves twice. */
-const [subsSaving, setSubsSaving] = createSignal(false);
+/** Every recommended default the profile does not have, on: what Start watching, Skip and an import's Done send.
+ * `installDefaults` ends `fresh`, so Home stops sending the profile here. */
+export async function installAllDefaults() {
+  const d = await op<DefaultAddons>("defaultAddons");
+  await op("installDefaults", { choices: choicesFor(d.addons, new Set()) });
+}
+
+type FirstStep = "welcome" | "login" | "profile" | "setup";
+const firstSteps: readonly string[] = ["login", "profile", "setup"];
 
 export default function Onboarding() {
-  const [query, setQuery] = useSearchParams();
-  const step = () =>
-    query.step === "2" ? 2 : query.step === "3" ? 3 : query.step === "choice" ? "choice" : query.step === "subs" ? "subs" : query.step === "doors" ? "doors" : 1;
+  const [query] = useSearchParams();
+  const step = () => (query.step === "2" ? 2 : query.step === "3" ? 3 : firstSteps.includes(query.step as string) ? (query.step as FirstStep) : "welcome");
   // A new step puts focus on its first action (on a remote or after keys). Off the TV a step change puts it on
   // the step's heading, so a screen reader starts at the question.
-  createEffect(on(step, () => autoFocusSoon(() => document.querySelector<HTMLElement>(".welcome [data-autofocus]"))));
+  createEffect(on(step, () => autoFocusSoon(() => document.querySelector<HTMLElement>("main [data-autofocus]"))));
   // A new step under the finger: a double tap answers one question, never the next (QA r1, Q1 row 30).
   createEffect(on(step, () => screenChanged(), { defer: true }));
-  createEffect(
-    on(step, () => form() !== "tv" && requestAnimationFrame(focusHeading), { defer: true }),
+  createEffect(on(step, () => form() !== "tv" && requestAnimationFrame(focusHeading), { defer: true }));
+  return (
+    <Switch>
+      <Match when={step() === 2 || step() === 3}>
+        <Settled step={step() as 2 | 3} review={query.review === "1"} first={query.first === "1"} />
+      </Match>
+      <Match when={true}>
+        <FirstRun step={step() as FirstStep} returning={query.returning === "1"} />
+      </Match>
+    </Switch>
   );
-  // The still is asked as the first run opens (a sign-in step first included), so the frame rarely waits for it.
-  onMount(() => void firstStill());
-  // The steps a first run walks: the doors, the recommended addons, the stream question, subtitles.
-  const count = () => ({ 1: 1, doors: 1, 2: 2, choice: 3, subs: 4 })[String(step())] ?? null;
+}
+
+/** The pages outside first run: Review and the setup check. */
+function Settled(props: { step: 2 | 3; review: boolean; first: boolean }) {
   const { addons, defaults, error } = useDefaults();
-  const fresh = () => addons.state.data?.fresh ?? true;
   const [note, setNote] = createSignal<{ tone: Tone; text: string } | null>(null);
   // A setup check fix: the one default it names, on.
   const fix = async (key: string, name: string) => {
@@ -112,186 +125,427 @@ export default function Onboarding() {
     }
   };
   const hasCatalog = () => (addons.state.data?.addons ?? []).some((a) => a.enabled && a.provides.includes("catalog"));
-
   return (
     <main class="welcome page" data-vscroll>
       <header class="welcome-head">
         <div class="brand">
           <Brand />
         </div>
-        <Show when={count()}>
-          {(n) => (
-            <div class="welcome-step">
-              <Show when={n() > 1}>
-                <button class="skip step-back" data-f="welcome:back" onClick={() => goBack()}>
-                  <ChevronLeft aria-hidden />
-                  Back
-                </button>
-              </Show>
-              <span class="step-count">
-                <span class="dots" aria-hidden="true">
-                  <For each={[1, 2, 3, 4]}>{(i) => <i classList={{ on: i === n() }} />}</For>
-                </span>
-                Step {n()} of 4
-              </span>
-            </div>
-          )}
-        </Show>
-        {/* Browse first still passes the switches: nothing is installed unasked. */}
-        <Show when={step() === 1 || step() === "doors"}>
-          <A
-            class="skip"
-            href={fresh() ? "/welcome?step=2&then=home" : "/"}
-            replace={!fresh() || undefined}
-            onClick={() => !fresh() && resetHistoryBase()}
-            data-f="welcome:skip"
-            // On a TV's sign-in screen it is the one focus stop (plans/tv-qr-login.md 5.5); over the doors, Stremio is.
-            data-autofocus={form() === "tv" && step() === 1 && !sync.joined() && !sync.locked() && tvQrShows() ? "" : undefined}
-          >
-            {accountWords.browseFirst}
-            <ChevronRight aria-hidden />
-          </A>
-        </Show>
-        {/* Skip writes nothing: the defaults are Start fast's. */}
-        <Show when={step() === "choice"}>
-          <A class="skip" href={subsStep(query.then as string | undefined)} replace data-f="welcome:skip">
-            {choiceWords.question.skip.label}
-            <ChevronRight aria-hidden />
-          </A>
-        </Show>
-        {/* Skip writes nothing: no subtitle turns on by itself. */}
-        <Show when={step() === "subs"}>
-          <A
-            class="skip"
-            href={afterContinue(query.then as string | undefined)}
-            replace
-            aria-disabled={subsSaving()}
-            onClick={(e) => {
-              if (subsSaving()) e.preventDefault();
-              else if (query.then === "home") resetHistoryBase();
-            }}
-            data-f="welcome:skip"
-          >
-            Skip
-            <ChevronRight aria-hidden />
-          </A>
-        </Show>
       </header>
+      <Show
+        when={props.step === 2}
+        fallback={<SetupCheck list={addons.state.data?.addons ?? []} defaults={defaults()?.addons ?? []} note={note()} onFix={fix} />}
+      >
+        <Recommended defaults={defaults()} error={error()} hasCatalog={hasCatalog()} review={props.review} first={props.first} />
+      </Show>
+    </main>
+  );
+}
+
+/** What the rule needs from the core and this browser: the profile's state, the account, the sync server. */
+function useEntry() {
+  const addons = liveView<AddonsSnapshot>("addons");
+  return (after: Parameters<typeof nextStep>[0]["after"], s: ProfilesSnapshot | null | undefined = profiles()): Step | null => {
+    const fresh = addons.state.data?.fresh;
+    if (!s || fresh === undefined) return null;
+    const only = s.profiles.length === 1 ? s.profiles[0] : undefined;
+    return nextStep({
+      fresh,
+      kidsSession: kidsSession(s),
+      server: !!signInServer(),
+      inAccount: sync.joined(),
+      // An older core never sends it: read as answered, so it never shows the form.
+      profileStepDone: s.profileStepDone !== false,
+      profiles: s.profiles.length,
+      pin: only?.hasPin === true,
+      locked: s.locked,
+      after,
+    });
+  };
+}
+
+/** First run's steps over one wall, kept mounted from step to step so the drift's phase and the posters stay. */
+function FirstRun(props: { step: FirstStep; returning: boolean }) {
+  const navigate = useNavigate();
+  const entry = useEntry();
+  // Where a start lands: Welcome, or the profile form or setup when an earlier run got that far; no first run when the
+  // profile is not fresh.
+  const start = createMemo(() => (props.step === "welcome" ? entry("start") : null));
+  createEffect(() => {
+    const s = start();
+    if (s === "profile" || s === "setup") navigate(`/welcome?step=${s}`, { replace: true });
+    else if (s === "none" || s === "home") leave(navigate, "/");
+  });
+  const to = (step: Step | null, o?: { replace?: boolean; returning?: boolean }) => {
+    if (step === "login" || step === "profile" || step === "setup") navigate(`/welcome?step=${step}${o?.returning ? "&returning=1" : ""}`, { replace: o?.replace });
+  };
+  // Past first run (the TV's Settings > Sign in opens this sheet too), Not now goes back where it came from.
+  const notNow = () => {
+    const next = entry("notNow") ?? "profile";
+    if (next === "profile") to(next);
+    else goBack();
+  };
+  // An empty or missed wall answer is asked again at the next step (the wall stays mounted from step to step).
+  createEffect(on(() => props.step, () => askWall(), { defer: true }));
+  return (
+    <WallPage moving={props.step === "welcome"}>
       <Switch>
-        {/* Sign-in first (plans/accounts.md 4.1, 4.2), on a device with no account yet; with no
-            sync service that offers it, the doors. */}
-        <Match when={step() === 1}>
-          <Show when={!sync.joined() && !sync.locked()} fallback={<Doors onFresh={() => setQuery({ step: "2" })} />}>
-            <Show when={form() === "tv"} fallback={<SignInStart from="welcome" doors={() => <Doors onFresh={() => setQuery({ step: "2" })} />} />}>
-              <TvSignIn doors={() => <Doors onFresh={() => setQuery({ step: "2" })} />} />
-            </Show>
+        <Match when={props.step === "welcome"}>
+          <Show when={start() === "welcome"}>
+            <Welcome onStart={() => to(entry("getStarted"))} onReturning={() => to(entry("alreadyUse"), { returning: true })} />
           </Show>
         </Match>
-        <Match when={step() === "doors"}>
-          <Doors onFresh={() => setQuery({ step: "2" })} />
+        <Match when={props.step === "login"}>
+          <Show when={form() === "tv"} fallback={<SignInStart from="welcome" returning={props.returning} />}>
+            <TvSignIn onNotNow={notNow} />
+          </Show>
         </Match>
-        <Match when={step() === 2}>
-          <Recommended
-            defaults={defaults()}
-            error={error()}
-            hasCatalog={hasCatalog()}
-            review={query.review === "1"}
-            fromImport={query.from === "import"}
-            then={query.then as string | undefined}
-          />
+        <Match when={props.step === "profile"}>
+          {/* A profile past first run (its addons came meanwhile) has no setup to show: Home. */}
+          <ProfileStep onDone={() => ((entry("profileDone") ?? "setup") === "setup" ? to("setup") : leave(navigate, "/"))} />
         </Match>
-        <Match when={step() === "choice"}>
-          <Question then={query.then as string | undefined} />
-        </Match>
-        <Match when={step() === "subs"}>
-          <Subtitles then={query.then as string | undefined} />
-        </Match>
-        <Match when={step() === 3}>
-          <SetupCheck list={addons.state.data?.addons ?? []} defaults={defaults()?.addons ?? []} note={note()} onFix={fix} />
+        <Match when={props.step === "setup"}>
+          <SetupStep />
         </Match>
       </Switch>
-    </main>
+    </WallPage>
+  );
+}
+
+/** Welcome: the lockup, the line, Get started and (with a sync server) I already use Momotus; Pause motion at the top
+ * right. The only step that moves. */
+function Welcome(props: { onStart: () => void; onReturning: () => void }) {
+  return (
+    <>
+      <MotionToggle />
+      <section class="welcome-block" aria-labelledby="welcome-q">
+        <div class="brand">
+          <Brand />
+        </div>
+        <h1 id="welcome-q" tabindex="-1">
+          {fw.welcomeTitle}
+        </h1>
+        <p>{fw.welcomeLead}</p>
+        <div class="acts" data-fgroup="welcome">
+          <button class="btn primary" data-f="welcome:start" data-autofocus onClick={() => props.onStart()}>
+            {fw.getStarted}
+          </button>
+          <Show when={signInServer()}>
+            <button class="btn" data-f="welcome:returning" onClick={() => props.onReturning()}>
+              {fw.alreadyUse}
+            </button>
+          </Show>
+        </div>
+      </section>
+    </>
   );
 }
 
 /** Focus on the step's heading, whichever step it is (a sign-in step's too). */
 function focusHeading() {
-  const h = document.querySelector<HTMLElement>(".welcome h1");
+  const h = document.querySelector<HTMLElement>("main h1");
   if (h && !h.hasAttribute("tabindex")) h.tabIndex = -1;
   h?.focus({ preventScroll: true });
 }
 
-// The still every framed step shows (`firstRunStill`): kept for the app run once it came. The core's "none"
-// (offline, or past its budget on a phone's first requests) and a request that failed (the core not ready yet) are
-// asked again by the next step, so the art comes late instead of never.
-let still: Promise<FirstRunStill | null> | undefined;
-const firstStill = () => {
-  const asked = (still ??= op<FirstRunStill | null>("firstRunStill").catch(() => null));
-  void asked.then((s) => {
-    if (!s && still === asked) still = undefined;
-  });
-  return asked;
-};
+/** The five colours the form offers: the profile's own first, then the others of the avatar set, spread apart. */
+const SWATCHES: readonly AvatarColor[] = ["ember", "moss", "sky", "plum", "graphite"];
+const swatchesFor = (own: AvatarColor) => [own, ...SWATCHES.filter((c) => c !== own)].slice(0, 5);
+const colourName = (c: string) => c.charAt(0).toUpperCase() + c.slice(1);
 
-/** V1, Full Bleed (the pick of 2026-10-30, design/exploration/onboarding-v2): one film still fills the screen behind
- * the step, its question and lead and the choices on a dark ramp at the foot (phone) or in a column at the lower left
- * (TV and desktop), in thumb reach. The still is the core's scene frame (`firstRunStill`); with none (offline, slow)
- * the screen stays black. The still is decorative; the question is the step's real heading. */
-export function Film(props: { title: string; lead?: string }) {
-  const [art, setArt] = createSignal<string | null>(null);
-  onMount(() => void firstStill().then((s) => setArt(s?.background ?? null)));
+/** Make your first profile: names the owner profile every device already has (never a new one). Nothing is filled
+ * in: an empty Name keeps the current one, and only a colour pressed here is sent (an untouched Continue sends
+ * `{name: "", avatar: ""}`, which writes nothing). */
+function ProfileStep(props: { onDone: () => void }) {
+  const owner = () => ownerOf(profiles());
+  const stored = () => parseAvatar(owner()?.avatar ?? "");
+  const [name, setName] = createSignal("");
+  const [pressed, setPressed] = createSignal<AvatarColor | null>(null);
+  const [busy, setBusy] = createSignal(false);
+  const [nameError, setNameError] = createSignal<string | null>(null);
+  const [problem, setProblem] = createSignal<string | null>(null);
+  const shown = () => pressed() ?? stored().color ?? "ember";
+  const go = async () => {
+    if (busy()) return;
+    setBusy(true);
+    setNameError(null);
+    setProblem(null);
+    try {
+      const c = pressed();
+      await op<ProfilesSnapshot>("finishProfileStep", { name: name().trim(), avatar: c ? formatAvatar({ glyph: stored().glyph, color: c }) : "" });
+      props.onDone();
+    } catch (e) {
+      const code = e && typeof e === "object" && "code" in e ? String((e as { code?: unknown }).code) : "";
+      if (code === "badName") setNameError(profileProblem("badName", ""));
+      else setProblem(reasonOf(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
-    <>
-      <div class="still" aria-hidden="true">
-        <Show when={art()} keyed>
-          {(src) => <img src={src} alt="" decoding="async" class="fade" onLoad={(e) => e.currentTarget.classList.add("in")} />}
+    <Sheet size="narrow" labelledby="profile-q">
+      <SheetHead id="profile-q" title={fw.profileTitle} />
+      <p class="sub">{sync.joined() ? fw.profileLineAccount : fw.profileLineLocal}</p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void go();
+        }}
+      >
+        <div class="idr">
+          <AvatarArt avatar={formatAvatar({ glyph: stored().glyph, color: shown() })} name={name().trim() || owner()?.name || fw.namePlaceholder} size="l" />
+          {/* Never focused on open: no keyboard over Continue on a phone (MOB-24). */}
+          <label class="fr-field">
+            <small>{fw.nameLabel}</small>
+            <input
+              type="text"
+              name="profile-name"
+              maxLength={30}
+              placeholder={fw.namePlaceholder}
+              value={name()}
+              autocomplete="off"
+              enterkeyhint="done"
+              data-f="profile:name"
+              aria-invalid={nameError() ? "true" : undefined}
+              aria-describedby={nameError() ? "profile-name-error" : undefined}
+              onInput={(e) => {
+                setName(e.currentTarget.value);
+                setNameError(null);
+              }}
+              onFocus={(e) => setTimeout(() => e.currentTarget.form?.querySelector(".fr-foot")?.scrollIntoView({ block: "nearest" }), 300)}
+            />
+          </label>
+        </div>
+        <Show when={nameError()}>
+          <p class="st bad" id="profile-name-error" role="status">
+            <i class="dot" />
+            {nameError()}
+          </p>
         </Show>
-      </div>
-      <h1 id="welcome-q" tabindex="-1">
-        {props.title}
-      </h1>
-      <Show when={props.lead}>
-        <p class="lead">{props.lead}</p>
-      </Show>
-    </>
+        <div class="swx" role="radiogroup" aria-label={fw.colourLabel} data-fgroup="profile:colours">
+          <For each={swatchesFor(stored().color ?? "ember")}>
+            {(c) => (
+              <button
+                type="button"
+                role="radio"
+                aria-checked={shown() === c}
+                aria-label={colourName(c)}
+                data-f={`profile:colour:${c}`}
+                style={{ background: `var(--avatar-${c})` }}
+                onClick={() => setPressed(c)}
+              />
+            )}
+          </For>
+        </div>
+        <Show when={problem()}>
+          <p class="st bad" role="alert">
+            <i class="dot" />
+            {problem()}
+          </p>
+        </Show>
+        <div class="fr-foot">
+          <button class="btn primary" type="submit" data-f="profile:continue" data-autofocus={form() === "tv" ? "" : undefined} aria-busy={busy() || undefined}>
+            {fw.continue}
+          </button>
+        </div>
+      </form>
+    </Sheet>
   );
 }
 
-/** The doors: I use Stremio, Start fresh, and (no account here yet) I already use Marquee. */
-function Doors(props: { onFresh: () => void }) {
+/** A language's own name ("Türkçe"), else its English one. */
+function ownName(code: string) {
+  try {
+    const own = new Intl.DisplayNames([code], { type: "language" }).of(code);
+    if (own && own.toLowerCase() !== code) return own.charAt(0).toLocaleUpperCase(code) + own.slice(1);
+  } catch {
+    // Not a code this browser knows.
+  }
+  return languageName(code);
+}
+/** A device language this app can name counts; one it cannot counts as absent. */
+const named = (code: string) => languageName(code) !== code.toUpperCase();
+
+// The setup sheet's answers, kept while first run lasts: Back from Import or Review finds them as they were.
+const [setup, setSetup] = createStore<{ bring: boolean; best: boolean; chip: string | null; picked: string | null }>({ bring: false, best: false, chip: null, picked: null });
+/** The patch already written, so Try again or a second press never writes the same answers twice. */
+let written = "";
+
+/** Set up {profile}: one page, every answer pre-chosen, so Start watching alone finishes first run. */
+function SetupStep() {
+  const navigate = useNavigate();
+  const prefs = prefsView();
+  const q = choiceWords.question;
+  const [busy, setBusy] = createSignal(false);
+  const [failed, setFailed] = createSignal<"prefs" | "sources" | null>(null);
+  const [open, setOpen] = createSignal(false);
+  const name = () => profiles()?.profiles.find((p) => p.id === profiles()?.active)?.name ?? "";
+  const chips = createMemo(() => {
+    const p = prefs.state.data;
+    if (!p) return null;
+    const base = setupChips(deviceLanguage(), p.subtitleLanguages, named);
+    // A language picked from More takes its place before No subtitles.
+    const extra = setup.picked && !base.chips.includes(setup.picked) ? [setup.picked] : [];
+    return { chips: [...base.chips.filter((c) => c !== NONE && c !== MORE), ...extra, NONE, MORE], selected: base.selected };
+  });
+  const chip = () => setup.chip ?? chips()?.selected ?? null;
+  const finish = () => leave(navigate, "/");
+  const sources = async () => {
+    try {
+      await installAllDefaults();
+      finish();
+    } catch {
+      setFailed("sources");
+    }
+  };
+  const go = async () => {
+    const c = chip();
+    if (busy() || !c) return;
+    setBusy(true);
+    setFailed(null);
+    try {
+      const patch = setupPatch(c, setup.best ? q.best.patch : null);
+      const key = JSON.stringify(patch);
+      if (written !== key) {
+        try {
+          await op("setPrefs", { patch });
+          written = key;
+        } catch {
+          setFailed("prefs");
+          return;
+        }
+      }
+      if (setup.bring) navigate("/import?from=welcome");
+      else await sources();
+    } finally {
+      setBusy(false);
+    }
+  };
+  // Skip writes no preference: the recommended sources go on, so first run ends.
+  const skip = async () => {
+    if (busy()) return;
+    setBusy(true);
+    setFailed(null);
+    try {
+      await sources();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const radio = (on: boolean) => ({ role: "radio" as const, "aria-checked": on });
   return (
-    <section class="step-body framed" aria-labelledby="welcome-q">
-      {/* After Create the account exists: the line would say the opposite. */}
-      <Film title="How would you like to begin?" lead={sync.joined() ? undefined : "No account needed. Everything stays on this device until you turn on sync."} />
-      <div class="doors" role="group" aria-labelledby="welcome-q" data-fgroup="doors">
-        <A class="door" href="/import?from=welcome" data-f="welcome:stremio" data-autofocus>
-          <DoorOpen aria-hidden />
-          <span>
-            <b>I use Stremio</b>
-            <small>Bring your addons, library and Continue Watching over with a code.</small>
-          </span>
-          <ChevronRight aria-hidden class="chev" />
-        </A>
-        <button class="door" data-f="welcome:fresh" onClick={() => props.onFresh()}>
-          <Sparkle aria-hidden />
-          <span>
-            <b>Start fresh</b>
-            <small>Pick from the recommended addons, then browse and play.</small>
-          </span>
-          <ChevronRight aria-hidden class="chev" />
+    <Sheet size="setup" labelledby="setup-q" busy={busy()}>
+      <SheetHead id="setup-q" title={fw.setupTitle.replace("{profile}", name())}>
+        <button class="flink" data-f="setup:skip" aria-disabled={busy() || undefined} onClick={() => void skip()}>
+          {fw.skip}
         </button>
-        <Show when={!sync.joined()}>
-          <A class="door" href="/pair" data-f="welcome:pair">
-            <QrCode aria-hidden />
-            <span>
-              <b>I already use Momotus</b>
-              <small>Join your other device's sync account with a code. Library and addons follow.</small>
-            </span>
-            <ChevronRight aria-hidden class="chev" />
-          </A>
-        </Show>
+      </SheetHead>
+      <Show when={form() !== "phone"}>
+        <p class="sub">{fw.setupLine}</p>
+      </Show>
+      <div class="g3">
+        <section aria-labelledby="setup-bring">
+          <h2 class="sect" id="setup-bring">
+            {fw.bringTitle}
+          </h2>
+          <div role="radiogroup" aria-labelledby="setup-bring" data-fgroup="setup:bring">
+            <For each={[true, false]}>
+              {(bring) => (
+                <button class="fr-opt" {...radio(setup.bring === bring)} data-f={`setup:${bring ? "bring" : "fresh"}`} onClick={() => setSetup("bring", bring)}>
+                  <span class="tx">
+                    <b>{bring ? fw.bringLibrary : fw.startFresh}</b>
+                    <Show when={form() !== "phone"}>
+                      <small>{bring ? fw.bringLibraryLine : fw.startFreshLine}</small>
+                    </Show>
+                  </span>
+                  <i class="rad" aria-hidden="true" />
+                </button>
+              )}
+            </For>
+          </div>
+        </section>
+        <section aria-labelledby="setup-pick">
+          <h2 class="sect" id="setup-pick">
+            {q.title}
+          </h2>
+          <div class="seg" role="radiogroup" aria-labelledby="setup-pick" data-fgroup="setup:pick">
+            <button {...radio(!setup.best)} data-f="setup:fast" onClick={() => setSetup("best", false)}>
+              <Zap aria-hidden />
+              {q.fast.label}
+            </button>
+            <button {...radio(setup.best)} data-f="setup:best" onClick={() => setSetup("best", true)}>
+              <Gem aria-hidden />
+              {q.best.label}
+            </button>
+          </div>
+          <p class="hint">{setup.best ? q.best.text : q.fast.text}</p>
+        </section>
+        <section aria-labelledby="setup-subs">
+          <h2 class="sect" id="setup-subs">
+            {fw.subtitlesTitle}
+          </h2>
+          <div class="fr-chips" role="radiogroup" aria-labelledby="setup-subs" data-fgroup="setup:subs">
+            <For each={chips()?.chips ?? []}>
+              {(c) => (
+                <Show
+                  when={c !== MORE}
+                  fallback={
+                    <button class="chip" data-f="setup:sub:more" aria-haspopup="dialog" onClick={() => setOpen(true)}>
+                      <SearchIcon aria-hidden />
+                      {fw.moreLanguages}
+                    </button>
+                  }
+                >
+                  <button class="chip" {...radio(chip() === c)} data-f={`setup:sub:${c}`} onClick={() => setSetup("chip", c)}>
+                    <Show when={c !== NONE} fallback={<NoneFlag />}>
+                      <Flag language={c} />
+                    </Show>
+                    <span lang={c === NONE ? undefined : c}>{c === NONE ? fw.noSubtitles : ownName(c)}</span>
+                  </button>
+                </Show>
+              )}
+            </For>
+          </div>
+        </section>
       </div>
-    </section>
+      <Show when={failed()}>
+        {(f) => (
+          <div class="sign-in-failure">
+            <p class="st bad" role="alert">
+              <i class="dot" />
+              {f() === "prefs" ? fw.setupPrefsFailed : fw.setupSourcesFailed}
+            </p>
+          </div>
+        )}
+      </Show>
+      <div class="sfoot">
+        <span class="srcl">
+          <Layers aria-hidden />
+          {fw.sourcesOn}
+          <A class="flink" href="/welcome?step=2&review=1&first=1" data-f="setup:review">
+            {fw.review}
+          </A>
+        </span>
+        <button class="btn primary" data-f="setup:start" data-autofocus aria-busy={busy() || undefined} aria-disabled={!chip() || undefined} onClick={() => void go()}>
+          {failed() ? fw.tryAgain : fw.startWatching}
+        </button>
+      </div>
+      <Show when={open()}>
+        <LanguageOverlay title={fw.subtitlesTitle} done="Cancel" onClose={() => setOpen(false)}>
+          <LanguageSearch
+            group="welcome:lang"
+            chosen={[]}
+            isOn={(code) => (chip() === NONE ? null : chip()) === code}
+            onPick={(code) => {
+              setSetup({ picked: code, chip: code ?? NONE });
+              setOpen(false);
+            }}
+            focusField={form() !== "tv"}
+            focusFirst={form() === "tv"}
+          />
+        </LanguageOverlay>
+      </Show>
+    </Sheet>
   );
 }
 
@@ -350,10 +604,9 @@ export function DefaultRow(props: {
   );
 }
 
-/** Step 2: the nine, grouped, each on until turned off. After an import the
- * ones Stremio brought show without a switch; Review (the Home card) shows
- * only the missing ones. Continue names exactly the rows with a switch. */
-function Recommended(props: { defaults: DefaultAddons | null; error: string | null; hasCatalog: boolean; review: boolean; fromImport: boolean; then?: string }) {
+/** Review: the recommended addons the profile does not have yet, each on until turned off. Continue names exactly
+ * the rows with a switch, then goes Home (Home's card) or back to the setup sheet (first run's Review). */
+function Recommended(props: { defaults: DefaultAddons | null; error: string | null; hasCatalog: boolean; review: boolean; first: boolean }) {
   const navigate = useNavigate();
   const [off, setOff] = createSignal<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = createSignal(false);
@@ -368,24 +621,15 @@ function Recommended(props: { defaults: DefaultAddons | null; error: string | nu
     if (!next.delete(key)) next.add(key);
     setOff(next);
   };
-  const present = (a: DefaultAddonInfo) => (props.fromImport ? "From Stremio" : a.installed === "on" ? "Installed" : "Installed, off");
+  const present = (a: DefaultAddonInfo) => (a.installed === "on" ? "Installed" : "Installed, off");
   const go = async () => {
     if (busy() || !props.defaults) return;
     setBusy(true);
     setProblem(null);
     try {
       await op("installDefaults", { choices: choicesFor(all(), off()) });
-      // Back from the next step must not call Marquee's own installs "From
-      // Stremio": this entry stops saying it came from an import. (A second
-      // router navigation here would be dropped, so the entry is rewritten.)
-      if (props.fromImport) {
-        const here = new URL(window.location.href);
-        here.searchParams.delete("from");
-        history.replaceState(history.state, "", `${here.pathname}${here.search}`);
-      }
-      // Review (the Home card) and Browse first go home; a first run asks the one question.
-      if (props.review || props.then === "home") leave(navigate, afterContinue("home"));
-      else navigate("/welcome?step=choice");
+      if (props.first) goBack();
+      else leave(navigate, "/");
     } catch (e) {
       setProblem(`Could not add the addons: ${reasonOf(e)}`);
     } finally {
@@ -467,183 +711,6 @@ function Recommended(props: { defaults: DefaultAddons | null; error: string | nu
           {findAddons.title}
         </A>
       </Show>
-    </section>
-  );
-}
-
-/** The one question: Start fast (focused) or Best quality, each a patch of
- * the stream preferences from the shared words. */
-function Question(props: { then?: string }) {
-  const navigate = useNavigate();
-  const q = choiceWords.question;
-  const [busy, setBusy] = createSignal(false);
-  const [problem, setProblem] = createSignal<string | null>(null);
-  const pick = async (patch: Record<string, unknown>) => {
-    if (busy()) return;
-    setBusy(true);
-    setProblem(null);
-    try {
-      await op("setPrefs", { patch: { streams: patch } });
-      leave(navigate, subsStep(props.then));
-    } catch (e) {
-      setProblem(`Could not save the choice: ${reasonOf(e)}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <section class="step-body framed question" aria-labelledby="welcome-q">
-      <Film title={q.title} lead={q.lead} />
-      <div class="doors two" role="group" aria-labelledby="welcome-q" data-fgroup="choice">
-        <button class="door" data-f="welcome:fast" data-autofocus aria-disabled={busy()} onClick={() => void pick(q.fast.patch)}>
-          <Zap aria-hidden />
-          <span>
-            <b>{q.fast.label}</b>
-            <small>{q.fast.text}</small>
-          </span>
-          <ChevronRight aria-hidden class="chev" />
-        </button>
-        <button class="door" data-f="welcome:best" aria-disabled={busy()} onClick={() => void pick(q.best.patch)}>
-          <Gem aria-hidden />
-          <span>
-            <b>{q.best.label}</b>
-            <small>{q.best.text}</small>
-          </span>
-          <ChevronRight aria-hidden class="chev" />
-        </button>
-      </div>
-      <Show when={problem()}>
-        {(p) => (
-          <p class="st bad" role="status">
-            <i class="dot" />
-            {p()}
-          </p>
-        )}
-      </Show>
-    </section>
-  );
-}
-
-/** The language subtitles start in, one choice, "Search first" (plans/onboarding-language-picker.md), on the V1
- * still like every framed step: the core suggests and pre-chooses (this device's language, or No subtitles on an
- * English device or one whose language it does not know); the step shows only that choice, in a search-shaped
- * selector that opens the picker over the step (flags, the search field first, every language). A pick on the
- * phone or desktop closes the picker; on TV, OK on a language picks it and goes on. Continue writes the choice as
- * the profile's subtitle languages: No subtitles writes an empty list, which the core keeps as off for good. Skip
- * writes nothing, so the question stays unanswered and the core starts subtitles in the device's language
- * (`Core::subtitle_languages_set`). A profile that has languages already passes by. */
-function Subtitles(props: { then?: string }) {
-  const navigate = useNavigate();
-  const prefs = prefsView();
-  const next = () => leave(navigate, afterContinue(props.then));
-  // Once, when the preferences are in: a Continue here must not pass twice.
-  createEffect(on(() => prefs.state.data !== null, (ready) => ready && (prefs.state.data?.subtitleLanguages.length ?? 0) > 0 && next()));
-  const [chosen, setChosen] = createSignal<Pickable | null>(null);
-  const [total, setTotal] = createSignal<number | null>(null);
-  let touched = false;
-  // Continue waits for the first answer: before it, the pre-chosen language is unknown.
-  const [loaded, setLoaded] = createSignal(false);
-  const [open, setOpen] = createSignal(false);
-  const [busy, setBusy] = createSignal(false);
-  const [problem, setProblem] = createSignal<string | null>(null);
-  const tv = () => form() === "tv";
-  // The core's first answer pre-chooses: its own call (the picker is not drawn until it is opened), or the
-  // picker's, whichever comes; with no answer, No subtitles, and the picker says why.
-  const first = (pre: Pickable | null) => {
-    if (!touched) setChosen(pre);
-    setLoaded(true);
-  };
-  onMount(
-    () =>
-      void firstChoice().then((r) => {
-        setTotal(r.total);
-        if (!loaded() || r.total !== null) first(r.chosen);
-      }),
-  );
-  // Continue writes the chosen language; a pick on TV writes its own at once, known before any answer.
-  const go = async (code?: string | null) => {
-    if (busy() || (code === undefined && !loaded())) return;
-    setBusy(true);
-    setSubsSaving(true);
-    setProblem(null);
-    try {
-      const c = code === undefined ? (chosen()?.code ?? null) : code;
-      await op("setPrefs", { patch: { subtitleLanguages: c ? [c] : [] } });
-      next();
-    } catch (e) {
-      setProblem(`Could not save the language: ${reasonOf(e)}`);
-    } finally {
-      setBusy(false);
-      setSubsSaving(false);
-    }
-  };
-  const pick = (code: string | null, p: Pickable) => {
-    touched = true;
-    setChosen(code === null ? null : p);
-    setOpen(false);
-    if (tv()) void go(code);
-  };
-  const words = () => {
-    const c = chosen();
-    if (!c) return { own: "No subtitles", english: "Turn them on while watching", lang: "en" };
-    return c.native && c.native !== c.name ? { own: c.native, english: c.name, lang: c.code ?? "en" } : { own: c.name, english: "", lang: "en" };
-  };
-  return (
-    <section class="step-body framed" aria-labelledby="welcome-q">
-      <Film title="Subtitles" lead="Pick the language subtitles start in. They turn on when a film's audio is in another language. Change it later in Settings, under Subtitles and audio." />
-      <div class="lp-pick" role="group" aria-labelledby="welcome-q">
-        <span class="kicker lp-kicker" id="lp-sub-label">
-          Subtitle language
-        </span>
-        <button
-          class="lp-selector"
-          id="lp-sub-open"
-          data-f="welcome:lang:open"
-          aria-labelledby="lp-sub-label lp-sub-open"
-          aria-haspopup="dialog"
-          aria-disabled={!loaded()}
-          onClick={() => loaded() && setOpen(true)}
-        >
-          <Show when={chosen()} fallback={<NoneFlag />}>
-            {(c) => <Flag language={c().code ?? ""} />}
-          </Show>
-          <span class="lp-names">
-            <b lang={loaded() ? words().lang : "en"} dir="auto">
-              {loaded() ? words().own : "Loading languages"}
-            </b>
-            <small>{loaded() ? words().english : ""}</small>
-          </span>
-          <SearchIcon aria-hidden class="lp-sel-icon" />
-        </button>
-        <p class="lp-hint">{`${tv() ? "Select" : form() === "phone" ? "Tap" : "Click"} to search ${total() ? `${total()} languages` : "the languages"}`}</p>
-      </div>
-      <Show when={open()}>
-        <LanguageOverlay title="Subtitle language" done="Cancel" onClose={() => setOpen(false)}>
-          <LanguageSearch
-            group="welcome:lang"
-            chosen={[]}
-            isOn={(code) => (chosen()?.code ?? null) === code}
-            onPick={pick}
-            onList={(reply) => first(preChosen(reply))}
-            focusField={!tv()}
-            focusFirst={tv()}
-          />
-        </LanguageOverlay>
-      </Show>
-      <Show when={problem()}>
-        {(p) => (
-          <p class="st bad" role="alert">
-            <i class="dot" />
-            {p()}
-          </p>
-        )}
-      </Show>
-      <div class="acts">
-        <button class="btn primary" data-f="welcome:next" data-autofocus aria-disabled={busy() || !loaded()} onClick={() => void go()}>
-          Continue
-          <ChevronRight aria-hidden />
-        </button>
-      </div>
     </section>
   );
 }
@@ -777,4 +844,25 @@ export function RecommendedAddons() {
       </div>
     </main>
   );
+}
+
+/** The import's last step on first run: the recommended sources the import did not bring, then Home. */
+export function useFinishImport() {
+  const navigate = useNavigate();
+  const [busy, setBusy] = createSignal(false);
+  const [failed, setFailed] = createSignal(false);
+  const finish = async () => {
+    if (busy()) return;
+    setBusy(true);
+    setFailed(false);
+    try {
+      await installAllDefaults();
+      leave(navigate, "/");
+    } catch {
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { finish, busy, failed };
 }

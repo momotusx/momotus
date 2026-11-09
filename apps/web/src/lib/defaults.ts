@@ -63,7 +63,3 @@ export function cardOffer(defaults: DefaultAddons | null, defaultsSeen: number |
   if (!defaults || defaultsSeen === undefined || kids || defaultsSeen >= defaults.version) return null;
   return switchable(defaults.addons).length || null;
 }
-
-/** Where the step goes after Continue: Home for Browse first and Review,
- * else the setup check. */
-export const afterContinue = (then: string | undefined) => (then === "home" ? "/" : "/welcome?step=3");

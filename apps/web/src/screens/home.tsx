@@ -170,7 +170,7 @@ function AccountNotice(props: { top?: boolean }) {
                     when={removing()}
                     fallback={
                       <>
-                        <A class="btn primary" href={form() === "tv" ? "/welcome" : "/sign-in"} data-f="home:account:sign-in">
+                        <A class="btn primary" href={form() === "tv" ? "/welcome?step=login" : "/sign-in"} data-f="home:account:sign-in">
                           {gone[0]}
                         </A>
                         <Show when={g().remove}>

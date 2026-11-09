@@ -14,7 +14,8 @@ import Server from "lucide-solid/icons/server";
 import { createEffect, createResource, createSignal, For, type JSX, on, onCleanup, onMount, Show } from "solid-js";
 import { Dynamic } from "solid-js/web";
 import { markSrc } from "../components/marks";
-import { profiles } from "../core/profiles";
+import { Sheet, SheetHead, WallPage } from "../components/wall";
+import { askWho, profiles } from "../core/profiles";
 import { type EmailFlow, emailCode, emailStart, held, openSignInWindow, relayProviders, runSignIn, type SignInEnd, type SignInRun, setHeld, signInServer } from "../core/sign-in";
 import * as sync from "../core/sync";
 import { pushBack } from "../focus/back";
@@ -32,29 +33,34 @@ import {
   emailFieldError,
   type Failure,
   fill,
+  providerName,
   providerOrder,
   resendIn,
   signInFailure,
   accountWords as w,
 } from "../lib/account";
+import { firstRunWords as fw, nextStep } from "../lib/first-run";
+import { kidsSession } from "../lib/kids";
 import { mayMakeKit } from "../lib/sync";
 import { plainAddress, syncWords } from "../lib/words";
-import { Film } from "./onboarding";
+import { goBack } from "../focus/dom";
 import { Session } from "./pairing";
 import "./browse.css";
-import Brand from "../components/brand";
 import "./settings.css";
 import "./onboarding.css";
 
 type From = "welcome" | "account";
 const fromOf = (q: { from?: string | string[] }): From => (q.from === "welcome" ? "welcome" : "account");
 const tail = (from: From) => (from === "welcome" ? "?from=welcome" : "");
-/** Where the first screen is: the welcome step, or its own page from Account. */
-const firstScreen = (from: From) => (from === "welcome" ? "/welcome" : "/sign-in");
-/** After creating: the recovery kit step (the web has no account passkey, D11), then the doors
- * on a first run. A TV, or a profile that may not make kits (D17), goes straight on. */
+/** Where the first screen is: first run's Login sheet, or its own page from Account. */
+const firstScreen = (from: From) => (from === "welcome" ? "/welcome?step=login" : "/sign-in");
+/** First run's Make your first profile, after Not now or a made account. */
+const PROFILE_STEP = "/welcome?step=profile";
+/** After creating: the recovery kit step (the web has no account passkey, D7), then Make your first profile on a
+ * first run. A TV, or a profile that may not make kits (D17), goes straight on. Every target replaces the sign-in
+ * entry, so Back from the profile form cannot reach Login. */
 const afterCreate = (from: From) =>
-  form() === "tv" || !mayMakeKit(profiles()) ? (from === "welcome" ? "/welcome?step=doors" : "/sync") : `/sync/kit?first=1${from === "welcome" ? "&then=doors" : ""}`;
+  form() === "tv" || !mayMakeKit(profiles()) ? (from === "welcome" ? PROFILE_STEP : "/sync") : `/sync/kit?first=1${from === "welcome" ? "&then=profile" : ""}`;
 const codeOf = (e: unknown) => {
   const c = e && typeof e === "object" && "code" in e ? (e as { code?: unknown }).code : undefined;
   return typeof c === "string" ? c : "";
@@ -148,70 +154,57 @@ export function SignInState(props: { said: { waiting: boolean; failure: Failure 
   );
 }
 
-/** The welcome steps' page, for the sign-in pages outside them. */
-function Page(props: { children: JSX.Element }) {
-  onMount(() => autoFocusSoon(() => document.querySelector<HTMLElement>(".welcome [data-autofocus]")));
+/** Every sign-in page is a sheet over the still wall, on first run and from Settings' Sign in alike
+ * (plans/first-screens.md 3.3, D10). */
+function Page(props: { label: string; size?: "login" | "narrow"; children: JSX.Element }) {
+  onMount(() => autoFocusSoon(() => document.querySelector<HTMLElement>(".sheet [data-autofocus]")));
   return (
-    <main class="welcome page" data-vscroll>
-      <header class="welcome-head">
-        <div class="brand">
-          <Brand />
-        </div>
-      </header>
+    <WallPage>
+      <Sheet size={props.size ?? "narrow"} label={props.label}>
+        {props.children}
+      </Sheet>
+    </WallPage>
+  );
+}
+
+/** A sign-in page with its own heading. */
+const Frame = Page;
+
+/** A later sign-in stage in its sheet: the heading, its line, then the stage. */
+function Stage(props: { title: string; lead?: string; children: JSX.Element }) {
+  return (
+    <>
+      <SheetHead title={props.title} />
+      <Show when={props.lead}>
+        <p class="sub">{props.lead}</p>
+      </Show>
       {props.children}
-    </main>
+    </>
   );
 }
 
-/** The welcome steps' frame, for the sign-in pages outside them. */
-function Frame(props: { label: string; children: JSX.Element }) {
-  return (
-    <Page>
-      <section class="step-body" aria-label={props.label}>
-        {props.children}
-      </section>
-    </Page>
-  );
-}
-
-/** A sign-in step with its heading and line. Desktop draws the stage (variant 4, the owner's pick of 2026-11-04,
- * design/exploration/desktop-signin): the first run's still full bleed under its washes, the step at the lower
- * left with its ways in one row, the phone's QR at the lower right (`PhoneCorner`). The phone and the TV keep the
- * welcome steps' column. */
-function Stage(props: { label: string; title: string; lead?: string; busy?: boolean; children: JSX.Element }) {
-  return (
-    <Show
-      when={form() === "desktop"}
-      fallback={
-        <section class="step-body" aria-label={props.label} aria-busy={props.busy || undefined}>
-          <h1>{props.title}</h1>
-          <Show when={props.lead}>
-            <p class="lead">{props.lead}</p>
-          </Show>
-          {props.children}
-        </section>
-      }
-    >
-      <section class="step-body framed sign-in-stage" aria-label={props.label} aria-busy={props.busy || undefined}>
-        <Film title={props.title} lead={props.lead} />
-        {props.children}
-      </section>
-    </Show>
-  );
-}
-
-/** The stage's live QR on desktop, as the page opens (the core renews the code while it shows): "Sign in with your
- * phone" and how. One per page, since a page holds one pairing; `false` where this browser may not pair. */
+/** The live QR beside the ways in, on wide forms, as the sheet opens (the core renews the code while it shows): "Sign
+ * in with your phone", how, and that it waits. One per page, since a page holds one pairing; `false` where this
+ * browser may not pair. */
 const cornerShows = () => form() === "desktop" && sync.mayPair();
 
-function PhoneCorner(props: { server: string; how?: string; onJoined: () => void }) {
+function PhoneCorner(props: { server: string; how?: string; onJoined: (by: string | null) => void }) {
   return (
-    <aside class="stage-qr" id="sign-in-qr" tabindex="-1" aria-labelledby="sign-in-qr-title">
-      <h2 id="sign-in-qr-title">{w.tvSignIn}</h2>
-      <Session server={props.server} name={sync.defaultDeviceName()} how={props.how ?? w.tvSignInHow} onJoined={props.onJoined} />
+    <aside class="qrc" id="sign-in-qr" tabindex="-1" aria-labelledby="sign-in-qr-title">
+      <h2 id="sign-in-qr-title">{fw.qrTitle}</h2>
+      <Session server={props.server} name={sync.defaultDeviceName()} how={props.how ?? fw.qrHow} onJoined={props.onJoined} />
+      <Waiting />
     </aside>
   );
 }
+
+/** "Waiting for your phone", its spinner still for reduced motion. */
+const Waiting = () => (
+  <p class="wait">
+    <i class="spin" aria-hidden="true" />
+    <span>{fw.qrWaiting}</span>
+  </p>
+);
 
 /** "I already use Momotus on another device" beside a corner: the corner's code is that way in. */
 function toCorner() {
@@ -220,11 +213,17 @@ function toCorner() {
   corner?.scrollIntoView({ block: "nearest" });
 }
 
-/** Desktop draws Google's and Facebook's buttons by their own rules (design/DECISION.md, design/marks). */
-const branded = (p: string): "google" | "facebook" | null => (form() === "desktop" && (p === "google" || p === "facebook") ? p : null);
+/** Google's and Facebook's buttons by their own rules, on every form (design/marks; round2.html combo A). */
+const branded = (p: string): "google" | "facebook" | null => (p === "google" || p === "facebook" ? p : null);
 
-/** Home, the root, once this device joined; after the first pull, so Home opens with the account's addons. */
-async function homeAfterPull(navigate: (to: string, o?: { replace?: boolean }) => void) {
+/** How the device joined, for Who's watching's line. */
+export type Via = { provider?: string; by?: string | null };
+const whoLineFor = (via: Via) =>
+  via.provider ? fill(fw.whoProvider, { provider: providerName(via.provider) }) : via.by ? fill(fw.whoDevice, { device: via.by }) : fw.whoSignedIn;
+
+/** After a join, once the first pull is in (so Home opens with the account's addons): Home as the root, or Who's
+ * watching? over the wall when the account has two or more profiles or its one profile has a PIN (D2). */
+export async function homeAfterPull(navigate: (to: string, o?: { replace?: boolean }) => void, via: Via = {}) {
   // A first round lost to a blip goes once more; Home opens after 15 s at most either way.
   const pull = async () => {
     await sync.syncNow();
@@ -233,12 +232,28 @@ async function homeAfterPull(navigate: (to: string, o?: { replace?: boolean }) =
   await Promise.race([pull(), new Promise((done) => setTimeout(done, 15_000))]);
   resetHistoryBase();
   navigate("/", { replace: true });
+  const s = profiles();
+  if (!s) return;
+  const only = s.profiles.length === 1 ? s.profiles[0] : undefined;
+  const step = nextStep({
+    fresh: false,
+    kidsSession: kidsSession(s),
+    server: true,
+    inAccount: true,
+    profileStepDone: s.profileStepDone !== false,
+    profiles: s.profiles.length,
+    pin: only?.hasPin === true,
+    locked: s.locked,
+    after: "joined",
+  });
+  if (step === "who") askWho(whoLineFor(via));
 }
 
-/** The first screen (4.1.1): Continue with each provider the sync service offers (none: Create
- * and I already use Momotus at once), Other ways to sign in, Not now. With no sync service known,
- * `doors` instead. */
-export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
+/** The Login sheet (plans/first-screens.md 3.3): "Sign in" with Not now at its right, Continue with each provider the
+ * sync service offers in its own marks (none: Create and I already use Momotus at once), email, Other ways to sign
+ * in; wide forms show the live QR to the right, the phone a Use another device button (first after "I already use
+ * Momotus"). Back, Escape and the grabber go back to Welcome on first run; from Account, Escape is Not now. */
+export function SignInStart(props: { from: From; returning?: boolean }) {
   const navigate = useNavigate();
   const server = signInServer();
   const [providers, { refetch }] = createResource(() => server || false, relayProviders);
@@ -250,11 +265,13 @@ export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
       navigate(`/sign-in/${end.phase}${tail(props.from)}`);
     },
   );
-  const leave = () => navigate(props.from === "welcome" ? "/welcome?step=doors" : "/sync");
-  // Escape is Not now, from the first run too (its address's own Back would go Home).
-  onCleanup(pushBack(leave));
+  const leave = () => navigate(props.from === "welcome" ? PROFILE_STEP : "/sync");
+  // From Account, Escape is Not now (its address's own Back would go Home); on first run it is Back, to Welcome.
+  if (props.from === "account") onCleanup(pushBack(leave));
   const corner = cornerShows();
-  // The corner and its way in once the sync service answered with a way to sign in here.
+  // The phone's code in the sheet, after Use another device.
+  const [pairing, setPairing] = createSignal(false);
+  // The corner once the sync service answered with a way to sign in here.
   const offered = () => providers.state === "ready" && !none();
   const act = (a: Act) => {
     if (a === "retry") s.again();
@@ -262,15 +279,28 @@ export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
     else if (a === "notNow") leave();
     else s.setFailure(null);
   };
-  // No sync service known: the doors. One that offers no provider still signs up here (plans/tv-qr-login.md 5.4).
-  const doors = () => !server;
   const none = () => providers.state === "ready" && providers().length === 0;
   const buttons = () => (providers.state === "ready" ? providerOrder(providers()) : []);
   // Never on a TV (E13): typing an address and a code with a remote is the slow path the QR replaced.
   const email = () => form() !== "tv" && providers.state === "ready" && providers().includes(EMAIL);
+  const device = () => form() === "phone" && offered() && sync.mayPair();
+  const another = () => (
+    <Show when={device()}>
+      <button class="btn" data-f="signin:device" aria-expanded={pairing()} data-autofocus={props.returning ? "" : undefined} onClick={() => setPairing(!pairing())}>
+        <QrCode aria-hidden />
+        {fw.useAnotherDevice}
+      </button>
+    </Show>
+  );
   return (
-    <Show when={!doors()} fallback={props.doors()}>
-      <Stage label={w.signInTitle} title={w.signInTitle} lead={props.from === "account" ? w.libraryAdded : undefined} busy={providers.loading}>
+    <Show when={server} fallback={<Navigate href={props.from === "welcome" ? PROFILE_STEP : "/sync"} />}>
+      <Sheet size="login" labelledby="sign-in-q" busy={providers.loading} onGrab={props.from === "welcome" ? goBack : leave}>
+        <SheetHead id="sign-in-q" title={w.signInTitle}>
+          <button class="flink" data-f="signin:not-now" onClick={leave}>
+            {w.notNow}
+          </button>
+        </SheetHead>
+        <p class="sub">{props.from === "account" ? w.libraryAdded : props.returning ? fw.loginReturning : fw.loginLine}</p>
         <Show
           when={providers.state !== "errored"}
           fallback={<FailureNote failure={signInFailure("unreachable") as Failure} fkey="signin:relay" onAct={(a) => (a === "retry" ? void refetch() : leave())} />}
@@ -278,9 +308,9 @@ export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
           <Show when={none()}>
             <Create server={server} from={props.from} />
           </Show>
-          {/* One row on desktop's stage: the providers, email and the corner's way in; a column elsewhere. */}
-          <div class="stage-row">
-            <div class="acts sign-in-providers" data-fgroup="providers">
+          <div class="login-cols">
+            <div class="prov" data-fgroup="providers">
+              <Show when={props.returning}>{another()}</Show>
               <For each={buttons()}>
                 {(p, i) => (
                   <button
@@ -289,18 +319,17 @@ export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
                     data-f={`signin:${p}`}
                     data-provider={p}
                     data-brand={branded(p) ?? undefined}
-                    data-autofocus={i() === 0 ? "" : undefined}
+                    data-autofocus={i() === 0 && !(props.returning && device()) ? "" : undefined}
                     onClick={() => s.go(p)}
                   >
-                    <Show when={branded(p)}>{(b) => <img class="provider-mark" src={markSrc(b())} alt="" />}</Show>
+                    <Show when={branded(p)} fallback={<span class="provider-mark" aria-hidden="true" />}>
+                      {(b) => <img class="provider-mark" src={markSrc(b())} alt="" />}
+                    </Show>
                     {continueWith(p)}
                   </button>
                 )}
               </For>
-            </div>
-            {/* Below the providers, above Other ways; the primary when it is the only way. */}
-            <Show when={email()}>
-              <div class="acts">
+              <Show when={email()}>
                 <button
                   class="btn"
                   classList={{ primary: buttons().length === 0 }}
@@ -314,48 +343,34 @@ export function SignInStart(props: { from: From; doors: () => JSX.Element }) {
                   <Mail aria-hidden />
                   {continueWithEmail}
                 </button>
-              </div>
-            </Show>
+              </Show>
+              <Show when={!props.returning}>{another()}</Show>
+              <Show when={pairing() && device()}>
+                <Session server={server} name={sync.defaultDeviceName()} how={w.phoneScanHow} onJoined={(by) => void homeAfterPull(navigate, { by })} />
+              </Show>
+              <SignInState said={s.said()} fkey="signin" onAct={act} />
+              <A class="flink" href={`/sign-in/other${tail(props.from)}`} data-f="signin:other">
+                {w.otherWays}
+              </A>
+            </div>
             <Show when={corner && offered()}>
-              <div class="acts">
-                <button class="btn" data-f="signin:already" aria-controls="sign-in-qr" onClick={toCorner}>
-                  <QrCode aria-hidden />
-                  {w.alreadyUse}
-                </button>
-              </div>
+              <PhoneCorner server={server} onJoined={(by) => void homeAfterPull(navigate, { by })} />
             </Show>
           </div>
-          <SignInState said={s.said()} fkey="signin" onAct={act} />
-          <div class="acts stage-links">
-            <A class="btn" href={`/sign-in/other${tail(props.from)}`} data-f="signin:other">
-              {w.otherWays}
-            </A>
-            <button class="btn" data-f="signin:not-now" onClick={leave}>
-              {w.notNow}
-            </button>
-          </div>
-          <Show when={corner && offered()}>
-            <PhoneCorner server={server} onJoined={() => void homeAfterPull(navigate)} />
-          </Show>
         </Show>
-      </Stage>
+      </Sheet>
     </Show>
   );
 }
 
-/** `/sign-in`, from Account on a device that used Not now. */
+/** `/sign-in`, from Account on a device that used Not now: the same Login sheet over the wall (D10). */
 export default function SignInScreen() {
   const [q] = useSearchParams();
   return (
     <Show when={!sync.joined()} fallback={<Navigate href="/sync" />}>
-      <main class="welcome page" data-vscroll>
-        <header class="welcome-head">
-          <div class="brand">
-            <Brand />
-          </div>
-        </header>
-        <SignInStart from={fromOf(q)} doors={() => <Navigate href="/sync" />} />
-      </main>
+      <WallPage label={w.signInTitle}>
+        <SignInStart from={fromOf(q)} />
+      </WallPage>
     </Show>
   );
 }
@@ -824,7 +839,7 @@ export function EmailSignIn() {
     else if (a === "resend") m.resend();
     else if (a === "otherAddress") toAddress();
     else if (a === "other") navigate(firstScreen(from));
-    else if (a === "notNow") navigate(from === "welcome" ? "/welcome?step=doors" : "/sync");
+    else if (a === "notNow") navigate(from === "welcome" ? PROFILE_STEP : "/sync");
     else m.dismiss();
   };
   return (
@@ -911,8 +926,8 @@ export function NewAccount() {
   return (
     <Show when={held()} fallback={<Navigate href={firstScreen(from)} />}>
       {(h) => (
-        <Page>
-          <Stage label={w.createAccount} title={w.createAccount} lead={from === "account" ? `${w.noAccountYet} ${w.libraryAdded}` : w.noAccountYet}>
+        <Page label={w.createAccount} size="login">
+          <Stage title={w.createAccount} lead={from === "account" ? `${w.noAccountYet} ${w.libraryAdded}` : w.noAccountYet}>
             <Create server={h().server} from={from} />
           </Stage>
         </Page>
@@ -961,12 +976,13 @@ function Create(props: { server: string; from: From }) {
   onMount(() => {
     if (held()) void create();
   });
-  const joined = () => {
-    if (!held()) return void homeAfterPull(navigate);
+  const joined = (by: string | null) => {
+    const h = held();
+    if (!h) return void homeAfterPull(navigate, { by });
     void t.run(async (ticket) => {
       await sync.linkIdentity(ticket);
       setHeld(null);
-      await homeAfterPull(navigate);
+      await homeAfterPull(navigate, { provider: h.provider, by });
     });
   };
   return (
@@ -1018,21 +1034,19 @@ export function Found() {
       setHeld(null);
       navigate(afterCreate(from), { replace: true });
     });
-  const joined = () => {
+  const joined = (by: string | null) => {
+    const provider = held()?.provider;
     setHeld(null);
-    void homeAfterPull(navigate);
+    void homeAfterPull(navigate, { provider, by });
   };
   return (
     <Show when={held()} fallback={<Navigate href={firstScreen(from)} />}>
       {(h) => (
-        <Page>
-          <Stage label={w.signInTitle} title={w.signInTitle} lead={w.foundWeb}>
-          {/* Start over needs the account slot the code holds: asked, the code goes; Cancel makes a new one.
-              Desktop's stage draws the code in its corner. */}
+        <Page label={w.signInTitle}>
+          <Stage title={w.signInTitle} lead={w.foundWeb}>
+          {/* Start over needs the account slot the code holds: asked, the code goes; Cancel makes a new one. */}
           <Show when={!asking()}>
-            <Show when={form() === "desktop"} fallback={<Session server={h().server} name={name} how={w.tvScanHow} onJoined={joined} />}>
-              <PhoneCorner server={h().server} how={w.tvScanHow} onJoined={joined} />
-            </Show>
+            <Session server={h().server} name={name} how={w.tvScanHow} onJoined={joined} />
           </Show>
           <div class="acts">
             <A class="btn" href="/sync/recover" data-f="signin:found-kit" data-autofocus>
@@ -1066,18 +1080,64 @@ export function Found() {
 /** A TV's first screen shows the QR: a sign-in service is known and this device may pair. */
 export const tvQrShows = () => !!signInServer() && sync.settled() && sync.mayPair();
 
-/** A TV's first run (plans/tv-qr-login.md 5.5): the QR and "Scan with your phone's camera", a new
- * code in place as each ends; the welcome header's Browse first is the one focus stop (a recovery
- * kit is reachable from Settings after it). A TV that joined opens Home after its first pull. */
-export function TvSignIn(props: { doors: () => JSX.Element }) {
+/** The TV's Login sheet (plans/first-screens.md 3.3, D3): the QR, three numbered steps and the waiting line, then
+ * Not now (the first focus) and Other ways to sign in; the QR needs no press, and a join moves on by itself. With no
+ * QR (no server, not settled, or this TV may not pair) one line says so with Try again and Not now. */
+export function TvSignIn(props: { onNotNow: () => void }) {
   const navigate = useNavigate();
   const server = signInServer();
+  // Try again asks the same questions afresh: the sheet is drawn anew.
+  const [round, setRound] = createSignal(0);
+  const acts = (retry: boolean) => (
+    <div class="acts" data-fgroup="tv-login">
+      <Show when={retry}>
+        <button class="btn" data-f="signin:retry" onClick={() => setRound(round() + 1)}>
+          {fw.tryAgain}
+        </button>
+      </Show>
+      <button class="btn" data-f="signin:not-now" data-autofocus onClick={() => props.onNotNow()}>
+        {w.notNow}
+      </button>
+      <Show when={!retry}>
+        <A class="btn" href="/sign-in/other?from=welcome" data-f="signin:other">
+          {w.otherWays}
+        </A>
+      </Show>
+    </div>
+  );
   return (
-    <Show when={tvQrShows()} fallback={props.doors()}>
-      <section class="step-body tv-sign-in" aria-label={w.tvSignIn}>
-        <h1>{w.tvSignIn}</h1>
-        <Session server={server} name={sync.defaultDeviceName()} onJoined={() => void homeAfterPull(navigate)} />
-      </section>
+    <Show when={round() + 1} keyed>
+      <Sheet size="tv" labelledby="sign-in-q">
+        <Show
+          when={tvQrShows()}
+          fallback={
+            <>
+              <SheetHead id="sign-in-q" title={fw.tvLoginTitle} />
+              <p class="sub">{fw.tvNoQr}</p>
+              <p class="st bad" role="status">
+                <i class="dot" />
+                {server && sync.settled() ? w.signInRefused : w.unreachable}
+              </p>
+              {acts(true)}
+            </>
+          }
+        >
+          <div class="tvl">
+            <Session server={server} name={sync.defaultDeviceName()} onJoined={(by) => void homeAfterPull(navigate, { by })} />
+            <div class="tx">
+              <h1 id="sign-in-q" tabindex="-1">
+                {fw.tvLoginTitle}
+              </h1>
+              <p class="sub">{fw.loginLine}</p>
+              <ol>
+                <For each={fw.tvSteps}>{(s) => <li>{s}</li>}</For>
+              </ol>
+              <Waiting />
+              {acts(false)}
+            </div>
+          </div>
+        </Show>
+      </Sheet>
     </Show>
   );
 }

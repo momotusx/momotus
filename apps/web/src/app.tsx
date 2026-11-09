@@ -58,6 +58,7 @@ import { Stub } from "./screens/stub";
 import TraktScreen from "./screens/trakt";
 import Title from "./screens/title";
 import Versions from "./screens/versions";
+import { wallShown } from "./components/wall";
 
 type Destination = { path: string; label: string; icon: Component<{ "aria-hidden"?: boolean }>; tool?: boolean };
 const destinations: Destination[] = [
@@ -358,7 +359,8 @@ function Shell(props: RouteSectionProps) {
       });
     }),
   );
-  const nav = () => hasNav(location.pathname);
+  // First run's sheets (the import and the recovery kit among them) sit over the wall: no bar over them.
+  const nav = () => hasNav(location.pathname) && !wallShown();
   const backPlace = () => (form() === "tv" ? null : backAt(location.pathname, form()));
   // Nothing of a profile shows before the core says which one runs and
   // whether it is locked (plans/m11-profiles.md, P1 apps v2 5).

@@ -1,14 +1,13 @@
-/** Desktop sign-in, variant 4 (the owner's pick of 2026-11-04, design/exploration/desktop-signin): every sign-in step
- * on desktop is a stage, the first run's still full bleed, the step at the lower left with its ways in one row
- * (Google and Facebook in their own marks and colors, the other providers, email, "I already use Momotus on another
- * device"), Other ways and Not now under it, and the phone's live QR at the lower right. Escape is Not now. The
- * phone keeps its column. A relay of its own lists Google, Facebook, email and the mock OpenID provider; the mock
- * signs in as alice for the `new` step. */
+/** Sign-in as the Login sheet over the poster wall (plans/first-screens.md 3.3, D10), from Settings' Sign in and from
+ * first run alike: "Sign in" with Not now at its right, the providers in a column (Google and Facebook in their own
+ * marks and colors on every form), email, Other ways; desktop puts the live QR to the right, the phone a Use another
+ * device button. From Settings, Escape is Not now. A relay of its own lists Google, Facebook, email and the mock
+ * OpenID provider; the mock signs in as alice for the `new` step. */
 
 import { type Browser, expect, type Page, test } from "./fixture";
 import type { ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client, PORTS, SHOTS, SIGN_IN_PORTS as P, startBridge, startMockProvider, startRelay } from "./core";
@@ -18,6 +17,8 @@ const procs: { proc: ChildProcess; data?: string }[] = [];
 let scratch = "";
 /** The next `op` the page asks is answered with no code, as when the sync service does not answer. */
 let failNext = "";
+/** The addons view says `fresh`, as on a profile that never had a list: first run's steps go on to setup. */
+let freshAddons = false;
 
 const FORMS = {
   desktop: { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 },
@@ -33,10 +34,22 @@ async function device(browser: Browser, form: keyof typeof FORMS): Promise<Page>
     core.addEventListener("open", () => {
       for (const m of early.splice(0)) core.send(m);
     });
-    core.addEventListener("message", (e) => ws.send(String(e.data)));
+    // The addons view's requests and its sub, for `freshAddons`.
+    const addonsAsks = new Set<number>();
+    let addonsSub = -1;
+    core.addEventListener("message", (e) => {
+      if (!freshAddons) return ws.send(String(e.data));
+      const m = JSON.parse(String(e.data));
+      if (addonsAsks.has(m.id) && m.result?.snapshot) {
+        addonsSub = m.result.sub;
+        m.result.snapshot.fresh = true;
+      } else if (m.sub === addonsSub && Array.isArray(m.updates)) for (const u of m.updates) u.fresh = true;
+      ws.send(JSON.stringify(m));
+    });
     core.addEventListener("close", () => ws.close());
     ws.onMessage((m) => {
-      const request = JSON.parse(String(m)) as { id?: number; op?: string };
+      const request = JSON.parse(String(m)) as { id?: number; op?: string; view?: string };
+      if (request.op === "subscribe" && request.view === "addons" && request.id !== undefined) addonsAsks.add(request.id);
       if (failNext && request.op === failNext) {
         failNext = "";
         return ws.send(JSON.stringify({ id: request.id, ok: false, error: "the sync service did not answer" }));
@@ -94,62 +107,55 @@ test.describe.serial("desktop sign-in stage", () => {
     if (scratch) rmSync(scratch, { recursive: true, force: true });
   });
 
-  test("desktop: the stage, the ways in one row, the brands' buttons, the live QR at the lower right; Tab, Escape", async ({ browser }) => {
+  test("desktop: the Login sheet over the wall, the brands' buttons, the live QR at its right; Tab, Escape", async ({ browser }) => {
     const page = await device(browser, "desktop");
     await go(page, "/sign-in");
-    const stage = page.locator(".sign-in-stage");
-    await expect(stage.locator("h1")).toHaveText("Sign in");
-    await expect(stage.locator(".lead")).toHaveText("This device's library will be added to your account.");
-    await expect(stage.locator(".still")).toHaveCount(1);
-    await expect(page.locator(".stage-row .btn")).toHaveText([
-      "Continue with Google",
-      "Continue with Facebook",
-      "Continue with mock",
-      "Continue with email",
-      "I already use Momotus on another device",
-    ]);
-    // Google's dark button and Facebook's blue one, each with its own mark; the others keep the app's own.
+    const sheet = page.locator(".sheet.login");
+    await expect(sheet.locator("h1")).toHaveText("Sign in");
+    await expect(sheet.locator(".sub")).toHaveText("This device's library will be added to your account.");
+    await expect(page.locator(".wall-frame")).toHaveCount(1);
+    await expect(sheet.locator(".sheet-head .flink")).toHaveText("Not now");
+    await expect(page.locator(".prov .btn")).toHaveText(["Continue with Google", "Continue with Facebook", "Continue with mock", "Continue with email"]);
+    // Google's white button and Facebook's blue one, each with its own mark; the others keep the app's own.
     const look = (f: string) =>
       page.locator(`[data-f="${f}"]`).evaluate((el) => {
         const s = getComputedStyle(el);
         const mark = el.querySelector("img.provider-mark") as HTMLImageElement | null;
-        return { bg: s.backgroundColor, color: s.color, edge: s.boxShadow, mark: mark?.naturalWidth ?? 0 };
+        return { bg: s.backgroundColor, color: s.color, mark: mark?.naturalWidth ?? 0 };
       });
     const google = await look("signin:google");
-    expect(google).toMatchObject({ bg: "rgb(19, 19, 20)", color: "rgb(227, 227, 227)" });
-    expect(google.edge).toContain("rgb(142, 145, 143)");
+    expect(google).toMatchObject({ bg: "rgb(255, 255, 255)", color: "rgba(0, 0, 0, 0.88)" });
     expect(google.mark).toBeGreaterThan(0);
     const facebook = await look("signin:facebook");
     expect(facebook).toMatchObject({ bg: "rgb(24, 119, 242)", color: "rgb(255, 255, 255)" });
     expect(facebook.mark).toBeGreaterThan(0);
     expect((await look("signin:mock")).mark).toBe(0);
 
-    // The step at the lower left: the heading on the page's 80 px inset, the providers on one line.
-    const h1 = await box(page, ".sign-in-stage h1");
-    expect(Math.round(h1.x)).toBe(80);
-    const [g, f, m] = [await box(page, '[data-f="signin:google"]'), await box(page, '[data-f="signin:facebook"]'), await box(page, '[data-f="signin:mock"]')];
-    expect(Math.abs(g.y - f.y)).toBeLessThanOrEqual(1);
-    expect(Math.abs(g.y - m.y)).toBeLessThanOrEqual(1);
-    expect(f.x).toBeGreaterThan(g.x + g.width);
+    // The sheet: 860 wide, centered; the providers in a column.
+    const s = await box(page, ".sheet.login");
+    expect(Math.abs(s.width - 860)).toBeLessThanOrEqual(2);
+    expect(Math.abs(s.x + s.width / 2 - 720)).toBeLessThanOrEqual(2);
+    const [g, f] = [await box(page, '[data-f="signin:google"]'), await box(page, '[data-f="signin:facebook"]')];
+    expect(f.y).toBeGreaterThan(g.y + g.height);
 
-    // The corner: "Sign in with your phone", how, and the live code, 56 from the right and 84 from the foot.
+    // The QR column: "Sign in with your phone", how, the live code and that it waits, right of the ways in.
     const corner = page.locator("#sign-in-qr");
     await expect(corner.locator("h2")).toHaveText("Sign in with your phone");
     await expect(corner.locator(".qrbox svg")).toBeVisible({ timeout: 30_000 });
-    await expect(corner.locator(".pair-steps .step")).toHaveText("On your phone, open Momotus and tap Sign in another device");
+    await expect(corner.locator(".pair-steps .step")).toHaveText("Point your phone's camera at the code, then sign in on the page that opens.");
+    await expect(corner.locator(".wait")).toHaveText("Waiting for your phone");
     const c = await box(page, "#sign-in-qr");
-    expect(Math.abs(c.x + c.width - (1440 - 56))).toBeLessThanOrEqual(2);
-    expect(Math.abs(c.y + c.height - (900 - 84))).toBeLessThanOrEqual(2);
-    for (const f of ["signin:google", "signin:email", "signin:already", "signin:not-now"]) {
+    for (const f of ["signin:google", "signin:email", "signin:other"]) {
       const b = await box(page, `[data-f="${f}"]`);
-      expect(b.x + b.width, `${f} runs into the corner`).toBeLessThan(c.x);
+      expect(b.x + b.width, `${f} runs into the QR`).toBeLessThan(c.x);
     }
-    await page.screenshot({ path: `${SHOTS}/sign-in-stage-desktop.png` });
+    await expect(page.locator('[data-f="signin:already"]')).toHaveCount(0);
+    await page.screenshot({ path: `${SHOTS}/sign-in-sheet-desktop.png` });
 
-    // Tab walks the ways in order, then the links, then the corner's Copy code, each with a visible focus.
+    // Tab walks the ways in order, then Other ways, then the QR's Copy code, each with a visible focus.
     await page.locator('[data-f="signin:google"]').focus();
     const walked: string[] = [];
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 5; i++) {
       await page.keyboard.press("Tab");
       walked.push(
         await page.evaluate(() => {
@@ -158,26 +164,14 @@ test.describe.serial("desktop sign-in stage", () => {
         }),
       );
     }
-    expect(walked).toEqual([
-      "signin:facebook:true",
-      "signin:mock:true",
-      "signin:email:true",
-      "signin:already:true",
-      "signin:other:true",
-      "signin:not-now:true",
-      "pair:copy:true",
-    ]);
+    expect(walked).toEqual(["signin:facebook:true", "signin:mock:true", "signin:email:true", "signin:other:true", "pair:copy:true"]);
 
-    // "I already use Momotus on another device" is the corner's way in: the focus goes to it.
-    await page.locator('[data-f="signin:already"]').click();
-    await expect(corner).toBeFocused();
-
-    // A window closed without a return: the line and its buttons in the step, the corner stays.
+    // A window closed without a return: the line and its buttons in the sheet, the QR stays.
     const [closed] = await Promise.all([page.waitForEvent("popup"), page.locator('[data-f="signin:mock"]').click()]);
     await closed.getByText("Sign in as alice").waitFor();
     await closed.close();
     await page.evaluate(() => dispatchEvent(new Event("focus")));
-    await expect(stage.locator(".sign-in-failure .st")).toHaveText("Didn't finish signing in?");
+    await expect(sheet.locator(".sign-in-failure .st")).toHaveText("Didn't finish signing in?");
     await expect(corner.locator(".qrbox svg")).toBeVisible();
 
     // Escape is Not now: Account's sync page.
@@ -190,14 +184,14 @@ test.describe.serial("desktop sign-in stage", () => {
     const page = await device(browser, "desktop");
     failNext = "relayInfo";
     await go(page, "/sign-in");
-    await expect(page.locator(".sign-in-stage .sign-in-failure .st")).toHaveText("Momotus can't reach its sync service right now.");
-    await expect(page.locator(".sign-in-stage .sign-in-failure .btn")).toHaveText(["Try again", "Not now"]);
+    await expect(page.locator(".sheet .sign-in-failure .st")).toHaveText("Momotus can't reach its sync service right now.");
+    await expect(page.locator(".sheet .sign-in-failure .btn")).toHaveText(["Try again", "Not now"]);
     await page.locator('[data-f="signin:relay:retry"]').click();
     await expect(page.locator('[data-f="signin:google"]')).toBeVisible();
     await page.context().close();
   });
 
-  test("desktop: a failed create after a provider leaves the same stage, Create and the corner's way in, Escape back to the first step", async ({ browser }) => {
+  test("desktop: a failed create after a provider leaves a sheet with Create and the QR's way in, Escape back to Login", async ({ browser }) => {
     const page = await device(browser, "desktop");
     await go(page, "/sign-in");
     // The account is created at once after a provider sign-in; only a failed create shows this stage.
@@ -205,15 +199,13 @@ test.describe.serial("desktop sign-in stage", () => {
     const [popup] = await Promise.all([page.waitForEvent("popup"), page.locator('[data-f="signin:mock"]').click()]);
     await popup.getByText("Sign in as alice").click();
     await expect(page).toHaveURL(/\/sign-in\/new$/);
-    const stage = page.locator(".sign-in-stage");
+    const stage = page.locator(".sheet");
     await expect(stage.locator("h1")).toHaveText("Create your Momotus account");
-    await expect(stage.locator(".lead")).toHaveText("This sign-in has no Momotus account yet. This device's library will be added to your account.");
-    await expect(page.locator(".sign-in-stage > .acts .btn")).toHaveText(["Create your Momotus account", "I already use Momotus on another device"]);
+    await expect(stage.locator(".sub")).toHaveText("This sign-in has no Momotus account yet. This device's library will be added to your account.");
+    await expect(page.locator(".sheet > .acts .btn")).toHaveText(["Create your Momotus account", "I already use Momotus on another device"]);
     await expect(page.locator(".sign-in-failure")).toBeVisible();
     await expect(page.locator("#sign-in-qr .qrbox svg")).toBeVisible({ timeout: 30_000 });
-    const c = await box(page, "#sign-in-qr");
-    expect(Math.abs(c.x + c.width - (1440 - 56))).toBeLessThanOrEqual(2);
-    await page.screenshot({ path: `${SHOTS}/sign-in-stage-new-desktop.png` });
+    await page.screenshot({ path: `${SHOTS}/sign-in-sheet-new-desktop.png` });
     await page.locator('[data-f="signin:already"]').click();
     await expect(page.locator("#sign-in-qr")).toBeFocused();
     await page.keyboard.press("Escape");
@@ -221,19 +213,52 @@ test.describe.serial("desktop sign-in stage", () => {
     await page.context().close();
   });
 
-  test("phone: the column as before, no stage, no corner, the app's own buttons", async ({ browser }) => {
+  test("phone: the bottom sheet, the brands' buttons, Use another device in place of the QR, 48 px targets", async ({ browser }) => {
     const page = await device(browser, "phone");
     await go(page, "/sign-in");
-    await expect(page.locator(".step-body h1")).toHaveText("Sign in");
-    await expect(page.locator('[data-f="signin:google"]')).toBeVisible();
-    await expect(page.locator(".sign-in-stage")).toHaveCount(0);
+    await expect(page.locator(".sheet h1")).toHaveText("Sign in");
+    await expect(page.locator('[data-f="signin:google"]')).toHaveAttribute("data-brand", "google");
+    await expect(page.locator('[data-f="signin:facebook"]')).toHaveAttribute("data-brand", "facebook");
     await expect(page.locator("#sign-in-qr")).toHaveCount(0);
-    await expect(page.locator('[data-f="signin:already"]')).toHaveCount(0);
-    await expect(page.locator("[data-brand]")).toHaveCount(0);
-    // Every button of the column is a 48 dp target (QA r3, Q2: the provider buttons and Not now were 46).
-    const heights = await page.locator(".step-body .btn").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
-    expect(heights.length).toBeGreaterThan(2);
+    await expect(page.locator(".sheet-grab")).toHaveCount(1);
+    const device_ = page.locator('[data-f="signin:device"]');
+    await expect(device_).toBeVisible();
+    await device_.click();
+    await expect(page.locator(".sheet .qrbox svg")).toBeVisible({ timeout: 30_000 });
+    // Every control of the sheet is a 48 px target (QA r3, Q2: the provider buttons and Not now were 46).
+    const heights = await page.locator(".sheet :is(.btn, .flink)").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
+    expect(heights.length).toBeGreaterThan(4);
     expect(heights.filter((h) => h < 48)).toEqual([]);
+    await page.context().close();
+  });
+
+  // Last: it makes an account on this spec's core. The vectors' newProvider path on the web, from Login on (the core
+  // here is past Welcome): a provider makes the account at once, the recovery kit sheet, then the profile form.
+  test("first run, a new Google account: Login, the recovery kit, Make your first profile, setup", async ({ browser }) => {
+    const vectors = JSON.parse(readFileSync(new URL("../../shared/fixtures/first-run-vectors.json", import.meta.url), "utf8"));
+    const want = vectors.paths.find((p: { path: string }) => p.path === "newProvider").web as { screens: string[]; presses: string[] };
+    freshAddons = true;
+    const page = await device(browser, "desktop");
+    await go(page, "/welcome?step=login");
+    await expect(page.locator(".sheet.login h1")).toHaveText("Sign in");
+    const seen = ["login"];
+    const [popup] = await Promise.all([page.waitForEvent("popup"), page.locator('[data-f="signin:google"]').click()]);
+    await popup.getByText("Sign in as alice").click();
+    await expect(page).toHaveURL(/\/sync\/kit\?first=1&then=profile$/, { timeout: 30_000 });
+    await expect(page.locator(".sheet.kit-sheet h1")).toBeVisible();
+    seen.push("recoveryKit");
+    await page.locator('[data-f="sync-kit:cancel"]').click();
+    await expect(page).toHaveURL(/\/welcome\?step=profile$/);
+    await expect(page.locator("#profile-q")).toHaveText("Make your first profile");
+    await expect(page.locator(".sheet .sub")).toHaveText("Your account has no profiles yet. A profile keeps its own library, subtitles and Continue Watching.");
+    seen.push("profile");
+    // The profile form replaced the sign-in entries: Back cannot reach Login.
+    await page.locator('[data-f="profile:continue"]').click();
+    await expect(page.locator("#setup-q")).toBeVisible();
+    seen.push("setup");
+    expect(seen).toEqual(want.screens.slice(1));
+    // Get started, Continue with Google, the kit's Later, Continue; Start watching comes next.
+    expect(want.presses.slice(1, 4)).toEqual(["continueWithGoogle", "kitDone", "continue"]);
     await page.context().close();
   });
 });

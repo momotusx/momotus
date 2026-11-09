@@ -251,27 +251,18 @@ test("movie page: trailer overlay and Mark watched by remote", async ({ page }) 
   await expect(play).toContainText("Resume");
 });
 
-test("onboarding: one decision per step, Back walks the steps", async ({ page }) => {
+test("a profile past first run: /welcome opens Home; Review and the setup check keep their pages", async ({ page }) => {
   await page.goto("/welcome?form=tv");
-  await expect.poll(() => focused(page)).toBe("welcome:stremio");
-  await expect(page.locator(".door")).toHaveCount(3);
-  await expect(page.locator(".check")).toHaveCount(0);
-  await expect(page.locator('[data-f="welcome:skip"]')).toHaveText("Browse first");
-  // The doors stack in a column (V1): the next one is down.
-  await page.keyboard.press("ArrowDown");
-  await expect.poll(() => focused(page)).toBe("welcome:fresh");
-  await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/step=2/);
+  await expect(page).toHaveURL(/\/(\?form=tv)?$/);
+  await expect(page.locator(".first")).toHaveCount(0);
+  await page.goto("/welcome?step=2&review=1&form=tv");
   await expect(page.locator("h1")).toHaveText("Recommended addons");
   // No typing first on a remote: focus lands on Continue, and there is no link field.
   await expect.poll(() => focused(page)).toBe("welcome:next");
   await expect(page.locator('[data-f="welcome:url"]')).toHaveCount(0);
-  // A default this profile has shows its state in words, without a switch.
-  await expect(page.locator(".drow.fixed", { hasText: "Cinemeta" })).toContainText("Installed");
+  // Review lists only what the profile does not have, each with its switch.
+  await expect(page.locator(".drow.fixed")).toHaveCount(0);
   await expect(page.locator('[data-f="welcome:default:trakt"]')).toHaveAttribute("aria-checked", "true");
-  // Continue would add the defaults to the shared core: Back instead.
-  await page.keyboard.press("Escape");
-  await expect(page).toHaveURL(/\/welcome(\?form=tv)?$/);
   await page.goto("/welcome?step=3&form=tv");
   await expect(page.locator(".check li").first()).toBeVisible();
   await expect(page.locator(".check")).not.toContainText("Core");

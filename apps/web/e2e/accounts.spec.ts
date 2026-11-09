@@ -329,8 +329,8 @@ test.describe.serial("accounts on the web", () => {
 
   test("email: Mail signs in by email (Back, a wrong code, new, Create); Late asks a code", async () => {
     // Its own row under the providers, never a provider button.
-    await go(mail, "/welcome");
-    await expect(mail.locator(".sign-in-providers .btn")).toHaveText(["Continue with Apple", "Continue with mock"]);
+    await go(mail, "/welcome?step=login");
+    await expect(mail.locator(".prov .btn[data-provider]")).toHaveText(["Continue with Apple", "Continue with mock"]);
     const row = mail.locator('[data-f="signin:email"]');
     await expect(row).toHaveText("Continue with email");
     await expect(row.locator("svg")).toBeVisible();
@@ -407,10 +407,10 @@ test.describe.serial("accounts on the web", () => {
     expect(codeTries(P.d)).toBe(2);
     await mail.locator('[data-f="signin:email:retry"]').click();
     // No account uses the address yet: it is created at once.
-    await expect(mail).toHaveURL(/\/sync\/kit\?first=1&then=doors$/);
+    await expect(mail).toHaveURL(/\/sync\/kit\?first=1&then=profile$/);
     expect(codeTries(P.d)).toBe(3);
     await mail.locator('[data-f="sync-kit:cancel"]').click();
-    await expect(mail).toHaveURL(/\/welcome\?step=doors$/);
+    await expect(mail).toHaveURL(/\/welcome\?step=profile$/);
 
     // Account reads the link as Email, and Link another offers no second one (E12).
     await go(mail, "/sync");
@@ -449,11 +449,11 @@ test.describe.serial("accounts on the web", () => {
     await shots(late, "email-code-375");
   });
 
-  test("Desk signs in: a cancel says nothing, a closed window asks, then new, Create, the kit, the doors", async () => {
-    await go(desk, "/welcome");
+  test("Desk signs in: a cancel says nothing, a closed window asks, then new, Create, the kit, the profile form", async () => {
+    await go(desk, "/welcome?step=login");
     await expect(desk.locator("h1")).toHaveText("Sign in");
     // The relay's providers, Apple first; any other by the id the relay gives it.
-    await expect(desk.locator(".sign-in-providers .btn")).toHaveText(["Continue with Apple", "Continue with mock"]);
+    await expect(desk.locator(".prov .btn[data-provider]")).toHaveText(["Continue with Apple", "Continue with mock"]);
     await expect(desk.locator('[data-f="signin:other"]')).toHaveText("Other ways to sign in");
     await expect(desk.locator('[data-f="signin:not-now"]')).toHaveText("Not now");
     await shot(desk, "accounts-sign-in-desktop");
@@ -479,14 +479,12 @@ test.describe.serial("accounts on the web", () => {
     await again.getByText("Sign in as alice").click();
     // No account uses the sign-in yet: it is created at once, as any app's provider sign-in does.
     // The web has no account passkey (D11): the recovery kit step comes next, then the doors.
-    await expect(desk).toHaveURL(/\/sync\/kit\?first=1&then=doors$/);
+    await expect(desk).toHaveURL(/\/sync\/kit\?first=1&then=profile$/);
     await desk.locator('[data-f="sync-kit:make"]').click();
     await expect(desk.locator(".sync-kit-text")).toBeVisible();
     await desk.locator('[data-f="sync-kit:saved"]').click();
-    await expect(desk).toHaveURL(/\/welcome\?step=doors$/);
-    await expect(desk.locator('[data-f="welcome:fresh"]')).toBeVisible();
-    // Signed in already: no door to another account.
-    await expect(desk.locator('[data-f="welcome:pair"]')).toHaveCount(0);
+    await expect(desk).toHaveURL(/\/welcome\?step=profile$/);
+    await expect(desk.locator('[data-f="profile:continue"]')).toBeVisible();
     // The create carried the ticket and the web's form.
     expect(asked.find((a) => a.port === P.a && a.op === "createSyncAccount")?.fields).toEqual(expect.arrayContaining(["ticket", "form"]));
     expect(asked.find((a) => a.port === P.a && a.op === "createSyncAccount")?.form).toBe("phone");
@@ -567,13 +565,13 @@ test.describe.serial("accounts on the web", () => {
   });
 
   test("Phone signs in as bob and skips the kit: Home nudges for a second way in", async () => {
-    await go(phone, "/welcome");
+    await go(phone, "/welcome?step=login");
     await providerPage(phone, "signin:mock", "bob");
-    await expect(phone).toHaveURL(/\/sync\/kit\?first=1&then=doors$/);
+    await expect(phone).toHaveURL(/\/sync\/kit\?first=1&then=profile$/);
     await phone.locator('[data-f="sync-kit:cancel"]').click();
     // The web states its form: neither it nor a TV approves another device (D6).
     expect(asked.find((a) => a.port === P.b && a.op === "createSyncAccount")?.form).toBe("web");
-    await expect(phone).toHaveURL(/\/welcome\?step=doors$/);
+    await expect(phone).toHaveURL(/\/welcome\?step=profile$/);
     await go(phone, "/");
     const card = phone.locator(".account-card");
     await expect(card).toHaveAttribute("data-card", "secondWay");
@@ -606,7 +604,7 @@ test.describe.serial("accounts on the web", () => {
     phone.on("pageerror", (e) => errors.push(`phone: ${e.message}`));
     await phone.goto("/");
     await expect(phone).toHaveURL(/\/welcome$/, { timeout: 30_000 });
-    await expect(phone.locator("h1")).toHaveText("Sign in");
+    await expect(phone.locator("h1")).toHaveText("Your films and series, on every screen.");
     const ops = asked.slice(from).filter((a) => a.port === P.b).map((a) => a.op);
     // In order: the leave, every profile out of Trakt, then the record-less wipe.
     const leave = ops.indexOf("signOut");
@@ -630,14 +628,14 @@ test.describe.serial("accounts on the web", () => {
     await expect(tv.locator('[data-f="signin:email"]')).toHaveCount(0);
     await go(tv, "/sign-in/email");
     await expect(tv).toHaveURL(/\/sign-in$/);
-    await go(tv, "/welcome");
-    await expect(tv.locator("h1")).toHaveText("Sign in with your phone");
-    await expect(tv.getByText("Scan with your phone's camera")).toBeVisible();
+    await go(tv, "/welcome?step=login");
+    await expect(tv.locator(".sheet.tv h1")).toHaveText("Sign in to Momotus");
+    await expect(tv.locator(".tvl ol li")).toHaveCount(3);
     await expect(tv.locator(".qrbox svg")).toBeVisible();
     await expect(tv.locator(".qrbox svg")).toHaveAttribute("aria-label", "QR code. Scan it with your phone's camera to sign in.");
-    // Nothing else to choose: Browse first is the one focus stop, and it has focus.
-    await expect(tv.locator('[data-f="welcome:skip"]')).toBeFocused();
-    await expect(tv.locator("main :is(button, a)")).toHaveCount(1);
+    // Not now is the first focus, Other ways beside it: nothing else to press (D3).
+    await expect(tv.locator('[data-f="signin:not-now"]')).toBeFocused();
+    await expect(tv.locator("main :is(button, a)")).toHaveCount(2);
     expect(asked.find((a) => a.port === P.c && a.view === "pairing")?.form).toBe("tv");
     await shot(tv, "accounts-first-run-tv");
     const code = codes.get(P.c) ?? "";
@@ -657,10 +655,10 @@ test.describe.serial("accounts on the web", () => {
   });
 
   test("Phone signs in as alice: found, Start over asks first, then the code Desk approves", async () => {
-    await go(phone, "/welcome");
+    await go(phone, "/welcome?step=login");
     await providerPage(phone, "signin:mock", "alice");
     await expect(phone).toHaveURL(/\/sign-in\/found\?from=welcome$/);
-    await expect(phone.locator(".lead")).toHaveText(
+    await expect(phone.locator(".sheet .sub")).toHaveText(
       "This sign-in already has a Momotus account. Scan this code with your phone, where Momotus is signed in, to add this browser.",
     );
     await expect(phone.locator(".qrbox svg")).toBeVisible();
@@ -763,7 +761,7 @@ test.describe.serial("accounts on the web", () => {
     await press(tv, "home:account:remove-confirm");
     // Removed: the TV starts as new, at its first run.
     await expect(tv).toHaveURL(/\/welcome$/, { timeout: 30_000 });
-    await expect(tv.locator("h1")).toHaveText("Sign in with your phone");
+    await expect(tv.locator("h1")).toHaveText("Your films and series, on every screen.");
   });
 
   test("Late's Send a new code turns on after its minute; Mail signs out and finds its account by email", async () => {
@@ -813,7 +811,7 @@ test.describe.serial("accounts on the web", () => {
     await expect(mail).toHaveURL(/\/sign-in\/email\?stage=code$/);
     await mail.locator('[data-f="signin:email:code"]').fill(codeIn(await mailText(SAM)));
     await expect(mail).toHaveURL(/\/sign-in\/found$/);
-    await expect(mail.locator(".lead")).toHaveText(
+    await expect(mail.locator(".sheet .sub")).toHaveText(
       "This sign-in already has a Momotus account. Scan this code with your phone, where Momotus is signed in, to add this browser.",
     );
     // Back to the code stage of a code already used: no dead field, the address stage instead.
@@ -829,7 +827,7 @@ test.describe.serial("accounts on the web", () => {
   });
 
   test("Desk signs in as bob, whose account has no device left: Start over makes a new one", async () => {
-    await go(desk, "/welcome");
+    await go(desk, "/welcome?step=login");
     await providerPage(desk, "signin:mock", "bob");
     await expect(desk).toHaveURL(/\/sign-in\/found\?from=welcome$/);
     await expect(desk.locator(".qrbox svg")).toBeVisible();
@@ -838,7 +836,7 @@ test.describe.serial("accounts on the web", () => {
     await expect(desk.locator(".qrbox svg")).toHaveCount(0);
     const from = asked.length;
     await desk.locator('[data-f="signin:start-over"]').click();
-    await expect(desk).toHaveURL(/\/sync\/kit\?first=1&then=doors$/, { timeout: 30_000 });
+    await expect(desk).toHaveURL(/\/sync\/kit\?first=1&then=profile$/, { timeout: 30_000 });
     expect(asked.slice(from).find((a) => a.port === P.a && a.op === "createSyncAccount")?.fields).toContain("move");
     await expect(desk.locator(".sign-in-failure")).toHaveCount(0);
   });

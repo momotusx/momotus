@@ -37,6 +37,7 @@ import { profiles } from "../core/profiles";
 import * as sync from "../core/sync";
 import { autoFocusSoon } from "../focus/dom";
 import { form } from "../form";
+import { Sheet, WallPage } from "../components/wall";
 import {
   fingerprintGroups,
   forkDrop,
@@ -315,7 +316,7 @@ function NotJoined() {
       <section class="set">
         <div class="links">
           <Show when={providers.state === "ready" && providers().length > 0}>
-            <LinkRow href={tv() ? "/welcome" : "/sign-in"} fkey="sync:sign-in" icon={<LogIn aria-hidden />} title={aw.signInTitle} text={aw.libraryAdded} />
+            <LinkRow href={tv() ? "/welcome?step=login" : "/sign-in"} fkey="sync:sign-in" icon={<LogIn aria-hidden />} title={aw.signInTitle} text={aw.libraryAdded} />
           </Show>
           <LinkRow href="/pair" fkey="sync:pair" icon={<QrCode aria-hidden />} title={w.pairTitle} text={w.pairText} />
           <LinkRow href="/sync/start" fkey="sync:start" icon={<Plus aria-hidden />} title={w.startTitle} text={w.startText} />
@@ -1368,8 +1369,8 @@ export function AddDevice() {
 export function MakeKit() {
   const navigate = useNavigate();
   const [params] = useSearchParams<{ first?: string; then?: string }>();
-  // A first run made its account at sign-in (plans/accounts.md 4.1.5): the doors come next.
-  const after = () => (params.then === "doors" ? "/welcome?step=doors" : "/sync");
+  // A first run made its account at sign-in (plans/accounts.md 4.1.5): Make your first profile comes next.
+  const after = () => (params.then === "profile" ? "/welcome?step=profile" : "/sync");
   // Kits are the main profile's (D17): another profile reached here by address, or switched to
   // while the page is open, goes back to the sync page.
   createEffect(() => {
@@ -1407,7 +1408,7 @@ export function MakeKit() {
     }
   };
   return (
-    <main class="browse page settings-page sync-page" data-vscroll>
+    <KitFrame first={!!params.first}>
       <h1>{w.kitTitle}</h1>
       <Show when={!tv()} fallback={<ElsewhereRow fkey="sync-kit:tv" icon={<KeyRound aria-hidden />} title={w.tvOnly} text={w.tvKit} />}>
         <NeedsAccount>
@@ -1463,7 +1464,20 @@ export function MakeKit() {
           </Show>
         </NeedsAccount>
       </Show>
-    </main>
+    </KitFrame>
+  );
+}
+
+/** The kit page; after an account made on first run, a sheet over the still wall (plans/first-screens.md D7). */
+function KitFrame(props: { first: boolean; children: JSX.Element }) {
+  return (
+    <Show when={props.first} fallback={<main class="browse page settings-page sync-page" data-vscroll>{props.children}</main>}>
+      <WallPage label={w.kitTitle}>
+        <Sheet size="narrow" class="kit-sheet">
+          {props.children}
+        </Sheet>
+      </WallPage>
+    </Show>
   );
 }
 

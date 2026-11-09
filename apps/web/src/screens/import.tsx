@@ -11,6 +11,9 @@ import { Qr } from "../components/qr";
 import { liveView } from "../core/client";
 import type { ImportSnapshot } from "../core/generated/ImportSnapshot";
 import { form } from "../form";
+import { Sheet, WallPage } from "../components/wall";
+import { firstRunWords as fw } from "../lib/first-run";
+import { useFinishImport } from "./onboarding";
 import "./browse.css";
 import "./settings.css";
 
@@ -20,6 +23,23 @@ function Attempt(props: { onRetry: () => void; welcome: boolean }) {
   const s = () => view.state.data;
   const hostOf = (url: string) => url.replace(/^https?:\/\//, "").replace(/\/$/, "");
   const [otherDevice, setOtherDevice] = createSignal(false);
+  // First run: the recommended sources the import did not bring, then Home; Skip import does the same without it.
+  const fin = useFinishImport();
+  const skip = () => (
+    <Show when={props.welcome}>
+      <button class="btn" data-f="import:skip" aria-busy={fin.busy() || undefined} onClick={() => void fin.finish()}>
+        {fw.skipImport}
+      </button>
+    </Show>
+  );
+  const finFailed = () => (
+    <Show when={fin.failed()}>
+      <p class="st bad" role="alert">
+        <i class="dot" />
+        {fw.setupSourcesFailed}
+      </p>
+    </Show>
+  );
   return (
     <Switch
       fallback={
@@ -37,6 +57,8 @@ function Attempt(props: { onRetry: () => void; welcome: boolean }) {
             <RefreshCw aria-hidden />
             Try again
           </button>
+          {skip()}
+          {finFailed()}
         </section>
       </Match>
       <Match when={s()?.phase === "waitingForLink" && (s() as Extract<ImportSnapshot, { phase: "waitingForLink" }>)}>
@@ -79,6 +101,7 @@ function Attempt(props: { onRetry: () => void; welcome: boolean }) {
                       Use another device
                     </button>
                     {again()}
+                    {skip()}
                   </div>
                   <Show when={otherDevice()}>
                     <div class="qrbox">
@@ -101,7 +124,11 @@ function Attempt(props: { onRetry: () => void; welcome: boolean }) {
                   </p>
                   {code()}
                   {waiting()}
-                  <div class="acts">{again()}</div>
+                  <div class="acts">
+                    {again()}
+                    {skip()}
+                  </div>
+                  {finFailed()}
                 </div>
               </div>
             </Show>
@@ -139,8 +166,7 @@ function Attempt(props: { onRetry: () => void; welcome: boolean }) {
             <Show when={d().summary.seriesUnmatched}>
               <p class="note small">{d().summary.seriesUnmatched} series kept their watched marks unmatched: their episode lists could not be loaded.</p>
             </Show>
-            {/* From the welcome doors, the recommended addons come next: the
-                ones Stremio brought show there without a switch. */}
+            {/* First run: the recommended sources Stremio did not bring go on, then Home. */}
             <Show
               when={props.welcome}
               fallback={
@@ -150,10 +176,11 @@ function Attempt(props: { onRetry: () => void; welcome: boolean }) {
                 </A>
               }
             >
-              <A class="btn primary" href="/welcome?step=2&from=import" data-f="import:next" data-autofocus>
-                Continue
-                <ChevronRight aria-hidden />
-              </A>
+              <button class="btn primary" data-f="import:home" data-autofocus aria-busy={fin.busy() || undefined} onClick={() => void fin.finish()}>
+                <House aria-hidden />
+                {fin.failed() ? fw.tryAgain : "Go to Home"}
+              </button>
+              {finFailed()}
             </Show>
           </section>
         )}
@@ -166,25 +193,39 @@ function Attempt(props: { onRetry: () => void; welcome: boolean }) {
             <RefreshCw aria-hidden />
             Get a new code
           </button>
+          {skip()}
+          {finFailed()}
         </section>
       </Match>
     </Switch>
   );
 }
 
+/** Import from Stremio; from first run's setup, a sheet over the still wall whose Back returns to the setup sheet with
+ * every answer kept (plans/first-screens.md 3.5). */
 export default function Import() {
   const [query] = useSearchParams();
   const [attempt, setAttempt] = createSignal(0);
-  return (
-    <main class="browse page settings-page column" data-vscroll>
-      <h1>Import from Stremio</h1>
+  const welcome = () => query.from === "welcome";
+  const body = () => (
+    <>
+      <h1 tabindex="-1">Import from Stremio</h1>
       <p class="lede">
         Brings your addons, library, Continue Watching and watched marks over once. Nothing is sent back to Stremio.
         <Show when={form() === "tv"}> Nothing is typed on this screen.</Show>
       </p>
       <Show when={attempt() + 1} keyed>
-        <Attempt onRetry={() => setAttempt(attempt() + 1)} welcome={query.from === "welcome"} />
+        <Attempt onRetry={() => setAttempt(attempt() + 1)} welcome={welcome()} />
       </Show>
-    </main>
+    </>
+  );
+  return (
+    <Show when={welcome()} fallback={<main class="browse page settings-page column" data-vscroll>{body()}</main>}>
+      <WallPage label="Import from Stremio">
+        <Sheet size="narrow" class="import">
+          {body()}
+        </Sheet>
+      </WallPage>
+    </Show>
   );
 }

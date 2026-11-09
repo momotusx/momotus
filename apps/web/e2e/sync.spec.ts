@@ -1090,12 +1090,11 @@ test.describe.serial("sync across three devices", () => {
     await expect(tv.getByText("This browser's storage could not be read, so nothing is remembered here")).toBeVisible();
     // The storage works again; leaving this account touches no copy it never held.
     await tv.evaluate(() => sessionStorage.removeItem("mq.e2e.noIdb"));
-    // A TV's Sign out always removes the library too (D13): it starts again at its first run,
-    // whose doors stand in for the sign-in while this browser still remembers an account.
+    // A TV's Sign out always removes the library too (D13): it starts again at its first run, Welcome.
     await expect(tv.locator('[data-f="sync:remove-library"]')).toHaveAttribute("aria-disabled", "true");
     await tv.locator('[data-f="sync:leave"]').click();
     await expect(tv).toHaveURL(/\/welcome$/, { timeout: 30_000 });
-    await expect(tv.locator("h1")).toHaveText("How would you like to begin?");
+    await expect(tv.locator(".welcome-block h1")).toHaveText("Your films and series, on every screen.");
     expect((await kept(tv)).text).toContain("credential");
     // Reloaded, the browser offers that copy; forgetting it leaves the TV as it was.
     await tv.goto("/sync");
