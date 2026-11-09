@@ -32,6 +32,7 @@ import {
   emailFieldError,
   type Failure,
   fill,
+  pairingStarting,
   providerName,
   providerOrder,
   resendIn,
@@ -159,8 +160,8 @@ function Page(props: { label: string; size?: "login" | "narrow"; children: JSX.E
   onMount(() => autoFocusSoon(() => document.querySelector<HTMLElement>(".sheet [data-autofocus]")));
   return (
     <WallPage>
-      <Sheet size={props.size ?? "narrow"} label={props.label}>
-        {props.children}
+      <Sheet size={props.size ?? "narrow"} label={props.label} busy={pulling()}>
+        <UnlessPulling title={props.label}>{props.children}</UnlessPulling>
       </Sheet>
     </WallPage>
   );
@@ -215,6 +216,29 @@ function toCorner() {
 /** Google's and Facebook's buttons by their own rules, on every form (design/marks; round2.html combo A). */
 const branded = (p: string): "google" | "facebook" | null => (p === "google" || p === "facebook" ? p : null);
 
+// The first pull after a join is under way (up to 15 s): the sheet says so, and nothing in it can be pressed.
+const [pulling, setPulling] = createSignal(false);
+
+/** A sheet's content, or "Getting your profiles" while the pull after a join runs. */
+function UnlessPulling(props: { title: string; children: JSX.Element }) {
+  return (
+    <Show
+      when={!pulling()}
+      fallback={
+        <>
+          <SheetHead title={props.title} />
+          <p class="wait pulling" role="status">
+            <i class="spin" aria-hidden="true" />
+            <span>{fw.gettingProfiles}</span>
+          </p>
+        </>
+      }
+    >
+      {props.children}
+    </Show>
+  );
+}
+
 /** How the device joined, for Who's watching's line. */
 export type Via = { provider?: string; by?: string | null };
 const whoLineFor = (via: Via) =>
@@ -228,8 +252,11 @@ export async function homeAfterPull(navigate: (to: string, o?: { replace?: boole
     await sync.syncNow();
     if (sync.problem() && !sync.report()) await sync.syncNow();
   };
+  setPulling(true);
   await Promise.race([pull(), new Promise((done) => setTimeout(done, 15_000))]);
   intoHome(navigate);
+  // Kept through the fade, so the actions never come back under it.
+  setTimeout(() => setPulling(false), 400);
   const s = profiles();
   if (!s) return;
   const only = s.profiles.length === 1 ? s.profiles[0] : undefined;
@@ -292,7 +319,8 @@ export function SignInStart(props: { from: From; returning?: boolean }) {
   );
   return (
     <Show when={server} fallback={<Navigate href={props.from === "welcome" ? PROFILE_STEP : "/sync"} />}>
-      <Sheet size="login" labelledby="sign-in-q" busy={providers.loading} onGrab={props.from === "welcome" ? goBack : leave}>
+      <Sheet size="login" labelledby="sign-in-q" busy={providers.loading || pulling()} onGrab={props.from === "welcome" ? goBack : leave}>
+        <UnlessPulling title={w.signInTitle}>
         <SheetHead id="sign-in-q" title={w.signInTitle}>
           <button class="flink" data-f="signin:not-now" onClick={leave}>
             {w.notNow}
@@ -356,6 +384,7 @@ export function SignInStart(props: { from: From; returning?: boolean }) {
             </Show>
           </div>
         </Show>
+        </UnlessPulling>
       </Sheet>
     </Show>
   );
@@ -1075,28 +1104,39 @@ export function Found() {
   );
 }
 
-/** A TV's first screen shows the QR: a sign-in service is known and this device may pair. */
-export const tvQrShows = () => !!signInServer() && sync.settled() && sync.mayPair();
-
 /** The TV's Login sheet (plans/first-screens.md 3.3, D3): the QR, three numbered steps and the waiting line, then
  * Not now (the first focus) and Other ways to sign in; the QR needs no press, and a join moves on by itself. With no
  * QR (no server, not settled, or this TV may not pair) one line says so with Try again and Not now. */
 export function TvSignIn(props: { onNotNow: () => void }) {
   const navigate = useNavigate();
-  const server = signInServer();
-  // Try again asks the same questions afresh: the sheet is drawn anew.
-  const [round, setRound] = createSignal(0);
-  const acts = (retry: boolean) => (
+  const [server, setServer] = createSignal(signInServer());
+  const [asking, setAsking] = createSignal(false);
+  // Try again asks afresh: this browser's stored account, then the sync service it knows (if any); the focus stays
+  // on Try again while the answer is the same.
+  const retry = async () => {
+    if (asking()) return;
+    setAsking(true);
+    await sync.vaultReady;
+    const s = signInServer();
+    if (s) await relayProviders(s).catch(() => null);
+    setServer(s);
+    setAsking(false);
+    autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="signin:retry"], [data-f="signin:not-now"]'));
+  };
+  const qr = () => !!server() && sync.settled() && sync.mayPair();
+  // No sync service (or none in reach): unreachable, with Try again. One this TV may not pair with: refused, Not now only.
+  const unreachable = () => !server();
+  const acts = (mode: "qr" | "retry" | "notNow") => (
     <div class="acts" data-fgroup="tv-login">
-      <Show when={retry}>
-        <button class="btn" data-f="signin:retry" onClick={() => setRound(round() + 1)}>
+      <Show when={mode === "retry"}>
+        <button class="btn" data-f="signin:retry" aria-busy={asking() || undefined} onClick={() => void retry()}>
           {fw.tryAgain}
         </button>
       </Show>
       <button class="btn" data-f="signin:not-now" data-autofocus onClick={() => props.onNotNow()}>
         {w.notNow}
       </button>
-      <Show when={!retry}>
+      <Show when={mode === "qr"}>
         <A class="btn" href="/sign-in/other?from=welcome" data-f="signin:other">
           {w.otherWays}
         </A>
@@ -1104,24 +1144,35 @@ export function TvSignIn(props: { onNotNow: () => void }) {
     </div>
   );
   return (
-    <Show when={round() + 1} keyed>
-      <Sheet size="tv" labelledby="sign-in-q">
+    <Sheet size="tv" labelledby="sign-in-q" busy={pulling() || !sync.settled()}>
+      <UnlessPulling title={fw.tvLoginTitle}>
         <Show
-          when={tvQrShows()}
+          when={qr()}
           fallback={
             <>
               <SheetHead id="sign-in-q" title={fw.tvLoginTitle} />
-              <p class="sub">{fw.tvNoQr}</p>
-              <p class="st bad" role="status">
-                <i class="dot" />
-                {server && sync.settled() ? w.signInRefused : w.unreachable}
-              </p>
-              {acts(true)}
+              {/* Before this browser has read its stored account, nothing is known yet: no error to show. */}
+              <Show
+                when={sync.settled()}
+                fallback={
+                  <p class="wait" role="status">
+                    <i class="spin" aria-hidden="true" />
+                    <span>{pairingStarting(false).text}</span>
+                  </p>
+                }
+              >
+                <p class="sub">{fw.tvNoQr}</p>
+                <p class="st bad" role="status">
+                  <i class="dot" />
+                  {unreachable() ? w.unreachable : w.signInRefused}
+                </p>
+              </Show>
+              {acts(sync.settled() && unreachable() ? "retry" : "notNow")}
             </>
           }
         >
           <div class="tvl">
-            <Session server={server} name={sync.defaultDeviceName()} onJoined={(by) => void homeAfterPull(navigate, { by })} />
+            <Session server={server()} name={sync.defaultDeviceName()} onJoined={(by) => void homeAfterPull(navigate, { by })} />
             <div class="tx">
               <h1 id="sign-in-q" tabindex="-1">
                 {fw.tvLoginTitle}
@@ -1131,11 +1182,11 @@ export function TvSignIn(props: { onNotNow: () => void }) {
                 <For each={fw.tvSteps}>{(s) => <li>{s}</li>}</For>
               </ol>
               <Waiting />
-              {acts(false)}
+              {acts("qr")}
             </div>
           </div>
         </Show>
-      </Sheet>
-    </Show>
+      </UnlessPulling>
+    </Sheet>
   );
 }

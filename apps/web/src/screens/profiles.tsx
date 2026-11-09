@@ -462,6 +462,8 @@ function AddInSheet(props: { onCancel: () => void }) {
   const [problem, setProblem] = createSignal<string | null>(null);
   let field: HTMLInputElement | undefined;
   onCleanup(pushBack(props.onCancel));
+  // The tile that had the focus is gone: on TV the focus goes to the Name field.
+  onMount(() => form() === "tv" && autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="add:name"]')));
   // One profile per press: a second Add while the first is with the core does nothing.
   const add = async () => {
     if (busy()) return;

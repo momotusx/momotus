@@ -62,7 +62,8 @@ if (typeof document !== "undefined") document.addEventListener("visibilitychange
 let settleWatched = false;
 let firstPoster: number | null = null;
 function watchSettle() {
-  if (settleWatched) return;
+  // Walk builds only (development and `VITE_WALK`): nobody else's console gets the line.
+  if (settleWatched || !(import.meta.env.DEV || import.meta.env.VITE_WALK)) return;
   settleWatched = true;
   const t0 = performance.now();
   const seen = (e: Event) => {

@@ -252,7 +252,16 @@ test.describe.serial("desktop sign-in stage", () => {
     await expect(page.locator("#profile-q")).toHaveText("Make your first profile");
     await expect(page.locator(".sheet .sub")).toHaveText("Your account has no profiles yet. A profile keeps its own library, subtitles and Continue Watching.");
     seen.push("profile");
-    // The profile form replaced the sign-in entries: Back cannot reach Login.
+    // An account was made: Back and Escape never return to Login (table 5, "Account made: leaves the app").
+    await page.goBack();
+    await page.waitForTimeout(500);
+    await expect(page.locator(".sheet.login")).toHaveCount(0);
+    await expect(page.locator("#profile-q")).toBeVisible();
+    await expect(page).toHaveURL(/step=profile/);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(500);
+    await expect(page.locator(".sheet.login")).toHaveCount(0);
+    await expect(page.locator("#profile-q")).toBeVisible();
     await page.locator('[data-f="profile:continue"]').click();
     await expect(page.locator("#setup-q")).toBeVisible();
     seen.push("setup");

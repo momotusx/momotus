@@ -28,6 +28,8 @@ mkdirSync(SHOTS, { recursive: true });
 
 type Json = any;
 interface World {
+  /** How long the page's `syncNow` waits before failing: the pull after a join, held. */
+  syncDelay?: number;
   fresh: boolean;
   profileStepDone: boolean;
   profiles: Json[] | null;
@@ -119,7 +121,10 @@ async function device(browser: Browser, form: Form, o: { server?: boolean; reduc
       }
       if (m.op === "unsubscribe" && m.sub > 90_000) return ws.send(JSON.stringify({ id: m.id, ok: true, result: null }));
       if (m.op in stub) return ws.send(JSON.stringify({ id: m.id, ok: true, result: stub[m.op]?.() }));
-      if (fail.has(m.op)) return ws.send(JSON.stringify({ id: m.id, ok: false, error: "the sync service did not answer" }));
+      if (fail.has(m.op)) {
+        const no = () => ws.send(JSON.stringify({ id: m.id, ok: false, error: "the sync service did not answer" }));
+        return void (world.syncDelay ? setTimeout(no, world.syncDelay) : no());
+      }
       if (core.readyState === WebSocket.OPEN) core.send(String(raw));
       else early.push(String(raw));
     });
@@ -130,6 +135,7 @@ async function device(browser: Browser, form: Form, o: { server?: boolean; reduc
     for (const [sub, s] of subs) if (s.view === view) route?.send(JSON.stringify({ sub, updates: [patch(view, structuredClone(s.last))] }));
   };
   const page = await context.newPage();
+  page.on("pageerror", (e) => pageErrors.push(`${form}: ${e.message}`));
   return { context, page, world, ops, push, sent: (op: string) => ops.filter((x) => x.op === op) };
 }
 type Device = Awaited<ReturnType<typeof device>>;
@@ -200,6 +206,8 @@ async function walk(d: Device, form: Form, path: string, at: { profiles?: number
   let moves = 0;
   let pressed = 0;
   for (const [i, press] of want.presses.entries()) {
+    // Nothing is written to the profile before Continue on the profile form (no profile before sign-in or Not now).
+    if (!want.presses.slice(0, i).includes("continue")) expect(d.sent("finishProfileStep"), `${path} ${form} before ${press}`).toEqual([]);
     const before = await screen(page);
     if (press === "profileTile" && before === "login") {
       await join(d, at.profiles ?? 3, at.pin);
@@ -244,6 +252,15 @@ async function walk(d: Device, form: Form, path: string, at: { profiles?: number
 
 const FORMS: Form[] = ["phone", "wide", "tv"];
 
+// No page throws, in any test (code review 2026-11-10 P2.2: a TypeError on the Name field went unseen).
+const pageErrors: string[] = [];
+test.beforeEach(() => {
+  pageErrors.length = 0;
+});
+test.afterEach(() => {
+  expect(pageErrors).toEqual([]);
+});
+
 for (const form of FORMS) {
   test(`${form}: New, Not now: the vectors' screens and presses, nothing written before Not now, an untouched Continue sends empties`, async ({ browser }) => {
     const d = await device(browser, form);
@@ -252,9 +269,6 @@ for (const form of FORMS) {
     expect(d.sent("createProfile")).toEqual([]);
     const finish = d.sent("finishProfileStep");
     expect(finish.map((f) => ({ name: f.args.name, avatar: f.args.avatar }))).toEqual([{ name: "", avatar: "" }]);
-    // Not now came before the profile step's write: the op list holds them in that order.
-    const order = d.ops.map((o) => o.op);
-    expect(order.indexOf("finishProfileStep")).toBeGreaterThan(-1);
     // Start watching wrote the shown chip, English on an English device, and no stream patch for Start fast.
     expect(d.sent("setPrefs").map((p) => p.args.patch)).toEqual([{ subtitleLanguages: ["en"] }]);
     expect(d.sent("installDefaults")).toHaveLength(1);
@@ -436,6 +450,13 @@ test("the wall op is never sent on a cold start of a profile that is not fresh",
     expect(d.sent("firstRunWall"), form).toEqual([]);
     await d.context.close();
   }
+  // Nor when /welcome itself opens on such a profile (an old link): it leaves for Home without asking.
+  const late = await device(browser, "wide", { world: { fresh: false } });
+  await open(late, "wide", "/welcome");
+  await expect.poll(() => screen(late.page)).toBe("home");
+  await late.page.waitForTimeout(1000);
+  expect(late.sent("firstRunWall")).toEqual([]);
+  await late.context.close();
 });
 
 test("no default addon's name on any first run step", async ({ browser }) => {
@@ -567,10 +588,12 @@ test("TV: first focus per step, Up reaches the pause toggle, and Settings' Sign 
     await open(d, "tv", `/welcome?step=${step}`);
     await expect.poll(() => focused(page), step).toBe(first);
   }
-  await page.goto("/settings?form=tv");
+  await page.goto("/settings/account?form=tv");
   const row = page.locator('[data-f="settings:sign-in"]');
-  if (await row.count()) await expect(row).toHaveAttribute("href", "/welcome?step=login");
-  await open(d, "tv", "/welcome?step=login");
+  await expect(row).toHaveAttribute("href", "/welcome?step=login");
+  await row.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/step=login/);
   await expect(page.locator(".sheet.tv .tvl ol li")).toHaveText(words.tvSteps);
   await d.context.close();
 });
@@ -581,6 +604,13 @@ test("TV without a QR: one line, Try again and Not now, Not now first", async ({
   await expect(d.page.locator(".sheet.tv .sub")).toHaveText(words.tvNoQr);
   await expect(d.page.locator(".sheet.tv .acts .btn")).toHaveText([words.tryAgain, "Not now"]);
   await expect.poll(() => focused(d.page)).toBe("signin:not-now");
+  // Try again asks again and keeps the focus on itself while the answer stays the same.
+  await d.page.locator('[data-f="signin:retry"]').focus();
+  await d.page.keyboard.press("Enter");
+  await d.page.waitForTimeout(600);
+  expect(await focused(d.page)).toBe("signin:retry");
+  await expect(d.page.locator(".sheet.tv .sub")).toHaveText(words.tvNoQr);
+  await d.page.locator('[data-f="signin:not-now"]').focus();
   await d.page.keyboard.press("Enter");
   await expect.poll(() => screen(d.page)).toBe("profile");
   await d.context.close();
@@ -719,6 +749,112 @@ test("a Norwegian device's subtitle chip is Norwegian, as the core lists it", as
   await expect.poll(() => screen(d.page)).toBe("home");
   expect(d.sent("setPrefs").map((p) => p.args.patch)).toEqual([{ subtitleLanguages: ["no"] }]);
   await d.context.close();
+});
+
+test("after a join, the sheet says Getting your profiles and holds nothing to press until the pull is in", async ({ browser }) => {
+  for (const form of ["wide", "tv"] as const) {
+    const d = await device(browser, form, { world: { syncDelay: 2500 } });
+    await open(d, form, "/welcome?step=login");
+    await expect.poll(() => screen(d.page)).toBe("login");
+    await join(d, 1);
+    const line = d.page.locator(".sheet .wait.pulling");
+    await expect(line, form).toHaveText(words.gettingProfiles);
+    await expect(d.page.locator(".sheet")).toHaveAttribute("aria-busy", "true");
+    await expect(d.page.locator('.sheet :is(button, a, input)')).toHaveCount(0);
+    await expect.poll(() => screen(d.page), { timeout: 30_000 }).toBe("home");
+    expect(d.sent("finishProfileStep")).toEqual([]);
+    await d.context.close();
+  }
+});
+
+test("a start whose picker was answered goes on: no bare wall when the account has more profiles", async ({ browser }) => {
+  // An account made here, the app closed before the profile form, a second profile added elsewhere, a restart.
+  const d = await device(browser, "wide", { world: { profiles: PROFILES(2) } });
+  await open(d, "wide");
+  await d.page.locator('[data-f="profile:default"]').click();
+  await expect.poll(() => screen(d.page)).toBe("welcome");
+  await expect(d.page.locator('[data-f="welcome:start"]')).toBeVisible();
+  await d.context.close();
+});
+
+test("Welcome by Tab: Get started, I already use Momotus, then Pause motion", async ({ browser }) => {
+  const d = await device(browser, "wide");
+  await open(d, "wide");
+  await expect(d.page.locator('[data-f="welcome:start"]')).toBeVisible();
+  await d.page.locator('[data-f="welcome:start"]').focus();
+  const order = ["welcome:start"];
+  for (let i = 0; i < 2; i++) {
+    await d.page.keyboard.press("Tab");
+    order.push((await focused(d.page)) ?? "");
+  }
+  expect(order).toEqual(["welcome:start", "welcome:returning", "welcome:motion"]);
+  await d.context.close();
+});
+
+/** Every control on screen under 48 px on a side, by its data-f (an input counts its label). */
+const smallTargets = (page: Page, scope = "main") =>
+  page.locator(`${scope} :is(button, a, input)`).evaluateAll((els) =>
+    els
+      .map((e) => (e.tagName === "INPUT" ? (e.closest("label") ?? e) : e))
+      .filter((e) => (e as HTMLElement).offsetParent !== null)
+      .map((e) => ({ f: (e as HTMLElement).dataset.f ?? e.textContent, r: e.getBoundingClientRect() }))
+      .filter((x) => x.r.width > 0 && Math.min(x.r.width, x.r.height) < 48)
+      .map((x) => `${x.f} ${Math.round(x.r.width)}x${Math.round(x.r.height)}`),
+  );
+
+test("phone: Who's watching, Add profile, Use another device's code and the import sheet are 48 px targets too", async ({ browser }) => {
+  const d = await device(browser, "phone", { world: { importPhase: { phase: "failed", reason: "Stremio did not answer." }, profileStepDone: true } });
+  const page = d.page;
+  await open(d, "phone", "/welcome?step=login&returning=1");
+  await page.locator('[data-f="signin:device"]').click();
+  await expect(page.locator(".sheet .qrbox")).toBeVisible();
+  await page.waitForTimeout(400);
+  expect(await smallTargets(page), "login with the code").toEqual([]);
+  await join(d, 3);
+  await expect.poll(() => screen(page), { timeout: 30_000 }).toBe("who");
+  await page.waitForTimeout(400);
+  expect(await smallTargets(page), "who").toEqual([]);
+  await page.locator('[data-f="profile:add"]').click();
+  await expect(page.locator(".add-in-sheet")).toBeVisible();
+  expect(await smallTargets(page), "add profile").toEqual([]);
+  await d.context.close();
+  const imp = await device(browser, "phone", { world: { importPhase: { phase: "failed", reason: "Stremio did not answer." } } });
+  await open(imp, "phone", "/import?from=welcome");
+  await expect(imp.page.locator('[data-f="import:skip"]')).toBeVisible();
+  await imp.page.waitForTimeout(400);
+  expect(await smallTargets(imp.page), "import").toEqual([]);
+  await imp.context.close();
+});
+
+test("one write per press: a double tap on Continue, Start watching and Skip import, and Enter twice during the fade", async ({ browser }) => {
+  const d = await device(browser, "phone", { world: { profileStepDone: false } });
+  await open(d, "phone", "/welcome?step=profile");
+  await d.page.locator('[data-f="profile:continue"]').dblclick();
+  await expect.poll(() => screen(d.page)).toBe("setup");
+  await d.page.waitForTimeout(400);
+  expect(d.sent("finishProfileStep")).toHaveLength(1);
+  await d.page.locator('[data-f="setup:start"]').dblclick();
+  await expect.poll(() => screen(d.page)).toBe("home");
+  await d.page.waitForTimeout(400);
+  expect([d.sent("setPrefs").length, d.sent("installDefaults").length]).toEqual([1, 1]);
+  await d.context.close();
+  const keys = await device(browser, "wide", { world: { profileStepDone: true } });
+  await open(keys, "wide", "/welcome?step=setup");
+  await keys.page.locator('[data-f="setup:start"]').focus();
+  await keys.page.keyboard.press("Enter");
+  await keys.page.waitForTimeout(80);
+  await keys.page.keyboard.press("Enter");
+  await expect.poll(() => screen(keys.page)).toBe("home");
+  await keys.page.waitForTimeout(400);
+  expect(keys.sent("installDefaults")).toHaveLength(1);
+  await keys.context.close();
+  const imp = await device(browser, "phone", { world: { importPhase: { phase: "expired" } } });
+  await open(imp, "phone", "/import?from=welcome");
+  await imp.page.locator('[data-f="import:skip"]').dblclick();
+  await expect.poll(() => screen(imp.page)).toBe("home");
+  await imp.page.waitForTimeout(400);
+  expect(imp.sent("installDefaults")).toHaveLength(1);
+  await imp.context.close();
 });
 
 test("shots: each step on the phone, desktop and TV", async ({ browser }) => {

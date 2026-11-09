@@ -13,14 +13,14 @@ import Link2 from "lucide-solid/icons/link-2";
 import PackageSearch from "lucide-solid/icons/package-search";
 import SearchIcon from "lucide-solid/icons/search";
 import Zap from "lucide-solid/icons/zap";
-import { createEffect, createMemo, createSignal, For, Index, Match, on, onCleanup, Show, Switch } from "solid-js";
+import { createEffect, createMemo, createSignal, For, Index, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
 import { displayCaps, link, liveView, op, ping, prefsView, reasonOf } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { DefaultAddonInfo } from "../core/generated/DefaultAddonInfo";
 import type { DefaultAddons } from "../core/generated/DefaultAddons";
 import type { ProfilesSnapshot } from "../core/generated/ProfilesSnapshot";
-import { profiles } from "../core/profiles";
+import { gateOpen, profiles } from "../core/profiles";
 import { signInServer } from "../core/sign-in";
 import * as sync from "../core/sync";
 import { AvatarArt } from "../components/avatar";
@@ -149,6 +149,8 @@ function useEntry() {
     const fresh = addons.state.data?.fresh;
     if (!s || fresh === undefined) return null;
     const only = s.profiles.length === 1 ? s.profiles[0] : undefined;
+    // Once the gate is open its picker has been answered: a start is past `who` (else a bare wall, nothing to press).
+    const answered = after === "start" && gateOpen();
     return nextStep({
       fresh,
       kidsSession: kidsSession(s),
@@ -156,9 +158,9 @@ function useEntry() {
       inAccount: sync.joined(),
       // An older core never sends it: read as answered, so it never shows the form.
       profileStepDone: s.profileStepDone !== false,
-      profiles: s.profiles.length,
+      profiles: answered ? 1 : s.profiles.length,
       pin: only?.hasPin === true,
-      locked: s.locked,
+      locked: answered ? false : s.locked,
       after,
     });
   };
@@ -185,9 +187,13 @@ function FirstRun(props: { step: FirstStep; returning: boolean }) {
     if (next === "profile") to(next);
     else goBack();
   };
+  // An account made here (table 5): Login is behind it, so a Back that lands there goes on to the profile form.
+  createEffect(() => props.step === "login" && sync.joined() && entry("start") === "profile" && to("profile", { replace: true }));
   // An empty or missed wall answer is asked again at the next step (the wall stays mounted from step to step).
   createEffect(on(() => props.step, () => askWall(), { defer: true }));
   return (
+    // No wall (and no wall request) before a start is known to be first run's.
+    <Show when={props.step !== "welcome" || start() === "welcome"}>
     <WallPage moving={props.step === "welcome"}>
       <Switch>
         <Match when={props.step === "welcome"}>
@@ -209,6 +215,7 @@ function FirstRun(props: { step: FirstStep; returning: boolean }) {
         </Match>
       </Switch>
     </WallPage>
+    </Show>
   );
 }
 
@@ -217,7 +224,6 @@ function FirstRun(props: { step: FirstStep; returning: boolean }) {
 function Welcome(props: { onStart: () => void; onReturning: () => void }) {
   return (
     <>
-      <MotionToggle />
       <section class="welcome-block" aria-labelledby="welcome-q">
         <div class="brand">
           <Brand />
@@ -237,6 +243,8 @@ function Welcome(props: { onStart: () => void; onReturning: () => void }) {
           </Show>
         </div>
       </section>
+      {/* After the buttons by Tab (3.1); drawn at the top right. */}
+      <MotionToggle />
     </>
   );
 }
@@ -262,6 +270,8 @@ function ProfileStep(props: { onDone: () => void }) {
   const [nameError, setNameError] = createSignal<string | null>(null);
   const [problem, setProblem] = createSignal<string | null>(null);
   const shown = () => pressed() ?? stored().color ?? "ember";
+  // Made an account here: this form is where the app starts now, and Back leaves it (table 5).
+  onMount(() => sync.joined() && resetHistoryBase());
   const go = async () => {
     if (busy()) return;
     setBusy(true);
@@ -270,12 +280,12 @@ function ProfileStep(props: { onDone: () => void }) {
     try {
       const c = pressed();
       await op<ProfilesSnapshot>("finishProfileStep", { name: name().trim(), avatar: c ? formatAvatar({ glyph: stored().glyph, color: c }) : "" });
+      // Busy until the next step shows: a second press sends nothing.
       props.onDone();
     } catch (e) {
       const code = e && typeof e === "object" && "code" in e ? String((e as { code?: unknown }).code) : "";
       if (code === "badName") setNameError(profileProblem("badName", ""));
-      else setProblem(reasonOf(e));
-    } finally {
+      else setProblem(fw.setupPrefsFailed);
       setBusy(false);
     }
   };
@@ -309,7 +319,11 @@ function ProfileStep(props: { onDone: () => void }) {
                 setName(e.currentTarget.value);
                 setNameError(null);
               }}
-              onFocus={(e) => setTimeout(() => e.currentTarget.form?.querySelector(".fr-foot")?.scrollIntoView({ block: "nearest" }), 300)}
+              onFocus={(e) => {
+                // Continue stays above the keyboard (MOB-24), once the keyboard is up.
+                const f = e.currentTarget.form;
+                setTimeout(() => f?.querySelector(".fr-foot")?.scrollIntoView({ block: "nearest" }), 300);
+              }}
             />
           </label>
         </div>
@@ -364,13 +378,22 @@ function ownName(code: string) {
 const named = (code: string) => languageName(code) !== code.toUpperCase();
 
 // The setup sheet's answers, kept while first run lasts: Back from Import or Review finds them as they were.
-const [setup, setSetup] = createStore<{ bring: boolean; best: boolean; chip: string | null; picked: string | null }>({ bring: false, best: false, chip: null, picked: null });
-/** The patch already written, so Try again or a second press never writes the same answers twice. */
+const [setup, setSetup] = createStore<{ profile: string | null; bring: boolean; best: boolean; chip: string | null; picked: string | null }>({
+  profile: null,
+  bring: false,
+  best: false,
+  chip: null,
+  picked: null,
+});
+/** The profile and patch already written, so Try again or a second press never writes the same answers twice. */
 let written = "";
 
 /** Set up {profile}: one page, every answer pre-chosen, so Start watching alone finishes first run. */
 function SetupStep() {
   const navigate = useNavigate();
+  // The answers are this profile's: another profile's first run starts from the defaults.
+  const active = profiles()?.active ?? null;
+  if (setup.profile !== active) setSetup({ profile: active, bring: false, best: false, chip: null, picked: null });
   const prefs = prefsView();
   const q = choiceWords.question;
   const [busy, setBusy] = createSignal(false);
@@ -387,12 +410,15 @@ function SetupStep() {
   });
   const chip = () => setup.chip ?? chips()?.selected ?? null;
   const finish = () => leave(navigate, "/");
+  /** The sources, then Home; false when they failed. */
   const sources = async () => {
     try {
       await installAllDefaults();
       finish();
+      return true;
     } catch {
       setFailed("sources");
+      return false;
     }
   };
   const go = async () => {
@@ -402,19 +428,21 @@ function SetupStep() {
     setFailed(null);
     try {
       const patch = setupPatch(c, setup.best ? q.best.patch : null);
-      const key = JSON.stringify(patch);
+      const key = `${active}|${JSON.stringify(patch)}`;
       if (written !== key) {
         try {
           await op("setPrefs", { patch });
           written = key;
         } catch {
           setFailed("prefs");
+          setBusy(false);
           return;
         }
       }
+      // On success the sheet stays busy while it leaves: a key press during the fade does nothing.
       if (setup.bring) navigate("/import?from=welcome");
-      else await sources();
-    } finally {
+      else if (!(await sources())) setBusy(false);
+    } catch {
       setBusy(false);
     }
   };
@@ -423,11 +451,7 @@ function SetupStep() {
     if (busy()) return;
     setBusy(true);
     setFailed(null);
-    try {
-      await sources();
-    } finally {
-      setBusy(false);
-    }
+    if (!(await sources())) setBusy(false);
   };
   const radio = (on: boolean) => ({ role: "radio" as const, "aria-checked": on });
   return (
@@ -852,12 +876,12 @@ export function useFinishImport() {
     if (busy()) return;
     setBusy(true);
     setFailed(false);
+    // Busy until the page leaves: a key press during the fade into Home does nothing.
     try {
       await installAllDefaults();
       leave(navigate, "/");
     } catch {
       setFailed(true);
-    } finally {
       setBusy(false);
     }
   };
