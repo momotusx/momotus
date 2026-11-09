@@ -819,21 +819,24 @@ fun RoundButton(
     value: String? = null,
     /** What a press does, where the label alone does not say it ("Shows download options"). */
     clickLabel: String? = null,
+    /** A size of its own (the player bar's transport); the glyph keeps its share of it. */
+    diameter: Dp? = null,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
-    val size =
+    val standard =
         when {
             main -> if (tv) 104.dp else 60.dp
             showLabel -> if (tv) 72.dp else 48.dp
             else -> if (tv) 84.dp else 48.dp
         }
+    val size = diameter ?: standard
     val glyph =
         when {
             main -> if (tv) 44.dp else 26.dp
             showLabel -> if (tv) 30.dp else 20.dp
             else -> if (tv) 36.dp else 22.dp
-        }
+        } * (size / standard)
     var focused by remember { mutableStateOf(false) }
     ButtonFocused(focused)
     // White is the main action or a TV focus, in the player too; a selected circle is the selected grey with a

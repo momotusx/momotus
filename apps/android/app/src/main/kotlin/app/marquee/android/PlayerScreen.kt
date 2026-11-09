@@ -20,6 +20,7 @@ import app.marquee.core.VersionsCopy
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
+import app.marquee.core.model.SubtitleBackground
 import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.SubtitleSize
 import app.marquee.core.model.VersionRow
@@ -31,6 +32,7 @@ import app.marquee.core.views.VersionsView
 import app.marquee.core.views.ViewStatus
 import app.marquee.core.watchesAfterNone
 import app.marquee.design.Form
+import app.marquee.player.DEFAULT_POSITION
 import app.marquee.player.PlaybackController
 import app.marquee.player.PlayerHost
 import app.marquee.player.PlayerLifecycle
@@ -121,6 +123,32 @@ class PlayerHolder(
 
     fun setSubtitleSize(size: SubtitleSize) = sizes.pick(size)
 
+    /** The strip's Position and Background (plans/player-bar.md section 5): shown at once, kept as the profile's. */
+    private val positions =
+        ProfileSetting(
+            viewModelScope,
+            DEFAULT_POSITION,
+            write = { at ->
+                session.ops.setPrefs(buildJsonObject { put("subtitlePosition", JsonPrimitive(at)) }).subtitlePosition
+            },
+            show = { controller.subtitlePosition = it },
+        )
+    private val backgrounds =
+        ProfileSetting(
+            viewModelScope,
+            SubtitleBackground.Box,
+            write = { look ->
+                session.ops
+                    .setPrefs(buildJsonObject { put("subtitleBackground", JsonPrimitive(look.wire)) })
+                    .subtitleBackground
+            },
+            show = { controller.subtitleBackground = it },
+        )
+
+    fun setSubtitlePosition(position: Int) = positions.pick(position)
+
+    fun setSubtitleBackground(background: SubtitleBackground) = backgrounds.pick(background)
+
     /** The second line's Layout and Only when paused (plans/dual-subtitles.md 5.1), as Settings sets them. */
     private val layouts =
         ProfileSetting(
@@ -166,6 +194,8 @@ class PlayerHolder(
         // The second line's settings, followed when Settings change them.
         viewModelScope.launch {
             snapshotFlow { prefs.snapshot }.collect { p ->
+                positions.fromProfile(p?.subtitlePosition ?: DEFAULT_POSITION)
+                backgrounds.fromProfile(p?.subtitleBackground ?: SubtitleBackground.Box)
                 layouts.fromProfile(p?.subtitleLayout ?: SubtitleLayout.Stacked)
                 onPause.fromProfile(p?.secondOnPause == true)
                 controller.secondPref = p?.secondSubtitle
@@ -382,6 +412,8 @@ fun PlayerScreen(
             onSecondOnPause = holder::setSecondOnPause,
             onSpokenKept = holder::keepSpoken,
             onSettings = onSettings,
+            onSubtitlePosition = holder::setSubtitlePosition,
+            onSubtitleBackground = holder::setSubtitleBackground,
         )
     } else {
         PhonePlayer(
@@ -400,6 +432,8 @@ fun PlayerScreen(
             onSpokenKept = holder::keepSpoken,
             onSettings = onSettings,
             brightness = window.brightness,
+            onSubtitlePosition = holder::setSubtitlePosition,
+            onSubtitleBackground = holder::setSubtitleBackground,
         )
     }
 }

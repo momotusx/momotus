@@ -26,8 +26,7 @@ import app.marquee.design.Icons
 import app.marquee.design.MarqueeTheme
 import app.marquee.design.RoundButton
 import app.marquee.player.ActionButton
-import app.marquee.player.TrackChoice
-import app.marquee.player.TrackPanel
+import app.marquee.player.StripChip
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -77,26 +76,24 @@ class TvFocusInvertTest {
     private fun bounds(spoken: String) = compose.onNodeWithContentDescription(spoken).fetchSemanticsNode().boundsInRoot
 
     @Test
-    fun `a focused track row turns white with dark words, apart from the chosen row unfocused`() {
+    fun `a focused strip chip turns white with dark words, apart from the checked chip unfocused`() {
         var shown by mutableStateOf("a")
         compose.setContent {
             MarqueeTheme(Form.Tv) {
-                TrackPanel(
-                    "Audio",
-                    listOf(
-                        TrackChoice("a", "English", "AAC, stereo", selected = true),
-                        TrackChoice("b", "Turkish", "AAC, stereo"),
-                    ),
-                    {},
-                    forceFocus = shown,
-                )
+                Row(
+                    Modifier.background(Color.Black).padding(48.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    StripChip("English, AAC, stereo", {}, checked = true, spoken = "English", forceFocus = shown == "a")
+                    StripChip("Turkish, AAC", {}, checked = false, spoken = "Turkish", forceFocus = shown == "b")
+                }
             }
         }
 
-        // The chosen row with the focused look, then the other row with it: the chosen row is only chosen.
+        // The checked chip with the focused look, then the other chip with it: the checked chip is only checked.
         fun chosen(): Pair<Color, Float> {
             compose.mainClock.advanceTimeBy(1_000)
-            val at = bounds("English, AAC, stereo")
+            val at = bounds("English")
             val shot = compose.onRoot().captureToImage().toPixelMap()
             val ground = fill(shot, at)
             return ground to ink(shot, at, ground)

@@ -5,6 +5,7 @@ import androidx.media3.common.PlaybackException
 import app.marquee.core.model.Segment
 import app.marquee.core.model.SegmentKind
 import app.marquee.core.model.SubtitleTrack
+import app.marquee.core.model.TraktPlayback
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -13,21 +14,19 @@ import kotlin.test.assertTrue
 
 class PlayerLogicTest {
     @Test
-    fun `the Trakt notice shows once per play for a few seconds and never stays`() {
-        // Nothing to say: no notice.
-        assertNull(traktNoticeSince(null, warns = false, nowMs = 1_000))
-        val since = traktNoticeSince(null, warns = true, nowMs = 1_000)
+    fun `the Trakt notice starts only for reconnect, once per play`() {
+        // Every other state shows nothing in the player (plans/player-bar.md D9); Settings, Trakt keeps them.
+        val quiet =
+            listOf(null, TraktPlayback.On, TraktPlayback.Off, TraktPlayback.Unmapped, TraktPlayback.ThisDeviceOff)
+        for (state in quiet) {
+            assertNull(traktNoticeSince(null, state, nowMs = 1_000), "$state started the notice")
+        }
+        val since = traktNoticeSince(null, TraktPlayback.Reconnect, nowMs = 1_000)
         assertEquals(1_000L, since)
-        assertTrue(traktNoticeShows(since, 1_000))
-        assertTrue(traktNoticeShows(since, 1_000 + TRAKT_NOTICE_MS - 1))
-        // Gone after its seconds, and still gone an hour into the play.
-        assertFalse(traktNoticeShows(since, 1_000 + TRAKT_NOTICE_MS))
-        assertFalse(traktNoticeShows(since, 3_600_000))
-        // A pause, a seek, a resume or another warning state later keeps the first time: never shown again.
-        assertEquals(since, traktNoticeSince(since, warns = false, nowMs = 60_000))
-        assertEquals(since, traktNoticeSince(since, warns = true, nowMs = 120_000))
-        assertFalse(traktNoticeShows(traktNoticeSince(since, warns = true, nowMs = 120_000), 120_000))
-        assertFalse(traktNoticeShows(null, 1_000))
+        assertEquals(4_000L, TRAKT_NOTICE_MS)
+        // A pause, a seek, a resume or a later state keeps the first time: never shown again.
+        assertEquals(since, traktNoticeSince(since, TraktPlayback.Off, nowMs = 60_000))
+        assertEquals(since, traktNoticeSince(since, TraktPlayback.Reconnect, nowMs = 120_000))
     }
 
     @Test

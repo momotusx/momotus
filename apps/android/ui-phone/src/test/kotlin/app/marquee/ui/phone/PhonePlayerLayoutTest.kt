@@ -154,25 +154,25 @@ class PhonePlayerLayoutTest {
     private fun full(size: SubtitleSize) = SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * subtitleScale(size)
 
     @Test
-    fun `transport over the bar, the options as one group under it, in the middle`() {
+    fun `the transport in the middle, one slim bar at the foot with the scrubber between the pill groups`() {
         playing()
         val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
         val transport = bounds("Back 10 seconds")
-        val bar = bounds("Position")
-        val actions = compose.onNodeWithTag(ACTIONS_TAG).fetchSemanticsNode().boundsInRoot
+        val bar = compose.onNodeWithTag(BAR_TAG).fetchSemanticsNode().boundsInRoot
+        val scrub = bounds("Position")
         assertTrue(transport.bottom <= bar.top, "the transport sits over the bar: $transport, $bar, $root")
-        // In the middle of the screen, as on the iPhone and the web; the bar and the options at the foot.
+        // In the middle of the screen, as on the iPhone and the web; the bar at the foot (plans/player-bar.md).
         val play = bounds("Pause")
         assertTrue(abs(play.center.y - root.center.y) < 2f, "the transport is in the middle: ${play.center.y}")
         assertTrue(abs(play.center.x - root.center.x) < 2f, "and centred across: ${play.center.x}")
-        assertTrue(bar.bottom <= actions.top, "the options row sits under the bar")
-        assertTrue(root.bottom - actions.bottom < 40f, "the bar and the options keep to the foot: ${actions.bottom}")
-        assertTrue(
-            actions.width < root.width * 0.6f,
-            "the options are a group, not spread across ${root.width}: ${actions.width}",
-        )
-        assertTrue(actions.left >= bar.left && actions.right <= bar.right, "inside the bar's margins: $actions, $bar")
-        assertTrue(abs(actions.center.x - root.center.x) < 2f, "the group is in the middle")
+        assertTrue(root.bottom - bar.bottom <= 12.5f, "the bar keeps to the foot: ${bar.bottom}")
+        assertTrue(bar.height <= 72f, "one slim row: ${bar.height}")
+        // Speed and Versions left of the scrubber, Subtitles right of it, all in the one row.
+        val speed = compose.onNodeWithContentDescription("Speed", substring = true).fetchSemanticsNode().boundsInRoot
+        val subtitles =
+            compose.onNodeWithContentDescription("Subtitles", substring = true).fetchSemanticsNode().boundsInRoot
+        assertTrue(speed.right <= scrub.left && subtitles.left >= scrub.right, "$speed, $scrub, $subtitles")
+        assertTrue(abs(speed.center.y - scrub.center.y) < 2f && abs(subtitles.center.y - scrub.center.y) < 2f)
     }
 
     @Test
@@ -220,15 +220,18 @@ class PhonePlayerLayoutTest {
     }
 
     @Test
-    fun `two lines at the largest size shrink under the transport, down to 75%, while the controls show`() {
+    fun `four lines at the largest size shrink under the transport, down to 75%, while the controls show`() {
         playing(SubtitleSize.ExtraLarge)
-        player.say("Who are you, and what are you doing here\nwith a sword and a dragon's tooth")
+        player.say(
+            "Who are you, and what are you doing here\nwith a sword and a dragon's tooth\n" +
+                "in a land where no one goes\nand nothing grows",
+        )
         compose.waitForIdle()
         val shown = cues()
         val bar = bounds("Position")
         assertTrue(shown.foot <= bar.top - 8f + 0.5f, "8 dp over the bar: ${shown.foot} against ${bar.top}")
-        // Between the bar and the transport in the middle of a 540 dp screen there is room for neither 100% nor
-        // 85%: the cues draw at the floor.
+        // Between the slim bar and the transport in the middle of a 540 dp screen four lines have room for neither
+        // 100% nor 85%: the cues draw at the floor (two lines fit whole over the slim bar).
         assertEquals(full(SubtitleSize.ExtraLarge) * CUE_FLOOR, shown.text, 1e-6f, "at 75%")
         controlsHidden()
         assertEquals(full(SubtitleSize.ExtraLarge), cues().text, "back to full size once the controls hide")

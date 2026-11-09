@@ -9,17 +9,15 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -49,10 +47,13 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
+import app.marquee.core.model.SubtitleBackground
 import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.SubtitleSize
 import app.marquee.design.Icons
@@ -64,31 +65,37 @@ import app.marquee.design.RoundButton
 import app.marquee.design.TextRole
 import app.marquee.design.marqueeFocus
 import app.marquee.player.ActionButton
+import app.marquee.player.AudioStrip
 import app.marquee.player.EndCard
 import app.marquee.player.LoadingLayer
 import app.marquee.player.PlaybackController
 import app.marquee.player.PlaybackController.Stage
 import app.marquee.player.PlayerStatus
 import app.marquee.player.PlayerVideo
+import app.marquee.player.QuickShift
 import app.marquee.player.Scrim
 import app.marquee.player.Scrubber
 import app.marquee.player.SkipButton
-import app.marquee.player.TrackPanel
-import app.marquee.player.TraktMark
-import app.marquee.player.TraktWarning
+import app.marquee.player.Strip
+import app.marquee.player.SubtitleStrip
 import app.marquee.player.TvSubtitlePicker
 import app.marquee.player.UpNextCard
 import app.marquee.player.activeSegment
 import app.marquee.player.audioDetail
 import app.marquee.player.clockText
 import app.marquee.player.endsAt
+import app.marquee.player.footScrim
 import app.marquee.player.loadingLines
+import app.marquee.player.nextName
 import app.marquee.player.nextSpeed
+import app.marquee.player.rememberBarWidths
 import app.marquee.player.rememberTitleMark
 import app.marquee.player.rememberTouchExploration
 import app.marquee.player.secondLine
 import app.marquee.player.seekStepMs
+import app.marquee.player.sideFit
 import app.marquee.player.speedText
+import app.marquee.player.stripLift
 import app.marquee.player.subtitlesDetail
 import app.marquee.player.subtitlesStillListing
 import app.marquee.player.upNextDue
@@ -99,20 +106,19 @@ import kotlin.math.ceil
 private const val HIDE_MS = 4_000L
 private const val SEEK_MS = 10_000L
 
-private enum class Panel { Audio, Subtitles }
-
 private val selectKeys = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
 
 private val dpadKeys =
     setOf(Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight, Key.DirectionCenter, Key.Enter)
 
 /**
- * The player on TV: the picture, and over it the title top left, the position bar and the
- * transport in the middle, and the actions (audio, subtitles, versions, episodes, speed) at the
- * right. The controls hide after four seconds of playing; while they are hidden the first key only
- * brings them back, with focus on play and pause. Left and right on the position bar step 10 s,
- * and a held key steps further (20, 30, 60 s) and lands when it is let go. Back closes a panel
- * first, then leaves.
+ * The player on TV: the picture, and over it the title top left; at the foot the position bar, then one row
+ * (plans/player-bar.md): Audio, Speed and Versions at the left, the transport in the middle, Subtitles with its quick
+ * shift, Episodes and Next at the right, at the picked bar's size times 1.5 (D19). Subtitles and Audio open their
+ * strips over the bar's ends. The controls hide after four seconds of playing; while they are hidden the first key
+ * only brings them back, with focus on play and pause. Left and right on the position bar step 10 s, and a held key
+ * steps further (20, 30, 60 s) and lands when it is let go. Back leaves the shift's adjust mode, then closes the
+ * Style row, a strip or the picker, then hides the controls, then leaves (section 6).
  *
  * @param onNext the next episode was chosen (or it starts by itself when [autoplayNext] is on).
  * @param onEpisodes the title page of a series; null for a movie.
@@ -138,6 +144,9 @@ fun TvPlayer(
     onSpokenKept: () -> Unit = {},
     /** The failure card's Settings: the addons (noSource). */
     onSettings: ((EmptyKind) -> Unit)? = null,
+    /** The strip's Style: the profile's subtitle position and background, as Size. */
+    onSubtitlePosition: (Int) -> Unit = {},
+    onSubtitleBackground: (SubtitleBackground) -> Unit = {},
 ) {
     val safe = Marquee.safe
     val stage = controller.stage
@@ -158,11 +167,17 @@ fun TvPlayer(
     var osd by remember { mutableStateOf(true) }
     // The controls band's height (bar, transport and options), as last laid out: the cues sit over it.
     var controlsHeight by remember { mutableStateOf(0.dp) }
+    // The open strip's height, with its Style row, as last laid out.
+    var stripHeight by remember { mutableStateOf(0.dp) }
     // The title block's foot, as last laid out: Split's second line hangs under it while the controls show.
     var headerFoot by remember { mutableStateOf(0.dp) }
     val density = LocalDensity.current
     var wake by remember { mutableIntStateOf(0) }
-    var panel by remember { mutableStateOf<Panel?>(null) }
+    // The full subtitle picker (from More languages); the strip over the bar, its Style row, the shift's adjust mode.
+    var picker by remember { mutableStateOf(false) }
+    var strip by remember { mutableStateOf<Strip?>(null) }
+    var style by remember { mutableStateOf(false) }
+    var adjusting by remember { mutableStateOf(false) }
     val ended = stage == Stage.Ended
     val showControls = osd && live && !ended && !opening
     // The loading screen over the paused picture while it waits for data.
@@ -184,6 +199,8 @@ fun TvPlayer(
     var enterOn by remember { mutableStateOf<FocusRequester?>(null) }
     val audioAction = remember { FocusRequester() }
     val subtitlesAction = remember { FocusRequester() }
+    // The open strip's checked chip (else its first): where a remote enters the strip.
+    val stripFirst = remember { FocusRequester() }
     val failFocus = remember { FocusRequester() }
     val nextFocus = remember { FocusRequester() }
     val endFocus = remember { FocusRequester() }
@@ -205,7 +222,7 @@ fun TvPlayer(
     val segment by remember(controller) {
         derivedStateOf { activeSegment(controller.segments, controller.positionMs) }
     }
-    val showSkip = segment != null && !showNext && panel == null && !ended && live && controller.status == null
+    val showSkip = segment != null && !showNext && !picker && !ended && live && controller.status == null
     val skipFocus = remember { FocusRequester() }
     // Whether the Skip button has focus, so that when it goes only its own focus is handed back.
     var skipHasFocus by remember { mutableStateOf(false) }
@@ -219,8 +236,8 @@ fun TvPlayer(
     // under TalkBack. Every key starts the wait again; `wake` is read here and not in composition, so a
     // key press recomposes nothing.
     val exploring = rememberTouchExploration()
-    LaunchedEffect(osd, stage, panel, showNext, exploring) {
-        if (osd && stage == Stage.Playing && panel == null && !showNext && !exploring) {
+    LaunchedEffect(osd, stage, picker, strip, adjusting, showNext, exploring) {
+        if (osd && stage == Stage.Playing && !picker && strip == null && !adjusting && !showNext && !exploring) {
             snapshotFlow { wake }.collectLatest {
                 kotlinx.coroutines.delay(HIDE_MS)
                 osd = false
@@ -243,11 +260,11 @@ fun TvPlayer(
     // The card takes focus when it appears, unless a list is open (choosing audio near the end must not be
     // interrupted); when it goes (a rewind), focus goes back to play and pause instead of being lost.
     LaunchedEffect(showNext) {
-        if (showNext && panel == null) {
+        if (showNext && !picker) {
             osd = true
             withFrameNanos { }
             runCatching { nextFocus.requestFocus() }
-        } else if (!showNext && panel == null && showControls) {
+        } else if (!showNext && !picker && showControls) {
             withFrameNanos { }
             runCatching { play.requestFocus() }
         }
@@ -258,16 +275,27 @@ fun TvPlayer(
         runCatching {
             if (showSkip && showControls) {
                 skipFocus.requestFocus()
-            } else if (!showSkip && skipHasFocus && showControls && panel == null && !showNext) {
+            } else if (!showSkip && skipHasFocus && showControls && !picker && !showNext) {
                 // Only when focus was on Skip: a viewer scrubbing the bar keeps it.
                 play.requestFocus()
             }
         }
     }
-    // A list does not stay open over a failure or any state without controls.
-    LaunchedEffect(live) { if (!live) panel = null }
-    // A list that was open when the film ended closes: the end card is the only thing to answer.
-    LaunchedEffect(ended) { if (ended) panel = null }
+
+    fun dropStrip() {
+        strip = null
+        style = false
+        adjusting = false
+    }
+    // A list or strip does not stay open over a failure, the end card or any state without controls.
+    LaunchedEffect(live, ended) {
+        if (!live || ended) {
+            picker = false
+            dropStrip()
+        }
+    }
+    // Skip and Up Next carry a time-bound action: an open strip gives them its place and the focus (D23).
+    LaunchedEffect(showSkip || showNext) { if (showSkip || showNext) dropStrip() }
     LaunchedEffect(showEnd) {
         if (showEnd) {
             withFrameNanos { }
@@ -280,25 +308,63 @@ fun TvPlayer(
         if (stage == Stage.Ended) osd = true
     }
 
-    // Closing a panel (Back, or a row chosen) returns focus to the action that opened it.
+    // Closing the picker or a strip returns focus to the pill that opened it.
     var returnTo by remember { mutableStateOf<FocusRequester?>(null) }
 
-    fun closePanel() {
-        returnTo = if (panel == Panel.Audio) audioAction else subtitlesAction
-        panel = null
+    fun closeStrip() {
+        returnTo = if (strip == Strip.Audio) audioAction else subtitlesAction
+        dropStrip()
         wake++
+    }
+
+    fun openStrip(opening: Strip) {
+        if (strip == opening) return closeStrip()
+        style = false
+        adjusting = false
+        strip = opening
+        wake++
+    }
+    // A strip opened by remote takes the focus on its checked chip, else its first (section 6).
+    LaunchedEffect(strip) {
+        if (strip != null) {
+            withFrameNanos { }
+            withFrameNanos { }
+            runCatching { stripFirst.requestFocus() }
+        }
     }
 
     // When the last Back step was taken (event time), so a held Back steps at a steady pace.
     val lastBack = remember { longArrayOf(0L) }
 
-    // Back, one step at a time (plans/android-design-v2.md 2.2, as Leanback does): an open panel
-    // closes, then the controls hide, then the player leaves.
+    // Back, one step at a time (section 6, as Leanback does): the shift's adjust mode, the Style row, the strip,
+    // the picker, then the controls hide, then the player leaves.
     fun back() {
         when {
-            panel != null -> closePanel()
-            showControls -> osd = false
-            else -> onBack()
+            adjusting -> {
+                adjusting = false
+            }
+
+            style -> {
+                style = false
+            }
+
+            strip != null -> {
+                closeStrip()
+            }
+
+            picker -> {
+                returnTo = subtitlesAction
+                picker = false
+                wake++
+            }
+
+            showControls -> {
+                osd = false
+            }
+
+            else -> {
+                onBack()
+            }
         }
     }
     // One handler that is always on (turning it on and off with the panel left Back ignored after a key press).
@@ -398,18 +464,21 @@ fun TvPlayer(
             }.focusProperties { exit = { FocusRequester.Cancel } }
             .focusable(),
     ) {
-        // While the controls show, the cues' foot sits 8 dp over their band, as on the phone.
+        // While the controls show, the cues' foot sits 8 dp over their band, or over an open strip, as on the phone.
+        val stripCover = if (strip != null) stripHeight + stripLift() else 0.dp
         PlayerVideo(
             controller.player,
             Modifier.fillMaxSize(),
             controller.subtitleSize,
-            subtitleLift = if (showControls) controlsHeight else 0.dp,
+            subtitleLift = if (showControls) controlsHeight + stripCover else 0.dp,
             addonCues = { controller.addonCues() }.takeIf { controller.addonOn },
             videoRatio = controller.videoRatio,
             secondCues = { controller.secondCues() }.takeIf { controller.secondOn },
             subtitleLayout = controller.subtitleLayout,
             secondOnPause = controller.secondOnPause,
             subtitleTop = if (showControls) headerFoot else 0.dp,
+            subtitlePosition = controller.subtitlePosition,
+            subtitleBackground = controller.subtitleBackground,
         )
 
         // The loading screen until the picture comes, and over the paused picture while it stalls.
@@ -428,15 +497,15 @@ fun TvPlayer(
             )
         }
 
-        // Scrims run edge to edge (no box with an edge to see): 320 dp at the foot to 72% black,
-        // 200 dp at the top to 60%, so the words over bright pictures hold their contrast.
+        // Scrims run edge to edge (no box with an edge to see), so the words over bright pictures hold their
+        // contrast; the foot's top follows an open strip (section 5, scrim).
         AnimatedVisibility(
             visible = showControls,
             modifier = Modifier.align(Alignment.BottomCenter),
             enter = fadeIn(),
             exit = fadeOut(),
         ) {
-            Scrim(top = false, height = 380.dp, peak = 0.85f)
+            Scrim(top = false, height = footScrim(controlsHeight + stripCover, 300.dp), peak = 0.85f)
         }
         AnimatedVisibility(visible = ((osd && !ended) || !live) && !opening, enter = fadeIn(), exit = fadeOut()) {
             Box(Modifier.fillMaxSize()) {
@@ -450,13 +519,6 @@ fun TvPlayer(
                 EndsAt(controller, Modifier.align(Alignment.TopEnd).padding(end = safe.side, top = 70.dp))
             }
         }
-
-        // Not recorded on Trakt: said under the title block once per play, for a few seconds.
-        TraktWarning(
-            controller.trakt,
-            controller.traktNoticeAt,
-            Modifier.align(Alignment.TopStart).padding(start = safe.side, top = safe.top + 150.dp),
-        )
 
         // While the loading screen shows, it says the status under the mark.
         val status = controller.status.takeUnless { opening || stalled }
@@ -506,10 +568,14 @@ fun TvPlayer(
                 scrub = scrub,
                 audioAction = audioAction,
                 subtitlesAction = subtitlesAction,
-                onAudio = { panel = Panel.Audio },
-                onSubtitles = { panel = Panel.Subtitles },
+                stripFirst = stripFirst,
+                strip = strip,
+                onStrip = ::openStrip,
                 onVersions = onVersions,
                 onEpisodes = onEpisodes,
+                onNext = next?.let { { onNext(it, controller.bingeGroup) } },
+                adjusting = adjusting,
+                onAdjust = { adjusting = it },
                 modifier =
                     Modifier
                         .onSizeChanged { if (it.height > 0) controlsHeight = with(density) { it.height.toDp() } }
@@ -517,38 +583,68 @@ fun TvPlayer(
             )
         }
 
-        when (panel) {
-            Panel.Audio -> {
-                TrackPanel(
-                    title = "Audio",
-                    rows = controller.audio,
-                    onPick = {
-                        controller.selectAudio(it)
-                        closePanel()
-                    },
-                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = safe.side, bottom = 300.dp),
-                )
-            }
+        // The strips over the bar's ends (section 5); Down from one goes back to its pill.
+        if (showControls) {
+            val placed =
+                Modifier
+                    .padding(start = safe.side, end = safe.side, bottom = controlsHeight + stripLift())
+                    .onSizeChanged { stripHeight = with(density) { it.height.toDp() } }
+            when (strip) {
+                Strip.Subtitles -> {
+                    SubtitleStrip(
+                        controller,
+                        style = style,
+                        onStyle = {
+                            style = it
+                            wake++
+                        },
+                        onMore = {
+                            dropStrip()
+                            picker = true
+                        },
+                        onClose = ::closeStrip,
+                        onSize = onSubtitleSize,
+                        onPosition = onSubtitlePosition,
+                        onBackground = onSubtitleBackground,
+                        modifier = Modifier.align(Alignment.BottomEnd).then(placed),
+                        first = stripFirst,
+                        opener = subtitlesAction,
+                        adjusting = adjusting,
+                        onAdjust = { adjusting = it },
+                    )
+                }
 
-            Panel.Subtitles -> {
-                TvSubtitlePicker(
-                    rows = controller.text,
-                    onPick = controller::selectText,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(end = safe.side, top = 96.dp),
-                    note = controller.subtitlePanelNote,
-                    timing = controller.subtitleDelayMs.takeIf { controller.subtitleTimeable },
-                    onDelay = controller::setSubtitleDelay,
-                    textSize = controller.subtitleSize,
-                    onSize = onSubtitleSize,
-                    second = controller.secondLine(onSubtitleLayout, onSecondOnPause, onSpokenKept),
-                    secondTab = controller.secondTab,
-                    onTab = { controller.secondTab = it },
-                )
-            }
+                Strip.Audio -> {
+                    AudioStrip(
+                        controller,
+                        onVersions = onVersions,
+                        onClose = ::closeStrip,
+                        modifier = Modifier.align(Alignment.BottomStart).then(placed),
+                        first = stripFirst,
+                        opener = audioAction,
+                    )
+                }
 
-            null -> {
-                Unit
+                null -> {
+                    Unit
+                }
             }
+        }
+
+        if (picker) {
+            TvSubtitlePicker(
+                rows = controller.text,
+                onPick = controller::selectText,
+                modifier = Modifier.align(Alignment.TopEnd).padding(end = safe.side, top = 96.dp),
+                note = controller.subtitlePanelNote,
+                timing = controller.quickShift,
+                onDelay = controller::setSubtitleDelay,
+                textSize = controller.subtitleSize,
+                onSize = onSubtitleSize,
+                second = controller.secondLine(onSubtitleLayout, onSecondOnPause, onSpokenKept),
+                secondTab = controller.secondTab,
+                onTab = { controller.secondTab = it },
+            )
         }
 
         if (showEnd) {
@@ -576,11 +672,12 @@ fun TvPlayer(
                     modifier =
                         Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(end = safe.side, bottom = if (showControls) 330.dp else 96.dp),
+                            .padding(end = safe.side, bottom = if (showControls) controlsHeight + CARD_GAP else 96.dp),
                 )
             }
         }
 
+        // Over the bar as it is laid out (it shows while the card does).
         if (showNext && !ended && next != null) {
             UpNextCard(
                 next = next,
@@ -588,7 +685,10 @@ fun TvPlayer(
                 onPlay = { onNext(next, controller.bingeGroup) },
                 onCancel = { upNextCancelled = true },
                 focus = nextFocus,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(end = safe.side, bottom = 330.dp),
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = safe.side, bottom = controlsHeight + CARD_GAP),
             )
         }
     }
@@ -604,7 +704,6 @@ private fun Header(
         controller.episode?.let {
             MqText(it, role = TextRole.Body, modifier = Modifier.padding(top = 8.dp))
         }
-        TraktMark(controller.trakt, Modifier.padding(top = 8.dp))
     }
 }
 
@@ -625,6 +724,13 @@ private fun EndsAt(
     )
 }
 
+/**
+ * The bar on TV (plans/player-bar.md, D16 and D19): the position bar, then one row of three columns, the pick's
+ * `1fr auto 1fr`: Audio, Speed and Versions start the left one, the transport takes the middle, Subtitles, the quick
+ * shift, Episodes and Next end the right one. A side whose pills do not fit its column with their words shows them as
+ * icons ([sideFit]), and then the shift as chevrons. Up from the row goes to the position bar, or into an open strip
+ * from the pills under it; Down from the position bar goes to Play (section 6).
+ */
 @Composable
 private fun Controls(
     controller: PlaybackController,
@@ -632,17 +738,27 @@ private fun Controls(
     scrub: FocusRequester,
     audioAction: FocusRequester,
     subtitlesAction: FocusRequester,
-    onAudio: () -> Unit,
-    onSubtitles: () -> Unit,
+    stripFirst: FocusRequester,
+    strip: Strip?,
+    onStrip: (Strip) -> Unit,
     onVersions: () -> Unit,
     onEpisodes: (() -> Unit)?,
+    onNext: (() -> Unit)?,
+    adjusting: Boolean,
+    onAdjust: (Boolean) -> Unit,
     modifier: Modifier,
 ) {
     var scrubTarget by remember { mutableStateOf<Long?>(null) }
     var scrubFocused by remember { mutableStateOf(false) }
     val playing = controller.offersPause
-    Box(modifier.fillMaxWidth()) {
-        Column(Modifier.fillMaxWidth()) {
+    val names = StreamChoiceCopy.Bar.Names
+
+    // Up: into the strip open over this side, else to the position bar.
+    fun under(side: Strip) = Modifier.focusProperties { up = if (strip == side) stripFirst else scrub }
+    val upLeft = under(Strip.Audio)
+    val upRight = under(Strip.Subtitles)
+    Box(modifier.fillMaxWidth().testTag(TV_BAR_TAG)) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(15.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(26.dp), verticalAlignment = Alignment.CenterVertically) {
                 MqText(clockText(scrubTarget ?: controller.positionMs), role = TextRole.Callout)
                 Scrubber(
@@ -656,7 +772,10 @@ private fun Controls(
                         Modifier
                             .weight(1f)
                             .focusRequester(scrub)
-                            .marqueeFocus(8.dp, scale = 1f)
+                            .focusProperties {
+                                down = play
+                                if (strip != null) up = stripFirst
+                            }.marqueeFocus(8.dp, scale = 1f)
                             .onFocusChanged {
                                 scrubFocused = it.isFocused
                                 if (!it.isFocused) scrubTarget = null
@@ -669,66 +788,163 @@ private fun Controls(
                     role = TextRole.Callout,
                 )
             }
-            Spacer(Modifier.height(34.dp))
-            // Three regions: the transport in the middle and the actions in the right one, so five
-            // actions with long track names never cover Forward or Play. Actions that do not fit
-            // their region scroll, and focus brings each into view.
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Spacer(Modifier.weight(1f))
+            val widths = rememberBarWidths()
+            val subtitles = controller.subtitlesDetail()
+            val audio = controller.audioDetail()
+            val speed = speedText(controller.speed)
+            val version = controller.versionLabel
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                // Each side's column: half of what the transport and the two gaps leave (D16).
+                val column = (maxWidth - TRANSPORT_WIDTH - COLUMN_GAP * 2) / 2
+                val pill = widths.pill
+                val left =
+                    sideFit(
+                        column,
+                        words =
+                            widths.pill(names.AUDIO, audio) + widths.pill(names.SPEED, speed) +
+                                widths.pill(names.VERSIONS, version) + PILL_GAP * 2,
+                        icons = pill * 3 + PILL_GAP * 2,
+                    )
+                val rightPills = 1 + (if (onEpisodes != null) 2 else 0)
+                val right =
+                    sideFit(
+                        column,
+                        words =
+                            widths.pill(names.SUBTITLES, subtitles) +
+                                (if (onEpisodes != null) widths.pill(names.EPISODES, null) else 0.dp) +
+                                (if (onEpisodes != null) widths.pill(StreamChoiceCopy.Bar.NEXT, null) else 0.dp) +
+                                PILL_GAP * rightPills,
+                        icons = pill * rightPills + PILL_GAP * rightPills,
+                        shiftWords = widths.shiftWords,
+                        shiftChevrons = widths.shiftChevrons,
+                    )
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(26.dp),
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(COLUMN_GAP),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    RoundButton(Icons.RotateCcw, "Back 10 seconds", { controller.seekBy(-SEEK_MS) }, badge = "10")
-                    RoundButton(
-                        icon = if (playing) PauseFilled else PlayFilled,
-                        label = if (playing) "Pause" else "Play",
-                        onClick = controller::togglePlay,
-                        main = true,
-                        focusRequester = play,
-                    )
-                    RoundButton(Icons.RotateCw, "Forward 10 seconds", { controller.seekBy(SEEK_MS) }, badge = "10")
-                }
-                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
                     Row(
-                        Modifier
-                            .horizontalScroll(rememberScrollState())
-                            // Room for the focus halos at the scrolling edges.
-                            .padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(PILL_GAP),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        // Audio, Subtitles, Versions, Speed, then Episodes: the design audit's order for every platform.
+                        // Audio once the file's tracks are known, as before.
                         if (controller.audio.isNotEmpty()) {
                             ActionButton(
-                                Icons.Volume2,
-                                "Audio",
-                                controller.audioDetail(),
-                                onAudio,
+                                Icons.AudioLines,
+                                names.AUDIO,
+                                audio,
+                                { onStrip(Strip.Audio) },
+                                upLeft,
                                 focusRequester = audioAction,
+                                words = left.words,
+                                expanded = strip == Strip.Audio,
                             )
                         }
                         ActionButton(
+                            Icons.Gauge,
+                            names.SPEED,
+                            speed,
+                            { controller.changeSpeed(nextSpeed(controller.speed)) },
+                            upLeft,
+                            words = left.words,
+                        )
+                        ActionButton(Icons.Layers, names.VERSIONS, version, onVersions, upLeft, words = left.words)
+                    }
+                    Row(
+                        Modifier.width(TRANSPORT_WIDTH),
+                        horizontalArrangement = Arrangement.spacedBy(TRANSPORT_GAP, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val toScrub = Modifier.focusProperties { up = scrub }
+                        RoundButton(
+                            Icons.RotateCcw,
+                            "Back 10 seconds",
+                            { controller.seekBy(-SEEK_MS) },
+                            toScrub,
+                            badge = "10",
+                            diameter = pill,
+                        )
+                        RoundButton(
+                            icon = if (playing) PauseFilled else PlayFilled,
+                            label = if (playing) "Pause" else "Play",
+                            onClick = controller::togglePlay,
+                            modifier = toScrub,
+                            main = true,
+                            focusRequester = play,
+                            diameter = PLAY,
+                        )
+                        RoundButton(
+                            Icons.RotateCw,
+                            "Forward 10 seconds",
+                            { controller.seekBy(SEEK_MS) },
+                            toScrub,
+                            badge = "10",
+                            diameter = pill,
+                        )
+                    }
+                    Row(
+                        Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(PILL_GAP, Alignment.End),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        ActionButton(
                             Icons.Captions,
-                            "Subtitles",
-                            controller.subtitlesDetail(),
-                            onSubtitles,
+                            names.SUBTITLES,
+                            subtitles,
+                            { onStrip(Strip.Subtitles) },
+                            upRight,
                             focusRequester = subtitlesAction,
                             busy = controller.subtitlesStillListing(),
+                            words = right.words,
+                            expanded = strip == Strip.Subtitles,
                         )
-                        ActionButton(Icons.Layers, "Versions", controller.versionLabel, onVersions)
-                        ActionButton(
-                            Icons.Gauge,
-                            "Speed",
-                            speedText(controller.speed),
-                            { controller.changeSpeed(nextSpeed(controller.speed)) },
-                        )
-                        onEpisodes?.let { ActionButton(Icons.ListVideo, "Episodes", null, it) }
+                        // Only while the subtitle on can be timed (D4): the value is the one focus stop.
+                        controller.quickShift?.let { delay ->
+                            QuickShift(
+                                delay,
+                                controller::setSubtitleDelay,
+                                words = right.shiftWords,
+                                valueFocus = remember { FocusRequester() },
+                                adjusting = adjusting,
+                                onAdjust = onAdjust,
+                                valueModifier = upRight,
+                            )
+                        }
+                        onEpisodes?.let {
+                            ActionButton(Icons.ListVideo, names.EPISODES, null, it, upRight, words = right.words)
+                        }
+                        val next = controller.next
+                        if (next != null && onNext != null) {
+                            ActionButton(
+                                Icons.SkipForward,
+                                StreamChoiceCopy.Bar.NEXT,
+                                null,
+                                onNext,
+                                upRight,
+                                words = right.words,
+                                spoken = nextName(next),
+                            )
+                        }
                     }
                 }
             }
         }
     }
 }
+
+/** The bar on TV, for tests. */
+internal const val TV_BAR_TAG = "tv-player-bar"
+
+/** The TV bar's sizes on the 1920-point canvas: the picked frame's at 1.5 times (D19). */
+private val PLAY = 84.dp
+private val TRANSPORT_GAP = 21.dp
+private val TRANSPORT_WIDTH = 72.dp * 2 + PLAY + TRANSPORT_GAP * 2
+private val PILL_GAP = 15.dp
+private val COLUMN_GAP = 24.dp
+
+/** Between the bar and the Skip button or the Up Next card over it. */
+private val CARD_GAP = 24.dp
 
 /** Left and Right while the controls are hidden: ten seconds back or ahead. */
 internal fun hiddenSeekMs(key: Key): Long? =

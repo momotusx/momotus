@@ -109,6 +109,8 @@ import app.marquee.design.focusClickable
 import app.marquee.design.focusPalette
 import app.marquee.design.focusSoon
 import app.marquee.design.marqueeFocus
+import app.marquee.player.POSITIONS
+import app.marquee.player.positionWords
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -1104,6 +1106,9 @@ private fun SubtitlesAudio(
                     })
                 }
             }
+            SubtitlePositionRow(prefs.subtitlePosition) {
+                set("Changing the subtitle position", "subtitlePosition", JsonPrimitive(it))
+            }
             MqText(StreamChoiceCopy.AUDIO, role = TextRole.Headline, weight = FontWeight.Bold)
             Languages(prefs.streams.languages, load, {
                 set("Changing the audio languages", "streams", buildJsonObject { put("languages", json(it)) })
@@ -1484,6 +1489,30 @@ private fun About() {
 
 /** TMDB's attribution line (its terms ask for it with the logo). */
 internal const val TMDB_CREDIT = "This product uses the TMDB API but is not endorsed or certified by TMDB."
+
+/**
+ * Settings > Subtitles and audio's Position, beside Subtitle size (the owner's 2026-10-31 note; plans/player-bar.md
+ * section 4): the profile's subtitle position, the same value the player's Style row steps, "Default" being today's.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun SubtitlePositionRow(
+    position: Int,
+    onPosition: (Int) -> Unit,
+) {
+    MqText(SUBTITLE_POSITION, role = TextRole.Headline, weight = FontWeight.Bold)
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
+    ) {
+        for (at in POSITIONS) {
+            Chip(positionWords(at), selected = position == at, onClick = { if (position != at) onPosition(at) })
+        }
+    }
+}
+
+/** The Position row's heading, as "Subtitle size" names its neighbour. */
+internal const val SUBTITLE_POSITION = "Subtitle position"
 
 /** The subtitle sizes Settings offers, in order (the profile's, on every device). */
 internal val SUBTITLE_SIZES =

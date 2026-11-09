@@ -4,6 +4,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -19,6 +20,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
@@ -134,6 +136,31 @@ class SubtitlesAudioTest {
         compose.onNodeWithText("Off").performClick()
         compose.runOnIdle { assertEquals(listOf(LanguagePicks.SPOKEN, "es", null), picks) }
         assertFalse(shows("Layout"))
+    }
+
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-xxhdpi")
+    fun `Position sits by Subtitle size, Default chosen, and a pick writes the profile's position`() {
+        var position by mutableStateOf(8)
+        val written = mutableListOf<Int>()
+        compose.setContent {
+            MarqueeTheme(Form.Phone) {
+                Column {
+                    SubtitlePositionRow(position) {
+                        written += it
+                        position = it
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("Subtitle position").assertExists()
+        compose.onNodeWithText("Default").assertIsSelected()
+        for (words in listOf("5%", "12%", "16%", "20%", "25%")) compose.onNodeWithText(words).assertExists()
+        compose.onNodeWithText("20%").performClick()
+        compose.onNodeWithText("20%").assertIsSelected()
+        // The chosen one again writes nothing.
+        compose.onNodeWithText("20%").performClick()
+        compose.runOnIdle { assertEquals(listOf(20), written) }
     }
 
     @Test

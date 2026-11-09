@@ -194,6 +194,27 @@ class CueFrameTest {
     }
 
     @Test
+    fun `the profile's position puts the foot 5 to 25 percent of the picture over its foot, 8 as before`() {
+        // A 2.39:1 film on a 960 by 540 screen: the picture 401.7 tall, its foot at 470.8.
+        val picture = 960f / 2.39f
+        val pictureFoot = (540f + picture) / 2
+        for (at in listOf(5, 8, 25)) {
+            assertEquals(pictureFoot - picture * at / 100f, cueFoot(540f, 960f, 2.39f, null, at), 1e-3f, "$at%")
+        }
+        assertEquals(cueFoot(540f, 960f, 2.39f, null), cueFoot(540f, 960f, 2.39f, null, DEFAULT_POSITION), 1e-3f)
+        // A full-height picture at 5%: the screen's 5% line, never lower.
+        assertEquals(540f * 0.95f, cueFoot(540f, 960f, 16f / 9, null, 5), 1e-3f)
+    }
+
+    @Test
+    fun `with the controls up a higher position lifts the foot over the bar by what it adds over 8 percent`() {
+        // Lifted to 472 (just over the bar or an open strip): 8 keeps it, 25 adds 17% of the picture, 5 adds nothing.
+        assertEquals(472f, cueFoot(540f, 960f, 16f / 9, lifted = 472f, position = 8), 1e-3f)
+        assertEquals(472f, cueFoot(540f, 960f, 16f / 9, lifted = 472f, position = 5), 1e-3f)
+        assertEquals(472f - 540f * 0.17f, cueFoot(540f, 960f, 16f / 9, lifted = 472f, position = 25), 1e-3f)
+    }
+
+    @Test
     fun `with the controls up the foot is the higher of the two`() {
         // Controls 60 px tall and the 8 px gap: the lifted foot 472, higher than the plain foot of a 16:9 picture.
         assertEquals(472f, cueFoot(540f, 960f, 16f / 9, lifted = 472f), 1e-3f)

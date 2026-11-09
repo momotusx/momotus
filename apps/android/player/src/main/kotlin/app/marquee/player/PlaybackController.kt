@@ -4,6 +4,7 @@ import android.os.SystemClock
 import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -34,6 +35,7 @@ import app.marquee.core.model.PlaybackPhase
 import app.marquee.core.model.PlaybackSnapshot
 import app.marquee.core.model.Segment
 import app.marquee.core.model.StartProgress
+import app.marquee.core.model.SubtitleBackground
 import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.SubtitleNote
 import app.marquee.core.model.SubtitleSize
@@ -264,6 +266,12 @@ class PlaybackController(
 
     /** How big subtitles show, from the profile's settings; the screen sets it. */
     var subtitleSize: SubtitleSize by mutableStateOf(SubtitleSize.Medium)
+
+    /** Where plain subtitles sit, percent of the picture over its foot (5 to 25), from the profile; the screen sets it. */
+    var subtitlePosition by mutableIntStateOf(DEFAULT_POSITION)
+
+    /** What keeps subtitle text readable, from the profile; the screen sets it. */
+    var subtitleBackground: SubtitleBackground by mutableStateOf(SubtitleBackground.Box)
 
     /**
      * The chosen track's subtitle delay (positive: later), from the subtitle menu's Timing row. Each track keeps its
@@ -507,8 +515,13 @@ class PlaybackController(
         segments = s.segments
         nextAtMs = s.nextAtMs
         trakt = s.trakt
-        val warns = s.trakt != TraktPlayback.On && TraktCopy.player(s.trakt) != null
-        traktNoticeAt = traktNoticeSince(traktNoticeAt, warns, SystemClock.elapsedRealtime())
+        val noticed = traktNoticeAt
+        traktNoticeAt = traktNoticeSince(noticed, s.trakt, SystemClock.elapsedRealtime())
+        // Said once per play, in the notice slot with priority, so the subtitle lines of these same first snapshots
+        // wait for it (plans/player-bar.md 5.1).
+        if (noticed == null && traktNoticeAt != null) {
+            TraktCopy.player(TraktPlayback.Reconnect)?.let { announce(it, TRAKT_NOTICE_MS, priority = true) }
+        }
         offer = s.offer
         empty = s.empty.takeIf { s.phase == PlaybackPhase.Failed }
         chooseAnother = s.chooseAnother
@@ -698,16 +711,42 @@ class PlaybackController(
             }
     }
 
-    /** A line for a few seconds (a source change), shown over the picture. */
-    private fun announce(line: String) {
+    /**
+     * A line for [ms] (a source change, a subtitle note), shown over the picture in the one notice slot, replacing what
+     * shows. A [priority] line (Trakt's) holds the slot for its whole time (plans/player-bar.md 5.1): a line that comes
+     * meanwhile waits, and a line it replaced comes back; either then shows for its own full time. One line waits, the
+     * newest.
+     */
+    private fun announce(
+        line: String,
+        ms: Long = NOTICE_MS,
+        priority: Boolean = false,
+    ) {
+        if (noticeHeld && !priority) {
+            waitingNotice = line
+            return
+        }
+        if (priority) notice?.let { waitingNotice = it }
         notice = line
+        noticeHeld = priority
         noticeJob?.cancel()
         noticeJob =
             scope.launch {
-                delay(NOTICE_MS)
+                delay(ms)
                 notice = null
+                noticeHeld = false
+                waitingNotice?.let {
+                    waitingNotice = null
+                    announce(it)
+                }
             }
     }
+
+    /** The notice slot holds a priority line ([announce]). */
+    private var noticeHeld = false
+
+    /** The line that waits for the priority line to end. */
+    private var waitingNotice: String? = null
 
     // The player
 
@@ -1293,6 +1332,12 @@ class PlaybackController(
      * Media3's own renderer draws without a delay. The Timing row shows only then.
      */
     val subtitleTimeable: Boolean get() = subtitleOn && pick?.kind !in CAPTIONS
+
+    /** The bar's quick shift: the chosen track's delay while it can be timed ([subtitleTimeable], D4), else null. */
+    val quickShift: Long? get() = subtitleDelayMs.takeIf { subtitleTimeable }
+
+    /** The chosen subtitle is pictures (PGS, DVB, DVD): the strip's Style has nothing for it (plans/player-bar.md 7). */
+    val subtitlePicture: Boolean get() = subtitleOn && pick?.kind in PICTURES
 
     /**
      * Another page is over the player (Versions, an install link): it stays paused, whatever asks it to

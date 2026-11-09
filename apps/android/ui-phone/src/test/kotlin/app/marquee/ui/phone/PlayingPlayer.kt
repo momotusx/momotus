@@ -3,6 +3,7 @@ package app.marquee.ui.phone
 import android.os.Looper
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
+import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.text.Cue
@@ -43,6 +44,7 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
                 .setNewlyRenderedFirstFrame(firstFrame)
                 .setCurrentCues(CueGroup(cues, at * 1000))
                 .setVideoSize(if (ready) pictureSize else VideoSize.UNKNOWN)
+                .setTrackSelectionParameters(selection)
         if (!ready && prepared) {
             return state
                 .setPlaylist(listOf(MediaItemData.Builder("film").build()))
@@ -114,6 +116,14 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
 
     override fun handlePrepare(): ListenableFuture<*> {
         prepared = true
+        return Futures.immediateVoidFuture()
+    }
+
+    /** What the player was told to select (a subtitle turned on or off). */
+    private var selection = TrackSelectionParameters.DEFAULT
+
+    override fun handleSetTrackSelectionParameters(parameters: TrackSelectionParameters): ListenableFuture<*> {
+        selection = parameters
         return Futures.immediateVoidFuture()
     }
 

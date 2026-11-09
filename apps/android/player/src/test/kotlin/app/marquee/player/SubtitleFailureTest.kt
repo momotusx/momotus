@@ -19,6 +19,7 @@ import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlaybackException
 import app.marquee.core.StreamChoiceCopy
+import app.marquee.core.TraktCopy
 import app.marquee.core.client.CoreClient
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreLog
@@ -120,8 +121,10 @@ class SubtitleFailureTest {
         delays: Map<String, Int> = emptyMap(),
         /** A track's language by its address; Turkish otherwise. */
         langs: Map<String, String> = emptyMap(),
+        /** Trakt's side of the play (`PlaybackSnapshot.trakt`). */
+        trakt: String = "off",
     ) = """{"phase":"$phase","url":"$url","key":"k1","attempt":1,"manifest":false,"subtitlesPending":$pending,""" +
-        """"trakt":"off","subtitleNotes":$notes,$extra"subtitles":[""" +
+        """"trakt":"$trakt","subtitleNotes":$notes,$extra"subtitles":[""" +
         subtitles.joinToString(",") {
             """{"url":"$it","lang":"${langs[it] ?: "tur"}",""" +
                 """"source":"${if (it == subtitle) "SubSense" else "OpenSubtitles v3"}",""" +
@@ -433,6 +436,77 @@ class SubtitleFailureTest {
         assertEquals(emptyList(), chosen(), "the start subtitle is not the viewer's pick")
         assertEquals(1, player.items.size)
         assertTrue(failOvers().isEmpty())
+        controller.release()
+    }
+
+    /**
+     * The shared notice slot (plans/player-bar.md 5.1): `reconnect` and a start-subtitle failure on the same first
+     * snapshot. The Trakt words hold the slot for their full 4 s, then the subtitle line shows for its own 4 s: both
+     * are seen, Trakt first.
+     */
+    @Test
+    fun `the Trakt reconnect line holds the notice slot for 4 s, then the subtitle line shows for its own time`() {
+        val failed = """{"source":"SubSense","problem":"trackFailed"}"""
+        val (_, controller) =
+            open(
+                snapshot(
+                    subtitles = emptyList(),
+                    notes = "[$failed]",
+                    extra = "\"startSubtitleFailed\":true,",
+                    trakt = "reconnect",
+                ),
+            )
+        until("the Trakt line shows first") { controller.notice == TraktCopy.PLAYER_RECONNECT }
+        runFor(TRAKT_NOTICE_MS - 1_000)
+        assertEquals(TraktCopy.PLAYER_RECONNECT, controller.notice, "the subtitle line took the Trakt line's place")
+        until("the subtitle line follows") { controller.notice == StreamChoiceCopy.SUBTITLES_FAILED }
+        runFor(3_000)
+        assertEquals(
+            StreamChoiceCopy.SUBTITLES_FAILED,
+            controller.notice,
+            "the subtitle line did not get its full time",
+        )
+        until("then the slot empties") { controller.notice == null }
+        controller.release()
+    }
+
+    @Test
+    fun `a subtitle line already up gives way to the Trakt line at once and comes back after it`() {
+        val failed = """{"source":"SubSense","problem":"trackFailed"}"""
+        val failing =
+            snapshot(subtitles = emptyList(), notes = "[$failed]", extra = "\"startSubtitleFailed\":true,")
+        val (_, controller) = open(failing)
+        until("the subtitle line is up") { controller.notice == StreamChoiceCopy.SUBTITLES_FAILED }
+        push(
+            snapshot(
+                subtitles = emptyList(),
+                notes = "[$failed]",
+                extra = "\"startSubtitleFailed\":true,",
+                trakt = "reconnect",
+            ),
+        )
+        until("the Trakt line takes the slot") { controller.notice == TraktCopy.PLAYER_RECONNECT }
+        runFor(TRAKT_NOTICE_MS - 1_000)
+        assertEquals(TraktCopy.PLAYER_RECONNECT, controller.notice)
+        until("the subtitle line comes back") { controller.notice == StreamChoiceCopy.SUBTITLES_FAILED }
+        runFor(3_000)
+        assertEquals(StreamChoiceCopy.SUBTITLES_FAILED, controller.notice, "it came back for less than its full time")
+        // Once per play: a later snapshot with reconnect says nothing again.
+        until("the slot empties") { controller.notice == null }
+        push(snapshot(subtitles = emptyList(), extra = "\"startSubtitleFailed\":true,", trakt = "reconnect"))
+        runFor(500)
+        assertEquals(null, controller.notice)
+        controller.release()
+    }
+
+    @Test
+    fun `unmapped and this device off say nothing in the player`() {
+        val (_, controller) = open(snapshot(trakt = "unmapped"))
+        for (state in listOf("unmapped", "thisDeviceOff", "on", "off")) {
+            push(snapshot(trakt = state))
+            runFor(300)
+            assertEquals(null, controller.notice, "$state said something")
+        }
         controller.release()
     }
 

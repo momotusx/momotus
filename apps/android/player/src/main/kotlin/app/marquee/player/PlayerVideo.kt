@@ -40,6 +40,8 @@ import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
 import androidx.media3.ui.compose.ContentFrame
 import androidx.media3.ui.compose.SURFACE_TYPE_SURFACE_VIEW
+import app.marquee.core.StreamChoiceCopy
+import app.marquee.core.model.SubtitleBackground
 import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.SubtitleSize
 import kotlinx.coroutines.delay
@@ -83,6 +85,10 @@ fun PlayerVideo(
     secondOnPause: Boolean = false,
     /** While the controls show: the foot of the bar at the top, which Split's second line hangs under. */
     subtitleTop: Dp = 0.dp,
+    /** The profile's position: the plain cues' foot, percent of the picture over its foot ([cueFoot]). */
+    subtitlePosition: Int = DEFAULT_POSITION,
+    /** The profile's background, unless the device's caption style is on ([captionStyle]). */
+    subtitleBackground: SubtitleBackground = SubtitleBackground.Box,
 ) {
     BoxWithConstraints(modifier.background(Color.Black)) {
         ContentFrame(
@@ -137,8 +143,9 @@ fun PlayerVideo(
         }
         // The system caption size (as setUserDefaultTextSize reads it) times the profile's size.
         val captions = rememberCaptions()
+        val style = captionStyle(captions.system, subtitleBackground)
         val text = SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * captions.scale * subtitleScale(subtitleSize)
-        val box = boxColor(captions.style)
+        val box = boxColor(style)
         val height = if (constraints.hasBoundedHeight) constraints.maxHeight.toFloat() else 0f
         val width = if (constraints.hasBoundedWidth) constraints.maxWidth.toFloat() else 0f
         val top =
@@ -170,6 +177,7 @@ fun PlayerVideo(
                                 width,
                                 videoRatio,
                                 lifted = (height - subtitleLift.toPx() - gap).takeIf { subtitleLift > 0.dp },
+                                position = subtitlePosition,
                             ),
                         ceiling = if (subtitleCeiling > 0.dp) (subtitleCeiling + CUE_CLEARANCE).toPx() else 0f,
                         text = text,
@@ -179,7 +187,7 @@ fun PlayerVideo(
                 }
             }
         // The view keeps the whole picture area, so the cues keep their size and a picture cue (PGS) its shape.
-        Subtitles(drawn, frame, captions.style, width, height, Modifier.fillMaxSize().testTag(SUBTITLES_TAG))
+        Subtitles(drawn, frame, style, width, height, Modifier.fillMaxSize().testTag(SUBTITLES_TAG))
     }
 }
 
@@ -233,21 +241,33 @@ fun cueFrame(
 }
 
 /**
- * The foot of the cues set from the foot, px from the top: [CUE_RISE] of the picture's height over the picture's foot
- * (the picture fitted to the view at [ratio]; the view's own height before the ratio is known), and with the controls
- * up the higher of that and [lifted] (just over them). On a landscape screen that foot is always at least 8% of the
- * screen over its foot, so the 5% title-safe line never binds; the black band under wide video never takes the lines.
+ * The foot of the cues set from the foot, px from the top: [position] percent of the picture's height over the
+ * picture's foot (the picture fitted to the view at [ratio]; the view's own height before the ratio is known), never
+ * under the screen's 5% title-safe line. With the controls up it is the higher of that and [lifted] (just over them)
+ * raised by what the position adds over the default 8%, so a change shows while the strip is open (plans/player-bar.md
+ * section 5). The black band under wide video never takes the lines.
  */
 internal fun cueFoot(
     height: Float,
     width: Float,
     ratio: Float,
     lifted: Float?,
+    position: Int = DEFAULT_POSITION,
 ): Float {
     val picture = if (ratio > 0f) min(height, width / ratio) else height
-    val plain = (height + picture) / 2 - picture * CUE_RISE
-    return lifted?.let { min(plain, it) } ?: plain
+    val plain = min((height + picture) / 2 - picture * position / 100f, height * (1 - SAFE_LINE))
+    return lifted?.let { min(plain, it - picture * max(0, position - DEFAULT_POSITION) / 100f) } ?: plain
 }
+
+/** The profile's default position, today's rule: the cues' foot 8% of the picture over its foot ([CUE_RISE]). */
+const val DEFAULT_POSITION = 8
+
+/** The positions the strip and Settings step through, percent of the picture (plans/player-bar.md D7). */
+val POSITIONS = listOf(5, DEFAULT_POSITION, 12, 16, 20, 25)
+
+/** "Default" for 8, else "12%". */
+fun positionWords(position: Int): String =
+    if (position == DEFAULT_POSITION) StreamChoiceCopy.Bar.DEFAULT else "$position%"
 
 /**
  * The cues drawn with a second line (plans/dual-subtitles.md 4, 6.2). Stacked and One box join every cue of the second
@@ -371,20 +391,45 @@ private fun signFoot(
 internal fun boxColor(style: CaptionStyleCompat): Int =
     if (AndroidColor.alpha(style.windowColor) > 0) style.windowColor else style.backgroundColor
 
-/** The system caption style and text size ([captionStyle], [captionScale]). */
+/** The system caption style while the device's captions are on, else null ([systemStyle]), and the text size ([captionScale]). */
 internal data class Captions(
-    val style: CaptionStyleCompat,
+    val system: CaptionStyleCompat?,
     val scale: Float,
 )
 
-internal fun captions(context: Context) = Captions(captionStyle(context), captionScale(context))
+internal fun captions(context: Context) = Captions(systemStyle(context), captionScale(context))
+
+/**
+ * The style cues draw in: the device's caption style while it is on, which outranks an app look (plans/player-bar.md
+ * D8); else the profile's [background]. Box is today's look (Media3's default: white on a black box); Outline and
+ * Shadow draw white with a black edge and no box.
+ */
+internal fun captionStyle(
+    system: CaptionStyleCompat?,
+    background: SubtitleBackground,
+): CaptionStyleCompat =
+    system ?: when (background) {
+        SubtitleBackground.Outline -> edged(CaptionStyleCompat.EDGE_TYPE_OUTLINE)
+        SubtitleBackground.Shadow -> edged(CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW)
+        SubtitleBackground.Box, SubtitleBackground.Unknown -> CaptionStyleCompat.DEFAULT
+    }
+
+private fun edged(edge: Int) =
+    CaptionStyleCompat(
+        AndroidColor.WHITE,
+        AndroidColor.TRANSPARENT,
+        AndroidColor.TRANSPARENT,
+        edge,
+        AndroidColor.BLACK,
+        null,
+    )
 
 /**
  * The system captions, followed while the player shows: a change in the system settings draws at once, not only
  * after the app restarts (the Pixel walk, 2026-11-01).
  */
 @Composable
-private fun rememberCaptions(): Captions {
+internal fun rememberCaptions(): Captions {
     val context = LocalContext.current
     var now by remember(context) { mutableStateOf(captions(context)) }
     DisposableEffect(context) {
@@ -412,14 +457,10 @@ internal fun followCaptions(
     return { manager.removeCaptioningChangeListener(listener) }
 }
 
-/** The system caption style, as [SubtitleView.setUserDefaultStyle] reads it: the default while captions are off. */
-private fun captionStyle(context: Context): CaptionStyleCompat {
+/** The system caption style, as [SubtitleView.setUserDefaultStyle] reads it, while captions are on; null while off. */
+private fun systemStyle(context: Context): CaptionStyleCompat? {
     val captions = context.getSystemService(CaptioningManager::class.java)
-    return if (captions?.isEnabled == true) {
-        CaptionStyleCompat.createFromCaptionStyle(captions.userStyle)
-    } else {
-        CaptionStyleCompat.DEFAULT
-    }
+    return if (captions?.isEnabled == true) CaptionStyleCompat.createFromCaptionStyle(captions.userStyle) else null
 }
 
 /**

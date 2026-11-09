@@ -127,6 +127,13 @@ class TvLoadingTest {
         return PlaybackView(client, scope, JsonObject(emptyMap())).also { it.open() }
     }
 
+    /** The full picker: Subtitles opens its strip, More languages the picker (plans/player-bar.md D5). */
+    private fun openPicker(subtitles: String = "Subtitles, Off, 2 languages") {
+        compose.onNodeWithContentDescription(subtitles, substring = true).performClick()
+        compose.onNodeWithText("More languages").performClick()
+        compose.waitForIdle()
+    }
+
     @After
     fun stop() {
         controller.release()
@@ -180,12 +187,11 @@ class TvLoadingTest {
     }
 
     @Test
-    fun `Subtitles opens the picker with the focus in it, and Back gives the focus back to Subtitles`() {
+    fun `More languages opens the picker with the focus in it, and Back gives the focus back to Subtitles`() {
         compose.setContent { MarqueeTheme(Form.Tv) { TvPlayer(controller, false, {}, null, { _, _ -> }, {}) } }
         compose.runOnIdle { player.open() }
         compose.waitUntil(10_000) { controller.stage == PlaybackController.Stage.Playing }
-        compose.onNodeWithContentDescription("Subtitles", substring = true).performClick()
-        compose.waitForIdle()
+        openPicker("Subtitles")
         compose.onNodeWithTag(SUBTITLE_PICKER_TAG).assertExists()
         // No subtitles here: Off, chosen, takes the focus.
         compose.onNodeWithContentDescription("Off").assertIsFocused()
@@ -206,8 +212,7 @@ class TvLoadingTest {
         }
         compose.runOnIdle { player.open() }
         compose.waitUntil(10_000) { controller.stage == PlaybackController.Stage.Playing }
-        compose.onNodeWithContentDescription("Subtitles, Off, 2 languages").performClick()
-        compose.waitForIdle()
+        openPicker()
         compose.onNodeWithContentDescription("Off").assertIsFocused()
         // The transport sits at the left under the picker: Left from Off and from a language goes nowhere.
         compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionLeft) }
@@ -264,8 +269,7 @@ class TvLoadingTest {
         }
         compose.runOnIdle { player.open() }
         compose.waitUntil(10_000) { controller.stage == PlaybackController.Stage.Playing }
-        compose.onNodeWithContentDescription("Subtitles, Off, 2 languages").performClick()
-        compose.waitForIdle()
+        openPicker()
         compose.onNode(isFocused()).performKeyInput { pressKey(Key.DirectionDown) }
         compose
             .onNodeWithContentDescription(

@@ -206,6 +206,7 @@ class PhoneSubtitleSheetTest {
         compose.runOnIdle { player.open() }
         compose.waitUntil(10_000) { controller.stage == PlaybackController.Stage.Playing }
         compose.onNodeWithContentDescription("Subtitles, Off, 2 languages").performClick()
+        compose.onNodeWithText("More languages").performClick()
         compose.onNodeWithContentDescription("Turkish options").performClick()
         compose.onNodeWithContentDescription("Back to languages").assertExists()
         compose.onNodeWithContentDescription("Turkish 1").assertExists()
@@ -294,7 +295,7 @@ class PhoneSubtitleSheetTest {
     }
 
     @Test
-    fun `Subtitles opens a full-height sheet at the right of the player, Back closes it`() {
+    fun `More languages opens a full-height sheet at the right of the player, Back closes it`() {
         compose.setContent {
             MarqueeTheme(
                 Form.Phone,
@@ -302,7 +303,9 @@ class PhoneSubtitleSheetTest {
         }
         compose.runOnIdle { player.open() }
         compose.waitUntil(10_000) { controller.stage == PlaybackController.Stage.Playing }
+        // Subtitles opens its strip; More languages there opens the full picker (plans/player-bar.md D5).
         compose.onNodeWithContentDescription("Subtitles", substring = true).performClick()
+        compose.onNodeWithText("More languages").performClick()
         val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
         val sheet = compose.onNodeWithTag(SUBTITLE_SHEET_TAG).fetchSemanticsNode().boundsInRoot
         val density = compose.activity.resources.displayMetrics.density

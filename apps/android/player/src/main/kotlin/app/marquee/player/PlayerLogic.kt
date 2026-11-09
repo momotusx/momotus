@@ -9,6 +9,7 @@ import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.Segment
 import app.marquee.core.model.SegmentKind
 import app.marquee.core.model.SubtitleTrack
+import app.marquee.core.model.TraktPlayback
 
 /** A position the core can store: both numbers are known and the position is inside the video. */
 data class ProgressReport(
@@ -42,20 +43,16 @@ fun progressReport(
 const val TRAKT_NOTICE_MS = 4_000L
 
 /**
- * When this play's Trakt notice first showed, or null before it ever did. Once set it is kept for the whole
- * play, so a pause, a seek, a resume or a later state never shows it again; Settings, Trakt keeps the state.
+ * When this play's Trakt notice first showed, or null before it ever did. Only `reconnect` starts it (plans/player-bar.md
+ * D9: the one state where watched progress silently stops); the other states show nothing in the player. Once set it
+ * is kept for the whole play, so a pause, a seek, a resume or a later state never shows it again; Settings, Trakt
+ * keeps the state.
  */
 fun traktNoticeSince(
     since: Long?,
-    warns: Boolean,
+    trakt: TraktPlayback?,
     nowMs: Long,
-): Long? = since ?: nowMs.takeIf { warns }
-
-/** Whether the notice shows at [nowMs]: only in its first [TRAKT_NOTICE_MS], then it fades out for good. */
-fun traktNoticeShows(
-    since: Long?,
-    nowMs: Long,
-): Boolean = since != null && nowMs - since in 0 until TRAKT_NOTICE_MS
+): Long? = since ?: nowMs.takeIf { trakt == TraktPlayback.Reconnect }
 
 /**
  * How far one D-pad seek press jumps. A held key grows the step as it repeats: 10 s for the first

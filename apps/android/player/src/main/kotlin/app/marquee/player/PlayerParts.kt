@@ -1,10 +1,6 @@
 package app.marquee.player
 
-import android.os.SystemClock
 import android.view.accessibility.AccessibilityManager
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,24 +18,19 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,10 +42,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -67,15 +55,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.stateDescription
@@ -85,7 +71,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
 import app.marquee.core.StreamChoiceCopy
-import app.marquee.core.TraktCopy
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
@@ -93,7 +78,6 @@ import app.marquee.core.model.OtherVersion
 import app.marquee.core.model.Segment
 import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.SubtitleSize
-import app.marquee.core.model.TraktPlayback
 import app.marquee.design.ButtonFocused
 import app.marquee.design.FocusInk
 import app.marquee.design.Form
@@ -194,62 +178,6 @@ fun Scrubber(
     }
 }
 
-/** The audio list: one row per track with its full name and what it is under it, the chosen one filled and checked. On a TV focus starts on the chosen row. */
-@Composable
-fun TrackPanel(
-    title: String,
-    rows: List<TrackChoice>,
-    onPick: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    /** Shows this row's focused look without focus (screenshots and tests), as [ActionButton]'s. */
-    forceFocus: String? = null,
-) {
-    val colors = Marquee.colors
-    val tv = Marquee.form == Form.Tv
-    val requesters = remember(rows.size) { List(rows.size) { FocusRequester() } }
-    val chosen = rows.indexOfFirst { it.selected }.coerceAtLeast(0)
-    // The list starts at the chosen row, so its node exists to take focus.
-    val state = rememberLazyListState(initialFirstVisibleItemIndex = (chosen - 1).coerceAtLeast(0))
-    if (tv) {
-        LaunchedEffect(Unit) {
-            withFrameNanos { }
-            withFrameNanos { }
-            runCatching { requesters.getOrNull(chosen)?.requestFocus() }
-        }
-    }
-    Column(
-        modifier
-            .then(if (tv) Modifier.width(640.dp) else Modifier)
-            .clip(RoundedCornerShape(Marquee.radius.l))
-            .background(colors.surface)
-            .border(2.dp, colors.line, RoundedCornerShape(Marquee.radius.l))
-            .padding(vertical = if (tv) 24.dp else 12.dp, horizontal = if (tv) 20.dp else 8.dp)
-            // The panel is its own pane for a screen reader, with its name.
-            .semantics { paneTitle = title },
-        verticalArrangement = Arrangement.spacedBy(Marquee.space.xs),
-    ) {
-        MqText(
-            title,
-            role = TextRole.Headline,
-            modifier = Modifier.padding(horizontal = 12.dp).semantics { heading() },
-            maxLines = 1,
-        )
-        LazyColumn(
-            Modifier.heightIn(max = if (tv) 520.dp else 230.dp),
-            state = state,
-            // Room for the focus ring and its halo, which the list would otherwise clip at both ends.
-            contentPadding = PaddingValues(vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            rows.forEachIndexed { index, row ->
-                item(key = row.id) {
-                    TrackRow(row, index, rows.lastIndex, requesters[index], onPick, forceFocus = row.id == forceFocus)
-                }
-            }
-        }
-    }
-}
-
 /**
  * The chosen track's subtitle timing, under a language's options, as Stremio's delay: minus and plus around the delay
  * ("+0.3 s"), a tenth of a second a press, faster while held ([DelayHold]); Reset, or a press on the delay itself,
@@ -266,7 +194,7 @@ fun TimingRow(
     val delay = rememberUpdatedState(delayMs)
     val set = rememberUpdatedState(onDelay)
     val scope = rememberCoroutineScope()
-    val hold = remember { DelayHold(scope, delay, set) }
+    val hold = remember { DelayHold(scope, delay, set, HOLD_START_MS + HOLD_EVERY_MS, HOLD_EVERY_MS, ::steppedDelay) }
     val reset = { if (delay.value != 0L) set.value(0L) }
     val resetFocus = remember { FocusRequester() }
     val valueFocus = remember { FocusRequester() }
@@ -277,7 +205,7 @@ fun TimingRow(
     ) {
         MqText("Timing", Modifier.weight(1f), role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
         if (tv) {
-            MqIcon(MINUS, tint = Marquee.colors.dim, size = 26.dp)
+            MqIcon(Icons.Minus, tint = Marquee.colors.dim, size = 26.dp)
             DelayValue(
                 delayMs,
                 reset,
@@ -289,7 +217,7 @@ fun TimingRow(
             )
             MqIcon(Icons.Plus, tint = Marquee.colors.dim, size = 26.dp)
         } else {
-            HoldButton(MINUS, "Minus 0.1 seconds", -1, hold)
+            HoldButton(Icons.Minus, "Minus 0.1 seconds", -1, hold)
             DelayValue(delayMs, reset)
             HoldButton(Icons.Plus, "Plus 0.1 seconds", 1, hold)
         }
@@ -308,14 +236,19 @@ fun TimingRow(
 }
 
 /**
- * Minus or plus held, or a TV's Left or Right on the delay, as stremio-web's: a release before the first repeat is one
- * press; held, it steps after [HOLD_START_MS] and every [HOLD_EVERY_MS] after that, faster as it goes ([steppedDelay]).
- * The hold counts its own time, so a slow frame does not speed it up.
+ * Minus or plus held, or a TV's Left or Right on the delay: a release before the first repeat is one press ([step]
+ * with no time held); held, it steps at [firstMs] and every [everyMs] after that, [step] told how long it was held so
+ * it can grow. The picker's is stremio-web's (first repeat at 350 ms, then every 100); the bar's quick shift's is
+ * plans/player-bar.md D2 (400, then 150). The hold counts its own time, so a slow frame does not speed it up, and a
+ * second press while held (a system key repeat) is ignored.
  */
-private class DelayHold(
+internal class DelayHold(
     private val scope: CoroutineScope,
     private val delayMs: State<Long>,
     private val onDelay: State<(Long) -> Unit>,
+    private val firstMs: Long,
+    private val everyMs: Long,
+    private val step: (delayMs: Long, direction: Int, heldMs: Long?) -> Long,
 ) {
     private var job: Job? = null
     private var direction = 0
@@ -327,17 +260,15 @@ private class DelayHold(
         repeated = false
         job =
             scope.launch {
-                // As stremio-web's Stepper: the repeat interval starts after the hold's wait, so the first tick
-                // comes one interval later.
-                delay(HOLD_START_MS + HOLD_EVERY_MS)
+                delay(firstMs)
                 repeated = true
                 var at = delayMs.value
-                var held = HOLD_START_MS + HOLD_EVERY_MS
+                var held = firstMs
                 while (true) {
-                    at = steppedDelay(at, direction, held)
+                    at = step(at, direction, held)
                     onDelay.value(at)
-                    delay(HOLD_EVERY_MS)
-                    held += HOLD_EVERY_MS
+                    delay(everyMs)
+                    held += everyMs
                 }
             }
     }
@@ -347,12 +278,12 @@ private class DelayHold(
         val held = job ?: return
         held.cancel()
         job = null
-        if (step && !repeated) onDelay.value(steppedDelay(delayMs.value, direction))
+        if (step && !repeated) onDelay.value(this.step(delayMs.value, direction, null))
     }
 }
 
 /** Left and Right on the TV's focused delay, held or pressed ([DelayHold]); the rest goes on. */
-private fun delayKey(
+internal fun delayKey(
     event: KeyEvent,
     hold: DelayHold,
 ): Boolean {
@@ -404,7 +335,7 @@ private fun DelayValue(
     }
 }
 
-/** A round minus or plus that steps [direction] on a press and faster while held ([DelayHold]). A screen reader presses it once. */
+/** A round minus or plus that steps [direction] on a press, faster while held ([DelayHold]); a screen reader presses once. */
 @Composable
 private fun HoldButton(
     icon: ImageVector,
@@ -438,19 +369,7 @@ private fun HoldButton(
 }
 
 /** A secondary control's fill over the picture: white at 16 percent (design/DECISION.md, Secondary actions). */
-private val SECONDARY = Color(0x29FFFFFF)
-
-/** Lucide's "minus", which the design module's set does not carry. */
-private val MINUS: ImageVector by lazy {
-    ImageVector
-        .Builder("minus", 24.dp, 24.dp, 24f, 24f)
-        .addPath(
-            addPathNodes("M5 12h14"),
-            stroke = SolidColor(Color.Black),
-            strokeLineWidth = 2f,
-            strokeLineCap = StrokeCap.Round,
-        ).build()
-}
+internal val SECONDARY = Color(0x29FFFFFF)
 
 /**
  * The profile's subtitle size, under the timing: Smaller and Larger step through its four sizes, which hold for the
@@ -579,58 +498,6 @@ fun stepSize(
 
 /** "100%": how big this app draws [size] ([subtitleScale]). */
 fun sizeWords(size: SubtitleSize): String = "${(subtitleScale(size) * 100).roundToInt()}%"
-
-/** One track: its name and what it is, the chosen one filled and checked; focus stays in the panel. */
-@Composable
-private fun TrackRow(
-    row: TrackChoice,
-    index: Int,
-    last: Int,
-    requester: FocusRequester,
-    onPick: (String) -> Unit,
-    forceFocus: Boolean = false,
-) {
-    val tv = Marquee.form == Form.Tv
-    var focusHeld by remember { mutableStateOf(false) }
-    val focused = focusHeld || forceFocus
-    // On TV a focused row turns white with dark words (focusPalette), as every TV row; the chosen row is a filled
-    // row with a check, and the phone's keyboard focus is the ring alone.
-    val colors = focusPalette(focused)
-    val shape = RoundedCornerShape(Marquee.radius.m)
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .focusRequester(requester)
-            // Focus stays in the panel while it is open: the ends of the list and the sides go nowhere.
-            .focusProperties {
-                left = FocusRequester.Cancel
-                right = FocusRequester.Cancel
-                if (index == 0) up = FocusRequester.Cancel
-                if (index == last) down = FocusRequester.Cancel
-            }.marqueeFocus(Marquee.radius.m, scale = 1.02f, forced = forceFocus)
-            .onFocusChanged { focusHeld = it.isFocused }
-            .clip(shape)
-            .background(if ((tv && focused) || row.selected) colors.raised else Color.Transparent)
-            .semantics {
-                selected = row.selected
-                contentDescription = listOfNotNull(row.name, row.detail).joinToString(", ")
-            }.focusClickable({ onPick(row.id) }, Role.RadioButton)
-            .heightIn(min = 48.dp)
-            .padding(horizontal = 16.dp, vertical = if (tv) 12.dp else 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        FocusInk(colors) {
-            Box(Modifier.size(if (tv) 30.dp else 18.dp)) {
-                if (row.selected) MqIcon(Icons.Check, tint = colors.text)
-            }
-            Column {
-                MqText(row.name, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
-                row.detail?.let { MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 2) }
-            }
-        }
-    }
-}
 
 /**
  * What is happening before anything plays, or why nothing does: a turning mark and one line, or the
@@ -810,7 +677,15 @@ fun PlayerStatus(
                     MqText(status, role = TextRole.Headline, weight = FontWeight.Medium)
                 }
             }
-            if (notice != null) MqText(notice, role = TextRole.Headline, weight = FontWeight.Medium)
+            if (notice != null) {
+                // Said once as it shows (the Trakt line, a subtitle note), with the words on screen.
+                MqText(
+                    notice,
+                    Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    role = TextRole.Headline,
+                    weight = FontWeight.Medium,
+                )
+            }
         }
     }
 }
@@ -992,8 +867,11 @@ fun Scrim(
 }
 
 /**
- * An action of the OSD: icon, bold name, and a small line under it (what is chosen now). [busy] puts a small
- * turning mark beside that line while more is still on the way (subtitles from slower sources).
+ * A pill of the player's bar (plans/player-bar.md, the picked "Toolbar strip"): its icon, then with [words] its name
+ * and [detail] (what is chosen now, cut with an ellipsis at [PILL_VALUE_MAX]); without, the icon alone in a round
+ * target, the name and detail still spoken. [busy] puts a small turning mark after it while more is still on the way
+ * (subtitles from slower sources). [expanded] marks a pill that opens a strip (Audio, Subtitles) and says whether it
+ * is open. A screen reader says [spoken] when the name alone does not say it ("Next episode, S1:E3 The Name").
  */
 @Composable
 fun ActionButton(
@@ -1006,46 +884,81 @@ fun ActionButton(
     busy: Boolean = false,
     /** Shows the focused look without focus (screenshots and tests), as a tile's. */
     forceFocus: Boolean = false,
+    words: Boolean = true,
+    expanded: Boolean? = null,
+    spoken: String? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     var focusHeld by remember { mutableStateOf(false) }
     val focused = focusHeld || forceFocus
     // Counted with the buttons, so the white Play yields while an action holds the focus (one white per screen).
     ButtonFocused(focused)
-    // On TV a focused action turns white with dark words (focusPalette), so it reads over any frame.
+    // On TV a focused pill turns white with dark words (focusPalette), so it reads over any frame.
     val colors = focusPalette(focused)
-    Column(
+    val fill =
+        when {
+            tv && focused -> colors.raised
+            expanded == true -> Tokens.selectedFill
+            else -> SECONDARY
+        }
+    Row(
         modifier
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
-            .marqueeFocus(Marquee.radius.m, scale = 1.04f, forced = forceFocus)
+            .marqueeFocus(Marquee.radius.pill, scale = 1.04f, forced = forceFocus)
             .onFocusChanged { focusHeld = it.isFocused }
-            .clip(RoundedCornerShape(Marquee.radius.m))
-            .background(if (tv && focused) colors.raised else Color.Transparent)
+            .height(pillHeight())
+            .clip(RoundedCornerShape(Marquee.radius.pill))
+            .background(fill)
             .semantics {
-                contentDescription = listOfNotNull(label, detail, BUSY_WORDS.takeIf { busy }).joinToString(", ")
+                contentDescription =
+                    spoken ?: listOfNotNull(label, detail, BUSY_WORDS.takeIf { busy }).joinToString(", ")
+                when (expanded) {
+                    true -> collapse { onClick().let { true } }
+                    false -> expand { onClick().let { true } }
+                    null -> Unit
+                }
             }.focusClickable(onClick, Role.Button)
-            // Wide enough to touch (48 dp on a phone), and short enough that five fit beside the transport on TV.
-            .widthIn(min = if (tv) 128.dp else 48.dp, max = if (tv) 190.dp else 150.dp)
-            // Side padding keeps neighbours apart when a phone's row is full and scrolls.
-            .padding(horizontal = if (tv) 8.dp else 6.dp, vertical = if (tv) 10.dp else 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+            .then(
+                if (words) {
+                    Modifier.padding(horizontal = if (tv) 24.dp else 12.dp)
+                } else {
+                    Modifier.width(pillHeight())
+                },
+            ),
+        horizontalArrangement = Arrangement.spacedBy(if (tv) 14.dp else 6.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         FocusInk(colors) {
-            MqIcon(icon, tint = colors.text, size = if (tv) 32.dp else 20.dp)
-            MqText(label, role = TextRole.Callout, weight = FontWeight.SemiBold, maxLines = 1)
-            detail?.let {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    MqText(it, role = TextRole.Caption, color = colors.muted, maxLines = 1)
-                    if (busy) Spinner(Modifier.testTag(BUSY_TAG), size = if (tv) 14.dp else 10.dp)
+            MqIcon(icon, tint = colors.text, size = pillIcon())
+            if (words) {
+                MqText(label, role = pillText(), weight = FontWeight.SemiBold, maxLines = 1)
+                detail?.let {
+                    MqText(
+                        it,
+                        Modifier.widthIn(max = PILL_VALUE_MAX * (if (tv) 2 else 1)),
+                        role = pillText(),
+                        color = colors.muted,
+                        maxLines = 1,
+                    )
                 }
             }
+            if (busy) Spinner(Modifier.testTag(BUSY_TAG), size = if (tv) 20.dp else 10.dp)
         }
     }
 }
+
+/** A bar pill's and strip chip's height: the touch minimum on a phone, the picked bar at 1.5 times on TV (D19). */
+@Composable
+internal fun pillHeight(): Dp = if (Marquee.form == Form.Tv) 72.dp else 48.dp
+
+@Composable
+internal fun pillIcon(): Dp = if (Marquee.form == Form.Tv) 36.dp else 20.dp
+
+@Composable
+internal fun pillText(): TextRole = if (Marquee.form == Form.Tv) TextRole.Body else TextRole.Callout
+
+/** The widest a pill's value draws before it ends in an ellipsis, as the web's 220 px (twice this on TV's canvas). */
+val PILL_VALUE_MAX = 150.dp
 
 /** Read out after an action's line while more is on the way. */
 const val BUSY_WORDS = "still searching"
@@ -1062,77 +975,6 @@ fun speedText(speed: Float): String = if (speed % 1f == 0f) "${speed.toInt()}x" 
 val SPEEDS = listOf(1f, 1.25f, 1.5f, 2f, 0.75f)
 
 fun nextSpeed(current: Float): Float = SPEEDS[(SPEEDS.indexOf(current) + 1) % SPEEDS.size]
-
-/**
- * Trakt's side of this play when it is recorded (`PlaybackSnapshot.trakt` on): a small mark with the
- * plain word "Trakt" (no logo) in the title block, read out as a sentence. The states where the play is
- * not recorded say so in [TraktWarning], which stays when the controls hide.
- */
-@Composable
-fun TraktMark(
-    trakt: TraktPlayback?,
-    modifier: Modifier = Modifier,
-) {
-    if (trakt != TraktPlayback.On) return
-    val spoken = TraktCopy.player(trakt) ?: return
-    val tv = Marquee.form == Form.Tv
-    Row(
-        modifier.clearAndSetSemantics { contentDescription = spoken },
-        horizontalArrangement = Arrangement.spacedBy(if (tv) 8.dp else 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        MqIcon(Icons.CheckCheck, tint = Marquee.colors.text, size = if (tv) 20.dp else 16.dp)
-        MqText(TraktCopy.TITLE, role = TextRole.Caption, color = Marquee.colors.muted, maxLines = 1)
-    }
-}
-
-/**
- * Why this play does not reach Trakt (unmapped, this device not signed in, or its sign-in ended), as a
- * visible sentence on a glass pill, said once to a screen reader. It shows once per play, for
- * [TRAKT_NOTICE_MS] from [since] (`PlaybackController.traktNoticeAt`), then fades out for good: a pause, a
- * seek or a resume never brings it back, and Settings, Trakt keeps the state (owner, 2026-11-08).
- */
-@Composable
-fun TraktWarning(
-    trakt: TraktPlayback?,
-    since: Long?,
-    modifier: Modifier = Modifier,
-) {
-    // Every state with words except On (its own mark) is one where the play is not recorded.
-    val words = TraktCopy.player(trakt)?.takeIf { trakt != TraktPlayback.On }
-    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
-    LaunchedEffect(since) {
-        if (since == null) return@LaunchedEffect
-        delay((since + TRAKT_NOTICE_MS - SystemClock.elapsedRealtime()).coerceAtLeast(0))
-        now = SystemClock.elapsedRealtime()
-    }
-    val tv = Marquee.form == Form.Tv
-    val shape = RoundedCornerShape(Marquee.radius.pill)
-    AnimatedVisibility(
-        visible = words != null && traktNoticeShows(since, now),
-        modifier = modifier,
-        enter = fadeIn(),
-        exit = fadeOut(),
-    ) {
-        Row(
-            Modifier
-                .widthIn(max = if (tv) 720.dp else 420.dp)
-                .clip(shape)
-                .background(Marquee.colors.glass)
-                .semantics { liveRegion = LiveRegionMode.Polite }
-                .padding(horizontal = if (tv) 16.dp else 12.dp, vertical = if (tv) 10.dp else 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(if (tv) 10.dp else 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            MqIcon(
-                if (trakt == TraktPlayback.Unmapped) Icons.CircleQuestionMark else Icons.Unlink,
-                tint = Marquee.colors.warn,
-                size = if (tv) 20.dp else 16.dp,
-            )
-            MqText(words.orEmpty(), role = TextRole.Caption, color = Marquee.colors.text)
-        }
-    }
-}
 
 /**
  * True while a screen reader explores by touch (TalkBack). A player's controls then stay up: swiping
