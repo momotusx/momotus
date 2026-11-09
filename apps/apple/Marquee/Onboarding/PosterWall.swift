@@ -18,7 +18,8 @@ struct PosterWall: View {
     var body: some View {
         GeometryReader { box in
             let layout = WallLayout(screen: box.size, columns: columns, count: posters.count)
-            TimelineView(.animation(paused: !running)) { context in
+            // ponytail: 60 frames a second at most (about 100 tiles move); measure on the iPhone 13 Pro before going higher.
+            TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !running)) { context in
                 let t = WallClock.shared.elapsed(at: context.date)
                 HStack(alignment: .top, spacing: WallLayout.gap) {
                     ForEach(0..<columns, id: \.self) { column in
@@ -93,7 +94,14 @@ struct PosterWall: View {
         guard !Task.isCancelled else { return }
         let shown = layout.visible(at: WallClock.shared.elapsed(at: .now))
         let filled = shown.filter { layout.poster($0.column, $0.row, in: posters).map { art[$0] != nil } == true }.count
-        WallLog.shared.settled(filled: filled, visible: shown.count)
+        guard let line = WallLog.shared.settled(filled: filled, visible: shown.count) else { return }
+        // Walk and debug builds only: the unified log (the Mac, the iPhone's console) and the walk log.
+        #if DEBUG
+        coreLog.notice("\(line, privacy: .public)")
+        DebugHooks.note(line)
+        #else
+        _ = line
+        #endif
     }
 }
 
@@ -108,34 +116,3 @@ enum WallFlags {
     }
 }
 
-/// `first-wall poster <ms> tiles6s <n>/<visible>` (plans/first-screens.md 3.1, 9): the bench's source, in walk and
-/// debug builds only, in the unified log (the Mac, the iPhone's console) and the walk log.
-@MainActor final class WallLog {
-    static let shared = WallLog()
-    private var began: ContinuousClock.Instant?
-    private var firstMs: Int?
-    private var done = false
-
-    /// The wall's first frame; false once this run has logged or begun.
-    func start() -> Bool {
-        guard began == nil, !done else { return false }
-        began = .now
-        return true
-    }
-
-    func drew() {
-        guard firstMs == nil, let began else { return }
-        let elapsed = ContinuousClock.now - began
-        firstMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
-    }
-
-    func settled(filled: Int, visible: Int) {
-        guard !done else { return }
-        done = true
-        #if DEBUG
-        let line = "first-wall poster \(firstMs.map(String.init) ?? "none") tiles6s \(filled)/\(visible)"
-        coreLog.notice("\(line, privacy: .public)")
-        DebugHooks.note(line)
-        #endif
-    }
-}

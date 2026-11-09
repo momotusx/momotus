@@ -135,6 +135,8 @@ struct ProfileFields: View {
     let selected: String?
     /// The name the avatar's letter shows while the field is empty.
     let fallbackName: String
+    /// Return in the field: the form's Continue.
+    var submit: () -> Void = {}
     let pick: (String) -> Void
     private var words: FirstRunWords { .shared }
 
@@ -163,6 +165,7 @@ struct ProfileFields: View {
                 .submitLabel(.done)
                 #endif
                 .onChange(of: typed) { _, now in if now.count > 30 { typed = String(now.prefix(30)) } }
+                .onSubmit(submit)
         }
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
@@ -191,6 +194,17 @@ struct ProfileFields: View {
         .padding(.horizontal, 5)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(words.colourLabel)
+    }
+}
+
+extension View {
+    /// A step's primary answers Return on the Mac and a hardware keyboard, where buttons take no focus by default.
+    @ViewBuilder func returnKey() -> some View {
+        #if os(tvOS)
+        self
+        #else
+        keyboardShortcut(.defaultAction)
+        #endif
     }
 }
 

@@ -140,6 +140,8 @@ final class ProfileSession {
 
     func askAfterJoin(line: String) {
         joinedWho = line
+        // First run ended with the join: the profile picked next opens Home, never first run again.
+        resumeOnboarding = false
         chosen = false
     }
 

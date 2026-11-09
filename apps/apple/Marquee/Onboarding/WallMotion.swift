@@ -129,3 +129,33 @@ struct WallLayout: Equatable {
         return shown
     }
 }
+
+/// `first-wall poster <ms> tiles6s <n>/<visible>` (plans/first-screens.md 3.1, 9): the bench's line, once per app run;
+/// PosterWall writes it in walk and debug builds.
+@MainActor final class WallLog {
+    static let shared = WallLog()
+    private var began: ContinuousClock.Instant?
+    private var firstMs: Int?
+    private var done = false
+
+    /// The wall's first frame; false once this run has logged. A size change in the first 6 s (a rotation, a window
+    /// resize) starts the 6 s again and keeps the first poster's time.
+    func start() -> Bool {
+        guard !done else { return false }
+        if began == nil { began = .now }
+        return true
+    }
+
+    func drew() {
+        guard firstMs == nil, let began else { return }
+        let elapsed = ContinuousClock.now - began
+        firstMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
+    }
+
+    /// The line, the first time only.
+    func settled(filled: Int, visible: Int) -> String? {
+        guard !done else { return nil }
+        done = true
+        return "first-wall poster \(firstMs.map(String.init) ?? "none") tiles6s \(filled)/\(visible)"
+    }
+}

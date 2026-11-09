@@ -69,7 +69,9 @@ private actor Asks {
 @Test func everyWallReadsItsMotionFromTheOneRule() throws {
     let onboarding = try source("Onboarding/OnboardingScreen.swift")
     #expect(onboarding.contains("running: WallMotion.runs(step: shown, reduceMotion: reduceMotion, scenePhase: scenePhase, paused: paused)"))
-    #expect(onboarding.contains("dimmed: step != .welcome"))
+    #expect(onboarding.contains("dimmed: step != nil && step != .welcome"))
+    // Before the first step is known the wall neither drifts nor dims (P3.13).
+    #expect(onboarding.contains("case nil: .none\n        case .welcome?: .welcome"))
     #expect(onboarding.contains("systemReduceMotion || WallFlags.reduceMotion"), "the walk's -MQReduceMotion is not read")
     // The step change honours Reduce Motion.
     #expect(onboarding.contains(".animation(reduceMotion ? nil : Theme.Motion.panel, value: step)"))
@@ -82,7 +84,7 @@ private actor Asks {
     let wall = try source("Onboarding/PosterWall.swift")
     #expect(wall.contains(".allowsHitTesting(false)\n        .accessibilityHidden(true)"))
     #expect(wall.contains("withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25))"))
-    #expect(wall.contains("\"first-wall poster \\(firstMs.map(String.init) ?? \"none\") tiles6s \\(filled)/\\(visible)\""))
+    #expect(wall.contains("coreLog.notice(\"\\(line, privacy: .public)\")") && wall.contains("DebugHooks.note(line)"))
     #expect(onboarding.contains("core.call(\"firstRunWall\", as: [String].self)"))
 }
 
@@ -217,7 +219,8 @@ private let sheet = over(29.0 / 255, 0.97, over(0, 0.62, 1))
     let toggle = try body(of: "private var pauseToggle: some View", in: onboarding)
     #expect(toggle.contains("UserDefaults.standard.set(paused, forKey: WallMotion.pausedKey)"))
     #expect(toggle.contains(".accessibilityLabel(WallMotion.toggleLabel(paused: paused))"))
-    #expect(toggle.contains(".accessibilityAddTraits(.isToggle)"))
+    // Named by what pressing it does, so no toggle trait that VoiceOver would read against the flipped label.
+    #expect(!toggle.contains(".isToggle"))
     #expect(onboarding.contains("@State private var paused = UserDefaults.standard.bool(forKey: WallMotion.pausedKey)"))
 }
 
@@ -273,7 +276,7 @@ private let sheet = over(29.0 / 255, 0.97, over(0, 0.62, 1))
     #expect(!skip.contains("setPrefs") && skip.contains("installSources()"))
     #expect(onboarding.contains("DefaultsStep(core: core, scope: .missing).install()"))
     // Import in first run: Skip import, Done to Home after the sources.
-    #expect(onboarding.contains("ImportScreen(core: core, finished: { Task { await installSources() } }, skip: { Task { await installSources() } })"))
+    #expect(onboarding.contains("ImportScreen(core: core, finished: { Task { await finishImport() } }, skip: { Task { await finishImport() } })"))
     let importer = try source("Settings/ImportScreen.swift")
     #expect(importer.components(separatedBy: "skipButton").count - 1 >= 4, "Skip import is missing from waiting, failed or expired")
     // No default addon's name in any first-run step's words (D12: Import's own list and Review only).
@@ -327,7 +330,7 @@ private let sheet = over(29.0 / 255, 0.97, over(0, 0.62, 1))
     #expect(page.contains("if backShown { WallBack { dismiss() } }"))
     #expect(page.contains(".onExitCommand(perform: backShown ? { dismiss() } : nil)"), "Escape does not go back to Login")
     let screen = try source("Account/SignInScreen.swift")
-    for push in ["otherWays.environment(\\.onWall, true)", "lede: words.phoneScanHow).environment(\\.onWall, true)",
+    for push in ["otherWays.environment(\\.onWall, true)", "lede: words.phoneScanHow, doneOnJoin: true)\n                .environment(\\.onWall, true)",
                  "SyncJoinScreen(kit: true, server: flow.server).environment(\\.onWall, true)", "RecoveryKitScreen().environment(\\.onWall, true)",
                  "EmailSignIn(flow: flow) { otherAfterPop = true; flow.back() }.environment(\\.onWall, true)",
                  "EmailCode(flow: flow, otherWays: otherWays).environment(\\.onWall, onWall)"] {
@@ -378,4 +381,83 @@ private let sheet = over(29.0 / 255, 0.97, over(0, 0.62, 1))
     #expect(form.contains("guard !busy, let fields = FirstRunRules.newProfile(typed: typed, swatch: swatch) else { return }"))
     #expect(form.components(separatedBy: "\"createProfile\"").count - 1 == 1, "more than one create")
     #expect(form.contains("await profiles.switchTo(made.id, pin: nil)"))
+}
+
+// MARK: review 2026-11-10-first-apple-code.md
+
+@Test func escapeOnLoginGoesBackToWelcome() throws {
+    // P1.1: SignInScreen's own Escape wins over first run's, so first run hands it the Back to Welcome.
+    let onboarding = try source("Onboarding/OnboardingScreen.swift")
+    #expect(onboarding.contains("back: { go(.welcome) }, notNow:"))
+    #expect(FirstRunRules.back(from: .login, server: true, made: false) == .welcome)
+}
+
+/// P1.2 on a real core: the picker after a join never reopens first run on a pick.
+@Suite(.serialized) @MainActor struct JoinedPickerTests {
+    @Test func askingAfterAJoinEndsFirstRunAndAPickOpensTheProfile() async throws {
+        let core = RealCore()
+        #expect(await core.ready())
+        let sync = SyncModel(core: core.client, records: FakeKeychain().record,
+                             defaults: try #require(UserDefaults(suiteName: "mq-test-\(UUID().uuidString)")))
+        let session = ProfileSession(core: core.client, sync: sync)
+        #expect(await eventually { session.open })
+        // Home's cover was open when the join came.
+        session.resumeOnboarding = true
+        session.askAfterJoin(line: "Signed in.")
+        #expect(!session.resumeOnboarding, "a pick would open first run again")
+        #expect(session.joinedWho == "Signed in.")
+        #expect(!session.open, "the picker does not show")
+        session.markChosen()
+        #expect(session.open && session.joinedWho == nil)
+        withExtendedLifetime(core) {}
+    }
+
+    @Test func firstRunClosesBeforeThePickerAndReadsFreshFromTheAddons() throws {
+        let onboarding = try source("Onboarding/OnboardingScreen.swift")
+        let join = try body(of: "private func afterJoin(provider: String?) async", in: onboarding)
+        let closes = try #require(join.range(of: "close?()")).lowerBound
+        let asks = try #require(join.range(of: "profiles.askAfterJoin(")).lowerBound
+        #expect(closes < asks, "the picker is asked before first run closes")
+        // A reopened cover on a profile that is no longer fresh shows nothing.
+        #expect(onboarding.contains("fresh: addons.snapshot?.fresh ?? true"))
+        #expect(onboarding.contains(".onChange(of: addons.snapshot?.fresh, initial: true)"))
+        // P2.7: only a new problem ends the wait, and the pulled roster gets its moment; P3.9: one wait.
+        #expect(join.contains("guard !pulling else { return }"))
+        #expect(join.contains("let problem = sync.problem") && join.contains("profiles.snapshot == roster"))
+    }
+}
+
+@Test func theReviewsSmallerFixesStayFixed() throws {
+    let onboarding = try source("Onboarding/OnboardingScreen.swift")
+    // P2.3: the phone's Use another device moves on after the join with no Done (checked with the pushes above).
+    // P2.4: a changed answer after Import's Back is written again.
+    #expect(onboarding.contains(".onChange(of: \"\\(selectedChip)/\\(best)\") { prefsSaved = false }"))
+    // P2.5: Return presses Get started, Continue and Start watching; Return in the Name field is Continue.
+    #expect(onboarding.components(separatedBy: ".returnKey()").count - 1 == 3)
+    #expect(try body(of: "struct ProfileFields: View", in: source("Onboarding/FirstRunFrame.swift")).contains(".onSubmit(submit)"))
+    #expect(onboarding.contains("submit: { Task { await finishProfile() } }"))
+    // P2.6: Welcome scrolls when it is taller than the screen.
+    let welcome = try body(of: "private var welcome: some View", in: onboarding)
+    #expect(welcome.contains("ScrollView(.vertical)") && welcome.contains("minHeight: page.size.height, alignment: .bottom"))
+    // P2.8: Add profile only for the unlocked owner.
+    #expect(try source("Profiles/ProfilePicker.swift").contains("joinedLine != nil && !snapshot.locked && snapshot.current?.isOwner == true"))
+    // P3.10: Import's Continue and Skip import go through one guarded finish.
+    #expect(onboarding.contains("ImportScreen(core: core, finished: { Task { await finishImport() } }, skip: { Task { await finishImport() } })"))
+    #expect(try body(of: "private func finishImport() async", in: onboarding).contains("guard !busy else { return }"))
+    // P3.12: Get started forgets "I already use Momotus".
+    #expect(onboarding.contains("returning = false\n                go(FirstRunRules.next(entry(.getStarted)))"))
+    // P3.14: "Getting your profiles" holds still under Reduce Motion.
+    #expect(try body(of: "private var gettingProfiles: some View", in: onboarding).contains("if reduceMotion { Glyph(\"clock\""))
+    // P3.17: back on Welcome a screen reader lands on its heading.
+    #expect(onboarding.contains(".accessibilityFocused($welcomeHeard)"))
+}
+
+@MainActor @Test func aResizeInTheFirstSixSecondsStillLogsTheWallLine() {
+    // P3.15: a second start (a rotation's new size) is let through until the line is logged.
+    let log = WallLog()
+    #expect(log.start())
+    #expect(log.start(), "a size change stopped the bench line")
+    #expect(log.settled(filled: 1, visible: 2)?.hasPrefix("first-wall poster none tiles6s 1/2") == true)
+    #expect(!log.start(), "logged twice")
+    #expect(log.settled(filled: 2, visible: 2) == nil)
 }

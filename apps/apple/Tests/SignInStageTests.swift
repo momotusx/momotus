@@ -88,7 +88,8 @@ private func source(_ path: String) throws -> String {
     #expect(screen.contains("if returning, offersDevice { anotherDevice }"))
     #expect(screen.contains("if !returning, offersDevice { anotherDevice }"))
     // Escape is Not now on the first step.
-    #expect(screen.contains(".onExitCommand {\n            switch flow.stage {\n            case .choose: notNow()"))
+    // Escape on the first step: first run's Back to Welcome, Not now only where no Back is given (Settings).
+    #expect(screen.contains(".onExitCommand {\n            switch flow.stage {\n            case .choose: (toWelcome ?? notNow)()"))
     // The code's join takes a held sign-in along, as the pushed pairing page's does.
     #expect(screen.contains("await flow.joinedByCode()"))
     // Settings' Sign in is the same sheet over the wall, asking for the wall as it opens (D10).

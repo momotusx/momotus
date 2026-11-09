@@ -18,6 +18,8 @@ struct SignInScreen: View {
     var lead: String?
     /// From "I already use Momotus": the phone offers Use another device first.
     var returning = false
+    /// Escape on the first stage: first run's Back to Welcome (plans/first-screens.md 5); nil is Not now.
+    var toWelcome: (() -> Void)?
     @State private var showOther = false
     @State private var showPairing = false
     @State private var showKit = false
@@ -32,11 +34,12 @@ struct SignInScreen: View {
     private typealias W = AccountWords
     private var words: AccountWords { .shared }
 
-    init(server: String, sync: SyncModel, lead: String? = nil, returning: Bool = false, notNow: @escaping () -> Void,
-         joined: @escaping (_ provider: String?) -> Void, created: @escaping () -> Void) {
+    init(server: String, sync: SyncModel, lead: String? = nil, returning: Bool = false, back: (() -> Void)? = nil,
+         notNow: @escaping () -> Void, joined: @escaping (_ provider: String?) -> Void, created: @escaping () -> Void) {
         _flow = State(initialValue: SignInFlow(server: server, sync: sync))
         self.lead = lead
         self.returning = returning
+        toWelcome = back
         self.notNow = notNow
         self.joined = joined
         self.created = created
@@ -67,7 +70,9 @@ struct SignInScreen: View {
         // Every later stage is the same sheet over the still wall, its Back returning here (plans/first-screens.md 3.3).
         .navigationDestination(isPresented: $showOther) { otherWays.environment(\.onWall, true) }
         .navigationDestination(isPresented: $showPairing) {
-            PairingScreen(core: core, done: { joined(nil) }, autostart: flow.server, lede: words.phoneScanHow).environment(\.onWall, true)
+            // The join moves on by itself, no Done to press (acceptance bar 9, phone 2 / 2).
+            PairingScreen(core: core, done: { joined(nil) }, autostart: flow.server, lede: words.phoneScanHow, doneOnJoin: true)
+                .environment(\.onWall, true)
         }
         .navigationDestination(isPresented: $showKit) { SyncJoinScreen(kit: true, server: flow.server).environment(\.onWall, true) }
         .navigationDestination(isPresented: $showMakeKit) { RecoveryKitScreen().environment(\.onWall, true) }
@@ -102,10 +107,11 @@ struct SignInScreen: View {
             .padding(.top, 22)
         }
         #if os(macOS)
-        // Escape is Not now on the first step, Cancel on the steps after a sign-in.
+        // Escape on the first step is first run's Back to Welcome (Not now from Settings), Cancel on the steps after a
+        // sign-in.
         .onExitCommand {
             switch flow.stage {
-            case .choose: notNow()
+            case .choose: (toWelcome ?? notNow)()
             case .new, .cannotOpen, .startOver: flow.back()
             default: break
             }

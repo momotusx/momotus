@@ -157,7 +157,9 @@ struct ProfilePicker: View {
     }
 
     private func tiles(_ snapshot: ProfilesSnapshot) -> some View {
-        let addable = (canManage(snapshot) || joinedLine != nil) && snapshot.profiles.count < snapshot.max
+        // First run's sheet offers Add profile only to the unlocked owner: the core refuses a create while locked.
+        let firstRunAdd = joinedLine != nil && !snapshot.locked && snapshot.current?.isOwner == true
+        let addable = (canManage(snapshot) || firstRunAdd) && snapshot.profiles.count < snapshot.max
         let incognito = Incognito.offered(snapshot)
         let count = snapshot.profiles.count + (incognito ? 1 : 0) + (addable ? 1 : 0)
         let wideColumns = joinedLine != nil ? 4 : min(max(count, 1), 6)
@@ -521,7 +523,8 @@ private struct AddProfileForm: View {
         VStack(alignment: .leading, spacing: 0) {
             WallBack(back: back)
             SheetHead(title: words.addProfile)
-            ProfileFields(typed: $typed, placeholder: "", glyph: "letter", selected: swatch, fallbackName: words.addProfile) { swatch = $0 }
+            ProfileFields(typed: $typed, placeholder: "", glyph: "letter", selected: swatch, fallbackName: words.addProfile,
+                          submit: { Task { await create() } }) { swatch = $0 }
                 .padding(.top, 22)
             if let said {
                 StatusDot(tone: .bad, text: said).padding(.top, Theme.Space.s)
@@ -530,6 +533,7 @@ private struct AddProfileForm: View {
                 Text(words.continue).frame(maxWidth: .infinity, minHeight: FirstRunRules.Size.primary - 2 * PillButtonStyle.vertical)
             }
             .buttonStyle(PillButtonStyle(prominent: true))
+            .returnKey()
             .disabled(busy || FirstRunRules.newProfile(typed: typed, swatch: swatch) == nil)
             .focused($onContinue)
             .padding(.top, 22)

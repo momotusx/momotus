@@ -13,6 +13,7 @@ extension XCUIApplication {
             let button = buttons[title].firstMatch
             if button.waitForExistence(timeout: 10) { button.tap() }
         }
-        return true
+        // Skip adds the recommended sources, then Home opens; offline it stays on the sheet.
+        return buttons["Skip"].firstMatch.waitForNonExistence(timeout: 20)
     }
 }

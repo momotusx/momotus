@@ -56,6 +56,8 @@ private struct FirstRun: View {
     @State private var picked: String?
     @State private var languages: [LanguageChoice] = []
     @State private var prefs: LiveRecord<Prefs>
+    /// The profile's addons: `fresh` decides whether a (re)opened first run shows anything at all.
+    @State private var addons: LiveRecord<AddonsSnapshot>
     @State private var prefsSaved = false
     @State private var showLanguages = false
     @State private var showReview = false
@@ -65,7 +67,7 @@ private struct FirstRun: View {
     @State private var paused = UserDefaults.standard.bool(forKey: WallMotion.pausedKey)
     @FocusState private var onStart: Bool
     @FocusState private var onContinue: Bool
-    @FocusState private var onNotNow: Bool
+    @AccessibilityFocusState private var welcomeHeard: Bool
     @Environment(\.metrics) private var metrics
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
@@ -78,13 +80,14 @@ private struct FirstRun: View {
         self.core = core
         self.close = close
         _prefs = State(initialValue: LiveRecord("settings", core: core))
+        _addons = State(initialValue: LiveRecord("addons", core: core))
     }
 
     var body: some View {
         ZStack {
             PosterWall(posters: WallOnce.shared.posters, columns: FirstRunRules.columns(form),
                        running: WallMotion.runs(step: shown, reduceMotion: reduceMotion, scenePhase: scenePhase, paused: paused),
-                       dimmed: step != .welcome, wide: metrics.wide)
+                       dimmed: step != nil && step != .welcome, wide: metrics.wide)
             Group {
                 if let step { screen(step) }
             }
@@ -97,7 +100,18 @@ private struct FirstRun: View {
         // Escape on the Mac, Menu on the TV: Back per the plan's table (5); nil leaves it to the system.
         .onExitCommand(perform: backAction)
         #endif
-        .task { if step == nil { go(FirstRunRules.next(entry(.start))) } }
+        .task(id: addons.taskId) { addons.start() }
+        // The start waits for the addons' answer: a cover reopened on a profile that is no longer fresh closes at once.
+        .onChange(of: addons.snapshot?.fresh, initial: true) { _, fresh in
+            if step == nil, fresh != nil { go(FirstRunRules.next(entry(.start))) }
+        }
+        // An addons view that never answers still starts first run, as fresh.
+        .task {
+            try? await Task.sleep(for: .seconds(3))
+            if step == nil { go(FirstRunRules.next(entry(.start))) }
+        }
+        // A changed answer after Bring my Stremio library and Back is written again by the next Start watching.
+        .onChange(of: "\(selectedChip)/\(best)") { prefsSaved = false }
         // The wall is asked as first run opens and again at each step while none came (WallOnce).
         .task(id: step) { await WallOnce.shared.get { [core] in try await core.call("firstRunWall", as: [String].self) } }
         .task(id: prefs.taskId) { prefs.start() }
@@ -118,7 +132,8 @@ private struct FirstRun: View {
     /// The step as the rules name it: what the wall and Back read.
     private var shown: FirstRunStep {
         switch step {
-        case .welcome?, nil: .welcome
+        case nil: .none
+        case .welcome?: .welcome
         case .signIn?, .tvSignIn?: .login
         case .profile?: .profile
         case .setup?: importing ? .importing : .setup
@@ -143,9 +158,9 @@ private struct FirstRun: View {
 
     private func entry(_ after: FirstRunRules.After) -> FirstRunRules.Entry {
         let snapshot = profiles.snapshot
-        // The cover opens only while the profile's addons are fresh.
+        // The addons' own answer; none yet counts as fresh, since the cover opens only then.
         return FirstRunRules.Entry(
-            fresh: true, kidsSession: snapshot?.current?.kids == true, server: AccountServer.default != nil, inAccount: sync.joined,
+            fresh: addons.snapshot?.fresh ?? true, kidsSession: snapshot?.current?.kids == true, server: AccountServer.default != nil, inAccount: sync.joined,
             profileStepDone: snapshot?.stepDone ?? true, profiles: snapshot?.profiles.count ?? 1,
             pin: snapshot?.profiles.contains(where: \.hasPin) == true, locked: snapshot?.locked == true, after: after)
     }
@@ -177,21 +192,48 @@ private struct FirstRun: View {
     /// A join pulled an account: "Getting your profiles" while the first round runs (15 s at most), then Who's
     /// watching? (two or more profiles, or a PIN) or Home (D2).
     private func afterJoin(provider: String?) async {
+        // A provider's join and the account's own `joined` can both arrive: one wait.
+        guard !pulling else { return }
         pulling = true
         let deadline = ContinuousClock.now + FirstRunRules.pullWait
-        while ContinuousClock.now < deadline, sync.lastReport == nil, sync.problem == nil, !Task.isCancelled {
+        // Only a problem this pull brings ends the wait, not one left from before.
+        let problem = sync.problem
+        while ContinuousClock.now < deadline, sync.lastReport == nil, sync.problem == problem {
             try? await Task.sleep(for: .milliseconds(250))
         }
+        // The profiles view hears the pulled roster a moment after the report: up to 2 s more for it.
+        let roster = profiles.snapshot
+        let settle = min(deadline, ContinuousClock.now + .seconds(2))
+        while ContinuousClock.now < settle, sync.problem == problem, profiles.snapshot == roster {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
         pulling = false
-        if FirstRunRules.next(entry(.joined)) == .who {
+        let next = FirstRunRules.next(entry(.joined))
+        // First run closes before the picker's ask, so Home's cover is marked closed and never reopens on a pick.
+        close?()
+        if next == .who {
             profiles.askAfterJoin(line: FirstRunRules.whoLine(provider: provider, device: sync.joinedBy))
         }
-        close?()
     }
 
     // MARK: Welcome
 
+    /// Welcome's block at the foot; taller than the screen (the largest text, a phone across) it scrolls, nothing clips.
     private var welcome: some View {
+        GeometryReader { page in
+            ScrollView(.vertical) {
+                welcomeBlock.frame(maxWidth: .infinity, minHeight: page.size.height, alignment: .bottom)
+            }
+            .scrollIndicators(.hidden)
+            .scrollBounceBehavior(.basedOnSize)
+        }
+        .overlay(alignment: .topTrailing) { pauseToggle }
+        .defaultFocus($onStart, true)
+        // Back on Welcome, a screen reader lands on its heading (plan 7).
+        .onAppear { if !tvForm { welcomeHeard = true } }
+    }
+
+    private var welcomeBlock: some View {
         let wide = metrics.wide
         return VStack(alignment: wide ? .center : .leading, spacing: 0) {
             // The lockup: the bird 52 (1.45 of 36), the name beside it.
@@ -201,6 +243,7 @@ private struct FirstRun: View {
                 .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
+                .accessibilityFocused($welcomeHeard)
                 .padding(.top, 22)
             Text(words.welcomeLead)
                 .textFont(wide ? 20 : 17, relativeTo: .body)
@@ -213,18 +256,21 @@ private struct FirstRun: View {
         .multilineTextAlignment(wide ? .center : .leading)
         .frame(maxWidth: wide ? 760 : .infinity, alignment: wide ? .center : .leading)
         .padding(.horizontal, 24)
+        // Clear of the pause toggle when the block reaches the top.
+        .padding(.top, FirstRunRules.Size.toggle + 16)
         .padding(.bottom, wide ? 84 : 40)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .overlay(alignment: .topTrailing) { pauseToggle }
-        .defaultFocus($onStart, true)
     }
 
     private var welcomeActions: some View {
         let wide = metrics.wide
         let acts = wide ? AnyLayout(HStackLayout(spacing: 12)) : AnyLayout(VStackLayout(spacing: 12))
         return acts {
-            Button { go(FirstRunRules.next(entry(.getStarted))) } label: { actionLabel(words.getStarted) }
+            Button {
+                returning = false
+                go(FirstRunRules.next(entry(.getStarted)))
+            } label: { actionLabel(words.getStarted) }
                 .buttonStyle(PillButtonStyle(prominent: true))
+                .returnKey()
                 .focused($onStart)
             // No sync server: no Login, and nothing to already use.
             if AccountServer.default != nil {
@@ -257,8 +303,8 @@ private struct FirstRun: View {
                 .contentShape(Circle())
         }
         .buttonStyle(FocusPlainStyle(shape: Circle()))
+        // A button named by what pressing it does (the shared words), so no toggle trait that would read it twice.
         .accessibilityLabel(WallMotion.toggleLabel(paused: paused))
-        .accessibilityAddTraits(.isToggle)
         .padding(.top, 8)
         .padding(.trailing, 16)
     }
@@ -274,7 +320,7 @@ private struct FirstRun: View {
         } else if let server = AccountServer.default {
             WallSheet(sheet: .login, back: { go(.welcome) }) {
                 SignInScreen(server: server, sync: sync, lead: returning ? words.loginReturning : words.loginLine, returning: returning,
-                             notNow: { go(FirstRunRules.next(entry(.notNow))) },
+                             back: { go(.welcome) }, notNow: { go(FirstRunRules.next(entry(.notNow))) },
                              joined: { provider in Task { await afterJoin(provider: provider) } },
                              created: {
                                  made = true
@@ -288,7 +334,10 @@ private struct FirstRun: View {
     private var gettingProfiles: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
             SheetHead(title: words.gettingProfiles)
-            ProgressView().controlSize(.large).tint(Theme.Palette.text)
+            // Still under Reduce Motion (plan 7).
+            if reduceMotion { Glyph("clock", size: 28).foregroundStyle(Theme.Palette.text) } else {
+                ProgressView().controlSize(.large).tint(Theme.Palette.text)
+            }
         }
     }
 
@@ -320,7 +369,7 @@ private struct FirstRun: View {
                 SheetHead(title: words.profileTitle, line: FirstRunRules.profileLine(made: made || sync.joined))
                 // "Main" as the placeholder and no prefill (the relay sends no name); empty keeps the name.
                 ProfileFields(typed: $typed, placeholder: words.namePlaceholder, glyph: opening.glyph, selected: pressed ?? opening.color,
-                              fallbackName: owner?.name ?? words.namePlaceholder) { pressed = $0 }
+                              fallbackName: owner?.name ?? words.namePlaceholder, submit: { Task { await finishProfile() } }) { pressed = $0 }
                     .padding(.top, 22)
                 if let failure {
                     StatusDot(tone: .bad, text: failure).padding(.top, Theme.Space.s)
@@ -329,6 +378,7 @@ private struct FirstRun: View {
                     Text(words.continue).frame(maxWidth: .infinity, minHeight: FirstRunRules.Size.primary - 2 * PillButtonStyle.vertical)
                 }
                 .buttonStyle(PillButtonStyle(prominent: true))
+                .returnKey()
                 .disabled(busy)
                 .focused($onContinue)
                 .padding(.top, 22)
@@ -476,6 +526,7 @@ private struct FirstRun: View {
                                             minHeight: FirstRunRules.Size.primary - 2 * PillButtonStyle.vertical)
         }
         .buttonStyle(PillButtonStyle(prominent: true))
+        .returnKey()
         .disabled(busy)
         .focused($onContinue)
         return Group {
@@ -539,6 +590,14 @@ private struct FirstRun: View {
     }
 
     /// Every absent recommended source on, then Home; a failure keeps the sheet with its line.
+    /// Import's Continue and Skip import: one install and one close however often they are pressed (STATE-15).
+    private func finishImport() async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
+        await installSources()
+    }
+
     private func installSources() async {
         if await DefaultsStep(core: core, scope: .missing).install() {
             go(.home)
@@ -554,7 +613,7 @@ private struct FirstRun: View {
             VStack(alignment: .leading, spacing: Theme.Space.s) {
                 WallBack { go(.setup) }
                 // Done brings the defaults the import did not bring and opens Home; Skip import the same without it.
-                ImportScreen(core: core, finished: { Task { await installSources() } }, skip: { Task { await installSources() } })
+                ImportScreen(core: core, finished: { Task { await finishImport() } }, skip: { Task { await finishImport() } })
                 if let failure { StatusDot(tone: .bad, text: failure) }
             }
         }
