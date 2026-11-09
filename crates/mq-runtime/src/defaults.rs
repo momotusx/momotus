@@ -7,10 +7,11 @@ use crate::Core;
 use crate::core::{CoreError, default_rows, put_addon};
 use mq_addons::InstalledAddon;
 use mq_library::DEFAULTS_GIVEN;
-use mq_protocol::{Manifest, ResourcePath, ResourceResponse, decode_catalog};
+use mq_protocol::{Manifest, MetaItemPreview, ResourcePath, ResourceResponse, decode_catalog};
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 use std::time::Duration;
+use stremio_core::types::addon::ManifestCatalog;
 
 /// Raised when the list gains entries, so an existing profile is offered
 /// the new ones once (`defaultsSeen`).
@@ -357,38 +358,11 @@ impl Core {
     /// (the owner, 2026-10-30, plans/batch-2.md R2); TMDB's answers are kept
     /// a day. Without TMDB (no token, a throwaway core): the first title with
     /// a backdrop. None when the catalog gave no answer within
-    /// `STILL_BUDGET`, TMDB none within another, or nothing fits: the frame
+    /// `WALL_BUDGET`, TMDB none within another, or nothing fits: the frame
     /// stays black.
     pub async fn first_run_still(&self) -> Option<FirstRunStill> {
-        let d = list().iter().find(|d| d.group == "catalogs")?;
-        let catalog = d
-            .manifest
-            .catalogs
-            .iter()
-            .find(|c| c.is_extra_supported(&[]))?;
-        let addon = InstalledAddon {
-            transport_url: url::Url::parse(&d.url).ok()?,
-            manifest: d.manifest.clone(),
-        };
-        let path = ResourcePath {
-            resource: "catalog".into(),
-            r#type: catalog.r#type.clone(),
-            id: catalog.id.clone(),
-            extra: vec![],
-        };
-        let fetched = tokio::time::timeout(
-            STILL_BUDGET,
-            // A little past the budget, so the request itself never times out first and records a failure
-            // in the health of an addon this profile may install later.
-            self.addons()
-                .fetch(&addon, &path, STILL_BUDGET + Duration::from_millis(200)),
-        )
-        .await
-        .ok()?
-        .ok()?;
-        let ResourceResponse::Metas { metas } = decode_catalog(&fetched.body).ok()? else {
-            return None;
-        };
+        let catalog = first_run_source()?.1;
+        let metas = self.first_run_catalog().await?;
         if self.tmdb_ready() {
             let textless = async {
                 for m in metas.iter().take(STILL_TRIES) {
@@ -404,7 +378,7 @@ impl Core {
                 }
                 None
             };
-            return tokio::time::timeout(STILL_BUDGET, textless)
+            return tokio::time::timeout(WALL_BUDGET, textless)
                 .await
                 .ok()
                 .flatten();
@@ -417,15 +391,94 @@ impl Core {
             })
         })
     }
+
+    /// The posters first run's wall shows (`firstRunWall`;
+    /// plans/first-screens.md 4.1): up to `WALL_POSTERS` links from the
+    /// default catalog addon's first catalog, in its order, without repeats,
+    /// `http` taken as `https` and any other scheme left out. Asked from its
+    /// bundled manifest without installing it (no account, nothing
+    /// written). Links only, never a name or an addon. Empty when no answer
+    /// came within `WALL_BUDGET`.
+    pub async fn first_run_wall(&self) -> Vec<String> {
+        let mut posters: Vec<String> = Vec::new();
+        for mut url in self
+            .first_run_catalog()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|m| m.poster)
+        {
+            if url.scheme() == "http" {
+                let _ = url.set_scheme("https");
+            }
+            // Links only: never `data:`, `file:` or any other scheme.
+            if url.scheme() != "https" {
+                continue;
+            }
+            let url = url.to_string();
+            if !posters.contains(&url) {
+                posters.push(url);
+            }
+            if posters.len() == WALL_POSTERS {
+                break;
+            }
+        }
+        posters
+    }
+
+    /// The first page of the catalog first run's art comes from, or none
+    /// past `WALL_BUDGET`.
+    async fn first_run_catalog(&self) -> Option<Vec<MetaItemPreview>> {
+        let (d, catalog) = first_run_source()?;
+        let addon = InstalledAddon {
+            transport_url: url::Url::parse(&d.url).ok()?,
+            manifest: d.manifest.clone(),
+        };
+        let path = ResourcePath {
+            resource: "catalog".into(),
+            r#type: catalog.r#type.clone(),
+            id: catalog.id.clone(),
+            extra: vec![],
+        };
+        let fetched = tokio::time::timeout(
+            WALL_BUDGET,
+            // A little past the budget, so the request itself never times out first and records a failure
+            // in the health of an addon this profile may install later.
+            self.addons()
+                .fetch(&addon, &path, WALL_BUDGET + Duration::from_millis(200)),
+        )
+        .await
+        .ok()?
+        .ok()?;
+        let ResourceResponse::Metas { metas } = decode_catalog(&fetched.body).ok()? else {
+            return None;
+        };
+        Some(metas)
+    }
 }
 
-/// How long first run waits for its still before it keeps the frame black:
-/// for the catalog, then for TMDB. No screen waits on it (each fades the
-/// still in when it lands), and a none is kept for the whole run, so the
-/// budget is sized for a phone's first requests after install: cold DNS and
-/// TLS to the catalog, its redirect host and TMDB. 1.5 s gave none on most
-/// cold starts with 150 ms of round trip (plans/batch-15.md, E images).
-const STILL_BUDGET: Duration = Duration::from_secs(6);
+/// First run's art source: the first default of group `catalogs` and its
+/// first catalog that needs no extra.
+fn first_run_source() -> Option<(&'static DefaultAddon, &'static ManifestCatalog)> {
+    let d = list().iter().find(|d| d.group == "catalogs")?;
+    let catalog = d
+        .manifest
+        .catalogs
+        .iter()
+        .find(|c| c.is_extra_supported(&[]))?;
+    Some((d, catalog))
+}
+
+/// How long first run waits for its art before it keeps the wall's tiles
+/// empty (and the still's frame black): for the catalog, then for TMDB. No
+/// screen waits on it (each fades the art in when it lands), so the budget
+/// is sized for a phone's first requests after install: cold DNS and TLS to
+/// the catalog, its redirect host and TMDB. 1.5 s gave none on most cold
+/// starts with 150 ms of round trip (plans/batch-15.md, E images).
+const WALL_BUDGET: Duration = Duration::from_secs(6);
+
+/// The most posters the wall is given.
+const WALL_POSTERS: usize = 30;
 
 /// How many of the catalog's top titles TMDB is asked for a textless still.
 const STILL_TRIES: usize = 5;

@@ -21,8 +21,14 @@ struct ProfilesSnapshot: Decodable, Hashable, Sendable {
     /// An Incognito end this session has not read yet (the ended line); it clears on the next profile op or
     /// `ackIncognitoEnded`.
     var incognitoEnded: Bool? = nil
+    /// First run's profile step was answered on this device (`finishProfileStep`, plans/first-screens.md 4.2).
+    /// Optional so an older core's snapshot still decodes; read it through `stepDone`.
+    var profileStepDone: Bool? = nil
 
     var incognito: Bool { incognitoHost != nil }
+
+    /// The profile step is answered: an older core that sends no field counts as answered, so it never shows the form.
+    var stepDone: Bool { profileStepDone ?? true }
 
     /// The session's profile: Incognito while it runs (the app face, 2.8), else the active one listed.
     var current: ProfileInfo? { incognito ? Incognito.profile : profiles.first { $0.id == active } }

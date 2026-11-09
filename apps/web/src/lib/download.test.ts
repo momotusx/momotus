@@ -165,7 +165,7 @@ test("a control's name starts with what it shows, then its state, its value and 
 });
 
 test("a profile not yet known, or not found, gets no download controls, as a kids one", () => {
-  const p = (kids: boolean, active = "a") => ({ profiles: [{ id: "a", name: "A", avatar: "letter:sky", position: 0, hasPin: false, isOwner: true, syncing: false, kids }], active, locked: false, max: 6, kids, wipePending: null, incognitoHost: null, incognitoPin: null, incognitoEnded: false });
+  const p = (kids: boolean, active = "a") => ({ profiles: [{ id: "a", name: "A", avatar: "letter:sky", position: 0, hasPin: false, isOwner: true, syncing: false, kids }], active, locked: false, max: 6, kids, wipePending: null, incognitoHost: null, incognitoPin: null, incognitoEnded: false, profileStepDone: true });
   expect(kidsOf(null)).toBe(true);
   expect(kidsOf(undefined)).toBe(true);
   expect(kidsOf(p(false, "gone"))).toBe(true);

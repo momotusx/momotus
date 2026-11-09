@@ -153,6 +153,8 @@ const DEFAULTED = new Map([
   ["PlaybackSnapshot.engine", "null"],
   // Incognito (plans/batch-10-incognito.md 2.8): an older core never reports an unread end.
   ["ProfilesSnapshot.incognitoEnded", "false"],
+  // First run's profile step (plans/first-screens.md 4.2): absent reads as answered, so an older core never shows the form.
+  ["ProfilesSnapshot.profileStepDone", "true"],
 ]);
 const INT = new Set([
   // Tile.rank: a Top 10 tile's place, 1 to 10.

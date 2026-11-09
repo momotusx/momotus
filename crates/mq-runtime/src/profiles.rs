@@ -204,6 +204,10 @@ impl Core {
             incognito_host: None,
             incognito_pin: None,
             incognito_ended: false,
+            profile_step_done: self
+                .device_library()
+                .device_value(crate::core::PROFILE_STEP)
+                .is_ok_and(|v| v.is_some()),
         }
     }
 
@@ -290,6 +294,36 @@ impl Core {
             avatar.unwrap_or(&row.avatar),
             position.unwrap_or(row.position),
             self.clock(),
+        )?;
+        Ok(())
+    }
+
+    /// First run's profile step (plans/first-screens.md 4.2): the owner's
+    /// name and avatar, where an empty one (or the stored one) means
+    /// unchanged, so an untouched form writes nothing; then the step is
+    /// marked answered on this device only, announced to the profiles view.
+    /// Owner session only.
+    pub fn finish_profile_step(&self, name: &str, avatar: &str) -> Result<(), ProfileError> {
+        if self.profile() != OWNER {
+            return Err(ProfileError::NotOwner);
+        }
+        let row = self
+            .device_library()
+            .profile(OWNER)?
+            .ok_or(ProfileError::Unknown)?;
+        let name = Some(name.trim())
+            .filter(|n| !n.is_empty())
+            .map(valid_name)
+            .transpose()?
+            .filter(|n| *n != row.name);
+        let avatar = Some(avatar).filter(|a| !a.is_empty() && *a != row.avatar);
+        if name.is_some() || avatar.is_some() {
+            self.update_profile(OWNER, name, avatar, None)?;
+        }
+        self.device_library().set_device_value_announced(
+            crate::core::PROFILE_STEP,
+            "1",
+            mq_library::Table::Profiles,
         )?;
         Ok(())
     }

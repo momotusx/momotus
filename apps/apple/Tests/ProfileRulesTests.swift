@@ -254,3 +254,14 @@ private func snapshot(_ profiles: [ProfileInfo], locked: Bool = false) -> Profil
     #expect(keypad.contains(".onKeyPress(.delete, phases: .down) { _ in delete(onScreen: false); return .handled }"))
     #expect(try body(of: "private func delete(onScreen: Bool)", in: keypad).contains("KeypadDelete.of(digits: digits, onScreen: onScreen)"))
 }
+
+// First run's profile step (plans/first-screens.md 4.2): the mark decodes, and an older core that sends none reads
+// as answered, so it never shows the form.
+@Test func theProfileStepMarkDecodesAndAnOlderCoreReadsAsAnswered() throws {
+    let base = #""profiles":[],"active":"default","locked":false,"max":6,"incognitoHost":null,"incognitoPin":null"#
+    let decode = { (json: String) in try JSONDecoder().decode(ProfilesSnapshot.self, from: Data(json.utf8)) }
+    #expect(try decode("{\(base),\"profileStepDone\":false}").stepDone == false)
+    #expect(try decode("{\(base),\"profileStepDone\":true}").stepDone == true)
+    #expect(try decode("{\(base)}").stepDone == true)
+    #expect(snapshot([profile("main", owner: true)]).stepDone)
+}

@@ -12,6 +12,7 @@ import app.marquee.core.model.LostPreview
 import app.marquee.core.model.PairingSnapshot
 import app.marquee.core.model.PlaybackPhase
 import app.marquee.core.model.PlaybackSnapshot
+import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.model.RowState
 import app.marquee.core.model.SegmentKind
 import app.marquee.core.model.SyncReport
@@ -199,5 +200,16 @@ class ShapeDecodeTest {
             PairingSnapshot.Joining,
             strict.decodeFromString(PairingSnapshot.serializer(), """{"phase":"joining"}"""),
         )
+    }
+
+    @Test
+    fun `the profile step mark decodes, and an older core without it reads as answered`() {
+        val base =
+            """"profiles":[],"active":"default","locked":false,"max":6,"kids":false,"wipePending":null,
+               "incognitoHost":null,"incognitoPin":null,"incognitoEnded":false"""
+        val decode = { json: String -> strict.decodeFromString(ProfilesSnapshot.serializer(), json) }
+        assertEquals(false, decode("""{$base,"profileStepDone":false}""").profileStepDone)
+        assertEquals(true, decode("""{$base,"profileStepDone":true}""").profileStepDone)
+        assertEquals(true, decode("{$base}").profileStepDone)
     }
 }

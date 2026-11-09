@@ -207,6 +207,8 @@ async fn incognito_refuses_the_device_ops_and_views() {
         json!({"op": "defaultAddons"}),
         json!({"op": "installDefaults", "choices": []}),
         json!({"op": "firstRunStill"}),
+        json!({"op": "firstRunWall"}),
+        json!({"op": "finishProfileStep", "name": "", "avatar": ""}),
         json!({"op": "profilesLastWatched"}),
         json!({"op": "relayInfo", "server": "http://127.0.0.1:9"}),
         json!({"op": "createSyncAccount", "server": "http://127.0.0.1:9", "name": "X"}),

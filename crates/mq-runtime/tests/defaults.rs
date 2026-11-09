@@ -1313,10 +1313,14 @@ async fn still_host(delay: std::time::Duration, status: u16, body: &'static str)
     format!("http://{addr}")
 }
 
-// One test for every case: the replay base is one switch for the whole process.
+/// The replay base is one switch for the whole process: the tests that set it take turns.
+static REPLAY: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+// One test for every case of the still.
 #[tokio::test]
 async fn first_run_still_is_the_first_backdrop_of_the_default_catalog_or_nothing() {
     use std::time::{Duration, Instant};
+    let _replay = REPLAY.lock().await;
     let metas = r#"{"metas":[
         {"id":"tt1","type":"movie","name":"No Art"},
         {"id":"tt2","type":"movie","name":"Second","background":"https://images.example/bg/tt2.jpg","logo":"https://images.example/logo/tt2.png"},
@@ -1413,6 +1417,84 @@ async fn first_run_still_is_the_first_backdrop_of_the_default_catalog_or_nothing
             logo: None,
             name: "Third".into(),
         })
+    );
+}
+
+/// First run's wall (plans/first-screens.md 4.1): the default catalog's
+/// poster links in its order, `https`, without repeats, at most 30, and
+/// nothing else (no name, no addon); empty on a failure or past the budget.
+#[tokio::test]
+async fn first_run_wall_is_the_default_catalogs_posters_or_nothing() {
+    use std::time::{Duration, Instant};
+    let _replay = REPLAY.lock().await;
+    let metas = r#"{"metas":[
+        {"id":"tt1","type":"movie","name":"First","poster":"https://images.example/poster/tt1.jpg"},
+        {"id":"tt2","type":"movie","name":"No Poster","background":"https://images.example/bg/tt2.jpg"},
+        {"id":"tt3","type":"movie","name":"Plain","poster":"http://images.example/poster/tt3.jpg"},
+        {"id":"tt6","type":"movie","name":"Inline","poster":"data:image/png;base64,AAAA"},
+        {"id":"tt7","type":"movie","name":"Local","poster":"file:///etc/poster.jpg"},
+        {"id":"tt4","type":"movie","name":"Again","poster":"https://images.example/poster/tt1.jpg"},
+        {"id":"tt5","type":"movie","name":"Last","poster":"https://images.example/poster/tt5.jpg"}
+    ]}"#;
+    mq_http::set_dev_replay(&still_host(Duration::ZERO, 200, metas).await);
+    let core = Core::temporary(OWNER).unwrap();
+    assert_eq!(
+        core.first_run_wall().await,
+        [
+            "https://images.example/poster/tt1.jpg",
+            "https://images.example/poster/tt3.jpg",
+            "https://images.example/poster/tt5.jpg",
+        ]
+    );
+    assert!(core.library().addons(OWNER).unwrap().is_empty());
+
+    // At most 30, the catalog's first 30 in its order.
+    let many: String = (0..40)
+        .map(|i| format!(r#"{{"id":"tt{i}","type":"movie","name":"T{i}","poster":"https://p.example/{i}.jpg"}}"#))
+        .collect::<Vec<_>>()
+        .join(",");
+    let many: &'static str = Box::leak(format!(r#"{{"metas":[{many}]}}"#).into_boxed_str());
+    mq_http::set_dev_replay(&still_host(Duration::ZERO, 200, many).await);
+    let wall = Core::temporary(OWNER).unwrap().first_run_wall().await;
+    let want: Vec<String> = (0..30)
+        .map(|i| format!("https://p.example/{i}.jpg"))
+        .collect();
+    assert_eq!(wall, want);
+
+    // A failing host, an answer that is not JSON, or one of another shape: empty.
+    for (status, body) in [(500, metas), (200, "not json"), (200, r#"{"streams":[]}"#)] {
+        mq_http::set_dev_replay(&still_host(Duration::ZERO, status, body).await);
+        assert!(
+            Core::temporary(OWNER)
+                .unwrap()
+                .first_run_wall()
+                .await
+                .is_empty(),
+            "{status} {body}"
+        );
+    }
+
+    // As slow as a phone's first request after install: it still comes.
+    mq_http::set_dev_replay(&still_host(Duration::from_millis(2500), 200, metas).await);
+    assert_eq!(
+        Core::temporary(OWNER).unwrap().first_run_wall().await.len(),
+        3
+    );
+
+    // No answer: empty once the budget is spent.
+    mq_http::set_dev_replay(&still_host(Duration::from_secs(30), 200, metas).await);
+    let started = Instant::now();
+    assert!(
+        Core::temporary(OWNER)
+            .unwrap()
+            .first_run_wall()
+            .await
+            .is_empty()
+    );
+    let waited = started.elapsed();
+    assert!(
+        waited >= Duration::from_millis(5800) && waited < Duration::from_millis(7500),
+        "waited {waited:?}"
     );
 }
 

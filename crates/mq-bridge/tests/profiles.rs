@@ -356,11 +356,16 @@ async fn a_locked_session_answers_only_the_picker_unlocking_and_sync() {
         json!({"op": "setPin", "profile": "default", "pin": null, "currentPin": "2580"}),
         json!({"op": "lockSession"}),
         json!({"op": "profilesLastWatched"}),
+        json!({"op": "finishProfileStep", "name": "", "avatar": ""}),
     ];
     for request in refused {
         assert_eq!(c.code(request.clone()).await, "locked", "{request}");
     }
     c.ok(json!({"op": "ping"})).await;
+    // The start picker is drawn over first run's wall: answered, posters or none.
+    let wall = c.call(json!({"op": "firstRunWall"})).await;
+    assert_eq!(wall["ok"], true, "{wall}");
+    assert!(wall["result"].is_array(), "{wall}");
     // Debrid keys are the device's, handed over at start, locked or not.
     let keys = json!({"op": "setDebridKeys", "keys": [["realdebrid", "k"]]});
     assert_eq!(c.ok(keys).await["stores"], 1);
@@ -483,6 +488,50 @@ async fn a_new_device_calls_its_owner_main() {
     let mut c = Client::new(core);
     let snapshot = picker_snapshot(&mut c).await;
     assert_eq!(profile(&snapshot, "default")["name"], "Main", "{snapshot}");
+}
+
+/// `finishProfileStep` (plans/first-screens.md 4.2): empty fields keep the
+/// owner as it is, the reply is the snapshot with the step done, and an
+/// open profiles view hears it; a typed name is written; another profile is
+/// refused.
+#[tokio::test]
+async fn finish_profile_step_replies_the_snapshot_and_tells_the_picker() {
+    let mut c = Client::new(Core::temporary("default").unwrap());
+    let opened = c.ok(json!({"op": "subscribe", "view": "profiles"})).await;
+    assert_eq!(opened["snapshot"]["profileStepDone"], false, "{opened}");
+    let picker = opened["sub"].clone();
+    let snapshot = c
+        .ok(json!({"op": "finishProfileStep", "name": "", "avatar": ""}))
+        .await;
+    assert_eq!(snapshot["profileStepDone"], true, "{snapshot}");
+    let owner = profile(&snapshot, "default");
+    assert_eq!(
+        (&owner["name"], &owner["avatar"]),
+        (&json!("Main"), &json!(""))
+    );
+    c.push_where(|m| {
+        m["sub"] == picker
+            && m["updates"].as_array().unwrap().last().unwrap()["profileStepDone"] == true
+    })
+    .await;
+    let snapshot = c
+        .ok(json!({"op": "finishProfileStep", "name": "Deniz", "avatar": ""}))
+        .await;
+    assert_eq!(profile(&snapshot, "default")["name"], "Deniz");
+    let long = "x".repeat(31);
+    assert_eq!(
+        c.code(json!({"op": "finishProfileStep", "name": long, "avatar": ""}))
+            .await,
+        "badName"
+    );
+    c.ok(json!({"op": "unsubscribe", "sub": picker})).await;
+    let kid = c.create("Kid").await;
+    c.switch(&kid, None).await;
+    assert_eq!(
+        c.code(json!({"op": "finishProfileStep", "name": "", "avatar": ""}))
+            .await,
+        "notOwner"
+    );
 }
 
 #[tokio::test]
@@ -1226,6 +1275,8 @@ async fn a_kids_session_changes_no_source_account_or_profile() {
         json!({"op": "removeAddon", "url": manifest}),
         json!({"op": "setAddonEnabled", "url": manifest, "enabled": false}),
         json!({"op": "installDefaults"}),
+        json!({"op": "firstRunWall"}),
+        json!({"op": "finishProfileStep", "name": "", "avatar": ""}),
         json!({"op": "addPluginRepo", "url": manifest}),
         json!({"op": "setDebridKey", "service": "realdebrid", "key": "k"}),
         json!({"op": "relayInfo", "server": "http://127.0.0.1:9"}),

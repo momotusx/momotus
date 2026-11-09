@@ -540,3 +540,192 @@ async fn art_is_the_backdrop_else_the_still_and_never_waits_long() {
     assert!(took < Duration::from_millis(2_500), "{took:?}");
     eprintln!("profiles_last_watched with a silent addon: {took:?}");
 }
+
+// First run's profile step and a later join (plans/first-screens.md 4.2).
+
+fn at(wall_ms: u64, device: u64) -> String {
+    mq_library::Hlc {
+        wall_ms,
+        counter: 0,
+        device,
+    }
+    .encode()
+}
+
+/// The account's registers: its owner, on device 9, renamed "Robin" with a
+/// picture at a fixed past time, or never renamed (the zero time).
+fn account(renamed: bool) -> Vec<mq_library::SyncRecord> {
+    let a = mq_library::Library::temporary().unwrap();
+    a.ensure_profile(OWNER, mq_library::OWNER_NAME, &at(0, 9))
+        .unwrap();
+    if renamed {
+        a.update_profile(OWNER, "Robin", "pic:robin", 0, &at(1_000, 9))
+            .unwrap();
+    }
+    a.changed_since(&mq_library::SyncCursor::default(), 100_000)
+        .unwrap()
+}
+
+/// A join as the engine runs it: marked, the first pull, the settle.
+fn join(core: &Core, records: &[mq_library::SyncRecord]) {
+    core.joined_sync_account();
+    core.library().apply(records).unwrap();
+    core.library()
+        .settle_join_defaults(core.clock().device())
+        .unwrap();
+}
+
+fn owner(core: &Core) -> (String, String) {
+    let row = core.library().profile(OWNER).unwrap().unwrap();
+    (row.name, row.avatar)
+}
+
+fn owner_hlc(core: &Core) -> String {
+    core.library()
+        .changed_since(&mq_library::SyncCursor::default(), 100_000)
+        .unwrap()
+        .into_iter()
+        .find(|r| r.coll == mq_library::coll::PROFILES && r.key == OWNER)
+        .unwrap()
+        .hlc
+}
+
+/// The owner records waiting to be sent: (name, hlc).
+fn queued_owner(core: &Core) -> Vec<(String, String)> {
+    core.library()
+        .outbox(1_000)
+        .unwrap()
+        .records
+        .into_iter()
+        .map(|(_, r)| r)
+        .filter(|r| r.coll == mq_library::coll::PROFILES && r.key == OWNER)
+        .map(|r| {
+            (
+                r.value["name"].as_str().unwrap_or_default().to_owned(),
+                r.hlc,
+            )
+        })
+        .collect()
+}
+
+fn mine(name: &str) -> (String, String) {
+    (name.to_owned(), String::new())
+}
+
+#[tokio::test]
+async fn an_untouched_continue_then_join_keeps_the_accounts_owner() {
+    let core = Core::temporary(OWNER).unwrap();
+    let queued = core.library().outbox(1_000).unwrap().records.len();
+    let mut changes = core.library().subscribe();
+    core.finish_profile_step("", "").unwrap();
+    let mut heard = Vec::new();
+    while let Ok(tables) = changes.try_recv() {
+        heard.extend(tables);
+    }
+    assert!(heard.contains(&mq_library::Table::Profiles), "announced");
+    // The stored values count as untouched too.
+    core.finish_profile_step(" Main ", "").unwrap();
+    assert_eq!(core.library().outbox(1_000).unwrap().records.len(), queued);
+    assert!(
+        owner_hlc(&core).starts_with("000000000000"),
+        "never written"
+    );
+    assert!(core.profiles_snapshot(false).profile_step_done);
+
+    join(&core, &account(true));
+    assert_eq!(owner(&core), ("Robin".into(), "pic:robin".into()));
+}
+
+#[tokio::test]
+async fn a_colour_only_edit_then_join_yields_to_a_renamed_account_owner() {
+    let core = Core::temporary(OWNER).unwrap();
+    core.finish_profile_step("", "glyph:sea").unwrap();
+    assert_eq!(owner(&core), ("Main".into(), "glyph:sea".into()));
+    join(&core, &account(true));
+    assert_eq!(owner(&core), ("Robin".into(), "pic:robin".into()));
+    let sent = queued_owner(&core);
+    assert!(!sent.is_empty());
+    assert!(
+        sent.iter().all(|s| *s == ("Robin".into(), at(1_000, 9))),
+        "{sent:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_typed_name_then_join_yields_to_a_renamed_account_owner() {
+    let core = Core::temporary(OWNER).unwrap();
+    core.finish_profile_step("Deniz", "").unwrap();
+    assert_eq!(owner(&core), mine("Deniz"));
+    join(&core, &account(true));
+    assert_eq!(owner(&core), ("Robin".into(), "pic:robin".into()));
+}
+
+#[tokio::test]
+async fn a_not_now_owner_edit_is_kept_when_the_account_owner_was_never_renamed() {
+    let core = Core::temporary(OWNER).unwrap();
+    core.finish_profile_step("Deniz", "").unwrap();
+    let edited = owner_hlc(&core);
+    join(&core, &account(false));
+    assert_eq!(owner(&core), mine("Deniz"));
+    assert_eq!(owner_hlc(&core), edited);
+    assert!(
+        queued_owner(&core).contains(&("Deniz".into(), edited.clone())),
+        "{:?}",
+        queued_owner(&core)
+    );
+}
+
+#[tokio::test]
+async fn an_empty_field_keeps_a_picked_avatar() {
+    let core = Core::temporary(OWNER).unwrap();
+    core.update_profile(OWNER, None, Some("glyph:sea"), None)
+        .unwrap();
+    let queued = core.library().outbox(1_000).unwrap().records.len();
+    core.finish_profile_step("", "").unwrap();
+    assert_eq!(core.library().outbox(1_000).unwrap().records.len(), queued);
+    assert_eq!(owner(&core), ("Main".into(), "glyph:sea".into()));
+    core.finish_profile_step("Deniz", "").unwrap();
+    assert_eq!(owner(&core), ("Deniz".into(), "glyph:sea".into()));
+}
+
+#[tokio::test]
+async fn a_not_now_owner_edit_survives_a_join_left_before_its_first_pull() {
+    let core = Core::temporary(OWNER).unwrap();
+    core.finish_profile_step("Deniz", "").unwrap();
+    let edited = owner_hlc(&core);
+    // A pairing tried again marks the join twice before any pull: the
+    // first hold's time is the one kept.
+    core.joined_sync_account();
+    core.joined_sync_account();
+    core.library().forget_sync().unwrap();
+    assert_eq!(owner(&core), mine("Deniz"));
+    assert_eq!(owner_hlc(&core), edited);
+}
+
+#[tokio::test]
+async fn profile_step_done_is_device_only_and_wiped() {
+    let core = Core::temporary(OWNER).unwrap();
+    assert!(!core.profiles_snapshot(false).profile_step_done);
+    core.finish_profile_step("Deniz", "glyph:sea").unwrap();
+    assert!(core.profiles_snapshot(false).profile_step_done);
+    // Another device takes everything this one has, but not the mark.
+    let other = Core::temporary(OWNER).unwrap();
+    other
+        .library()
+        .apply(
+            &core
+                .library()
+                .changed_since(&mq_library::SyncCursor::default(), 100_000)
+                .unwrap(),
+        )
+        .unwrap();
+    assert_eq!(owner(&other).0, "Deniz");
+    assert!(!other.profiles_snapshot(false).profile_step_done);
+    core.wipe().unwrap();
+    assert!(!core.profiles_snapshot(false).profile_step_done);
+    // Not the owner: refused, nothing marked.
+    let kid = other.create_profile("Kid", "fox").unwrap();
+    let kid = other.for_profile(&kid);
+    assert!(kid.finish_profile_step("", "").is_err());
+    assert!(!kid.profiles_snapshot(false).profile_step_done);
+}

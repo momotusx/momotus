@@ -44,7 +44,7 @@ const main: ProfileInfo = { id: "default", name: "Main", avatar: "letter:ember",
 const kid: ProfileInfo = { id: "k", name: "Kid", avatar: "letter:sky", position: 1, hasPin: false, isOwner: false, syncing: false, kids: true };
 const sam: ProfileInfo = { id: "s", name: "Sam", avatar: "letter:sea", position: 2, hasPin: false, isOwner: false, syncing: false, kids: false };
 const session = (active: string, over: Partial<ProfilesSnapshot> = {}, profiles = [main, kid, sam]) =>
-  ({ profiles, active, locked: false, max: 6, kids: active === "k", wipePending: null, incognitoHost: null, incognitoPin: null, incognitoEnded: false, ...over }) as ProfilesSnapshot;
+  ({ profiles, active, locked: false, max: 6, kids: active === "k", wipePending: null, incognitoHost: null, incognitoPin: null, incognitoEnded: false, profileStepDone: true, ...over }) as ProfilesSnapshot;
 
 test("only the main profile's unlocked session manages kids profiles", () => {
   expect(managesKids(session("default"))).toBe(true);

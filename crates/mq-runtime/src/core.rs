@@ -1784,6 +1784,9 @@ const ADDONS_REFRESHED: &str = "addons_refreshed_ms";
 /// D13's removal, recorded before the leave and gone with the wipe (which
 /// empties `device_state`) or a join: `debrid` or `keep`.
 const REMOVAL: &str = "removal_pending";
+/// First run's profile step was answered on this device
+/// (`finishProfileStep`): never synced, gone with the wipe.
+pub(crate) const PROFILE_STEP: &str = "profile_step";
 /// Installed manifests are fetched again at most this often.
 const REFRESH_EVERY_MS: u64 = 24 * 60 * 60 * 1000;
 

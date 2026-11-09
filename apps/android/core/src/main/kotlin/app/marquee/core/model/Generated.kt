@@ -1519,6 +1519,8 @@ data class ProfilesSnapshot(
     val incognitoPin: String? = null,
     /** An Incognito end this session has not read yet: set until its next profile op or `ackIncognitoEnded`; automatic requests never clear it. */
     val incognitoEnded: Boolean = false,
+    /** First run's profile step was answered on this device (`finishProfileStep`; plans/first-screens.md 4.2): never synced, gone with the wipe. In Incognito, the host's. */
+    val profileStepDone: Boolean = true,
 )
 
 @Serializable(with = QualityPref.Serializer::class)

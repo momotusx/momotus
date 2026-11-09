@@ -41,6 +41,7 @@ import app.marquee.core.model.TraktReport
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.nullable
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -285,6 +286,12 @@ class CoreOps(
     suspend fun firstRunStill(): FirstRunStill? = call("firstRunStill", emptyMap(), FirstRunStill.serializer().nullable)
 
     /**
+     * The posters first run's wall shows (plans/first-screens.md 4.1): links from the default catalog's first
+     * catalog, asked without installing it. Empty when none came within its budget: the tiles stay empty.
+     */
+    suspend fun firstRunWall(): List<String> = call("firstRunWall", emptyMap(), ListSerializer(String.serializer()))
+
+    /**
      * Installs the defaults in one write, no network: a named absent one goes in on or off as chosen,
      * a named present one takes its switch. A key left out is never added or switched, and an empty
      * list writes nothing. Refused for a kids profile.
@@ -385,6 +392,15 @@ class CoreOps(
             },
             profilesSnap,
         )
+
+    /**
+     * First run's profile step (plans/first-screens.md 4.2): [name] empty unless typed and [avatar] empty unless a
+     * swatch was pressed; the core keeps the stored value for an empty one and marks the step answered here.
+     */
+    suspend fun finishProfileStep(
+        name: String,
+        avatar: String,
+    ): ProfilesSnapshot = call("finishProfileStep", mapOf("name" to text(name), "avatar" to text(avatar)), profilesSnap)
 
     suspend fun deleteProfile(profile: String): ProfilesSnapshot =
         call("deleteProfile", mapOf("profile" to text(profile)), profilesSnap)

@@ -104,6 +104,21 @@ enum Request {
     FirstRunStill {
         id: u64,
     },
+    /// The posters first run's wall shows (`Core::first_run_wall`), empty
+    /// past its budget. Replies `[string]`.
+    FirstRunWall {
+        id: u64,
+    },
+    /// First run's profile step (`Core::finish_profile_step`): the owner's
+    /// name and avatar, an empty one meaning unchanged, and the step marked
+    /// answered on this device. Replies the `ProfilesSnapshot`.
+    FinishProfileStep {
+        id: u64,
+        #[serde(default)]
+        name: String,
+        #[serde(default)]
+        avatar: String,
+    },
     /// Each profile's last title for the desktop profile panel
     /// (`Core::profiles_last_watched`), within 1.5 s. Refused locked, for
     /// kids and in Incognito. Replies `[LastWatched]`.
@@ -788,6 +803,9 @@ impl Request {
             | Request::SwitchProfile { .. }
             | Request::ResetOwnerPin { .. }
             | Request::SyncNow { .. }
+            // The start picker is drawn over first run's wall: public
+            // poster links, no profile's data.
+            | Request::FirstRunWall { .. }
             // Debrid accounts are the device's: an app hands them over at
             // start, locked or not.
             | Request::SetDebridKeys { .. }
@@ -888,6 +906,8 @@ impl Request {
             | Request::AckDebrid { .. } => true,
             Request::DefaultAddons { .. }
             | Request::FirstRunStill { .. }
+            | Request::FirstRunWall { .. }
+            | Request::FinishProfileStep { .. }
             | Request::ProfilesLastWatched { .. }
             | Request::InstallDefaults { .. }
             | Request::SetDebridKey { .. }
@@ -990,6 +1010,8 @@ impl Request {
             | Request::InstallAddon { .. }
             | Request::DefaultAddons { .. }
             | Request::FirstRunStill { .. }
+            | Request::FirstRunWall { .. }
+            | Request::FinishProfileStep { .. }
             // Other profiles' history is not a kid's to read.
             | Request::ProfilesLastWatched { .. }
             | Request::InstallDefaults { .. }
@@ -1087,6 +1109,8 @@ impl Request {
             | Request::InstallAddon { .. }
             | Request::DefaultAddons { .. }
             | Request::FirstRunStill { .. }
+            | Request::FirstRunWall { .. }
+            | Request::FinishProfileStep { .. }
             | Request::ProfilesLastWatched { .. }
             | Request::InstallDefaults { .. }
             | Request::InstallListed { .. }
@@ -1887,6 +1911,13 @@ impl Session {
             }
             Request::FirstRunStill { id } => {
                 self.spawn_fenced(id, async move { to_value(&core.first_run_still().await) });
+            }
+            Request::FirstRunWall { id } => {
+                self.spawn_fenced(id, async move { to_value(&core.first_run_wall().await) });
+            }
+            Request::FinishProfileStep { id, name, avatar } => {
+                let result = core.finish_profile_step(&name, &avatar);
+                self.reply_profiles(id, result);
             }
             Request::ProfilesLastWatched { id } => {
                 self.spawn_fenced(
