@@ -96,7 +96,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 /* Room kept for the shift and Next while hidden; the measure lays it out unseen, with the Subtitles value at its longest. */
 .rsv.off { display: none; }
 .osd[data-measure] .rsv.off { display: flex; visibility: hidden; }
-.osd[data-measure] .subv { min-width: 8em; }
+.osd[data-measure] .subv { width: calc(220 * var(--u)); }
 .round { position: relative; width: calc(48 * var(--u)); height: calc(48 * var(--u)); border-radius: 50%; display: grid; place-items: center; color: var(--text); background: var(--fill); }
 .round svg { width: calc(24 * var(--u)); height: calc(24 * var(--u)); }
 /* The interval inside the skip arrows. */
@@ -156,7 +156,11 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 @keyframes strip-in { from { opacity: 0; transform: translateY(calc(8 * var(--u))); } }
 @media (hover: hover) {
   /* 22 percent, not the pick's 26: a hovered label keeps 4.5:1 over a white picture under the scrim. */
-  [data-form="desktop"] .osd :is(.pill, .round:not(.main), .qsb, .qv, .chip3, .stb:not(:disabled), .qb, .sseg button):hover { background-color: rgba(255, 255, 255, .22); }
+  [data-form="desktop"] .osd :is(.pill, .round:not(.main), .chip3, .stb:not(:disabled), .qb, .sseg button):hover { background-color: rgba(255, 255, 255, .22); }
+  /* The shift's parts sit on the capsule's own 16 percent: a light tint over it, never a second 22 percent. */
+  [data-form="desktop"] .osd .qs :is(.qsb, .qv):hover { background-color: rgba(255, 255, 255, .08); }
+  /* A hovered pill's value brightens with its fill, so it keeps 4.5:1 over a white picture. */
+  [data-form="desktop"] .osd .pill:hover small { color: rgba(255, 255, 255, .9); }
 }
 /* Back, above the title on a desktop and a phone. */
 .pback-row { display: flex; align-items: center; gap: 20px; margin-bottom: 18px; }

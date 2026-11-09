@@ -338,7 +338,8 @@ test("desktop and phone players say Back on screen; a desktop adds full screen a
       await startIfPaused(page);
       await expect.poll(paused).toBe(false);
       // No volume control at all (plans/player-bar.md D10): the system's covers it, and nothing on the page moves the level.
-      await expect(page.locator('[data-f="player:mute"], [data-f="player:volume"]')).toHaveCount(0);
+      await expect(page.locator(".player-scr").getByRole("slider", { name: /volume|level/i })).toHaveCount(0);
+      await expect(page.locator(".player-scr").getByRole("button", { name: /mute|volume/i })).toHaveCount(0);
       const level = await volume();
       // Real clicks land on the icon, which each click swaps: the surface
       // must not take them for a click on the picture (QA r1 Q5 rows 8, 9).

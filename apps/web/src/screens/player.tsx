@@ -423,7 +423,12 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   let sayTimer: ReturnType<typeof setTimeout> | undefined;
   const say = () => {
     clearTimeout(sayTimer);
-    sayTimer = setTimeout(() => !holding() && setSaid(shiftSaid(subDelay())), DELAY_SETTLE_MS);
+    sayTimer = setTimeout(() => {
+      if (holding()) return;
+      // Emptied first, so the same line twice (Later, reset, Later) is said again.
+      setSaid("");
+      queueMicrotask(() => setSaid(shiftSaid(subDelay())));
+    }, DELAY_SETTLE_MS);
   };
   onCleanup(() => clearTimeout(sayTimer));
   const shiftTo = (sec: number) => {
@@ -650,6 +655,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   );
   // Whether the press under way only closed a strip (D21): no play or pause, no seek, no full screen with it.
   let closedStrip = -Infinity;
+  // Presses on the screen so far: the one that closed a strip is `closedStrip`.
+  let presses = 0;
 
   // How the row fits (D16 desktop and TV, D17 phone): measured, at any width. Each candidate state is laid out in
   // turn within one task (nothing paints between) with the shift's and Next's room and the Subtitles value's longest
@@ -702,13 +709,16 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     osdEl = el;
     barWidth = -1;
     const sizes = new ResizeObserver(() => {
-      // Only a new width can change the fit; the rows it chose change the height.
-      if (el.clientWidth !== barWidth) {
-        barWidth = el.clientWidth;
-        fitBar();
-      }
-      barVars();
-      placeCues();
+      // Only a new width can change the fit; the rows it chose change the height. On the next frame, so the height
+      // it changes is never a size change inside the observer's own callback.
+      requestAnimationFrame(() => {
+        if (el.clientWidth !== barWidth) {
+          barWidth = el.clientWidth;
+          fitBar();
+        }
+        barVars();
+        placeCues();
+      });
     });
     sizes.observe(el);
     onCleanup(() => sizes.disconnect());
@@ -731,6 +741,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     wake();
     const timer = setInterval(() => !paused() && report(), PROGRESS_MS);
     // While the controls are hidden, the first press only shows them.
+    // A held Back already took a step in the player (see onKey).
+    let backStepped = false;
     const onKey = (e: KeyboardEvent) => {
       // Versions over the player owns the keys; its Back closes it.
       if (layer()) {
@@ -769,14 +781,22 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       if (back && panel()) {
         e.preventDefault();
         e.stopImmediatePropagation();
+        backStepped = true;
         setPanel(null);
         return;
       }
       // Back with a shift in adjust mode or a strip open (plans/player-bar.md 6): adjust mode first, then Style's row,
-      // then the strip (focus back to its opener); then today's order.
+      // then the strip (focus back to its opener); then today's order. A held Back takes one step: its repeats after
+      // that step are swallowed until the key is let go, so it never leaves the player in the same press.
+      if (back && e.repeat && backStepped) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
       if (back && (adjust() || strip())) {
         e.preventDefault();
         e.stopImmediatePropagation();
+        backStepped = true;
         stepBack();
         return;
       }
@@ -788,7 +808,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         if ((e.key === "g" || e.key === "h") && form() === "desktop" && !e.altKey && !e.ctrlKey && !e.metaKey && canShift()) {
           e.preventDefault();
           e.stopImmediatePropagation();
-          shiftTo(nudge(subDelay(), (e.key === "g" ? -1 : 1) * QUICK_STEP));
+          // One step a press: the keyboard's own repeat never sets the speed (section 6).
+          if (!e.repeat) shiftTo(nudge(subDelay(), (e.key === "g" ? -1 : 1) * QUICK_STEP));
           return;
         }
         // Into and out of an open strip by arrows (section 6).
@@ -841,6 +862,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       wake();
     };
     window.addEventListener("keydown", onKey, { capture: true });
+    const backUp = (e: KeyboardEvent) => isBackKey(e) && (backStepped = false);
+    window.addEventListener("keyup", backUp, { capture: true });
+    onCleanup(() => window.removeEventListener("keyup", backUp, { capture: true }));
     onCleanup(() => {
       clearInterval(timer);
       clearTimeout(hideTimer);
@@ -1277,7 +1301,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // turned); the bar's measures when a strip or Style's row opens or closes.
   const later = (f: () => void) => requestAnimationFrame(f);
   createEffect(
-    on([audioText, rate, () => playing()?.quality, subsText, () => !!ctx.ref, () => !!next(), full, form, upright, canShift], () =>
+    // Not the Subtitles value: it is measured at its longest, so a subtitle turned on or off never moves the row.
+    on([audioText, rate, () => playing()?.quality, () => !!ctx.ref, () => !!next(), full, form, upright, canShift], () =>
       later(() => {
         fitBar();
         barVars();
@@ -1434,6 +1459,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         // While the controls are hidden, a click only brings them back. A touch's click would land on the control that
         // just came up under the finger; one on Skip or Up Next, which stay up, is theirs.
         woke = !osd();
+        presses++;
         if (woke) {
           e.preventDefault();
           wake();
@@ -1441,22 +1467,22 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         }
         // D21: with a strip open, the first press outside it and the bar only closes it.
         if (strip() && !e.composedPath().some((n) => n instanceof Element && n.matches(".osd, .skip-wrap, .next"))) {
-          closedStrip = e.timeStamp;
+          closedStrip = presses;
           closeStrip();
           wake();
         }
       }}
       onClick={(e) => {
         // With the controls up, a click on the picture plays or pauses (a
-        // mouse; a touch screen shows and hides the controls).
-        if (woke || form() !== "desktop" || !started() || e.timeStamp - closedStrip < 1000) return;
+        // mouse; a touch screen shows and hides the controls). The press that closed a strip does nothing more.
+        if (woke || form() !== "desktop" || !started() || presses === closedStrip) return;
         if (onControls(e)) return;
         toggle();
       }}
       // A double click on the picture: full screen in and out (its two
-      // clicks played and paused, so the play goes on as it was).
+      // clicks played and paused, so the play goes on as it was); not when one of its presses closed a strip.
       onDblClick={(e) => {
-        if (form() !== "desktop" || onControls(e) || e.timeStamp - closedStrip < 1000) return;
+        if (form() !== "desktop" || onControls(e) || presses - closedStrip <= 1) return;
         toggleFull();
       }}
     >
@@ -1881,7 +1907,12 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
             <AudioStrip
               tracks={
                 audioTracks().length > 1
-                  ? audioTracks().map((t, i) => ({ id: t.id, name: audioTrackName(t, i, audioTracks().length), checked: t.selected }))
+                  ? audioTracks().map((t, i) => ({
+                      id: t.id,
+                      name: audioTrackName(t, i, audioTracks().length),
+                      detail: t.lang && t.label && t.label !== t.lang ? t.label : undefined,
+                      checked: t.selected,
+                    }))
                   : [{ id: "current", name: audioText(), checked: true }]
               }
               pick={(id) => id !== "current" && engine.selectTrack("audio", id)}
@@ -1890,6 +1921,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   <span class="cl">{barWords.chooseVersion}</span>
                 </RouteA>
               }
+              note="Other languages come with other versions."
               close={closeStrip}
             />
           </Show>

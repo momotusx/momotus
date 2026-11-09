@@ -291,10 +291,12 @@ export function SubtitleStrip(props: SubtitleStripProps) {
 }
 
 export function AudioStrip(props: {
-  tracks: { id: string; name: string; checked: boolean }[];
+  /** `detail`: the file's own label for a track, when it says more than its name (said with it). */
+  tracks: { id: string; name: string; detail?: string; checked: boolean }[];
   pick: (id: string) => void;
-  /** Choose a version (web's link to Versions), on every audio strip. */
+  /** Choose a version (web's link to Versions), on every audio strip, after the note that other languages live there. */
   versions: JSX.Element;
+  note: string;
   close: () => void;
 }) {
   return (
@@ -307,12 +309,21 @@ export function AudioStrip(props: {
         <div class="strk" role="radiogroup" aria-label={names.audioTrack}>
           <For each={props.tracks}>
             {(t) => (
-              <button class="chip3" role="radio" aria-checked={t.checked} data-f={`strip:aud:${t.id}`} onClick={() => props.pick(t.id)}>
+              <button
+                class="chip3"
+                role="radio"
+                aria-checked={t.checked}
+                aria-label={t.detail ? `${t.name}, ${t.detail}` : undefined}
+                title={t.detail}
+                data-f={`strip:aud:${t.id}`}
+                onClick={() => props.pick(t.id)}
+              >
                 <AudioLines aria-hidden />
                 <span class="cl">{t.name}</span>
               </button>
             )}
           </For>
+          <span class="snote">{props.note}</span>
           {props.versions}
         </div>
         {closeButton(props.close)}

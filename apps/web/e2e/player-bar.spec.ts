@@ -148,7 +148,11 @@ test.describe("desktop", () => {
     try {
       const b = await bar(page);
       expect(b.height).toBeLessThanOrEqual(96);
-      await expect(page.locator('[data-f="player:mute"], [data-f="player:volume"], .trakt-mark, .pvol')).toHaveCount(0);
+      // Nothing removed comes back under another name: no volume slider or mute, no More, nothing of Trakt.
+      const scr = page.locator(".player-scr");
+      await expect(scr.getByRole("slider", { name: /volume|level/i })).toHaveCount(0);
+      await expect(scr.getByRole("button", { name: /mute|volume|^more$/i })).toHaveCount(0);
+      expect(await scr.evaluate((el) => /trakt/i.test(el.textContent ?? "") || !!el.querySelector('[aria-label*="trakt" i], [title*="trakt" i]'))).toBe(false);
       await expect(page.locator(".player-scr").getByRole("button", { name: /^More$/ })).toHaveCount(0);
       await expect(page.locator('[data-f="player:next"]')).toHaveAccessibleName("Next episode, S1:E2 Chapter 2");
       // Tab from Audio walks the row, Earlier, the value and Later included (section 6).
@@ -169,7 +173,42 @@ test.describe("desktop", () => {
     }
   });
 
-  for (const [width, height] of [[721, 800], [800, 600], [1024, 768], [1280, 800], [1366, 768], [1440, 900]] as const) {
+  // Under 1840 px the desktop canvas scales with the window (form.ts, --k), so the fit is the same at every width
+  // there; from 1840 the canvas grows and the right side's words come back somewhere in the band swept here.
+  test("D16: the right side keeps its words or icons whatever the subtitle, at every width from 1840 to 2800", async ({ browser }) => {
+    const { page, close } = await open(browser, S1E1, "desktop", { viewport: { width: 1840, height: 1000 } });
+    try {
+      // The fit at each width, the subtitle as it is now.
+      const sweep = async () => {
+        const out: string[] = [];
+        for (let width = 1840; width <= 2800; width += 10) {
+          await page.setViewportSize({ width, height: 1000 });
+          await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+          const f = (await bar(page)).fit;
+          out.push(`${width} ${f.rows} ${f.lw} ${f.rw} ${f.chev}`);
+        }
+        return out;
+      };
+      // A long value on (Portuguese (Brazil), from the full picker), against Off's.
+      await openSubtitlePicker(page);
+      await page.locator('[data-f="sublang:pt-BR"]').dispatchEvent("click");
+      await expect(page.locator('[data-f="player:subs"] small')).toHaveText("Portuguese (Brazil)");
+      const on = await sweep();
+      // The band is crossed: the right side has its words at the wide end and drops them at the narrow one.
+      expect(on.at(-1)).toContain(" true true ");
+      expect(on[0]).toContain(" false ");
+      await page.locator('[data-f="player:subs"]').dispatchEvent("click");
+      await page.locator('[data-f="strip:sub:off"]').dispatchEvent("click");
+      await page.locator('[data-f="strip:close"]').dispatchEvent("click");
+      await expect(page.locator('[data-f="player:subs"] small')).toHaveText(/^Off/);
+      expect(await sweep()).toEqual(on);
+      if (BENCH) writeFileSync(`${BENCH}/desktop-series-sweep.json`, JSON.stringify(on));
+    } finally {
+      await close();
+    }
+  });
+
+  for (const [width, height] of [[721, 800], [800, 600], [1024, 768], [1280, 800], [1366, 768], [1440, 900], [1600, 900], [1920, 1080]] as const) {
     test(`D16 at ${width} x ${height}: no group meets the transport, targets 44 px, the subtitle off and on moves nothing`, async ({ browser }) => {
       const { page, close } = await open(browser, S1E1, "desktop", { viewport: { width, height } });
       try {
@@ -256,7 +295,10 @@ test.describe("desktop", () => {
       await expect(shiftValue(page)).toHaveText("0.0 s");
       await page.keyboard.press("h");
       await expect(shiftValue(page)).toHaveText("+0.25 s");
-      await page.keyboard.press("g");
+      // Held G: one step for the press, none for the keyboard's repeats.
+      for (let i = 0; i < 5; i++) await page.keyboard.down("g");
+      await page.keyboard.up("g");
+      await expect(shiftValue(page)).toHaveText("0.0 s");
       await page.keyboard.press("g");
       await expect(shiftValue(page)).toHaveText("−0.25 s");
       // Playing, the controls hide after 4 s; H wakes them and shifts in the same press.
@@ -311,10 +353,16 @@ test.describe("desktop", () => {
       await expect(strip).toHaveCount(0);
       await expect(page.locator(".player-scr")).not.toHaveClass(/idle/);
       expect(await page.evaluate(() => document.querySelector("video")?.paused)).toBe(true);
-      // Audio's strip mirrors it over the left, with Choose a version.
+      // Only that press: the next click at once plays, and one more pauses again.
+      await page.mouse.click(700, 300);
+      await expect.poll(() => page.evaluate(() => document.querySelector("video")?.paused)).toBe(false);
+      await page.mouse.click(700, 300);
+      await expect.poll(() => page.evaluate(() => document.querySelector("video")?.paused)).toBe(true);
+      // Audio's strip mirrors it over the left, with Choose a version and the note on other languages.
       await page.locator('[data-f="player:audio"]').click();
       await expect(page.locator(".bstrip.aud")).toBeVisible();
       await expect(page.locator('.bstrip.aud [data-f="audio:versions"]')).toHaveText("Choose a version");
+      await expect(page.locator(".bstrip.aud .snote")).toHaveText("Other languages come with other versions.");
       const [aud, left] = [(await boxes(page, ".bstrip.aud"))[0]!, (await boxes(page, ".osd .bl"))[0]!];
       expect(Math.abs(aud.x - left.x)).toBeLessThan(2);
     } finally {
@@ -377,6 +425,27 @@ test.describe("desktop", () => {
       expect(measured.length).toBeGreaterThan(8);
       for (const m of measured) expect(m.ratio, m.what).toBeGreaterThanOrEqual(m.floor);
       await shot(page, "desktop-white");
+    } finally {
+      await close();
+    }
+  });
+
+  test("hovered, Later on the capsule and a pill's value keep 4.5:1 over a white frame", async ({ browser }) => {
+    const { page, close } = await open(browser, FILM, "desktop", { viewport: { width: 1920, height: 1080 } });
+    try {
+      await page.addStyleTag({ content: ".player-scr { background: #fff !important; } .video, .player-bd, .pdim, .cues { visibility: hidden !important; }" });
+      for (const [control, label] of [
+        ['[data-f="bar:later"]', '[data-f="bar:later"] .w'],
+        ['[data-f="bar:earlier"]', '[data-f="bar:earlier"] .w'],
+        ['[data-f="bar:shift"]', '[data-f="bar:shift"]'],
+        ['[data-f="player:audio"]', '[data-f="player:audio"] small'],
+        ['[data-f="player:speed"]', '[data-f="player:speed"] small'],
+      ] as const) {
+        await page.locator(control).hover();
+        const [m] = await drawnContrast(page, ".osd", [label], []);
+        expect(m, label).toBeDefined();
+        expect(m!.ratio, `${label} hovered`).toBeGreaterThanOrEqual(4.5);
+      }
     } finally {
       await close();
     }
@@ -462,10 +531,12 @@ test.describe("Trakt in the player", () => {
       const o = await bare(browser, FILM, patch);
       try {
         // The first line in the slot is the subtitle's, at once: no Trakt line came before it, and none after.
+        // Searched by its words, not a class, so a mark under a new name would show here too.
+        const traktShown = () => o.page.locator(".player-scr").evaluate((el) => /trakt/i.test(el.textContent ?? "") || !!el.querySelector('[aria-label*="trakt" i]'));
         await expect(o.page.locator(".toast")).toBeVisible({ timeout: 30_000 });
-        expect(await o.page.locator(".trakt-toast, .trakt-mark").count()).toBe(0);
+        expect(await traktShown()).toBe(false);
         await o.page.waitForTimeout(1000);
-        expect(await o.page.locator(".trakt-toast, .trakt-mark").count()).toBe(0);
+        expect(await traktShown()).toBe(false);
       } finally {
         await o.close();
       }
@@ -594,6 +665,24 @@ test.describe("TV", () => {
       await page.keyboard.press("Enter");
       await expect(shiftValue(page)).toHaveText("0.0 s");
       await expect(page.locator('[data-f="strip:reset"]')).toHaveCount(0);
+    } finally {
+      await close();
+    }
+  });
+
+  test("a held Back closes the strip once and never leaves the player in the same press", async ({ browser }) => {
+    const { page, close } = await open(browser, S1E1, "tv", tv);
+    try {
+      await page.locator('[data-f="player:subs"]').focus();
+      await page.keyboard.press("Enter");
+      await expect(page.locator(".bstrip")).toBeVisible();
+      // Held: the first keydown and the remote's repeats, then the key let go.
+      for (let i = 0; i < 4; i++) await page.keyboard.down("Escape");
+      await page.keyboard.up("Escape");
+      await page.waitForTimeout(500);
+      await expect(page.locator(".bstrip")).toHaveCount(0);
+      await expect(page).toHaveURL(/\/play\/series\/mqbs\/mqbs:1:1/);
+      await expect(page.locator(".osd")).toBeVisible();
     } finally {
       await close();
     }
