@@ -32,6 +32,12 @@ pub struct Prefs {
     /// How big subtitles show, on every device of the profile (journey
     /// reviews 2026-10-20). The delay stays per play, in the apps.
     pub subtitle_size: SubtitleSize,
+    /// Where plain subtitles sit: their foot this many percent of the
+    /// picture's height over the picture's foot (5 to 25; 8 is
+    /// plans/dual-subtitles.md 11.3). Read clamped to that range.
+    pub subtitle_position: u8,
+    /// What keeps subtitle text readable over the picture.
+    pub subtitle_background: SubtitleBackground,
     /// The second subtitle line (plans/dual-subtitles.md 3.1): `"audio"`
     /// for the spoken language, else a language tag ("en", "pt-BR"); null
     /// for none.
@@ -96,6 +102,25 @@ pub enum SubtitleSize {
     ExtraLarge,
 }
 
+/// The subtitle position's range, in percent (plans/player-bar.md D7).
+pub const SUBTITLE_POSITIONS: std::ops::RangeInclusive<u8> = 5..=25;
+
+/// What sits behind or around subtitle text: a box (today's look), an
+/// outline, or a drop shadow.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts",
+    derive(ts_rs::TS),
+    ts(export, export_to = "../../../apps/web/src/core/generated/")
+)]
+#[serde(rename_all = "camelCase")]
+pub enum SubtitleBackground {
+    #[default]
+    Box,
+    Outline,
+    Shadow,
+}
+
 /// How the second subtitle line draws beside the first: above it in one
 /// block, at the top of the picture, or in one box with it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,6 +161,8 @@ impl Default for Prefs {
             streams: StreamPrefs::default(),
             subtitle_languages: Vec::new(),
             subtitle_size: SubtitleSize::default(),
+            subtitle_position: 8,
+            subtitle_background: SubtitleBackground::default(),
             second_subtitle: None,
             subtitle_layout: SubtitleLayout::default(),
             second_on_pause: false,
@@ -200,6 +227,10 @@ impl Core {
         if quality_only(&rows) {
             from_quality(&mut prefs.streams);
         }
+        // A row from a newer version may hold a wider range; apps never clamp.
+        prefs.subtitle_position = prefs
+            .subtitle_position
+            .clamp(*SUBTITLE_POSITIONS.start(), *SUBTITLE_POSITIONS.end());
         prefs
     }
 
@@ -220,6 +251,16 @@ impl Core {
         merge(&mut merged, patch);
         let mut prefs: Prefs =
             serde_json::from_value(merged).map_err(|e| CoreError::BadPrefs(e.to_string()))?;
+        // Only a patch that names the position is checked, so a stored row
+        // from a newer version never blocks other changes.
+        if fields.contains_key("subtitlePosition")
+            && !SUBTITLE_POSITIONS.contains(&prefs.subtitle_position)
+        {
+            return Err(CoreError::BadPrefs(format!(
+                "subtitlePosition must be 5 to 25, not {}",
+                prefs.subtitle_position
+            )));
+        }
         // The old `quality` is mapped once (plans/m13-stream-choice.md
         // 4.1): an older app's choice, written now or before any of the new
         // fields, is stored as the fields it maps to.

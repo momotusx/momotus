@@ -48,6 +48,26 @@ private func fixture<T: Decodable>(_ name: String, as type: T.Type) throws -> T 
     #expect(prefs.streams.quality == "best")
     #expect(prefs.streams.maxHeight == nil)
     #expect(prefs.autoplayNext)
+    #expect(prefs.subtitlePosition == 8)
+    #expect(prefs.subtitleBackground == .box)
+}
+
+/// plans/player-bar.md section 4: a core from before the subtitle position and background sends neither, and
+/// its settings still decode, with both nil; a background the core sets decodes.
+@Test func settingsDecodeWithoutThePositionAndBackground() throws {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "Fixtures/settings.json")
+    var json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+    json["subtitlePosition"] = nil
+    json["subtitleBackground"] = nil
+    let older = try JSONDecoder().decode(Prefs.self, from: JSONSerialization.data(withJSONObject: json))
+    #expect(older.subtitlePosition == nil)
+    #expect(older.subtitleBackground == nil)
+    #expect(older.subtitleSize == .medium)
+    json["subtitlePosition"] = 25
+    json["subtitleBackground"] = "shadow"
+    let set = try JSONDecoder().decode(Prefs.self, from: JSONSerialization.data(withJSONObject: json))
+    #expect(set.subtitlePosition == 25)
+    #expect(set.subtitleBackground == .shadow)
 }
 
 @Test func importWaitsForTheLink() throws {

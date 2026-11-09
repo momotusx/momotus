@@ -106,6 +106,9 @@ const DEFAULTED = new Map([
   // Dual subtitles (plans/dual-subtitles.md 3.1): an older core or recording has no second line.
   ["Prefs.subtitleLayout", "SubtitleLayout.Stacked"],
   ["Prefs.secondOnPause", "false"],
+  // The player bar's subtitle style (plans/player-bar.md section 4): an older core or recording has neither.
+  ["Prefs.subtitlePosition", "8"],
+  ["Prefs.subtitleBackground", "SubtitleBackground.Box"],
   // Discover's preview Library state (core backlog C44b): an older core says nothing.
   ["ItemDetails.inLibrary", "false"],
   // Whether Add to Library can be offered (false on a kids profile): an older core always took it.
@@ -237,6 +240,8 @@ const INT = new Set([
   "peers",
   "source",
   "sources",
+  // The player bar's subtitle position, percent (plans/player-bar.md section 4).
+  "subtitlePosition",
 ]);
 
 type TypeIr =

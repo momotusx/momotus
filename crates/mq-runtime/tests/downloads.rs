@@ -2101,6 +2101,80 @@ async fn offline_the_next_episode_is_the_next_downloaded_one() {
     assert!(last.snapshot().next.is_none());
 }
 
+/// Offline with the title's meta cached, the next episode is the next
+/// released one whether or not it is downloaded, as the Up Next card has it
+/// (plans/player-bar.md section 4, D14): only e1 is downloaded here, the
+/// addon is gone, and e2 is still offered.
+#[tokio::test]
+async fn offline_with_cached_meta_the_next_episode_is_the_next_released_one() {
+    // An addon that answers the series meta once, cached for an hour, and
+    // then stops listening.
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let meta = serde_json::json!({ "cacheMaxAge": 3600, "meta": {
+        "id": "tt9", "type": "series", "name": "Show",
+        "videos": [
+            { "id": "tt9:2:1", "title": "One", "season": 2, "episode": 1,
+              "released": "2020-01-01T00:00:00.000Z" },
+            { "id": "tt9:2:2", "title": "Two", "season": 2, "episode": 2,
+              "released": "2020-01-08T00:00:00.000Z" }
+        ]
+    }})
+    .to_string();
+    let served = tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.unwrap();
+        let mut buf = [0u8; 2048];
+        let _ = socket.read(&mut buf).await;
+        let resp = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{meta}",
+            meta.len()
+        );
+        socket.write_all(resp.as_bytes()).await.unwrap();
+    });
+    let manifest = serde_json::json!({
+        "id": "local", "version": "1.0.0", "name": "Local",
+        "types": ["series"], "resources": ["meta"], "catalogs": [], "idPrefixes": ["tt"]
+    });
+    let row = AddonRow {
+        transport_url: format!("http://{addr}/manifest.json"),
+        manifest_json: manifest.to_string(),
+        position: 0,
+        enabled: true,
+        allow_private: true,
+    };
+    let core = core_with(row).await;
+    core.fetch_meta("series", "tt9").await.unwrap();
+    served.await.unwrap();
+
+    let data = video(1 << 20);
+    let mut e1 = record(
+        "e1",
+        "tt9",
+        "tt9:2:1",
+        "done",
+        kept_version(
+            "http://127.0.0.1:1/v.mp4",
+            "http://127.0.0.1:9/manifest.json",
+        ),
+    );
+    e1.bytes_done = data.len() as i64;
+    e1.bytes_total = Some(data.len() as i64);
+    core.library().add_download(&e1).unwrap();
+    put(&core, "e1", "video.mp4", &data);
+    core.downloads().relaunch();
+    core.downloads().set_link(Link {
+        offline: true,
+        ..Link::default()
+    });
+    let first = play(&core, "tt9", "tt9:2:1").await;
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while first.snapshot().next.is_none() {
+        assert!(std::time::Instant::now() < deadline, "no next episode");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(first.snapshot().next.unwrap().video_id, "tt9:2:2");
+}
+
 /// Two jobs starting together never take the same room: with space for
 /// one, the second waits until the first is done (code review r1 M7).
 #[tokio::test]

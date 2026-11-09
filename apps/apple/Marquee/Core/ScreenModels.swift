@@ -615,6 +615,11 @@ struct Prefs: Decodable, Hashable, Sendable {
     let subtitleLanguages: [String]
     /// How big subtitles show, on every device of the profile; the delay stays per play.
     let subtitleSize: SubtitleSize
+    /// Plain subtitles' foot, in percent of the picture's height over its foot (plans/player-bar.md D7), 5 to 25
+    /// as the core clamps it; nil from an older core (read it as 8).
+    let subtitlePosition: Int?
+    /// What keeps subtitle text readable; nil from an older core (read it as `.box`).
+    let subtitleBackground: SubtitleBackground?
     /// The second subtitle line (plans/dual-subtitles.md 3.1): "audio" for the spoken language, else a
     /// language tag; nil for none, and from an older core.
     let secondSubtitle: String?
@@ -634,6 +639,11 @@ struct Prefs: Decodable, Hashable, Sendable {
 
 enum SubtitleSize: String, Codable, Hashable, Sendable, CaseIterable {
     case small, medium, large, extraLarge
+}
+
+/// What sits behind or around subtitle text (plans/player-bar.md D8).
+enum SubtitleBackground: String, Codable, Hashable, Sendable, CaseIterable {
+    case box, outline, shadow
 }
 
 /// How the second subtitle line draws beside the first (plans/dual-subtitles.md 4).

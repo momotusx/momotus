@@ -1448,10 +1448,14 @@ data class PluginsAnswer(
 @Serializable
 data class Prefs(
     val streams: StreamPrefs,
-    /** Subtitle languages as addons name them (usually ISO 639-2, "eng"), most wanted first. Matching tracks are listed first. */
+    /** Subtitle languages as addons name them (usually ISO 639-2, "eng"), most wanted first. Matching tracks are listed first. An empty list the profile wrote (No subtitles, Remove all) is off; one never written lets the device's language stand in (`Core::subtitle_languages_set`). */
     val subtitleLanguages: List<String> = emptyList(),
     /** How big subtitles show, on every device of the profile (journey reviews 2026-10-20). The delay stays per play, in the apps. */
     val subtitleSize: SubtitleSize = SubtitleSize.Medium,
+    /** Where plain subtitles sit: their foot this many percent of the picture's height over the picture's foot (5 to 25; 8 is plans/dual-subtitles.md 11.3). Read clamped to that range. */
+    val subtitlePosition: Int = 8,
+    /** What keeps subtitle text readable over the picture. */
+    val subtitleBackground: SubtitleBackground = SubtitleBackground.Box,
     /** The second subtitle line (plans/dual-subtitles.md 3.1): `"audio"` for the spoken language, else a language tag ("en", "pt-BR"); null for none. */
     val secondSubtitle: String? = null,
     /** How two subtitle lines draw. */
@@ -2017,6 +2021,22 @@ data class StreamPrefs(
     /** Learn from the user's picks (applied by the runtime). */
     val learn: Boolean,
 )
+
+/** What sits behind or around subtitle text: a box (today's look), an outline, or a drop shadow. */
+@Serializable(with = SubtitleBackground.Serializer::class)
+enum class SubtitleBackground(
+    val wire: String,
+) {
+    Box("box"),
+    Outline("outline"),
+    Shadow("shadow"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<SubtitleBackground>("SubtitleBackground", SubtitleBackground.entries, SubtitleBackground::wire, Unknown)
+}
 
 /** How the second subtitle line draws beside the first: above it in one block, at the top of the picture, or in one box with it. */
 @Serializable(with = SubtitleLayout.Serializer::class)

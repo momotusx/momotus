@@ -1,4 +1,4 @@
-use mq_runtime::views::settings::{SubtitleLayout, SubtitleSize};
+use mq_runtime::views::settings::{SubtitleBackground, SubtitleLayout, SubtitleSize};
 use mq_runtime::{Core, SettingsView};
 use mq_streams::QualityPref;
 use serde_json::json;
@@ -51,6 +51,49 @@ async fn the_subtitle_size_is_a_preference() {
     assert!(core.set_prefs(&json!({"subtitleSize": "huge"})).is_err());
     let stored = core.library().settings("p").unwrap();
     assert!(stored.contains(&("subtitleSize".into(), "\"extraLarge\"".into())));
+}
+
+/// Plans/player-bar.md section 4: the subtitle position (5 to 25 percent,
+/// 8 until set) and background (box until set) are synced preferences. A
+/// patch out of range or with an unknown background is refused and writes
+/// nothing; a stored row from a newer device reads clamped and never blocks
+/// other changes.
+#[tokio::test]
+async fn the_subtitle_position_and_background_are_preferences() {
+    let core = Core::temporary("p").unwrap();
+    let prefs = core.prefs();
+    assert_eq!(prefs.subtitle_position, 8);
+    assert_eq!(prefs.subtitle_background, SubtitleBackground::Box);
+
+    let prefs = core
+        .set_prefs(&json!({"subtitlePosition": 12, "subtitleBackground": "outline"}))
+        .unwrap();
+    assert_eq!(prefs.subtitle_position, 12);
+    assert_eq!(prefs.subtitle_background, SubtitleBackground::Outline);
+    assert_eq!(core.prefs(), prefs, "stored and read back");
+    let stored = core.library().settings("p").unwrap();
+    assert!(stored.contains(&("subtitlePosition".into(), "12".into())));
+    assert!(stored.contains(&("subtitleBackground".into(), "\"outline\"".into())));
+
+    for patch in [
+        json!({"subtitlePosition": 4}),
+        json!({"subtitlePosition": 26}),
+        json!({"subtitleBackground": "glow"}),
+        json!({"subtitlePosition": 26, "autoplayNext": false}),
+    ] {
+        assert!(core.set_prefs(&patch).is_err(), "{patch}");
+    }
+    assert_eq!(core.prefs(), prefs, "a refused patch writes nothing");
+    assert_eq!(core.library().settings("p").unwrap(), stored);
+
+    // A synced row from a newer device with a wider range.
+    core.library()
+        .set_setting("p", "subtitlePosition", "30", &core.hlc())
+        .unwrap();
+    assert_eq!(core.prefs().subtitle_position, 25);
+    let prefs = core.set_prefs(&json!({"autoplayNext": false})).unwrap();
+    assert!(!prefs.autoplay_next);
+    assert_eq!(prefs.subtitle_position, 25);
 }
 
 /// Plans/dual-subtitles.md 3.1: the second subtitle line's preferences.

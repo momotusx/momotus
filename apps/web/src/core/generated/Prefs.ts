@@ -3,13 +3,16 @@ import type { DiscoverPrefs } from "./DiscoverPrefs";
 import type { HomeRows } from "./HomeRows";
 import type { LearnedByClass } from "./LearnedByClass";
 import type { StreamPrefs } from "./StreamPrefs";
+import type { SubtitleBackground } from "./SubtitleBackground";
 import type { SubtitleLayout } from "./SubtitleLayout";
 import type { SubtitleSize } from "./SubtitleSize";
 
 export type Prefs = { streams: StreamPrefs, 
 /**
  * Subtitle languages as addons name them (usually ISO 639-2, "eng"),
- * most wanted first. Matching tracks are listed first.
+ * most wanted first. Matching tracks are listed first. An empty list the
+ * profile wrote (No subtitles, Remove all) is off; one never written lets
+ * the device's language stand in (`Core::subtitle_languages_set`).
  */
 subtitleLanguages: Array<string>, 
 /**
@@ -17,6 +20,16 @@ subtitleLanguages: Array<string>,
  * reviews 2026-10-20). The delay stays per play, in the apps.
  */
 subtitleSize: SubtitleSize, 
+/**
+ * Where plain subtitles sit: their foot this many percent of the
+ * picture's height over the picture's foot (5 to 25; 8 is
+ * plans/dual-subtitles.md 11.3). Read clamped to that range.
+ */
+subtitlePosition: number, 
+/**
+ * What keeps subtitle text readable over the picture.
+ */
+subtitleBackground: SubtitleBackground, 
 /**
  * The second subtitle line (plans/dual-subtitles.md 3.1): `"audio"`
  * for the spoken language, else a language tag ("en", "pt-BR"); null
