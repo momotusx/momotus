@@ -10,6 +10,7 @@ import app.marquee.core.model.SectionQuality
 import app.marquee.core.model.SourceKind
 import app.marquee.core.model.Speed
 import app.marquee.core.model.StreamPrefs
+import app.marquee.core.model.SubtitleBackground
 import app.marquee.core.model.SubtitleLayout
 import app.marquee.core.model.VersionRow
 import app.marquee.core.model.VersionsConditions
@@ -275,6 +276,65 @@ object StreamChoiceCopy {
     /** An audio track inside the file that names no language: the file's only one, else by its place ("{n}"). */
     const val AUDIO_ONE = "Audio"
     const val AUDIO_NUMBERED = "Audio {n}"
+
+    /** The player bar (plans/player-bar.md): the quick shift, the strips and their Style row ("player.bar"). */
+    object Bar {
+        const val EARLIER = "Earlier"
+        const val LATER = "Later"
+        const val RESET = "Reset"
+        const val STYLE = "Style"
+        const val SIZE = "Size"
+        const val POSITION = "Position"
+        const val DEFAULT = "Default"
+        const val LOWER = "Lower"
+        const val HIGHER = "Higher"
+        const val BACKGROUND = "Background"
+        val BACKGROUNDS =
+            mapOf(
+                SubtitleBackground.Box to "Box",
+                SubtitleBackground.Outline to "Outline",
+                SubtitleBackground.Shadow to "Shadow",
+            )
+        const val MORE_LANGUAGES = "More languages"
+        const val NEXT = "Next"
+        const val CLOSE = "Close"
+
+        /** The Background row while the device's caption style decides it (D8). */
+        const val SET_BY_DEVICE = "Set by your device's caption settings"
+
+        /** The Position row on an upright phone, where lines sit under the picture (D7). */
+        const val SIDEWAYS_ONLY = "Applies with the phone sideways"
+
+        /** Said once a shift settles (D12); `{n}` is the value in seconds, without a sign. */
+        const val SAID_LATER = "Subtitles {n} seconds later"
+        const val SAID_EARLIER = "Subtitles {n} seconds earlier"
+        const val SAID_IN_SYNC = "Subtitles in sync"
+
+        /**
+         * What screen readers say (plans/player-bar.md section 8). `{episode}` is the episode as the bar shows it;
+         * `{value}` the shift's visible text, followed by ", " and [PRESS_TO_RESET] (TV: [PRESS_OK_TO_ADJUST]).
+         */
+        object Names {
+            const val AUDIO = "Audio"
+            const val SPEED = "Speed"
+            const val VERSIONS = "Versions"
+            const val SUBTITLES = "Subtitles"
+            const val EPISODES = "Episodes"
+            const val NEXT_EPISODE = "Next episode, {episode}"
+            const val FULL_SCREEN = "Full screen"
+            const val EXIT_FULL_SCREEN = "Exit full screen"
+            const val TIMING = "Subtitle timing"
+            const val EARLIER = "Subtitles earlier"
+            const val LATER = "Subtitles later"
+            const val VALUE_LATER = "{value}, subtitles later"
+            const val VALUE_EARLIER = "{value}, subtitles earlier"
+            const val VALUE_IN_SYNC = "{value}, subtitles in sync"
+            const val PRESS_TO_RESET = "press to reset"
+            const val PRESS_OK_TO_ADJUST = "press OK to adjust"
+            const val SUBTITLE_LANGUAGE = "Subtitle language"
+            const val AUDIO_TRACK = "Audio track"
+        }
+    }
 
     /**
      * A subtitle source that gave nothing this time, by the note's problem ("other" for a newer core's): the same

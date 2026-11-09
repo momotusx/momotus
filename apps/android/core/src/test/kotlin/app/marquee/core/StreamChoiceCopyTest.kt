@@ -1,5 +1,6 @@
 package app.marquee.core
 
+import app.marquee.core.StreamChoiceCopy.Bar
 import app.marquee.core.StreamChoiceCopy.Setting
 import app.marquee.core.StreamChoiceCopy.UpDown
 import app.marquee.core.model.EmptyKind
@@ -219,6 +220,53 @@ class StreamChoiceCopyTest {
                         put("onlyWhenPaused", ONLY_WHEN_PAUSED)
                         put("audio", AUDIO_ONE)
                         put("audioNumbered", AUDIO_NUMBERED)
+                        put(
+                            "bar",
+                            buildJsonObject {
+                                put("earlier", Bar.EARLIER)
+                                put("later", Bar.LATER)
+                                put("reset", Bar.RESET)
+                                put("style", Bar.STYLE)
+                                put("size", Bar.SIZE)
+                                put("position", Bar.POSITION)
+                                put("default", Bar.DEFAULT)
+                                put("lower", Bar.LOWER)
+                                put("higher", Bar.HIGHER)
+                                put("background", Bar.BACKGROUND)
+                                put("backgrounds", buildJsonObject { for ((b, w) in Bar.BACKGROUNDS) put(b.wire, w) })
+                                put("moreLanguages", Bar.MORE_LANGUAGES)
+                                put("next", Bar.NEXT)
+                                put("close", Bar.CLOSE)
+                                put("setByDevice", Bar.SET_BY_DEVICE)
+                                put("sidewaysOnly", Bar.SIDEWAYS_ONLY)
+                                put("saidLater", Bar.SAID_LATER)
+                                put("saidEarlier", Bar.SAID_EARLIER)
+                                put("saidInSync", Bar.SAID_IN_SYNC)
+                                put(
+                                    "names",
+                                    buildJsonObject {
+                                        put("audio", Bar.Names.AUDIO)
+                                        put("speed", Bar.Names.SPEED)
+                                        put("versions", Bar.Names.VERSIONS)
+                                        put("subtitles", Bar.Names.SUBTITLES)
+                                        put("episodes", Bar.Names.EPISODES)
+                                        put("nextEpisode", Bar.Names.NEXT_EPISODE)
+                                        put("fullScreen", Bar.Names.FULL_SCREEN)
+                                        put("exitFullScreen", Bar.Names.EXIT_FULL_SCREEN)
+                                        put("timing", Bar.Names.TIMING)
+                                        put("earlier", Bar.Names.EARLIER)
+                                        put("later", Bar.Names.LATER)
+                                        put("valueLater", Bar.Names.VALUE_LATER)
+                                        put("valueEarlier", Bar.Names.VALUE_EARLIER)
+                                        put("valueInSync", Bar.Names.VALUE_IN_SYNC)
+                                        put("pressToReset", Bar.Names.PRESS_TO_RESET)
+                                        put("pressOkToAdjust", Bar.Names.PRESS_OK_TO_ADJUST)
+                                        put("subtitleLanguage", Bar.Names.SUBTITLE_LANGUAGE)
+                                        put("audioTrack", Bar.Names.AUDIO_TRACK)
+                                    },
+                                )
+                            },
+                        )
                         put("subtitleNotes", buildJsonObject { for ((k, w) in SUBTITLE_NOTES) put(k, w) })
                     },
                 )
