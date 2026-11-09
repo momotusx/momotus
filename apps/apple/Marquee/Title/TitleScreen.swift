@@ -44,6 +44,8 @@ struct TitleScreen: View {
     @State private var showEpisodes = false
     /// The episode a player's Episodes came back for: the panel shows it.
     @State private var episodeShown: String?
+    /// A player's Episodes asked for the episodes; they open once the page is in front.
+    @State private var pendingEpisodes = false
     @Environment(\.openTitle) private var parentOpenTitle
     #if !os(tvOS)
     /// What opened the panel, which takes keyboard focus back when it closes.
@@ -116,6 +118,7 @@ struct TitleScreen: View {
         // Play plays the core's pick (plans/plugins-and-marketplace.md 4.2).
         .onAppear {
             inFront = true
+            openPendingEpisodes()
             versions?.listEveryKind()
             episodeVersions?.listEveryKind()
         }
@@ -174,12 +177,27 @@ struct TitleScreen: View {
             (playing, showVersions, showEpisodeVersions) = (nil, false, false)
             if let season = route.season { model.selectSeason(season) }
             episodeShown = route.videoId
-            #if !os(tvOS)
-            openEpisodes()
-            #endif
+            // The episodes open once this page is in front again, never while the player's pop is under way.
+            pendingEpisodes = true
+            if inFront { openPendingEpisodes() }
         case .push:
             parentOpenTitle(route)
         }
+    }
+
+    /// The episodes a player's Episodes asked for, once the page is in front: the Mac's panel at once; the
+    /// iPhone's pushed Episodes page after the pop's transition has run.
+    private func openPendingEpisodes() {
+        guard pendingEpisodes else { return }
+        pendingEpisodes = false
+        #if !os(tvOS)
+        if metrics.wide { return openEpisodes() }
+        Task { @MainActor in
+            // ponytail: waits out the navigation pop (0.35 s); the iPhone walk checks Episodes from Versions.
+            try? await Task.sleep(for: .milliseconds(450))
+            openEpisodes()
+        }
+        #endif
     }
 
     @ViewBuilder private var page: some View {

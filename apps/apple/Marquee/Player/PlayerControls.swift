@@ -35,8 +35,9 @@ struct PlayerControls: View {
     var episodes: (() -> Void)?
     /// The subtitle picker over the picture (a sheet on the iPhone): More languages; on tvOS the subtitle and audio pickers.
     @State private var picker: TrackPickerPanel.Kind?
-    /// The bar's width and height, and an open strip's height.
-    @State private var barWidth: CGFloat = 0
+    /// The real window's width (with `windowHeight`, its turn), for the first pass before the bar is measured.
+    var windowWidth: CGFloat = 0
+    /// The bar's height, and an open strip's height.
     @State private var barHeight: CGFloat = 120
     @State private var stripHeight: CGFloat = 0
     /// TV seeking: how many quick presses in a row, and the last one's direction and time.
@@ -48,10 +49,13 @@ struct PlayerControls: View {
     @FocusState private var focus: Control?
     /// The bar's text sizes, following Dynamic Type as the text does.
     @ScaledMetric(relativeTo: .callout) private var wideText = Theme.type.callout
-    @ScaledMetric(relativeTo: .caption) private var phoneWord: CGFloat = 14
+    /// The shift's words on the iPhone, scaled as QuickShift draws them (relative to callout).
+    @ScaledMetric(relativeTo: .callout) private var phoneWord: CGFloat = 14
     @ScaledMetric(relativeTo: .caption) private var phoneTime = Theme.type.caption
     #if os(macOS)
     @State private var fullScreen = false
+    /// The window the player is in, whose full screen the button shows and toggles.
+    @State private var window: NSWindow?
     #endif
 
     enum Control: Hashable { case back, rewind, play, forward, scrub, audio, subtitles, versions, speed, episodes, next, fullScreen }
@@ -65,9 +69,23 @@ struct PlayerControls: View {
         #endif
     }
 
-    /// The phone's safe area and turn, read from the layout.
+    /// The phone's safe area, read from the layout.
     @State private var safe = EdgeInsets()
-    @State private var landscape = false
+
+    /// The phone's turn, from the window the player measured, so a show never starts on the upright rows.
+    private var landscape: Bool { windowWidth > windowHeight }
+
+    /// The width the plans are made for: the bar's last measured width (kept on the model while the controls come
+    /// and go), else the window's less the bar's insets.
+    private var barWidth: CGFloat {
+        BarFit.width(measured: model.barWidth.bar, measuredIn: model.barWidth.window, window: windowWidth,
+                     inset: Self.phone ? 2 * PhoneFrame.edge : 2 * metrics.gutter)
+    }
+
+    private func measuredBar(_ size: CGSize) {
+        model.barWidth = (size.width, windowWidth)
+        barHeight = size.height
+    }
 
     private var bar: StreamChoiceWords.Player.Bar { StreamChoice.words.player.bar }
     private var names: StreamChoiceWords.Player.Bar.Names { bar.names }
@@ -303,13 +321,20 @@ struct PlayerControls: View {
                 @unknown default: break
                 }
             }
+            // tvOS keeps its row as it was (the owner, 2026-10-21: tvOS only has to keep compiling): the transport at
+            // its TV size in the middle, the four actions as words with their values on the right.
+            HStack(alignment: .center) {
+                Spacer().frame(maxWidth: .infinity)
+                transport(gap: 28, skip: 56, play: 68)
+                tvActions.frame(maxWidth: .infinity)
+            }
             #else
             scrubRow(spacing: 12)
                 .textFont(Theme.type.callout, relativeTo: .callout)
-            #endif
             controlRows(BarFit.desktop(width: barWidth, left: leftPills, right: rightPills, type: wideType))
+            #endif
         }
-        .onGeometryChange(for: CGSize.self) { $0.size } action: { (barWidth, barHeight) = ($0.width, $0.height) }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { measuredBar($0) }
         .overlay(alignment: model.strip == .audio ? .bottomLeading : .bottomTrailing) { strip(chevrons: false) }
     }
 
@@ -383,7 +408,6 @@ struct PlayerControls: View {
             }
         }
         .onGeometryChange(for: EdgeInsets.self) { $0.safeAreaInsets } action: { safe = $0 }
-        .onGeometryChange(for: Bool.self) { $0.size.width > $0.size.height } action: { landscape = $0 }
     }
 
     private var phoneType: BarFit.TextSizes { BarFit.TextSizes(word: phoneWord, value: phoneTime) }
@@ -430,7 +454,7 @@ struct PlayerControls: View {
                 }
             }
         }
-        .onGeometryChange(for: CGSize.self) { $0.size } action: { (barWidth, barHeight) = ($0.width, $0.height) }
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { measuredBar($0) }
         .overlay(alignment: model.strip == .audio ? .bottomLeading : .bottomTrailing) {
             strip(chevrons: landscape ? true : BarFit.uprightChevrons(width: barWidth, type: phoneType))
         }
@@ -527,7 +551,9 @@ struct PlayerControls: View {
             picked: nil, found: (model.playback?.subtitles.count ?? 0) + model.textTracks.count,
             pending: model.playback?.subtitlesPending == true, ready: model.playback?.phase == "ready").text
         let listed = TrackPicker.languages(model.playback?.subtitles ?? [], file: model.fileTextTracks).map(\.name)
-        var pills = [BarFit.Pill(word: names.subtitles, value: subtitleValue.text, reserve: BarFit.subtitleReserve(off: off, languages: listed))]
+        let reserve = BarFit.subtitleReserve(
+            off: off, languages: listed, fileTracks: model.textTracks, second: model.secondSubtitle.map(SubtitleMenu.heading))
+        var pills = [BarFit.Pill(word: names.subtitles, value: subtitleValue.text, reserve: reserve, mark: true)]
         if target.season != nil { pills += [BarFit.Pill(word: names.episodes), BarFit.Pill(word: bar.next)] }
         #if os(macOS)
         pills.append(BarFit.Pill(word: nil))
@@ -572,14 +598,22 @@ struct PlayerControls: View {
             shift(chevrons: chevrons)
             episodesAndNext(words: words)
             #if os(macOS)
-            Button { NSApp.keyWindow?.toggleFullScreen(nil) } label: {
+            Button { (window ?? NSApp.keyWindow)?.toggleFullScreen(nil) } label: {
                 action(fullScreen ? names.exitFullScreen : names.fullScreen, fullScreen ? "minimize" : "maximize", nil, words: false)
             }
             .focused($focus, equals: .fullScreen)
             .buttonStyle(FocusPlainStyle(shape: Capsule()))
-            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in fullScreen = true }
-            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in fullScreen = false }
-            .onAppear { fullScreen = NSApp.keyWindow?.styleMask.contains(.fullScreen) == true }
+            // The player's own window only: another window (Settings) going full screen changes nothing here.
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { note in
+                if let window, note.object as? NSWindow === window { fullScreen = true }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { note in
+                if let window, note.object as? NSWindow === window { fullScreen = false }
+            }
+            .onAppear {
+                window = NSApp.keyWindow
+                fullScreen = window?.styleMask.contains(.fullScreen) == true
+            }
             #endif
         }
         .fixedSize()
@@ -622,6 +656,53 @@ struct PlayerControls: View {
         }
     }
 
+    #if os(tvOS)
+    /// tvOS: Audio, Subtitles, Versions and Speed as before the bar, each its word over its value; Audio and
+    /// Subtitles open the full pickers.
+    private var tvActions: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 26) {
+                Button { openPicker(.audio) } label: { tvAction(names.audio, "audio-lines", audioValue) }
+                    .focused($focus, equals: .audio)
+                Button { openPicker(.subtitles) } label: { tvAction(names.subtitles, "captions", subtitleValue.text) }
+                    .focused($focus, equals: .subtitles)
+                if let versions, let snapshot = versions.snapshot {
+                    Menu {
+                        ForEach([snapshot.recommended].compactMap { $0 } + snapshot.rows.prefix(12)) { row in
+                            Button { model.switchVersion(row.key) } label: {
+                                Choice(text: VersionWords.rowSpoken(row), selected: row.key == playingKey)
+                            }
+                        }
+                    } label: { tvAction(names.versions, "layers", currentQuality(snapshot)) }
+                    .focused($focus, equals: .versions)
+                }
+                Menu {
+                    ForEach([0.5, 0.75, 1, 1.25, 1.5, 2] as [Float], id: \.self) { speed in
+                        Button { model.rate = speed } label: { Choice(text: speedText(speed), selected: model.rate == speed) }
+                    }
+                } label: { tvAction(names.speed, "gauge", speedText(model.rate)) }
+                .focused($focus, equals: .speed)
+            }
+            .menuStyle(.button)
+            .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: Theme.Radius.s, style: .continuous)))
+            .padding(14)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private func tvAction(_ title: String, _ symbol: String, _ value: String) -> some View {
+        VStack(spacing: 3) {
+            Glyph(symbol, size: 18)
+            Text(title).textFont(Theme.type.caption + 1, weight: .semibold, relativeTo: .caption)
+            Text(value).textFont(Theme.type.caption, relativeTo: .caption).lineLimit(1)
+                .foregroundStyle(.white.opacity(0.75))
+                .frame(maxWidth: 220)
+        }
+        .foregroundStyle(.white)
+        .accessibilityElement(children: .combine)
+    }
+    #endif
+
     /// An OSD menu that keeps the controls up while it is open, so they never
     /// hide (and close it) under the viewer's finger. Each pick ends the hold;
     /// iOS never calls the content's `onDisappear`, so a tap outside ends it
@@ -649,6 +730,10 @@ struct PlayerControls: View {
                         .foregroundStyle(.white.opacity(0.75))
                         .frame(maxWidth: BarFit.valueCap)
                 }
+            }
+            // More may come (the core is still asking subtitle addons): seen on an icon alone too.
+            if searching {
+                Glyph("loader-circle", size: BarFit.markSize).foregroundStyle(.white.opacity(0.75))
             }
         }
         .padding(.leading, words ? BarFit.lead : 0)

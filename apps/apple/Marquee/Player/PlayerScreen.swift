@@ -1,5 +1,6 @@
 import AVFoundation
 import AetherEngine
+import MediaAccessibility
 import SwiftUI
 
 /// Full-screen playback with an OSD that hides itself while playing.
@@ -32,6 +33,7 @@ struct PlayerScreen: View {
     @FocusState private var catcherFocused: Bool
     /// The real window's height, bars included (the player hides them).
     @State private var windowHeight: CGFloat = 0
+    @State private var windowWidth: CGFloat = 0
     /// The bottom controls' measured height; a guess until they have shown once.
     @State private var controlsHeight: CGFloat = 200
     /// The safe area's foot (the home indicator), which the drawn subtitles keep clear of.
@@ -48,7 +50,7 @@ struct PlayerScreen: View {
     @Environment(\.openTitle) private var openTitle
     #if os(macOS)
     /// G and H held: the quick shift's hold (D11).
-    @State private var shiftKeys: TimingHold?
+    @State private var shiftKeys: ShiftKeys?
     /// The player holds the keyboard focus itself: pushed over a page whose plain buttons take none (no Full
     /// Keyboard Access), it would inherit none, and its keys and the Playback menu's would reach nothing.
     @FocusState private var keysFocused: Bool
@@ -89,7 +91,9 @@ struct PlayerScreen: View {
     }
     #endif
 
-    var body: some View {
+    /// The picture, its overlays and the controls, with their geometry and their changes; `body` adds the places it
+    /// leads to and the keys (split in two so the compiler type-checks each in time).
+    private var stage: some View {
         ZStack {
             // The player under Versions is inert: nothing in it can be reached, read or pressed.
             ZStack {
@@ -181,8 +185,9 @@ struct PlayerScreen: View {
                         menuOpenedAt = open ? .now : nil
                         lastTouch = .now
                     }, activity: { lastTouch = .now }, pip: pipControl, windowHeight: windowHeight, measured: { controlsHeight = $0 },
-                    measuredTop: { topBarFoot = $0 }, chooseVersion: model.versions == nil ? nil : { openVersions() },
-                    episodes: model.route.target.season == nil ? nil : { openEpisodes() })
+                    measuredTop: { topBarFoot = $0 },
+                    chooseVersion: model.versions == nil ? nil : { model.strip = nil; openVersions() },
+                    episodes: model.route.target.season == nil ? nil : { openEpisodes() }, windowWidth: windowWidth)
                         .transition(.opacity)
                 }
                 // The file's bitmap subtitles (PGS, DVD, DVB) on the second engine, where the disc placed them.
@@ -217,6 +222,7 @@ struct PlayerScreen: View {
                         // the shrink near the controls takes both lines.
                         SubtitleBlock(
                             first: first, second: split ? nil : second, size: model.subtitleSize, background: model.subtitleBackground,
+                            insists: model.captionInsists,
                             oneBox: model.subtitleLayout == .oneBox, firstHidden: model.subtitle == nil)
                             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { subtitleBox = $0 }
                             .scaleEffect(place.scale, anchor: .bottom)
@@ -228,7 +234,7 @@ struct PlayerScreen: View {
                 }
                 if split, let second, model.playback?.phase != "failed" {
                     GeometryReader { geo in
-                        SubtitleBlock(first: nil, second: second, size: model.subtitleSize, background: model.subtitleBackground, scale: 1)
+                        SubtitleBlock(first: nil, second: second, size: model.subtitleSize, background: model.subtitleBackground, insists: model.captionInsists, scale: 1)
                             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { secondBox = $0 }
                             .padding(.top, subtitleTop(geo.size))
                             .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
@@ -293,6 +299,10 @@ struct PlayerScreen: View {
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height + $0.safeAreaInsets.top + $0.safeAreaInsets.bottom } action: { windowHeight = $0 }
+        // The width inside the safe area, which the bar lays out in.
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { windowWidth = $0 }
+        // The viewer's caption settings, read once and again when they change (not on every cue).
+        .onReceive(Self.captionChanges) { _ in model.captionInsists = CaptionStyle.systemInsists }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { safeBottom = $0 }
         #if os(iOS)
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { safeTop = $0 }
@@ -328,9 +338,11 @@ struct PlayerScreen: View {
         // Said once, as it shows (Trakt's `reconnect` line included, plans/player-bar.md 5.1).
         .onChange(of: model.statusLine) { _, now in if let now { announce(now) } }
         // Skip or Up Next appearing closes an open strip (D23).
-        .onChange(of: skipShown || upNextShown) { _, now in
-            if model.strip != nil, BarRules.strip(model.strip, skipOrUpNext: now) == nil { model.strip = nil }
-        }
+        .onChange(of: skipShown || upNextShown, closeStripForPills)
+    }
+
+    var body: some View {
+        stage
         // Back from the card's Settings: the versions are asked again, so a source added there plays.
         .onChange(of: settingsPlace) { old, new in
             if old != nil, new == nil, model.noPick { model.retryPick() }
@@ -380,7 +392,11 @@ struct PlayerScreen: View {
             #if os(macOS)
             keysFocused = true
             let model = model
-            shiftKeys = TimingHold(rule: .quick) { model.shiftSubtitles(by: $0) }
+            // The controls stay up while G or H is held, as they do under a held shift button.
+            shiftKeys = ShiftKeys(holding: { held in
+                menuOpenedAt = held ? .now : nil
+                lastTouch = .now
+            }) { model.shiftSubtitles(by: $0) }
             // Every move in the window is over the player, which fills it: the controls follow the same moves that
             // bring back the pointer, whatever view lies under it.
             pointerMoves = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { event in
@@ -394,7 +410,7 @@ struct PlayerScreen: View {
             #if os(macOS)
             if let pointerMoves { NSEvent.removeMonitor(pointerMoves) }
             pointerMoves = nil
-            shiftKeys?.stop(single: false)
+            shiftKeys?.cancel()
             #endif
             #if os(iOS)
             if let across = PlayerOrientation.leave() { model.lastAcross = across }
@@ -445,19 +461,11 @@ struct PlayerScreen: View {
         }
         // G earlier, H later (D11), held by the shift's own rule (the keyboard's repeats are swallowed); with the
         // controls hidden the press wakes them and shifts at once, so the new value is in sight.
-        .onKeyPress(keys: ["g", "h"], phases: [.down, .repeat, .up]) { press in
-            guard !showVersions, !model.pickerOpen, BarRules.shiftShown(timingKey: model.timingKey),
-                  PlayerLayout.stepperTakes(down: press.phase == .down, modifiers: press.modifiers) else { return .ignored }
-            let direction = press.key == "g" ? -1 : 1
-            switch press.phase {
-            case .down:
-                touched(toggle: false)
-                shiftKeys?.start(direction)
-            case .up: if shiftKeys?.direction == direction { shiftKeys?.stop(single: true) }
-            default: break
-            }
-            return .handled
-        }
+        .onKeyPress(keys: ["g", "h"], phases: [.down, .repeat, .up], action: shiftKey)
+        // A release that will never come: the keys went to another window or app, or the subtitle went.
+        .onChange(of: keysFocused) { _, focused in if !focused { shiftKeys?.cancel() } }
+        .onChange(of: model.timingKey) { shiftKeys?.cancel() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in shiftKeys?.cancel() }
         // A new value as a picker opens or closes, so the menu's bare keys follow it.
         .focusedSceneValue(\.playerKeys, PlayerKeys(model: model, close: close, pickerOpen: model.pickerOpen || showVersions))
         #elseif os(tvOS)
@@ -675,6 +683,15 @@ struct PlayerScreen: View {
     }
 
     #if os(macOS)
+    /// G or H (D11): a press counts while the shift shows; its release always ends its own hold.
+    private func shiftKey(_ press: KeyPress) -> KeyPress.Result {
+        let down: Bool? = press.phase == .down ? true : press.phase == .up ? false : nil
+        let shown = !showVersions && !model.pickerOpen && BarRules.shiftShown(timingKey: model.timingKey)
+        let allowed = shown && PlayerLayout.stepperTakes(down: down == true, modifiers: press.modifiers)
+        if down == true, allowed { touched(toggle: false) }
+        return shiftKeys?.key(press.key == "g" ? -1 : 1, down: down, allowed: allowed) == true ? .handled : .ignored
+    }
+
     /// The player's own keys, not while Versions or a track picker is over it.
     private func playerKey(_ action: () -> Void) -> KeyPress.Result {
         guard !showVersions, !model.pickerOpen else { return .ignored }
@@ -685,10 +702,11 @@ struct PlayerScreen: View {
 
     /// Escape or Back: the Style row first, then the strip, then Versions, then the player (section 6).
     private func escape() {
-        switch BarRules.back(strip: model.strip, style: model.styleOpen) {
+        switch BarRules.back(strip: model.strip, style: model.styleOpen, versions: showVersions) {
+        case .closeVersions: closeVersions()
         case .closeStyle: withAnimation(Theme.Motion.panel) { model.styleOpen = false }
         case .closeStrip: withAnimation(Theme.Motion.panel) { model.strip = nil }
-        case .player: if showVersions { closeVersions() } else { close() }
+        case .player: close()
         }
     }
 
@@ -712,6 +730,15 @@ struct PlayerScreen: View {
             return
         }
         withAnimation(Theme.Motion.panel) { controls = toggle ? !controls : true }
+    }
+
+    /// The viewer's caption settings changed (System Settings, Captions).
+    private static let captionChanges = NotificationCenter.default.publisher(
+        for: Notification.Name(kMACaptionAppearanceSettingsChangedNotification as String))
+
+    /// Skip or Up Next appearing closes an open strip (D23).
+    private func closeStripForPills(_: Bool, _ now: Bool) {
+        if model.strip != nil, BarRules.strip(model.strip, skipOrUpNext: now) == nil { model.strip = nil }
     }
 
     /// Episodes (section 5, Apple Episodes): the player leaves first, then the title opens on this season and
@@ -792,6 +819,8 @@ private struct SubtitleBlock: View {
     let size: SubtitleSize
     /// The profile's background (D8), unless the viewer's caption settings decide it.
     let background: SubtitleBackground
+    /// The viewer's caption settings decide the background (`PlayerModel.captionInsists`).
+    let insists: Bool
     var oneBox = false
     /// The player's own file subtitles were never spoken line by line, so the file's are not; an addon track's
     /// lines stay readable, as they were.
@@ -801,7 +830,7 @@ private struct SubtitleBlock: View {
     @ScaledMetric(relativeTo: .title3) private var unit: CGFloat = 1
 
     var body: some View {
-        let style = CaptionStyle.current.with(background, systemInsists: CaptionStyle.systemInsists)
+        let style = CaptionStyle.current.with(background, systemInsists: insists)
         VStack(spacing: SubtitleLine.points(style, size) * 0.25 * unit) {
             if let second {
                 SubtitleLine(text: second, style: style, size: size, scale: scale, boxed: !oneBox)

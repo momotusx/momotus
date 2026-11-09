@@ -287,6 +287,9 @@ struct MainShell: View {
         // The film brought back from Picture in Picture, over whichever place is open.
         .fullScreenCover(item: Bindable(floating).shown) { held in
             NavigationStack { PlayerScreen(held: held, core: core) }
+                // Its Episodes (plans/player-bar.md section 5): the cover goes with the player, then the title opens
+                // in the place in front.
+                .environment(\.openTitle, OpenTitleAction { route in push(route, on: tab) })
         }
         .overlay(alignment: .top) {
             if let note = floating.note {
@@ -482,6 +485,12 @@ struct MainShell: View {
         }
     }
 
+    /// A title pushed on a place's stack; Settings keeps no titles, so one opened there goes on Home.
+    private func push(_ route: TitleRoute, on item: AppTab) {
+        if item == .settings { select(.home) }
+        if item == .home || item == .settings { homePath.append(route) } else { titlePaths[item, default: []].append(route) }
+    }
+
     private func titlePath(_ item: AppTab) -> Binding<[TitleRoute]> {
         Binding { titlePaths[item] ?? [] } set: { titlePaths[item] = $0 }
     }
@@ -494,9 +503,7 @@ struct MainShell: View {
             ForEach(AppTab.allCases.filter(opened.contains), id: \.self) { item in
                 screen(item)
                     .environment(\.tabShown, item == tab)
-                    .environment(\.openTitle, OpenTitleAction { route in
-                        if item == .home { homePath.append(route) } else { titlePaths[item, default: []].append(route) }
-                    })
+                    .environment(\.openTitle, OpenTitleAction { route in push(route, on: item) })
                     .opacity(item == tab ? 1 : 0)
                     .allowsHitTesting(item == tab)
                     .accessibilityHidden(item != tab)

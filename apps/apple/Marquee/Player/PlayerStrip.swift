@@ -14,6 +14,8 @@ struct StripChip<Mark: View>: View {
     let title: String
     var checked = false
     var ghost = false
+    /// A choice among others (a radio): `checked` is said as selected. Style is an opener, whose state is its own.
+    var choice = true
     @ViewBuilder var mark: Mark
     let action: () -> Void
 
@@ -32,13 +34,13 @@ struct StripChip<Mark: View>: View {
             .contentShape(Capsule())
         }
         .buttonStyle(FocusPlainStyle(shape: Capsule()))
-        .accessibilityAddTraits(checked ? .isSelected : [])
+        .accessibilityAddTraits(choice && checked ? .isSelected : [])
     }
 }
 
 extension StripChip where Mark == EmptyView {
     init(title: String, checked: Bool = false, ghost: Bool = false, action: @escaping () -> Void) {
-        self.init(title: title, checked: checked, ghost: ghost, mark: { EmptyView() }, action: action)
+        self.init(title: title, checked: checked, ghost: ghost, choice: true, mark: { EmptyView() }, action: action)
     }
 }
 
@@ -268,7 +270,7 @@ struct SubtitleStrip: View {
         divider
         // Nothing in Style applies to a subtitle drawn as pictures.
         if !model.pictureFirst {
-            StripChip(title: bar.style, checked: model.styleOpen) {
+            StripChip(title: bar.style, checked: model.styleOpen, choice: false) {
                 Glyph("text-align-start", size: 16)
             } action: {
                 withAnimation(Theme.Motion.panel) { model.styleOpen.toggle() }
@@ -294,7 +296,7 @@ struct SubtitleStrip: View {
         Text(bar.background).textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout).foregroundStyle(Theme.Palette.muted).fixedSize()
             .accessibilityHidden(true)
         // The viewer's caption settings decide it (D8): the buttons wait, with the reason.
-        let insists = CaptionStyle.systemInsists
+        let insists = model.captionInsists
         HStack(spacing: 4) {
             ForEach(SubtitleBackground.allCases, id: \.self) { b in
                 StripChip(title: bar.backgroundName(b), checked: !insists && model.subtitleBackground == b) { model.setSubtitleBackground(b) }

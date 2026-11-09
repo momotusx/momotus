@@ -72,6 +72,12 @@ final class PlayerModel {
     /// The strip open over the bar, and its Style row (plans/player-bar.md section 5): one at a time.
     var strip: BarStrip? { didSet { if strip != .subtitles { styleOpen = false } } }
     var styleOpen = false
+    /// The bar's last measured width, kept while the controls come and go, so a show starts on its final layout.
+    var barWidth: (bar: CGFloat, window: CGFloat) = (0, 0)
+    /// The viewer's caption settings decide the background (D8); refreshed when they change.
+    var captionInsists = CaptionStyle.systemInsists
+    /// The value waiting to settle came from the quick shift: it is said in its words, not the stepper's.
+    @ObservationIgnored private var quickSettle = false
     /// The picture's size, for placing subtitles on it rather than on the screen.
     private(set) var videoSize: CGSize = .zero
     private(set) var subtitle: SubtitleTrack?
@@ -265,7 +271,9 @@ final class PlayerModel {
             self.core.commandNow(sub, command)
             return true
         }
-        outbox.settled = { AccessibilityNotification.Announcement(PlayerLayout.shiftSaid($0)).post() }
+        outbox.settled = { [weak self] value in
+            AccessibilityNotification.Announcement(PlayerLayout.settledWords(value, quick: self?.quickSettle == true)).post()
+        }
         notices = NoticeSlot { [weak self] in self?.statusLine = $0 }
     }
 
@@ -502,7 +510,7 @@ final class PlayerModel {
     /// The quick shift (D2): the timing on moved by `by`, sent and said as the picker's stepper does.
     func shiftSubtitles(by: Double, spoken: Bool = true) {
         guard timingKey != nil else { return }
-        setSubtitleDelay(PlayerLayout.nudge(subtitleDelay, by: by), spoken: spoken)
+        setSubtitleDelay(PlayerLayout.nudge(subtitleDelay, by: by), spoken: spoken, quick: true)
     }
 
     /// The picker's Layout and Only when paused rows write the profile's values at once, as Settings does.
@@ -940,7 +948,8 @@ final class PlayerModel {
 
     /// The stepper's value for the addon track on: drawn at once, sent to the core (which keeps it for
     /// this track) once it rests, and said to VoiceOver then (`spoken`), never on each tick of a hold.
-    func setSubtitleDelay(_ seconds: Double, spoken: Bool = true) {
+    func setSubtitleDelay(_ seconds: Double, spoken: Bool = true, quick: Bool = false) {
+        quickSettle = quick
         if let url = subtitle?.url {
             subtitleDelay = seconds
             outbox.set(url: url, seconds: seconds, spoken: spoken)
@@ -955,6 +964,7 @@ final class PlayerModel {
     /// The second line's stepper: its own track's value, kept and sent as the first line's is.
     func setSecondDelay(_ seconds: Double, spoken: Bool = true) {
         guard let url = secondSubtitle?.url else { return }
+        quickSettle = false
         secondDelay = seconds
         outbox.set(url: url, seconds: seconds, spoken: spoken)
     }

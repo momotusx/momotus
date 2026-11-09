@@ -93,6 +93,126 @@ private final class ManualTime: @unchecked Sendable {
     #expect(PlayerLayout.delayText(value) == "+1.0 s")
 }
 
+@MainActor @Test func aHeldGOrHAlwaysEndsOnItsReleaseOrWhenTheKeysGo() async {
+    // Review P1-1: the release ends the hold even when the shift no longer shows (the subtitle went, the picker
+    // opened); a release that never comes (Cmd-Tab, the app inactive) is cancelled. Nothing ticks on to 60 s.
+    for ending in ["release while the shift is gone", "cancel"] {
+        let time = ManualTime()
+        var value = 0.0
+        var held: [Bool] = []
+        let keys = ShiftKeys(clock: time.clock, holding: { held.append($0) }) { value = PlayerLayout.nudge(value, by: $0) }
+        #expect(keys.key(1, down: true, allowed: true))
+        #expect(keys.key(1, down: nil, allowed: true), "the keyboard's repeat is swallowed")
+        await time.advance(to: 990)
+        if ending == "cancel" {
+            keys.cancel()
+        } else {
+            #expect(keys.key(1, down: false, allowed: false), "the release is the shift's even when it no longer shows")
+        }
+        await time.advance(to: 10_000)
+        await time.drain()
+        #expect(value == 1.0, "\(ending): \(value)")
+        // The controls stayed up for the hold and their timer starts again after it (review P2-4).
+        #expect(held == [true, false], "\(ending)")
+    }
+    // A press while the shift does not show is not the shift's, and starts nothing.
+    var moved = false
+    let keys = ShiftKeys(clock: ManualTime().clock) { _ in moved = true }
+    #expect(!keys.key(-1, down: true, allowed: false))
+    #expect(!keys.key(-1, down: false, allowed: false))
+    #expect(!moved)
+}
+
+@Test func theKeysWiringCancelsALostRelease() throws {
+    let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerScreen.swift"), encoding: .utf8)
+    #expect(screen.contains(".onChange(of: keysFocused) { _, focused in if !focused { shiftKeys?.cancel() } }"))
+    #expect(screen.contains(".onChange(of: model.timingKey) { shiftKeys?.cancel() }"))
+    #expect(screen.contains("NSApplication.didResignActiveNotification)) { _ in shiftKeys?.cancel() }"))
+    #expect(screen.contains("menuOpenedAt = held ? .now : nil"), "the controls stay up while G or H is held")
+    // Choose a version closes the audio strip, so Escape under Versions closes Versions (review P2-3).
+    #expect(screen.contains("chooseVersion: model.versions == nil ? nil : { model.strip = nil; openVersions() }"))
+}
+
+@Test func episodesFromAPlayerBroughtBackFromPictureInPictureOpensTheTitle() throws {
+    // Review P1-2: the cover sits outside the places, so it carries its own way to a title.
+    let root = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/App/RootView.swift"), encoding: .utf8)
+    let cover = try #require(root.range(of: "NavigationStack { PlayerScreen(held: held, core: core) }"))
+    #expect(root[cover.upperBound...].prefix(300).contains(".environment(\\.openTitle, OpenTitleAction { route in push(route, on: tab) })"))
+    #expect(root.contains(".environment(\\.openTitle, OpenTitleAction { route in push(route, on: item) })"))
+    let push = try body(of: "private func push(_ route: TitleRoute, on item: AppTab)", in: root)
+    #expect(push.contains("homePath.append(route)") && push.contains("titlePaths[item, default: []].append(route)"))
+}
+
+@Test func escapeUnderVersionsClosesVersionsFirst() {
+    #expect(BarRules.back(strip: .audio, style: false, versions: true) == .closeVersions)
+    #expect(BarRules.back(strip: nil, style: false, versions: true) == .closeVersions)
+    #expect(BarRules.back(strip: .audio, style: false, versions: false) == .closeStrip)
+}
+
+@Test func aShowStartsOnItsFinalLayout() throws {
+    // Review P2-5: the controls are made again on every show; the first pass uses the width kept on the model
+    // while the window is the same, else the window's, never 0 (which laid the Mac out on two rows for a frame).
+    #expect(BarFit.width(measured: 1360, measuredIn: 1440, window: 1440, inset: 80) == 1360)
+    #expect(BarFit.width(measured: 0, measuredIn: 0, window: 1440, inset: 80) == 1360)
+    #expect(BarFit.width(measured: 1360, measuredIn: 1440, window: 1024, inset: 80) == 944, "resized while hidden")
+    let mac = BarFit.desktop(width: BarFit.width(measured: 0, measuredIn: 0, window: 1440, inset: 80), left: longLeft, right: longRight(subtitle: "English"))
+    #expect(mac.under == .none)
+    let controls = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerControls.swift"), encoding: .utf8)
+    #expect(controls.contains("private var landscape: Bool { windowWidth > windowHeight }"), "an iPhone held sideways never starts upright")
+    #expect(!controls.contains("@State private var barWidth"))
+    // The iPhone's shift words are measured as QuickShift draws them, relative to callout (review P2-8).
+    #expect(controls.contains("@ScaledMetric(relativeTo: .callout) private var phoneWord: CGFloat = 14"))
+    let strip = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerStrip.swift"), encoding: .utf8)
+    #expect(strip.components(separatedBy: ".textFont(textSize, weight: .semibold, relativeTo: .callout)").count - 1 == 2)
+}
+
+@Test func theIPhoneOpensEpisodesOnlyOnceThePageIsInFront() throws {
+    // Review P2-6: never a push during the player's pop; the iPhone walk checks Episodes from Versions too.
+    let title = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Title/TitleScreen.swift"), encoding: .utf8)
+    let opened = try body(of: "private func titleOpened(", in: title)
+    #expect(opened.contains("pendingEpisodes = true\n            if inFront { openPendingEpisodes() }"))
+    #expect(!opened.contains("openEpisodes()"))
+    #expect(title.contains("inFront = true\n            openPendingEpisodes()"))
+    #expect(try body(of: "private func openPendingEpisodes()", in: title).contains("try? await Task.sleep(for: .milliseconds(450))"))
+}
+
+@Test func tvOSKeepsItsRowAsItWas() throws {
+    // Review P2-7: tvOS only compiles; its transport keeps 56 and 68 and its four actions, no new stops.
+    let controls = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerControls.swift"), encoding: .utf8)
+    #expect(controls.contains("transport(gap: 28, skip: 56, play: 68)\n                tvActions.frame(maxWidth: .infinity)"))
+    let tv = try body(of: "private var tvActions: some View", in: controls)
+    #expect(!tv.contains("episodes") && !tv.contains("playNext") && !tv.contains("QuickShift"))
+}
+
+@Test func theSettledLineFollowsWhereTheChangeCameFrom() {
+    // Review P3-12: the quick shift's words; the full picker keeps its signed value.
+    #expect(PlayerLayout.settledWords(0.25, quick: true) == "Subtitles 0.25 seconds later")
+    #expect(PlayerLayout.settledWords(0.1, quick: false) == "Plus 0.1 seconds")
+}
+
+@Test func theSubtitlesPillKeepsRoomForEveryValueItMayShow() throws {
+    // Review P3-9: file tracks by their own names, and "A + B" while a second line is set.
+    let reserve = BarFit.subtitleReserve(off: "Off, 3 found", languages: ["English"], fileTracks: ["SDH"], second: "Spanish")
+    #expect(Set(reserve) == ["Off, 3 found", "English", "English, Auto", "SDH", "English + Spanish", "SDH + Spanish"])
+    // The searching mark's room is kept too (review P3-11).
+    let plain = BarFit.pillWidth(BarFit.Pill(word: "Subtitles", value: "English"), words: true)
+    #expect(BarFit.pillWidth(BarFit.Pill(word: "Subtitles", value: "English", mark: true), words: true) == plain + BarFit.inner + BarFit.markSize)
+    let controls = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerControls.swift"), encoding: .utf8)
+    #expect(try body(of: "private func action(", in: controls).contains("Glyph(\"loader-circle\", size: BarFit.markSize)"))
+    // The Mac's Full screen follows its own window only (review P3-14).
+    #expect(controls.components(separatedBy: "note.object as? NSWindow === window").count - 1 == 2)
+}
+
+@Test func theCaptionSettingsAreReadOnceNotOnEveryCue() throws {
+    // Review P3-13; and Style, an opener, is never said as selected (review P3-10).
+    let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerScreen.swift"), encoding: .utf8)
+    #expect(screen.contains("CaptionStyle.current.with(background, systemInsists: insists)"))
+    #expect(screen.contains("model.captionInsists = CaptionStyle.systemInsists"))
+    let strip = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerStrip.swift"), encoding: .utf8)
+    #expect(!strip.contains("CaptionStyle.systemInsists"))
+    #expect(strip.contains("StripChip(title: bar.style, checked: model.styleOpen, choice: false)"))
+}
+
 @Test func theShiftReadsAtLeastOneDecimalAndAtMostTwo() {
     #expect(PlayerLayout.delayText(0.25) == "+0.25 s")
     #expect(PlayerLayout.delayText(0.5) == "+0.5 s")

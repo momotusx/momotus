@@ -179,6 +179,10 @@ enum PlayerLayout {
         return (delay > 0 ? w.saidLater : w.saidEarlier).replacingOccurrences(of: "{n}", with: seconds(delay))
     }
 
+    /// What is said once a value settles: the quick shift's words, or the full picker's signed value (the owner,
+    /// 2026-10-22), by where the change came from.
+    static func settledWords(_ delay: Double, quick: Bool) -> String { quick ? shiftSaid(delay) : delayWords(delay) }
+
     /// The shift's value as a screen reader names it (section 8): its visible text first, then which way, then
     /// what a press does ("+0.25 s, subtitles later, press to reset"); at 0 a press does nothing, so the name ends
     /// there. A remote's OK always enters adjust mode.
@@ -760,6 +764,43 @@ struct HoldRule: Sendable {
     }
 }
 
+/// G and H held on the Mac (D11): the quick shift's hold, by the shift's rule. A release always ends its own hold,
+/// whatever else changed meanwhile; a press counts only while the shift shows (`allowed`), and the keyboard's own
+/// repeats are swallowed. `cancel` ends a hold whose release will never come (the app or the window lost the keys,
+/// the subtitle went). `holding` keeps the controls up while a hold runs, and restarts their timer after it.
+@MainActor final class ShiftKeys {
+    private let hold: TimingHold
+    private let holding: (Bool) -> Void
+
+    init(clock: StepperClock = .real, holding: @escaping (Bool) -> Void = { _ in }, move: @escaping (Double) -> Void) {
+        hold = TimingHold(rule: .quick, clock: clock, move: move)
+        self.holding = holding
+    }
+
+    /// G (-1) or H (1): `down` true for the press, false for the release, nil for a repeat. True when the key was
+    /// the shift's.
+    func key(_ direction: Int, down: Bool?, allowed: Bool) -> Bool {
+        if down == false {
+            guard hold.direction == direction else { return allowed }
+            hold.stop(single: true)
+            holding(false)
+            return true
+        }
+        guard allowed else { return false }
+        if down == true {
+            hold.start(direction)
+            holding(true)
+        }
+        return true
+    }
+
+    func cancel() {
+        guard hold.direction != 0 else { return }
+        hold.stop(single: false)
+        holding(false)
+    }
+}
+
 /// The stepper's value on its way to the core (`subtitleDelay`): each track's value for the play, and
 /// the one not sent yet, which goes once it rests 700 ms or at once on `flush` (another track, a
 /// failover, a server move, close). `send` is synchronous (`commandNow`), so a flush reaches the core
@@ -981,9 +1022,11 @@ enum BarRules {
     /// Skip or Up Next appearing closes an open strip (D23): they carry a time-bound action.
     static func strip(_ strip: BarStrip?, skipOrUpNext: Bool) -> BarStrip? { skipOrUpNext ? nil : strip }
 
-    /// Escape or Back on the Mac and iPad (section 6): the Style row first, then the strip, then the player's own.
-    enum Back: Equatable { case closeStyle, closeStrip, player }
-    static func back(strip: BarStrip?, style: Bool) -> Back {
+    /// Escape or Back on the Mac and iPad (section 6): Versions over the player first (a strip under it is out of
+    /// sight), then the Style row, then the strip, then the player's own.
+    enum Back: Equatable { case closeVersions, closeStyle, closeStrip, player }
+    static func back(strip: BarStrip?, style: Bool, versions: Bool = false) -> Back {
+        if versions { return .closeVersions }
         guard strip != nil else { return .player }
         return style ? .closeStyle : .closeStrip
     }
@@ -1052,12 +1095,19 @@ enum BarFit {
         let word: String?
         var value: String?
         var reserve: [String] = []
+        /// Room for the searching mark (Subtitles), kept whether or not it shows.
+        var mark = false
     }
 
-    /// Every value the Subtitles pill may show in this list: off, and each language on (by the viewer or Auto).
-    // ponytail: two lines on ("English + Spanish") are not reserved; a second line is chosen in the full picker.
-    static func subtitleReserve(off: String, languages: [String]) -> [String] {
-        [off] + languages.flatMap { [$0, "\($0), Auto"] }
+    /// The searching mark's size.
+    static let markSize: CGFloat = 12
+
+    /// Every value the Subtitles pill may show in this list: off, each language on (by the viewer or Auto), each of
+    /// the file's own tracks by its name, and with a second line set, each first line beside it ("A + B").
+    static func subtitleReserve(off: String, languages: [String], fileTracks: [String] = [], second: String? = nil) -> [String] {
+        let firsts = languages + fileTracks
+        let paired = second.map { s in firsts.map { "\($0) + \(s)" } } ?? []
+        return [off] + languages.map { "\($0), Auto" } + firsts + paired
     }
 
     /// The text sizes the bar draws at before Dynamic Type: the Mac's and iPad's callout; on the iPhone the shift's
@@ -1090,7 +1140,8 @@ enum BarFit {
         guard words, let word = p.word else { return pill }
         let values = ([p.value].compactMap { $0 } + p.reserve).map { min(textWidth($0, size: type.value, bold: false), valueCap) }
         let value = values.max().map { inner + $0 } ?? 0
-        return max(pill, lead + icon + inner + textWidth(word, size: type.word, bold: true) + value + trail)
+        let mark = p.mark ? inner + markSize : 0
+        return max(pill, lead + icon + inner + textWidth(word, size: type.word, bold: true) + value + mark + trail)
     }
 
     /// The shift, Earlier and Later in words or as chevrons; each part at least a target wide.
@@ -1099,6 +1150,13 @@ enum BarFit {
         let w = StreamChoice.words.player.bar
         let side = { (s: String) in max(pill, textWidth(s, size: type.word, bold: true) + 2 * shiftPad) }
         return side(w.earlier) + shiftValue + side(w.later)
+    }
+
+    /// The width a plan is made for: the bar's last measured width while the window is the one it was measured in,
+    /// else (a first show, or the window turned or resized while the controls were hidden) the window's less the
+    /// bar's insets, so the first frame of a show already has its final layout.
+    static func width(measured: CGFloat, measuredIn: CGFloat, window: CGFloat, inset: CGFloat) -> CGFloat {
+        measured > 0 && measuredIn == window ? measured : max(window - inset, 0)
     }
 
     static func groupWidth(_ widths: [CGFloat], gap: CGFloat = gap) -> CGFloat {
