@@ -39,12 +39,17 @@ class FirstRunStillAskTest {
                 val id = request.getValue("id").jsonPrimitive.long
                 // The first ask past the budget, the second in time.
                 val result =
-                    if (asks.incrementAndGet() == 1) "null" else """{"background":"https://art.example/b.jpg","name":"B"}"""
+                    if (asks.incrementAndGet() == 1) {
+                        "null"
+                    } else {
+                        """{"background":"https://art.example/b.jpg","name":"B"}"""
+                    }
                 session.client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
                 answered.incrementAndGet()
             },
         )
         val state = AppState(session, caps, shutsBefore = 0)
+
         // The answer comes on the client's thread; the state takes it on the main looper.
         fun settle(after: Int) {
             repeat(500) {
