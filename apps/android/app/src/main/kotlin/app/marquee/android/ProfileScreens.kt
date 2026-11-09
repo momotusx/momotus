@@ -84,6 +84,7 @@ import app.marquee.core.AccountRules
 import app.marquee.core.ErrorCopy
 import app.marquee.core.FirstRunCopy
 import app.marquee.core.ProfileCopy
+import app.marquee.core.SyncCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.model.ProfileInfo
 import app.marquee.core.model.ProfilesSnapshot
@@ -104,6 +105,7 @@ import app.marquee.design.Status
 import app.marquee.design.StatusWord
 import app.marquee.design.TextRole
 import app.marquee.design.Tokens
+import app.marquee.design.avatarColor
 import app.marquee.design.focusClickable
 import app.marquee.design.focusPalette
 import app.marquee.design.focusSoon
@@ -594,6 +596,8 @@ fun PickerScreen(
     val target = picked ?: gate.switching.takeIf { gate.switchProblem != null }
     var said by remember { mutableStateOf("") }
     val first = remember { FocusRequester() }
+    // First run's Add profile: the form in the sheet (plans/first-screens.md 3.4).
+    var adding by rememberSaveable { mutableStateOf(false) }
     val incognito = ProfileCopy.inIncognito(s)
     // Incognito asks for the PIN of the profile the core names; a refusal that is not about the PIN has no keypad.
     val pinRefused = gate.switchProblem?.code.let { it == "wrongPin" || it == "locked" }
@@ -727,6 +731,15 @@ fun PickerScreen(
         },
         contentAlignment = Alignment.Center,
     ) {
+        if (sheet && adding) {
+            AddProfileSheet(
+                session,
+                s.profiles.map { it.avatar },
+                onDone = { onAdd?.invoke() },
+                onCancel = { adding = false },
+            )
+            return@Box
+        }
         if (chosen != null && target == ProfileCopy.INCOGNITO) {
             sheeted {
                 Keypad(
@@ -847,7 +860,9 @@ fun PickerScreen(
                         glyph = Color.White,
                     )
                 }
-                if (onAdd != null && owner && !locked && s.profiles.size < s.max) AddTile(onAdd)
+                if (onAdd != null && owner && !locked && s.profiles.size < s.max) {
+                    AddTile(if (sheet) ({ adding = true }) else onAdd)
+                }
             }
             if (said.isNotEmpty()) {
                 MqText(
@@ -880,6 +895,93 @@ fun PickerScreen(
         }
         LaunchedEffect(Unit) {
             if (tv) focusSoon(first)
+        }
+    }
+}
+
+/**
+ * Who's watching?'s Add profile on first run (plans/first-screens.md 3.4): the create form in the sheet, a name and
+ * one of the swatches (the next unused colour chosen), then [onDone]; Cancel and Back return to the tiles. One create
+ * per press; a refused name keeps what was typed.
+ */
+@Composable
+internal fun AddProfileSheet(
+    session: CoreSession,
+    avatars: List<String>,
+    onDone: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    var name by rememberSaveable { mutableStateOf("") }
+    val next = ProfileCopy.parseAvatar(ProfileCopy.nextAvatar(avatars)).color ?: "ember"
+    var color by rememberSaveable { mutableStateOf(next) }
+    var busy by remember { mutableStateOf(false) }
+    var said by remember { mutableStateOf<String?>(null) }
+    val go = remember { FocusRequester() }
+    AutoFocus(go)
+    BackHandler { onCancel() }
+
+    fun save() {
+        val n = name.trim()
+        if (n.isEmpty() || n.length > 30) {
+            said = ProfileCopy.problem("badName", "")
+            return
+        }
+        if (busy) return
+        busy = true
+        said = null
+        scope.launch {
+            try {
+                session.ops.createProfile(n, ProfileCopy.formatAvatar("letter", color))
+                onDone()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                said = (tried(e) as? Tried.Problem)?.text ?: "That did not work."
+            } finally {
+                busy = false
+            }
+        }
+    }
+    FirstSheet(
+        FirstRunCopy.ADD_PROFILE,
+        width = 760.dp,
+        corner = { SheetLink(SyncCopy.CANCEL, onCancel) },
+        foot = {
+            Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.s)) {
+                said?.let { StatusWord(it, Status.Bad) }
+                PrimaryButton(
+                    FirstRunCopy.CONTINUE,
+                    ::save,
+                    if (Marquee.form == Form.Tv) Modifier else Modifier.fillMaxWidth(),
+                    big = true,
+                    busy = busy,
+                    focusRequester = go,
+                )
+            }
+        },
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            AvatarArt("letter", color, ProfileCopy.initial(name.ifBlank { "?" }), 72.dp)
+            Box(Modifier.weight(1f)) {
+                MqTextField(
+                    name,
+                    { name = it.take(30) },
+                    label = FirstRunCopy.NAME_LABEL,
+                    placeholder = FirstRunCopy.NAME_LABEL,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        Row(
+            Modifier.padding(top = 16.dp).semantics { contentDescription = FirstRunCopy.COLOUR_LABEL },
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            for (c in SWATCHES) {
+                Choice(selected = c == color, label = c.replaceFirstChar { it.uppercase() }, size = 48.dp, onClick = {
+                    color = c
+                }) { Box(Modifier.size(48.dp).clip(CircleShape).background(avatarColor(c) ?: Marquee.colors.raised)) }
+            }
         }
     }
 }

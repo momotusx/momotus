@@ -114,9 +114,6 @@ class AppState(
     /** The provider of a first-run sign-in, for Who's watching?'s line; memory only. */
     var joinedWith: String? = null
 
-    /** Who's watching?'s Add profile: the create form opens once the app shows (it is today's page). */
-    var addProfile by mutableStateOf(false)
-
     /** Make your first profile's and the setup sheet's writes, shared by the setup sheet and Import after it. */
     val firstProfile = FirstProfileStep(session.ops, viewModelScope)
     val setup = FirstSetup(session.ops, viewModelScope)

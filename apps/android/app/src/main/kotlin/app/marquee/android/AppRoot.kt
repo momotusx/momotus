@@ -160,10 +160,8 @@ fun MarqueeRoot(
                             gate,
                             session,
                             mode,
-                            onAdd = {
-                                app.addProfile = true
-                                gate.markChosen()
-                            },
+                            // A profile added in the sheet: Home, on the profile this session runs.
+                            onAdd = gate::markChosen,
                             sheet = true,
                             line = whoLine(app, marquee.sync),
                         )
@@ -499,13 +497,6 @@ private fun AppNav(
     // A join met while a first-run page other than the sign-in shows (a pairing page, Account's kit): the same way on.
     LaunchedEffect(sync.joined, top) {
         if (sync.joined && firstRun && top !is Route.SignIn && !created) joined()
-    }
-    // Who's watching?'s Add profile, once the app shows: today's create form over Home.
-    LaunchedEffect(app.addProfile) {
-        if (app.addProfile) {
-            app.addProfile = false
-            backStack.add(Route.EditProfile(null))
-        }
     }
     // The wall over every first-run step and sign-in sheet, asked again at each while it has none.
     val overWall = overWall(top, routes)
