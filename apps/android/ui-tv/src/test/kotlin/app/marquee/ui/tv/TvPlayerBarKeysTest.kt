@@ -5,19 +5,25 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performKeyPress
 import androidx.compose.ui.test.pressKey
 import app.marquee.core.model.NextEpisode
+import app.marquee.core.model.Segment
+import app.marquee.core.model.SegmentKind
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import app.marquee.player.PlaybackController
+import app.marquee.player.STRIP_TAG
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -40,19 +46,24 @@ class TvPlayerBarKeysTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val play = BarPlay()
+    private var play = BarPlay()
     private val controller get() = play.controller
 
     @After
     fun stop() = play.close()
 
-    private fun playing(focus: Boolean = true) {
+    private fun playing(
+        focus: Boolean = true,
+        /** Set after the core's snapshot, which would replace it. */
+        setup: () -> Unit = {},
+    ) {
         compose.setContent { MarqueeTheme(Form.Tv) { TvPlayer(controller, false, {}, {}, { _, _ -> }, {}) } }
         play.attach { _, check -> compose.waitUntil(10_000) { check() } }
         compose.runOnIdle { play.player.open() }
         compose.waitUntil(10_000) { controller.stage == PlaybackController.Stage.Playing }
         // After the core's snapshot, which names no next episode.
         compose.runOnIdle {
+            setup()
             controller.next = NextEpisode("tt1:1:2", "The Second", 1, 2)
             play.english()
             controller.pause()
@@ -163,6 +174,81 @@ class TvPlayerBarKeysTest {
         press(Key.DirectionRight)
         focused().assert(hasContentDescription("Episodes"))
         compose.runOnIdle { assertEquals(0L, controller.subtitleDelayMs) }
+        // OK leaves adjust mode too, and its release does not enter it again: Right then moves on.
+        press(Key.DirectionLeft)
+        press(Key.DirectionCenter)
+        press(Key.DirectionCenter)
+        press(Key.DirectionRight)
+        focused().assert(hasContentDescription("Episodes"))
+        compose.runOnIdle { assertEquals(0L, controller.subtitleDelayMs) }
+    }
+
+    /** Opens the subtitle strip by remote from Play: OK on Subtitles. */
+    private fun openStrip() {
+        repeat(2) { press(Key.DirectionRight) }
+        press(Key.DirectionCenter)
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("More languages").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun `Reset in the strip puts the shift to 0 and leaves the focus on the value, never on nothing`() {
+        playing()
+        compose.runOnIdle { controller.setSubtitleDelay(500) }
+        openStrip()
+        var steps = 0
+        while (!hasText("Reset").matches(focused().fetchSemanticsNode()) && steps++ < 10) press(Key.DirectionRight)
+        press(Key.DirectionCenter)
+        compose.waitForIdle()
+        compose.runOnIdle { assertEquals(0L, controller.subtitleDelayMs) }
+        compose.onNodeWithText("Reset").assertDoesNotExist()
+        focused().assert(value)
+    }
+
+    @Test
+    fun `Back closes the Style row first, the focus back on Style`() {
+        playing()
+        openStrip()
+        compose.onNodeWithText("Style").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("Size").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
+        press(Key.Back)
+        compose.waitForIdle()
+        compose.onNodeWithText("Size").assertDoesNotExist()
+        compose.onNodeWithText("More languages").assertExists()
+        focused().assert(hasText("Style"))
+    }
+
+    @Test
+    fun `a strip opened while Skip shows sits over it, never on it`() {
+        playing(focus = false) {
+            controller.segments = listOf(Segment(SegmentKind.Intro, 0, 120_000, "TheIntroDB"))
+        }
+        compose.onNodeWithText("Skip intro").assertExists()
+        compose.onNode(hasContentDescription("Subtitles, ", substring = true)).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("More languages").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
+        val strip = compose.onNode(hasTestTag(STRIP_TAG)).fetchSemanticsNode().boundsInRoot
+        val skip = compose.onNodeWithText("Skip intro").fetchSemanticsNode().boundsInRoot
+        assertTrue(!strip.overlaps(skip), "the strip $strip meets Skip $skip")
+    }
+
+    @Test
+    fun `long values never squeeze a pill, Next keeps its round target`() {
+        play.close()
+        play = BarPlay(english = "English (United Kingdom), for the hard of hearing, with the songs")
+        playing(focus = false) {
+            controller.versionLabel = "2160p WEB-DL HDR10 Dolby Vision Atmos 7.1 REMUX from the long release name"
+        }
+        val bar = compose.onNode(hasTestTag(TV_BAR_TAG)).fetchSemanticsNode().boundsInRoot
+        val next = compose.onNode(hasContentDescription("Next episode", substring = true)).fetchSemanticsNode()
+        val box = next.boundsInRoot
+        assertTrue(box.width >= box.height - 1f, "Next is squeezed: $box")
+        assertTrue(box.right <= bar.right + 1f, "Next runs past the bar: $box, $bar")
+        val targets = compose.onAllNodes(hasClickAction()).fetchSemanticsNodes().map { it.boundsInRoot }
+        for (t in targets.filter { it.top >= bar.top - 1f && it.bottom <= bar.bottom + 1f }) {
+            assertTrue(t.width >= t.height - 1f, "a squeezed pill: $t")
+        }
     }
 
     /**

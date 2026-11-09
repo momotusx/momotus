@@ -28,6 +28,8 @@ import kotlin.coroutines.CoroutineContext
  */
 internal class BarPlay(
     trakt: String = "off",
+    /** The English track's language name as the core gives it (a long one for the fit). */
+    english: String = "English",
 ) {
     private val main =
         object : CoroutineDispatcher() {
@@ -55,7 +57,10 @@ internal class BarPlay(
             SubtitleDelay(),
             false,
         ) { SRT.toByteArray() }
-    private val snapshot = SNAPSHOT.replace("\"trakt\":\"off\"", "\"trakt\":\"$trakt\"")
+    private val snapshot =
+        SNAPSHOT
+            .replace("\"trakt\":\"off\"", "\"trakt\":\"$trakt\"")
+            .replace("\"languageName\":\"English\"", "\"languageName\":\"$english\"")
 
     /** Attaches the core's view and waits for the stream to load. */
     fun attach(waitUntil: (String, () -> Boolean) -> Unit) {

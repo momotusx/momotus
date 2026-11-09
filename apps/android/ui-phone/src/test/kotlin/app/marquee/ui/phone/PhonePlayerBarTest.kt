@@ -15,12 +15,15 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import app.marquee.core.model.NextEpisode
+import app.marquee.core.model.Segment
+import app.marquee.core.model.SegmentKind
 import app.marquee.core.model.SubtitleBackground
 import app.marquee.core.model.SubtitleSize
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import app.marquee.player.PlaybackController
 import app.marquee.player.SHIFT_TAG
+import app.marquee.player.STRIP_TAG
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -51,7 +54,12 @@ class PhonePlayerBarTest {
     fun stop() = play.close()
 
     /** Playing a series at one minute in, its controls up. */
-    private fun playing(trakt: String = "off") {
+    private fun playing(
+        trakt: String = "off",
+        /** Set after the core's snapshot, which would replace it. */
+        setup: () -> Unit = {},
+    ) {
+        play.close()
         play = BarPlay(trakt)
         compose.setContent {
             MarqueeTheme(Form.Phone) {
@@ -74,7 +82,10 @@ class PhonePlayerBarTest {
         compose.runOnIdle { play.player.open() }
         compose.waitUntil(10_000) { controller.stage == PlaybackController.Stage.Playing }
         // Paused, so the controls stay up through the test.
-        compose.runOnIdle { controller.pause() }
+        compose.runOnIdle {
+            setup()
+            controller.pause()
+        }
         compose.waitForIdle()
     }
 
@@ -179,6 +190,28 @@ class PhonePlayerBarTest {
         compose.onNodeWithText("More languages").assertDoesNotExist()
         compose.onNodeWithContentDescription("Back 10 seconds").assertExists()
         compose.runOnIdle { assertEquals(60_000L, play.player.currentPosition) }
+        // Play, Back 10 and Forward 10 count as outside too: the first press only closes the strip (D21).
+        for (press in listOf("Play", "Back 10 seconds", "Forward 10 seconds")) {
+            compose.onNodeWithContentDescription("Subtitles, Off, 2 languages").performClick()
+            compose.onNodeWithText("More languages").assertExists()
+            compose.onNodeWithContentDescription(press).performClick()
+            compose.onNodeWithText("More languages").assertDoesNotExist()
+            compose.runOnIdle {
+                assertEquals(60_000L, play.player.currentPosition, "$press seeked")
+                assertEquals(PlaybackController.Stage.Paused, controller.stage, "$press played")
+            }
+        }
+    }
+
+    @Test
+    fun `a strip opened while Skip shows sits over it, never on it`() {
+        playing { controller.segments = listOf(Segment(SegmentKind.Intro, 0, 120_000, "TheIntroDB")) }
+        compose.onNodeWithText("Skip intro").assertExists()
+        compose.onNodeWithContentDescription("Subtitles, Off, 2 languages").performClick()
+        compose.waitForIdle()
+        val strip = compose.onNode(hasTestTag(STRIP_TAG)).fetchSemanticsNode().boundsInRoot
+        val skip = compose.onNodeWithText("Skip intro").fetchSemanticsNode().boundsInRoot
+        assertTrue(!strip.overlaps(skip), "the strip $strip meets Skip $skip")
     }
 
     @Test

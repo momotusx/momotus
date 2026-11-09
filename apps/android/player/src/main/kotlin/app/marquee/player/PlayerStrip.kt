@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -133,19 +134,19 @@ data class SideFit(
  * else icons alone ([icons]); and if that still overflows, the shift's words become chevrons (D16 a and b). The
  * shift's room is always counted, so the side never flips when a subtitle turns on.
  * ponytail: D16's third step (two rows) is not built on Android TV: on its 1920-point canvas a series' right side as
- * icons with chevrons takes about 580 of the about 700 points it has. Add it if the canvas ever narrows.
+ * icons with chevrons takes about 605 of the about 700 points it has (PlayerBarRulesTest pins it). Add it if the canvas
+ * ever narrows.
  */
 fun sideFit(
     column: Dp,
     words: Dp,
     icons: Dp,
     shiftWords: Dp = 0.dp,
-    shiftChevrons: Dp = 0.dp,
 ): SideFit =
     when {
         words + shiftWords <= column -> SideFit(words = true, shiftWords = true)
         icons + shiftWords <= column -> SideFit(words = false, shiftWords = true)
-        else -> SideFit(words = false, shiftWords = shiftChevrons > column - icons)
+        else -> SideFit(words = false, shiftWords = false)
     }
 
 /**
@@ -160,6 +161,15 @@ fun stripLanguages(
     val all = subtitleLanguages(rows)
     return (all.filter { it.chosen } + all.filterNot { it.chosen }).take(cap)
 }
+
+/**
+ * Whether Off is where a remote enters the subtitle strip ([languages] its chips): it is checked, or the track on has
+ * no chip (captions in the video that name no language), so the strip always has a way in.
+ */
+fun offIsEntry(
+    rows: List<TrackChoice>,
+    languages: List<SubtitleLanguage>,
+): Boolean = rows.none { it.selected && it.id != TRACK_OFF } || languages.none { it.chosen }
 
 /** Next's spoken name: "Next episode, S1:E3 In Perpetuity" (section 8). */
 fun nextName(next: NextEpisode): String =
@@ -200,15 +210,28 @@ class BarWidths(
     private val gap: Dp,
     private val value: Dp,
     private val shiftPad: Dp,
+    /** The widest a pill's value draws ([ActionButton]: twice [PILL_VALUE_MAX] on TV). */
+    private val valueMax: Dp,
+    /** The busy mark after a value ([ActionButton]'s spinner). */
+    private val spinner: Dp,
 ) {
     /** The width of [text] in the bar's words. */
     fun text(text: String): Dp = measure(text)
 
-    /** A pill with its words: icon, name and value. */
+    /** A pill with its words: icon, name and value, the value as wide as the widest of [details]; [busy] with its mark. */
+    fun pill(
+        label: String,
+        details: List<String?>,
+        busy: Boolean = false,
+    ): Dp =
+        pad * 2 + icon + gap + measure(label) +
+            (details.filterNotNull().maxOfOrNull { gap + minOf(measure(it), valueMax) } ?: 0.dp) +
+            (if (busy) gap + spinner else 0.dp)
+
     fun pill(
         label: String,
         detail: String?,
-    ): Dp = pad * 2 + icon + gap + measure(label) + (detail?.let { gap + minOf(measure(it), PILL_VALUE_MAX) } ?: 0.dp)
+    ): Dp = pill(label, listOf(detail))
 
     /** The shift with Earlier and Later in words. */
     val shiftWords: Dp
@@ -247,9 +270,19 @@ fun rememberBarWidths(): BarWidths {
             gap = if (tv) 14.dp else 6.dp,
             value = value,
             shiftPad = pad,
+            valueMax = if (tv) PILL_VALUE_MAX * 2 else PILL_VALUE_MAX,
+            spinner = if (tv) 20.dp else 10.dp,
         )
     }
 }
+
+/**
+ * Every value Subtitles can show in this play: what it shows now, Off's ("Off, 3 languages") and each language's name,
+ * so a side's fit is decided once and turning a subtitle on or off never flips it (D16).
+ */
+fun PlaybackController.subtitleValues(): List<String> =
+    listOf(subtitlesDetail(), subtitlesDetail(text.map { it.copy(selected = it.id == TRACK_OFF) }, subtitlesPending)) +
+        subtitleLanguages(text).map { it.name }
 
 /**
  * The quick shift beside Subtitles and in its strip (D2, D3): Earlier, the value, Later in one capsule. A tap moves
@@ -305,6 +338,7 @@ fun QuickShift(
         LiveSpoken(said, quietMs = 0L) {}
         ShiftButton(-1, words, hold, tv)
         var focused by remember { mutableStateOf(false) }
+        var eatRelease by remember { mutableStateOf(false) }
         ButtonFocused(focused)
         val ink = focusPalette(focused)
         val actions =
@@ -324,6 +358,11 @@ fun QuickShift(
                         onAdjust(false)
                     }
                 }.onPreviewKeyEvent { event ->
+                    // The release of the OK that ended adjust mode is eaten, so it never presses the value again.
+                    if (eatRelease && event.type == KeyEventType.KeyUp && event.key in OK_KEYS) {
+                        eatRelease = false
+                        return@onPreviewKeyEvent true
+                    }
                     if (!tv || !adjust.value) return@onPreviewKeyEvent false
                     when (event.key) {
                         Key.DirectionLeft, Key.DirectionRight -> {
@@ -335,10 +374,11 @@ fun QuickShift(
                         }
 
                         Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.DirectionUp, Key.DirectionDown -> {
-                            // Adjust mode ends on the press; its release is eaten, so OK does not enter it again.
+                            // Adjust mode ends on the press; an OK's release is eaten above.
                             if (event.type == KeyEventType.KeyDown) {
                                 hold.release(step = false)
                                 onAdjust(false)
+                                eatRelease = event.key in OK_KEYS
                             }
                             true
                         }
@@ -361,7 +401,8 @@ fun QuickShift(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             FocusInk(ink) {
-                val lit = tv && adjusting
+                // Only the capsule that holds the focus lights (the bar's and the strip's share one adjust mode).
+                val lit = tv && adjusting && focused
                 if (lit) MqIcon(Icons.ChevronLeft, tint = ink.text, size = 24.dp)
                 MqText(delayText(delayMs), role = pillText(), weight = FontWeight.SemiBold, maxLines = 1)
                 if (lit) MqIcon(Icons.ChevronRight, tint = ink.text, size = 24.dp)
@@ -376,6 +417,12 @@ const val SHIFT_SETTLE_MS = 700L
 
 /** The quick shift's capsule, for tests. */
 const val SHIFT_TAG = "quick-shift"
+
+/** An open strip, with its Style row, for tests. */
+const val STRIP_TAG = "player-strip"
+
+/** The keys a remote's OK sends. */
+private val OK_KEYS = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
 
 /** Earlier or Later, a word or a chevron: a tap steps, a hold repeats ([DelayHold]), a screen reader presses once. */
 @Composable
@@ -591,8 +638,9 @@ fun SubtitleStrip(
             runCatching { styleChip.requestFocus() }
         }
     }
+    val offFirst = offIsEntry(rows, languages)
     Column(
-        modifier.semantics { paneTitle = Names.SUBTITLES },
+        modifier.semantics { paneTitle = Names.SUBTITLES }.testTag(STRIP_TAG),
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(stripGap()),
     ) {
@@ -610,17 +658,20 @@ fun SubtitleStrip(
                 StripChip(
                     "Off",
                     { if (!off) controller.selectText(TRACK_OFF) },
-                    down.then(if (off && first != null) Modifier.focusRequester(first) else Modifier),
+                    down.then(if (offFirst && first != null) Modifier.focusRequester(first) else Modifier),
                     checked = off,
                 )
+                // Keyed, so a language arriving ahead of the focused chip leaves the focus on its language.
                 languages.forEach { lang ->
-                    StripChip(
-                        lang.name,
-                        { if (!lang.chosen) controller.selectText(lang.best.id) },
-                        down.then(if (lang.chosen && first != null) Modifier.focusRequester(first) else Modifier),
-                        checked = lang.chosen,
-                        leading = { LanguageFlag(lang.key, pillIcon()) },
-                    )
+                    key(lang.key) {
+                        StripChip(
+                            lang.name,
+                            { if (!lang.chosen) controller.selectText(lang.best.id) },
+                            down.then(if (lang.chosen && first != null) Modifier.focusRequester(first) else Modifier),
+                            checked = lang.chosen,
+                            leading = { LanguageFlag(lang.key, pillIcon()) },
+                        )
+                    }
                 }
             }
             if (rows.size <= 1 && controller.subtitlesPending) {
@@ -638,7 +689,13 @@ fun SubtitleStrip(
                     onAdjust = onAdjust,
                     valueModifier = down,
                 )
-                if (tv && delay != 0L) StripChip(Bar.RESET, { controller.setSubtitleDelay(0L) }, down)
+                if (tv && delay != 0L) {
+                    // Reset goes with its press: the focus moves to the value first, never into nothing.
+                    StripChip(Bar.RESET, {
+                        runCatching { shiftFocus.requestFocus() }
+                        controller.setSubtitleDelay(0L)
+                    }, down)
+                }
             }
             if (!controller.subtitlePicture) {
                 StripRule()
@@ -782,6 +839,7 @@ fun AudioStrip(
     Row(
         modifier
             .semantics { paneTitle = Names.AUDIO }
+            .testTag(STRIP_TAG)
             .horizontalScroll(rememberScrollState())
             .padding(horizontal = if (tv) 16.dp else 0.dp),
         horizontalArrangement = Arrangement.spacedBy(stripGap()),

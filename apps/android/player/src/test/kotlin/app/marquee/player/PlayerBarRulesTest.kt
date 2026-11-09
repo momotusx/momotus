@@ -33,7 +33,7 @@ class PlayerBarRulesTest {
         assertEquals(SideFit(false, true), sideFit(699.dp, words = 400.dp, icons = 200.dp, shiftWords = 300.dp))
         assertEquals(
             SideFit(false, false),
-            sideFit(499.dp, words = 400.dp, icons = 200.dp, shiftWords = 300.dp, shiftChevrons = 250.dp),
+            sideFit(499.dp, words = 400.dp, icons = 200.dp, shiftWords = 300.dp),
         )
         // The left side has no shift: its words alone decide.
         assertEquals(SideFit(true, true), sideFit(400.dp, words = 400.dp, icons = 200.dp))
@@ -75,6 +75,32 @@ class PlayerBarRulesTest {
         assertTrue(contrast >= 4.5f, "white chip words read at $contrast:1 (scrim $alpha at the strip's top)")
         // A short bar keeps the least height.
         assertEquals(160.dp, footScrim(60.dp, 160.dp))
+    }
+
+    @Test
+    fun `a remote enters the strip on the checked chip, else on Off, even for a track with no language`() {
+        val english = TrackChoice("e", "English", section = "English", language = "en")
+        val off = listOf(TrackChoice(TRACK_OFF, "Off", selected = true), english)
+        assertTrue(offIsEntry(off, stripLanguages(off, 3)))
+        val on = listOf(TrackChoice(TRACK_OFF, "Off"), english.copy(selected = true))
+        assertTrue(!offIsEntry(on, stripLanguages(on, 3)))
+        // Captions in the video that name no language: no chip holds them, so Off is the way in.
+        val captions = listOf(TrackChoice(TRACK_OFF, "Off"), english, TrackChoice("0:0", "CC", selected = true))
+        assertTrue(offIsEntry(captions, stripLanguages(captions, 3)))
+    }
+
+    @Test
+    fun `a TV side counts the widest value a pill can show and its busy mark`() {
+        // Value 300 wide on a TV pill, drawn up to 300 (twice the phone's cap), plus the spinner and its gap.
+        val widths =
+            BarWidths({ if (it == "long") 300.dp else 50.dp }, 72.dp, 36.dp, 24.dp, 14.dp, 200.dp, 15.dp, 300.dp, 20.dp)
+        val pill = 24.dp * 2 + 36.dp + 14.dp + 50.dp
+        assertEquals(pill + 14.dp + 300.dp, widths.pill("Subtitles", listOf("short", "long")))
+        assertEquals(pill + 14.dp + 300.dp + 14.dp + 20.dp, widths.pill("Subtitles", listOf("long"), busy = true))
+        // A series' right side as icons with chevrons fits the 1920 canvas' column (about 700) with room to spare.
+        val icons = 72.dp * 3 + 15.dp * 3
+        assertEquals(SideFit(false, false), sideFit(700.dp, icons + 2_000.dp, icons, 1_000.dp))
+        assertTrue(icons + widths.shiftChevrons <= 700.dp)
     }
 
     @Test

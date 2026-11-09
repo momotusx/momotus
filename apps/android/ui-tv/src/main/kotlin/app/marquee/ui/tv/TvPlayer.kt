@@ -96,6 +96,7 @@ import app.marquee.player.seekStepMs
 import app.marquee.player.sideFit
 import app.marquee.player.speedText
 import app.marquee.player.stripLift
+import app.marquee.player.subtitleValues
 import app.marquee.player.subtitlesDetail
 import app.marquee.player.subtitlesStillListing
 import app.marquee.player.upNextDue
@@ -167,8 +168,9 @@ fun TvPlayer(
     var osd by remember { mutableStateOf(true) }
     // The controls band's height (bar, transport and options), as last laid out: the cues sit over it.
     var controlsHeight by remember { mutableStateOf(0.dp) }
-    // The open strip's height, with its Style row, as last laid out.
+    // The open strip's height, with its Style row, as last laid out; and Skip's or Up Next's in the corner.
     var stripHeight by remember { mutableStateOf(0.dp) }
+    var cardHeight by remember { mutableStateOf(0.dp) }
     // The title block's foot, as last laid out: Split's second line hangs under it while the controls show.
     var headerFoot by remember { mutableStateOf(0.dp) }
     val density = LocalDensity.current
@@ -585,9 +587,11 @@ fun TvPlayer(
 
         // The strips over the bar's ends (section 5); Down from one goes back to its pill.
         if (showControls) {
+            // Over Skip or Up Next when one shows in the corner: a strip opened then never meets it (D23).
+            val cardLift = if (showSkip || (showNext && !ended && next != null)) cardHeight + stripLift() else 0.dp
             val placed =
                 Modifier
-                    .padding(start = safe.side, end = safe.side, bottom = controlsHeight + stripLift())
+                    .padding(start = safe.side, end = safe.side, bottom = controlsHeight + stripLift() + cardLift)
                     .onSizeChanged { stripHeight = with(density) { it.height.toDp() } }
             when (strip) {
                 Strip.Subtitles -> {
@@ -672,7 +676,8 @@ fun TvPlayer(
                     modifier =
                         Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(end = safe.side, bottom = if (showControls) controlsHeight + CARD_GAP else 96.dp),
+                            .padding(end = safe.side, bottom = if (showControls) controlsHeight + CARD_GAP else 96.dp)
+                            .onSizeChanged { cardHeight = with(density) { it.height.toDp() } },
                 )
             }
         }
@@ -688,7 +693,8 @@ fun TvPlayer(
                 modifier =
                     Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(end = safe.side, bottom = controlsHeight + CARD_GAP),
+                        .padding(end = safe.side, bottom = controlsHeight + CARD_GAP)
+                        .onSizeChanged { cardHeight = with(density) { it.height.toDp() } },
             )
         }
     }
@@ -753,14 +759,15 @@ private fun Controls(
     val playing = controller.offersPause
     val names = StreamChoiceCopy.Bar.Names
 
-    // Up: into the strip open over this side, else to the position bar.
+    // Up: into the strip open over this side, else to the position bar. Kept while the strip stays, so a tick of the
+    // clock (read only in the clocks below) recomposes none of the pills.
     fun under(side: Strip) = Modifier.focusProperties { up = if (strip == side) stripFirst else scrub }
-    val upLeft = under(Strip.Audio)
-    val upRight = under(Strip.Subtitles)
+    val upLeft = remember(strip) { under(Strip.Audio) }
+    val upRight = remember(strip) { under(Strip.Subtitles) }
     Box(modifier.fillMaxWidth().testTag(TV_BAR_TAG)) {
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(15.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(26.dp), verticalAlignment = Alignment.CenterVertically) {
-                MqText(clockText(scrubTarget ?: controller.positionMs), role = TextRole.Callout)
+                Clock { clockText(scrubTarget ?: controller.positionMs) }
                 Scrubber(
                     position = { controller.positionMs },
                     duration = { controller.durationMs },
@@ -783,13 +790,12 @@ private fun Controls(
                                 scrubKey(event, controller, scrubTarget) { scrubTarget = it }
                             }.focusable(),
                 )
-                MqText(
-                    "-" + clockText((controller.durationMs - controller.positionMs).coerceAtLeast(0)),
-                    role = TextRole.Callout,
-                )
+                Clock { "-" + clockText((controller.durationMs - controller.positionMs).coerceAtLeast(0)) }
             }
             val widths = rememberBarWidths()
             val subtitles = controller.subtitlesDetail()
+            // Measured at the longest it can read in this play, with the busy mark, so it never flips (D16).
+            val subtitleValues = controller.subtitleValues()
             val audio = controller.audioDetail()
             val speed = speedText(controller.speed)
             val version = controller.versionLabel
@@ -810,13 +816,12 @@ private fun Controls(
                     sideFit(
                         column,
                         words =
-                            widths.pill(names.SUBTITLES, subtitles) +
+                            widths.pill(names.SUBTITLES, subtitleValues, busy = true) +
                                 (if (onEpisodes != null) widths.pill(names.EPISODES, null) else 0.dp) +
                                 (if (onEpisodes != null) widths.pill(StreamChoiceCopy.Bar.NEXT, null) else 0.dp) +
                                 PILL_GAP * rightPills,
                         icons = pill * rightPills + PILL_GAP * rightPills,
                         shiftWords = widths.shiftWords,
-                        shiftChevrons = widths.shiftChevrons,
                     )
                 Row(
                     Modifier.fillMaxWidth(),
@@ -932,6 +937,10 @@ private fun Controls(
         }
     }
 }
+
+/** A clock beside the position bar: its own scope, so the time's tick recomposes it alone. */
+@Composable
+private fun Clock(text: () -> String) = MqText(text(), role = TextRole.Callout)
 
 /** The bar on TV, for tests. */
 internal const val TV_BAR_TAG = "tv-player-bar"

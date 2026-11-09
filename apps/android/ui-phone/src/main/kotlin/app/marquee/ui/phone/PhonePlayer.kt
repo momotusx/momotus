@@ -556,10 +556,14 @@ fun PhonePlayer(
         }
         // The strips over the bar's ends (section 5): touches on them stay on them.
         if (showControls) {
+            val cardLift =
+                corner?.takeIf { showSkip || showNextCard }?.let { with(density) { it.height.toDp() } + stripLift() }
+                    ?: 0.dp
             val placed =
                 Modifier
                     .windowInsetsPadding(WindowInsets.displayCutout)
-                    .padding(start = 16.dp, end = 16.dp, bottom = controlsHeight + stripLift())
+                    // Over Skip or Up Next when one shows in the corner: a strip opened then never meets it (D23).
+                    .padding(start = 16.dp, end = 16.dp, bottom = controlsHeight + stripLift() + cardLift)
                     .onSizeChanged { stripHeight = with(density) { it.height.toDp() } }
                     .pointerInput(Unit) { detectTapGestures { wake++ } }
             when (strip) {
@@ -615,6 +619,7 @@ fun PhonePlayer(
                     Modifier.onGloballyPositioned {
                         transportFoot = with(density) { it.boundsInRoot().bottom.toDp() }
                     },
+                closeStrip = closeStrip.takeIf { strip != null },
             )
         }
 
@@ -906,7 +911,10 @@ private fun Track(
     }
 }
 
-/** Back 10 seconds, play or pause, forward 10 seconds; while [waiting], the spinner turns in the Play circle. */
+/**
+ * Back 10 seconds, play or pause, forward 10 seconds; while [waiting], the spinner turns in the Play circle. While a
+ * strip is open ([closeStrip] given) a press only closes it: no pause and no seek (D21).
+ */
 @Composable
 private fun Transport(
     controller: PlaybackController,
@@ -914,40 +922,26 @@ private fun Transport(
     waiting: Boolean,
     onTouch: () -> Unit,
     modifier: Modifier = Modifier,
+    closeStrip: (() -> Unit)? = null,
 ) {
+    val press = { action: () -> Unit ->
+        onTouch()
+        if (closeStrip != null) closeStrip() else action()
+    }
     Row(
         modifier,
         horizontalArrangement = Arrangement.spacedBy(18.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RoundButton(
-            Icons.RotateCcw,
-            "Back 10 seconds",
-            {
-                onTouch()
-                controller.seekBy(-SEEK_MS)
-            },
-            badge = "10",
-        )
+        RoundButton(Icons.RotateCcw, "Back 10 seconds", { press { controller.seekBy(-SEEK_MS) } }, badge = "10")
         RoundButton(
             icon = if (playing) PauseFilled else PlayFilled,
             label = if (playing) "Pause" else "Play",
-            onClick = {
-                onTouch()
-                controller.togglePlay()
-            },
+            onClick = { press(controller::togglePlay) },
             main = true,
             busy = waiting,
         )
-        RoundButton(
-            Icons.RotateCw,
-            "Forward 10 seconds",
-            {
-                onTouch()
-                controller.seekBy(SEEK_MS)
-            },
-            badge = "10",
-        )
+        RoundButton(Icons.RotateCw, "Forward 10 seconds", { press { controller.seekBy(SEEK_MS) } }, badge = "10")
     }
 }
 
