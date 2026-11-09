@@ -105,4 +105,7 @@ test("the strips take Off, Still searching and Choose a version from the shared 
   expect(strip).toContain("{barWords.stillSearching}");
   const player = readFileSync(join(import.meta.dir, "../screens/player.tsx"), "utf8");
   expect(player).toMatch(/data-f="audio:versions">\s*<span class="cl">\{barWords\.chooseVersion\}<\/span>/);
+  // The Subtitles pill's spinner says the same words.
+  expect(player).not.toContain('aria-label="Still searching"');
+  expect(player).toContain('<LoaderCircle class="spin mark" role="img" aria-label={barWords.stillSearching} />');
 });

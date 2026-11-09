@@ -1838,7 +1838,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                 {/* The core still asks: a small spinner after the value, or on the icon's corner when the pill is
                     an icon (D16 a), so the state never hides. */}
                 <Show when={!track() && subsOff().searching}>
-                  <LoaderCircle class="spin mark" role="img" aria-label="Still searching" />
+                  <LoaderCircle class="spin mark" role="img" aria-label={barWords.stillSearching} />
                 </Show>
               </button>
               <div class="bshift rsv" classList={{ off: !canShift() }} inert={!canShift() || undefined}>
