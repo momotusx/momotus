@@ -570,6 +570,12 @@ impl Library {
     /// at the lowest time there is (all zero), so whatever the account holds
     /// for the same addon wins over them on that pull, whichever device id
     /// is higher (code review A P1-1).
+    ///
+    /// The owner's name and avatar, when this device edited them while it
+    /// was in no account (era "fresh"), wait too, at `OWNER_WAITING`: an
+    /// account owner renamed anywhere replaces them on that pull, one never
+    /// renamed (a zero time) does not, and the settle gives the edit back
+    /// (plans/first-screens.md 4.2).
     pub fn mark_join_defaults(&self, device: u64) -> Result<(), LibraryError> {
         let mine = format!("{device:016x}");
         self.write(|c| {
@@ -600,6 +606,33 @@ impl Library {
                     ),
                     params![mine, WAITING],
                 )?;
+            }
+            let fresh: bool = c.query_row(
+                "SELECT EXISTS (SELECT 1 FROM device_state WHERE key = ?1 AND value = 'fresh')",
+                params![crate::sync::DEFAULTS_ERA],
+                |r| r.get(0),
+            )?;
+            if fresh {
+                let owner: Option<String> = c
+                    .query_row(
+                        "SELECT hlc FROM profiles WHERE id = ?1
+                         AND substr(hlc, 1, 12) != '000000000000' AND substr(hlc, 17) = ?2",
+                        params![crate::sync::OWNER, mine],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
+                if let Some(hlc) = owner {
+                    held.push((
+                        "profiles".to_owned(),
+                        crate::sync::OWNER.to_owned(),
+                        String::new(),
+                        hlc,
+                    ));
+                    c.execute(
+                        "UPDATE profiles SET hlc = ?2 WHERE id = ?1",
+                        params![crate::sync::OWNER, OWNER_WAITING],
+                    )?;
+                }
             }
             let held = serde_json::to_string(&held).expect("strings serialize");
             c.execute(
@@ -666,6 +699,8 @@ impl Library {
                     params![profile, WAITING],
                 )?;
             }
+            // An owner edit still waiting (the account's owner was never
+            // renamed) gets its own time back here; it is already queued.
             restore_waiting(c, &own_zero)?;
             Ok(())
         })
@@ -1134,10 +1169,15 @@ pub(crate) const JOIN_DEFAULTS: &str = "join_defaults";
 /// The time a joining device's untouched defaults wait at until its first
 /// pull settles them: the lowest there is, so the account's win.
 const WAITING: &str = "00000000000000000000000000000000";
+/// The time a joining device's own owner edit waits at: above every zero
+/// time (an account owner never renamed loses to it), below every real one
+/// (an account owner renamed anywhere wins).
+const OWNER_WAITING: &str = "000000000000ffffffffffffffffffff";
 
-/// Gives every addon register still waiting from a join its own time back
-/// (kept by `mark_join_defaults`; `fallback` for one it does not name), and
-/// ends the join: after its settle, or when the device leaves first.
+/// Gives every addon register and the owner's profile still waiting from a
+/// join its own time back (kept by `mark_join_defaults`; `fallback` for one
+/// it does not name), and ends the join: after its settle, or when the
+/// device leaves first.
 pub(crate) fn restore_waiting(c: &Connection, fallback: &str) -> rusqlite::Result<()> {
     let held: Vec<(String, String, String, String)> = c
         .query_row(
@@ -1149,6 +1189,13 @@ pub(crate) fn restore_waiting(c: &Connection, fallback: &str) -> rusqlite::Resul
         .and_then(|v| serde_json::from_str(&v).ok())
         .unwrap_or_default();
     for (table, profile, hash, hlc) in &held {
+        if table == "profiles" {
+            c.execute(
+                "UPDATE profiles SET hlc = ?3 WHERE id = ?1 AND hlc = ?2",
+                params![profile, OWNER_WAITING, hlc],
+            )?;
+            continue;
+        }
         if !matches!(table.as_str(), "addons" | "addon_order") {
             continue;
         }
@@ -1165,6 +1212,10 @@ pub(crate) fn restore_waiting(c: &Connection, fallback: &str) -> rusqlite::Resul
             params![WAITING, fallback],
         )?;
     }
+    c.execute(
+        "UPDATE profiles SET hlc = ?2 WHERE hlc = ?1",
+        params![OWNER_WAITING, fallback],
+    )?;
     c.execute(
         "DELETE FROM device_state WHERE key = ?1",
         params![JOIN_DEFAULTS],

@@ -519,3 +519,35 @@ fn an_avatar_from_another_device_is_held_to_the_local_rule() {
         );
     }
 }
+
+/// A join holds the owner edit only when this device (3) made it while in
+/// no account (era "fresh"): then an account owner renamed earlier still
+/// wins. A legacy or created era, or an edit from another device, is not
+/// held: the newer time wins as always (plans/first-screens.md 4.2).
+#[test]
+fn only_a_fresh_devices_own_owner_edit_waits_at_a_join() {
+    for (era, by, held) in [
+        ("fresh", 3, true),
+        ("legacy", 3, false),
+        ("created", 3, false),
+        ("fresh", 7, false),
+    ] {
+        let c = Library::temporary().unwrap();
+        c.ensure_profile(OWNER, "Main", &hlc(0, 3)).unwrap();
+        c.set_device_value(mq_library::DEFAULTS_ERA, era).unwrap();
+        c.update_profile(OWNER, "Deniz", "", 0, &hlc(5, by))
+            .unwrap();
+        let a = Library::temporary().unwrap();
+        a.ensure_profile(OWNER, "Main", &hlc(0, 9)).unwrap();
+        a.update_profile(OWNER, "Robin", "", 0, &hlc(2, 9)).unwrap();
+        c.mark_join_defaults(3).unwrap();
+        c.apply(&all(&a)).unwrap();
+        c.settle_join_defaults(3).unwrap();
+        let want = if held { "Robin" } else { "Deniz" };
+        assert_eq!(
+            c.profile(OWNER).unwrap().unwrap().name,
+            want,
+            "{era} by {by}"
+        );
+    }
+}
