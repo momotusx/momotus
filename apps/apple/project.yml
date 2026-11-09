@@ -90,6 +90,9 @@ targetTemplates:
       # Failure words, shared with the web and Android.
       - path: ../shared/error-words.json
         buildPhase: resources
+      # First run's words, shared with the web and Android.
+      - path: ../shared/first-run-words.json
+        buildPhase: resources
       - path: Core/marquee_core.swift
     dependencies:
       - framework: Core/MarqueeCore.xcframework
@@ -239,6 +242,8 @@ targets:
         buildPhase: resources
       - path: ../shared/error-words.json
         buildPhase: resources
+      - path: ../shared/first-run-words.json
+        buildPhase: resources
       - path: Marquee/Account/AccountWords.swift
       - path: Marquee/Account/AccountRules.swift
       - path: Marquee/Account/PasskeyContract.swift
@@ -333,10 +338,12 @@ targets:
       - path: Marquee/Settings/InstallSheet.swift
       - path: Marquee/Settings/Language.swift
       - path: Marquee/Onboarding/SubtitleStepRules.swift
-      # Settings A1 and first run V1: their rules and V1's ramps and column (Tests/SettingsA1Tests.swift,
-      # Tests/FirstRunV1Tests.swift).
+      # Settings A1 and first run's Poster Wall: their rules, the wall's motion and geometry, the Mac's sheet
+      # (Tests/SettingsA1Tests.swift, Tests/FirstRunRulesTests.swift, Tests/FirstScreensTests.swift).
       - path: Marquee/Settings/SettingsRules.swift
       - path: Marquee/Onboarding/FilmLayout.swift
+      - path: Marquee/Onboarding/FirstRunRules.swift
+      - path: Marquee/Onboarding/WallMotion.swift
       # Offline downloads: the models, the control's words, the keeper's reducer, the network report and the
       # control as drawn (Tests/DownloadTests.swift, the Mac row in Tests/TitleHeroTests.swift).
       - path: Marquee/Core/DownloadModels.swift

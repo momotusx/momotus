@@ -113,8 +113,7 @@ import XCTest
                 allow.tap()
             }
         }
-        let browse = app.buttons["Browse first"]
-        if browse.waitForExistence(timeout: 5) { browse.tap() }
+        app.passFirstRun(timeout: 5)
         sleep(2)
         launch(base + source + title)
         if allow.waitForExistence(timeout: 8) { allow.tap() }

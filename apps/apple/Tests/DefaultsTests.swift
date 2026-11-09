@@ -90,14 +90,6 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
     #expect(DefaultsRules.column(wide: true, tv: true) == 1400)
 }
 
-@Test func onlyADebugWalkOpensTheStepDirectly() {
-    #expect(DefaultsRules.walkOpensDefaults("defaults", debug: true))
-    // A Release build never reads it, and nothing else opens the step.
-    #expect(!DefaultsRules.walkOpensDefaults("defaults", debug: false))
-    #expect(!DefaultsRules.walkOpensDefaults(nil, debug: true))
-    #expect(!DefaultsRules.walkOpensDefaults("check", debug: true))
-}
-
 @Test func newFieldsDecode() throws {
     let snapshot = try JSONDecoder().decode(AddonsSnapshot.self, from: Data(#"{"addons": [], "fresh": true}"#.utf8))
     #expect(snapshot.fresh)

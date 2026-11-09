@@ -2,8 +2,8 @@ import SwiftUI
 
 /// One-way import from a Stremio account. Opening the view starts the sign-in:
 /// the user links this device on Stremio's site with a code, never typing a
-/// password here. In onboarding a finished import goes on to the
-/// recommended addons.
+/// password here. In first run it is a sheet over the poster wall (plans/first-screens.md 3.5): Continue after a
+/// finished import, and Skip import while it waits, failed or expired.
 struct ImportScreen: View {
     @State private var importer: LiveRecord<ImportSnapshot>
     @State private var attempt = 0
@@ -11,20 +11,53 @@ struct ImportScreen: View {
     @Environment(\.metrics) private var metrics
     @Environment(\.openURL) private var openURL
     let core: CoreClient
-    /// Onboarding: Continue after a finished import.
+    /// First run: Continue after a finished import.
     let finished: (() -> Void)?
+    /// First run's sheet: Skip import, and the sheet draws the page's title and frame.
+    let skip: (() -> Void)?
 
-    init(core: CoreClient, finished: (() -> Void)? = nil) {
+    init(core: CoreClient, finished: (() -> Void)? = nil, skip: (() -> Void)? = nil) {
         self.core = core
         self.finished = finished
+        self.skip = skip
         _importer = State(initialValue: LiveRecord("import", core: core))
     }
 
+    private static let title = "Import from Stremio"
+    private static let lead = "Brings your addons, library and progress over once. Nothing is sent back to Stremio."
+
     var body: some View {
+        if skip != nil {
+            sheet.task(id: [importer.taskId, attempt]) { importer.start() }
+        } else {
+            page
+        }
+    }
+
+    /// First run's sheet: the page's words under the sheet's own heading.
+    private var sheet: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            SheetHead(title: Self.title, line: Self.lead)
+            phase
+            if let failure = importer.failure {
+                StateLine(symbol: "triangle-alert", text: failure, action: ("Try again", restart))
+                skipButton
+            }
+        }
+    }
+
+    @ViewBuilder private var skipButton: some View {
+        if let skip {
+            Button(FirstRunWords.shared.skipImport, action: skip)
+                .buttonStyle(PillButtonStyle())
+        }
+    }
+
+    private var page: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
-                ScreenTitle(text: "Import from Stremio")
-                Text("Brings your addons, library and progress over once. Nothing is sent back to Stremio.")
+                ScreenTitle(text: Self.title)
+                Text(Self.lead)
                     .textFont(Theme.type.body)
                     .foregroundStyle(Theme.Palette.muted)
                 phase
@@ -77,6 +110,7 @@ struct ImportScreen: View {
                     Label("Waiting for the link. This page moves on by itself.", glyph: "clock")
                         .textFont(Theme.type.callout, relativeTo: .callout)
                         .foregroundStyle(Theme.Palette.muted)
+                    skipButton
                 }
                 if metrics.wide { QRCode(text: link).frame(width: 180, height: 180) }
             }
@@ -104,8 +138,10 @@ struct ImportScreen: View {
             .foregroundStyle(Theme.Palette.text)
         case .expired?:
             StateLine(symbol: "clock-alert", text: "The code expired before it was linked.", action: ("New code", restart))
+            skipButton
         case .failed(let reason)?:
             StateLine(symbol: "triangle-alert", text: reason, action: ("Try again", restart))
+            skipButton
         }
     }
 

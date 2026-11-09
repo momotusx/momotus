@@ -214,11 +214,7 @@ import XCTest
         // The walk install's first network call asks for the local network (its source is on the Mac).
         let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow"]
         if allow.waitForExistence(timeout: 4) { allow.tap() }
-        let browse = app.buttons["Browse first"]
-        if browse.waitForExistence(timeout: 3) {
-            browse.tap()
-            sleep(3)
-        }
+        if app.passFirstRun(timeout: 3) { sleep(3) }
         sleep(3)
     }
 

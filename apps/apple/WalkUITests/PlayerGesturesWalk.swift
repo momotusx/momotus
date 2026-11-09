@@ -32,12 +32,10 @@ import XCTest
         app.launchArguments += (ProcessInfo.processInfo.environment["MQ_WALK_ARGS"] ?? "").split(separator: " ").map(String.init)
         app.launch()
         // A fresh walk install asks for the local network (its test source is on the Mac) and opens on the first-run
-        // choice: allow the one for this walk app, browse past the other, then launch again so the title opens and plays.
+        // Welcome: allow the one for this walk app, pass first run, then launch again so the title opens and plays.
         let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow"]
         if allow.waitForExistence(timeout: 15) { allow.tap() }
-        let browse = app.buttons["Browse first"]
-        if browse.waitForExistence(timeout: 10) {
-            browse.tap()
+        if app.passFirstRun(timeout: 10) {
             sleep(5)
             app.terminate()
             app.launch()

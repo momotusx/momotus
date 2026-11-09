@@ -31,9 +31,7 @@ import XCTest
         app.launch()
         let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow"]
         if allow.waitForExistence(timeout: 15) { allow.tap() }
-        let browse = app.buttons["Browse first"]
-        if browse.waitForExistence(timeout: 10) {
-            browse.tap()
+        if app.passFirstRun(timeout: 10) {
             sleep(5)
             app.terminate()
             app.launch()

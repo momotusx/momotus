@@ -54,6 +54,10 @@ enum DebugHooks {
         }
     }
 
+    /// `-MQReduceMotion YES`: first run's poster wall and step changes hold still as under Reduce Motion, for a walk
+    /// that may not change the device's own setting (plans/first-screens.md 10).
+    static var reduceMotion: Bool { UserDefaults.standard.bool(forKey: "MQReduceMotion") }
+
     /// `-MQMute YES`: every player starts muted, so a walk never makes a sound.
     static var mute: Bool { UserDefaults.standard.bool(forKey: "MQMute") }
 

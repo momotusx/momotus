@@ -1,174 +1,641 @@
 import Network
 import SwiftUI
 
-/// First run as a full-screen flow, one decision per step: the doors (I use
-/// Stremio, Start fresh, I already use Marquee), then the recommended addons
-/// with a switch each (plans/m13-default-addons.md 6), the stream question,
-/// the language subtitles start in (plans/m13-subtitle-languages.md 7), then the setup check,
-/// where every line has a dot, a word and, when something is missing, its
-/// fix. Start fresh, Browse first on a new profile and a finished import
-/// lead to the addons; joining never does. Settings opens the check step
-/// alone as a page.
+/// First run as Poster Wall (plans/first-screens.md, design/exploration/first-screens/round2.html combo A): Welcome
+/// over a drifting wall of the default catalog's posters, then sheets over the same wall, held still: Login, the profile
+/// form (only after sign-in or Not now), one-page setup, then Home. The order is `FirstRunRules`, held equal to the web's
+/// and Android's by apps/shared/fixtures/first-run-vectors.json. Settings opens the setup check alone as a page.
 struct OnboardingScreen: View {
-    /// `signIn`: a phone, tablet or Mac with a hosted relay signs in first
-    /// (plans/accounts.md 4.1); `tvSignIn`: a TV shows the phone's QR (4.2).
-    enum Step { case signIn, tvSignIn, doors, defaults, question, subtitles, check }
+    /// `tvSignIn`: a TV shows the phone's QR (plans/tv-qr-login.md 5.5); `check` is Settings' page.
+    enum Step: String, Equatable { case welcome, signIn, tvSignIn, profile, setup, check }
 
     let core: CoreClient
-    /// Ends the flow (Browse first, Done); nil when the check is a page.
+    /// Ends the flow: Home opens as the root.
     let close: (() -> Void)?
-    @State private var step: Step
-    @State private var addons: LiveRecord<AddonsSnapshot>
-    /// The profile's preferences: a profile with subtitle languages passes that step.
-    @State private var prefs: LiveRecord<Prefs>
-    /// The subtitles step: every language the core knows, the one chosen
-    /// (nil: No subtitles), and whether the rest show.
+    private let start: Step?
+
+    init(core: CoreClient, start: Step? = nil, close: (() -> Void)? = nil) {
+        self.core = core
+        self.start = start
+        self.close = close
+    }
+
+    var body: some View {
+        if start == .check {
+            SetupCheckPage(core: core)
+        } else {
+            FirstRun(core: core, close: close)
+        }
+    }
+}
+
+/// The flow itself.
+private struct FirstRun: View {
+    typealias Step = OnboardingScreen.Step
+
+    let core: CoreClient
+    let close: (() -> Void)?
+    /// Nil until the profiles and the account are known: the wall alone meanwhile.
+    @State private var step: Step?
+    /// Login came from "I already use Momotus".
+    @State private var returning = false
+    /// The account was made in this first run: the profile form's line, and Back leaves the app from it.
+    @State private var made = false
+    /// After a join: "Getting your profiles" while the first pull runs.
+    @State private var pulling = false
+    /// Start watching with Bring my Stremio library: the import's sheet.
+    @State private var importing = false
+    // The profile form.
+    @State private var typed = ""
+    @State private var pressed: String?
+    // The setup sheet.
+    @State private var bring = false
+    @State private var best = false
+    /// A chip pressed, or a language picked under More.
+    @State private var chip: String?
+    @State private var picked: String?
     @State private var languages: [LanguageChoice] = []
-    @State private var subtitle: String? = nil
-    @State private var moreLanguages = false
-    /// The core's list is in (or failed): Continue waits for it, since the
-    /// device's language is unknown before; a choice made before it stays.
-    @State private var languagesLoaded = false
-    @State private var subtitleTouched = false
-    /// The recommended addons step's switches.
-    @State private var defaults: DefaultsStep
+    @State private var prefs: LiveRecord<Prefs>
+    @State private var prefsSaved = false
+    @State private var showLanguages = false
+    @State private var showReview = false
+    @State private var busy = false
+    @State private var failure: String?
+    /// Pause motion's choice, kept on this device.
+    @State private var paused = UserDefaults.standard.bool(forKey: WallMotion.pausedKey)
+    @FocusState private var onStart: Bool
+    @FocusState private var onContinue: Bool
+    @FocusState private var onNotNow: Bool
+    @Environment(\.metrics) private var metrics
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    @Environment(SyncModel.self) private var sync
+    @Environment(ProfileSession.self) private var profiles
+
+    private var words: FirstRunWords { .shared }
+
+    init(core: CoreClient, close: (() -> Void)?) {
+        self.core = core
+        self.close = close
+        _prefs = State(initialValue: LiveRecord("settings", core: core))
+    }
+
+    var body: some View {
+        ZStack {
+            PosterWall(posters: WallOnce.shared.posters, columns: FirstRunRules.columns(form),
+                       running: WallMotion.runs(step: shown, reduceMotion: reduceMotion, scenePhase: scenePhase, paused: paused),
+                       dimmed: step != .welcome, wide: metrics.wide)
+            Group {
+                if let step { screen(step) }
+            }
+            .transition(.opacity)
+        }
+        // The step change honours Reduce Motion (closes OnboardingScreen's old :100).
+        .animation(reduceMotion ? nil : Theme.Motion.panel, value: step)
+        .animation(reduceMotion ? nil : Theme.Motion.panel, value: importing)
+        #if !os(iOS)
+        // Escape on the Mac, Menu on the TV: Back per the plan's table (5); nil leaves it to the system.
+        .onExitCommand(perform: backAction)
+        #endif
+        .task { if step == nil { go(FirstRunRules.next(entry(.start))) } }
+        // The wall is asked as first run opens and again at each step while none came (WallOnce).
+        .task(id: step) { await WallOnce.shared.get { [core] in try await core.call("firstRunWall", as: [String].self) } }
+        .task(id: prefs.taskId) { prefs.start() }
+        .task(id: step == .setup) { if step == .setup, languages.isEmpty { await loadLanguages() } }
+        .navigationDestination(isPresented: $showLanguages) {
+            LanguagePicker(title: words.subtitlesTitle, audio: false, core: core, isOn: { $0 == selectedChip }, toggle: { code in
+                picked = code
+                chip = code
+                showLanguages = false
+            })
+        }
+        .navigationDestination(isPresented: $showReview) { RecommendedAddonsPage(core: core, scope: .all) }
+    }
+
+    private var form: FirstRunRules.Form { FirstRunRules.form(wide: metrics.wide, tv: tvForm) }
+    private var reduceMotion: Bool { systemReduceMotion || WallFlags.reduceMotion }
+
+    /// The step as the rules name it: what the wall and Back read.
+    private var shown: FirstRunStep {
+        switch step {
+        case .welcome?, nil: .welcome
+        case .signIn?, .tvSignIn?: .login
+        case .profile?: .profile
+        case .setup?: importing ? .importing : .setup
+        case .check?: .none
+        }
+    }
+
+    @ViewBuilder private func screen(_ step: Step) -> some View {
+        switch step {
+        case .welcome: welcome
+        case .signIn: signIn
+        case .tvSignIn: tvSignIn
+        case .profile: profileSheet
+        case .setup: importing ? AnyView(importSheet) : AnyView(setupSheet)
+        case .check: EmptyView()
+        }
+    }
+
+    // MARK: rules
+
+    private var owner: ProfileInfo? { profiles.snapshot?.profiles.first(where: \.isOwner) }
+
+    private func entry(_ after: FirstRunRules.After) -> FirstRunRules.Entry {
+        let snapshot = profiles.snapshot
+        // The cover opens only while the profile's addons are fresh.
+        return FirstRunRules.Entry(
+            fresh: true, kidsSession: snapshot?.current?.kids == true, server: AccountServer.default != nil, inAccount: sync.joined,
+            profileStepDone: snapshot?.stepDone ?? true, profiles: snapshot?.profiles.count ?? 1,
+            pin: snapshot?.profiles.contains(where: \.hasPin) == true, locked: snapshot?.locked == true, after: after)
+    }
+
+    private func go(_ next: FirstRunStep) {
+        failure = nil
+        switch next {
+        case .welcome: step = .welcome
+        case .login:
+            #if os(tvOS)
+            step = .tvSignIn
+            #else
+            step = .signIn
+            #endif
+        case .profile: step = .profile
+        case .setup:
+            importing = false
+            step = .setup
+        case .importing: importing = true
+        case .who, .home, .none: close?()
+        }
+    }
+
+    private var backAction: (() -> Void)? {
+        guard let target = FirstRunRules.back(from: shown, server: AccountServer.default != nil, made: made || sync.joined) else { return nil }
+        return { go(target) }
+    }
+
+    /// A join pulled an account: "Getting your profiles" while the first round runs (15 s at most), then Who's
+    /// watching? (two or more profiles, or a PIN) or Home (D2).
+    private func afterJoin(provider: String?) async {
+        pulling = true
+        let deadline = ContinuousClock.now + FirstRunRules.pullWait
+        while ContinuousClock.now < deadline, sync.lastReport == nil, sync.problem == nil, !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        pulling = false
+        if FirstRunRules.next(entry(.joined)) == .who {
+            profiles.askAfterJoin(line: FirstRunRules.whoLine(provider: provider, device: sync.joinedBy))
+        }
+        close?()
+    }
+
+    // MARK: Welcome
+
+    private var welcome: some View {
+        let wide = metrics.wide
+        return VStack(alignment: wide ? .center : .leading, spacing: 0) {
+            // The lockup: the bird 52 (1.45 of 36), the name beside it.
+            Wordmark(size: 36)
+            Text(words.welcomeTitle)
+                .textFont(wide ? (tvForm ? 64 : 60) : 36, weight: .bold, relativeTo: .largeTitle)
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+                .padding(.top, 22)
+            Text(words.welcomeLead)
+                .textFont(wide ? 20 : 17, relativeTo: .body)
+                .foregroundStyle(Theme.Palette.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: wide ? 620 : nil)
+                .padding(.top, 12)
+            welcomeActions.padding(.top, 26)
+        }
+        .multilineTextAlignment(wide ? .center : .leading)
+        .frame(maxWidth: wide ? 760 : .infinity, alignment: wide ? .center : .leading)
+        .padding(.horizontal, 24)
+        .padding(.bottom, wide ? 84 : 40)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .overlay(alignment: .topTrailing) { pauseToggle }
+        .defaultFocus($onStart, true)
+    }
+
+    private var welcomeActions: some View {
+        let wide = metrics.wide
+        let acts = wide ? AnyLayout(HStackLayout(spacing: 12)) : AnyLayout(VStackLayout(spacing: 12))
+        return acts {
+            Button { go(FirstRunRules.next(entry(.getStarted))) } label: { actionLabel(words.getStarted) }
+                .buttonStyle(PillButtonStyle(prominent: true))
+                .focused($onStart)
+            // No sync server: no Login, and nothing to already use.
+            if AccountServer.default != nil {
+                Button {
+                    returning = true
+                    go(FirstRunRules.next(entry(.alreadyUse)))
+                } label: { actionLabel(words.alreadyUse) }
+                    .buttonStyle(PillButtonStyle())
+            }
+        }
+    }
+
+    /// A Welcome or sheet action: 54 high, the column's width on the phone, at least 220 wide elsewhere.
+    private func actionLabel(_ title: String) -> some View {
+        Text(title)
+            .frame(minWidth: metrics.wide ? 220 - 2 * PillButtonStyle.horizontal : nil, maxWidth: metrics.wide ? nil : .infinity,
+                   minHeight: FirstRunRules.Size.primary - 2 * PillButtonStyle.vertical)
+    }
+
+    /// Pause motion / Play motion (WCAG 2.2.2, D4): Welcome only, top right inside the safe area.
+    private var pauseToggle: some View {
+        Button {
+            paused.toggle()
+            UserDefaults.standard.set(paused, forKey: WallMotion.pausedKey)
+        } label: {
+            Glyph(paused ? "play" : "pause", size: 20)
+                .foregroundStyle(.white)
+                .frame(width: FirstRunRules.Size.toggle, height: FirstRunRules.Size.toggle)
+                .background(Circle().fill(.black.opacity(0.45)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(FocusPlainStyle(shape: Circle()))
+        .accessibilityLabel(WallMotion.toggleLabel(paused: paused))
+        .accessibilityAddTraits(.isToggle)
+        .padding(.top, 8)
+        .padding(.trailing, 16)
+    }
+
+    // MARK: Login
+
+    @ViewBuilder private var signIn: some View {
+        #if os(tvOS)
+        tvSignIn
+        #else
+        if pulling {
+            WallSheet(sheet: .login) { gettingProfiles }
+        } else if let server = AccountServer.default {
+            WallSheet(sheet: .login, back: { go(.welcome) }) {
+                SignInScreen(server: server, sync: sync, lead: returning ? words.loginReturning : words.loginLine, returning: returning,
+                             notNow: { go(FirstRunRules.next(entry(.notNow))) },
+                             joined: { provider in Task { await afterJoin(provider: provider) } },
+                             created: {
+                                 made = true
+                                 go(FirstRunRules.next(entry(.created)))
+                             })
+            }
+        }
+        #endif
+    }
+
+    private var gettingProfiles: some View {
+        VStack(alignment: .leading, spacing: Theme.Space.m) {
+            SheetHead(title: words.gettingProfiles)
+            ProgressView().controlSize(.large).tint(Theme.Palette.text)
+        }
+    }
+
+    /// A TV's Login (plans/tv-qr-login.md 5.5): the phone's QR over the wall; Not now, its one focus stop, goes on to
+    /// the profile form. A TV that joined follows the join's rule.
+    @ViewBuilder private var tvSignIn: some View {
+        if pulling {
+            WallSheet(sheet: .login) { gettingProfiles }
+        } else if let server = AccountServer.default {
+            PairingScreen(core: core, done: { Task { await afterJoin(provider: nil) } }, autostart: server,
+                          heading: AccountWords.shared.tvSignIn, lede: AccountWords.shared.tvScanHow,
+                          more: [
+                              PairingMore(title: AccountWords.shared.notNow, glyph: "chevron-right") {
+                                  sync.endPairing()
+                                  go(FirstRunRules.next(entry(.notNow)))
+                              },
+                          ],
+                          doneOnJoin: true)
+        }
+    }
+
+    // MARK: Make your first profile
+
+    private var profileSheet: some View {
+        let stored = owner?.avatar ?? ""
+        let opening = ProfileRules.parseAvatar(stored)
+        return WallSheet(sheet: .profile) {
+            VStack(alignment: .leading, spacing: 0) {
+                SheetHead(title: words.profileTitle, line: FirstRunRules.profileLine(made: made || sync.joined))
+                HStack(spacing: 16) {
+                    ProfileAvatar(ProfileRules.Avatar(glyph: opening.glyph, color: pressed ?? opening.color),
+                                  name: typed.isEmpty ? (owner?.name ?? words.namePlaceholder) : typed, size: 72)
+                    nameField
+                }
+                .padding(.top, 22)
+                swatches(selected: pressed ?? opening.color).padding(.top, 16)
+                if let failure {
+                    StatusDot(tone: .bad, text: failure).padding(.top, Theme.Space.s)
+                }
+                Button { Task { await finishProfile() } } label: {
+                    Text(words.continue).frame(maxWidth: .infinity, minHeight: FirstRunRules.Size.primary - 2 * PillButtonStyle.vertical)
+                }
+                .buttonStyle(PillButtonStyle(prominent: true))
+                .disabled(busy)
+                .focused($onContinue)
+                .padding(.top, 22)
+            }
+        }
+        // TV starts on Continue (the field by up); the phone, iPad and Mac focus nothing, so no keyboard covers it.
+        .defaultFocus($onContinue, FirstRunRules.profileFocus(tv: tvForm) == .continueButton)
+    }
+
+    /// The Name field: "Main" as its placeholder and no prefill (the relay sends no name); empty keeps the name.
+    private var nameField: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(words.nameLabel)
+                .textFont(12, weight: .medium, relativeTo: .caption)
+                .foregroundStyle(Color.white.opacity(0.64))
+                .accessibilityHidden(true)
+            TextField(words.nameLabel, text: $typed, prompt: Text(words.namePlaceholder))
+                .textFieldStyle(.plain)
+                .textFont(18, relativeTo: .body)
+                .foregroundStyle(.white)
+                #if os(iOS)
+                .textContentType(.nickname)
+                .submitLabel(.done)
+                #endif
+                .onChange(of: typed) { _, now in if now.count > 30 { typed = String(now.prefix(30)) } }
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.white.opacity(0.1)))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(.white.opacity(0.55), lineWidth: 1.5))
+    }
+
+    private func swatches(selected: String?) -> some View {
+        HStack(spacing: 12) {
+            ForEach(FirstRunRules.swatches, id: \.self) { colour in
+                let on = colour == selected
+                Button { pressed = colour } label: {
+                    Circle()
+                        .fill(ProfileAvatar.color(colour))
+                        .frame(width: FirstRunRules.Size.swatch, height: FirstRunRules.Size.swatch)
+                        .overlay {
+                            if on { Circle().strokeBorder(.white, lineWidth: 2).padding(-5) }
+                        }
+                        .contentShape(Circle())
+                }
+                .buttonStyle(FocusPlainStyle(shape: Circle()))
+                .accessibilityLabel("\(words.colourLabel): \(colour.capitalized)")
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .padding(.horizontal, 5)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(words.colourLabel)
+    }
+
+    /// Continue: `finishProfileStep` with only what the user typed or pressed (an untouched form sends both empty and
+    /// writes nothing), then the setup sheet. One press, one write.
+    private func finishProfile() async {
+        guard !busy else { return }
+        busy = true
+        failure = nil
+        defer { busy = false }
+        do {
+            try await core.perform("finishProfileStep", FirstRunRules.profilePayload(typed: typed, pressed: pressed, stored: owner?.avatar ?? ""))
+            go(FirstRunRules.next(entry(.profileDone)))
+        } catch {
+            failure = ErrorWords.of(error)
+        }
+    }
+
+    // MARK: Setup
+
+    private var profileName: String {
+        let name = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? (owner?.name ?? words.namePlaceholder) : name
+    }
+
+    /// The device's language as the core lists it, or the system's while the list is not in (nil: unknown or unnamed).
+    private var deviceLanguage: String? {
+        if !languages.isEmpty { return SubtitleStepRules.listed(languages) }
+        return DeviceCaps.language.flatMap { code in Language.all.contains { $0.audio == code } ? code : nil }
+    }
+
+    private var chipRule: (chips: [String], selected: String) {
+        FirstRunRules.chips(device: deviceLanguage, chosen: picked.map { [$0] } ?? (prefs.snapshot?.subtitleLanguages ?? []))
+    }
+
+    private var selectedChip: String { chip ?? chipRule.selected }
+
+    private var setupSheet: some View {
+        let q = StreamChoice.words.question
+        let wide = metrics.wide
+        let columns = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 36)) : AnyLayout(VStackLayout(alignment: .leading, spacing: 22))
+        return WallSheet(sheet: .setup) {
+            VStack(alignment: .leading, spacing: 0) {
+                SheetHead(title: AccountRules.fill(words.setupTitle, ["profile": profileName]), line: wide ? words.setupLine : nil,
+                          link: words.skip, linkDisabled: busy) { Task { await skipSetup() } }
+                columns {
+                    section(words.bringTitle) {
+                        SheetOption(title: words.bringLibrary, line: wide ? words.bringLibraryLine : nil, on: bring) { bring = true }
+                        SheetOption(title: words.startFresh, line: wide ? words.startFreshLine : nil, on: !bring) { bring = false }
+                    }
+                    section(q.title) {
+                        HStack(spacing: 0) {
+                            segment(q.fast.label, glyph: "zap", on: !best) { best = false }
+                            segment(q.best.label, glyph: "gem", on: best) { best = true }
+                        }
+                        .padding(4)
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(.white.opacity(0.08)))
+                        Text(best ? q.best.text : q.fast.text)
+                            .textFont(13, relativeTo: .footnote)
+                            .foregroundStyle(Color.white.opacity(0.64))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    section(words.subtitlesTitle) {
+                        FlowRow(spacing: 8) {
+                            ForEach(chipRule.chips, id: \.self) { code in chipView(code) }
+                        }
+                    }
+                }
+                .padding(.top, 4)
+                if let failure {
+                    HStack(spacing: Theme.Space.s) {
+                        StatusDot(tone: .bad, text: failure)
+                        Button(words.tryAgain) { Task { await startWatching() } }
+                            .buttonStyle(PillButtonStyle())
+                            .disabled(busy)
+                    }
+                    .padding(.top, Theme.Space.m)
+                }
+                setupFooter
+            }
+        }
+        // TV: every answer is pre-chosen, so OK on Start watching alone finishes first run.
+        .defaultFocus($onContinue, true)
+    }
+
+    private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SheetSection(title: title).padding(.top, 18)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(title)
+    }
+
+    private func segment(_ title: String, glyph: String, on: Bool, pick: @escaping () -> Void) -> some View {
+        Button(action: pick) {
+            Label(title, glyph: glyph)
+                .labelStyle(PillLabelStyle())
+                .textFont(16, weight: .semibold, relativeTo: .body)
+                .foregroundStyle(on ? Theme.Palette.onPrimary : Theme.Palette.muted)
+                .frame(maxWidth: .infinity, minHeight: FirstRunRules.Size.segment)
+                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(on ? Color.white : .clear))
+                .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        }
+        .buttonStyle(FocusPlainStyle(shape: RoundedRectangle(cornerRadius: 11, style: .continuous)))
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
+    @ViewBuilder private func chipView(_ code: String) -> some View {
+        switch code {
+        case FirstRunRules.none:
+            SheetChip(title: words.noSubtitles, on: selectedChip == code) { chip = code }
+        case FirstRunRules.more:
+            // Today's language picker; the last chip.
+            SheetChip(title: words.moreLanguages, glyph: "search", on: false) { showLanguages = true }
+        default:
+            SheetChip(title: languages.first { $0.code == code }?.name ?? Language.name(code), flag: TrackPicker.flag(code),
+                      on: selectedChip == code) { chip = code }
+        }
+    }
+
+    private var setupFooter: some View {
+        let wide = metrics.wide
+        let sources = HStack(spacing: 10) {
+            Glyph("layers", size: 16).accessibilityHidden(true)
+            Text(words.sourcesOn).textFont(14, relativeTo: .callout)
+            Button(words.review) { showReview = true }
+                .buttonStyle(.textLink)
+                .textFont(14, weight: .semibold, relativeTo: .callout)
+                .foregroundStyle(tvForm ? Theme.Palette.text : Theme.Palette.key)
+                .frame(minHeight: FirstRunRules.Size.link)
+                .contentShape(Rectangle())
+        }
+        .foregroundStyle(Theme.Palette.muted)
+        let start = Button { Task { await startWatching() } } label: {
+            Text(words.startWatching).frame(minWidth: wide ? 240 - 2 * PillButtonStyle.horizontal : nil, maxWidth: wide ? nil : .infinity,
+                                            minHeight: FirstRunRules.Size.primary - 2 * PillButtonStyle.vertical)
+        }
+        .buttonStyle(PillButtonStyle(prominent: true))
+        .disabled(busy)
+        .focused($onContinue)
+        return Group {
+            if wide {
+                VStack(spacing: 22) {
+                    Rectangle().fill(Theme.Palette.line).frame(height: 1)
+                    HStack {
+                        sources
+                        Spacer(minLength: Theme.Space.m)
+                        start
+                    }
+                }
+                .padding(.top, 28)
+            } else {
+                VStack(alignment: .leading, spacing: 14) {
+                    sources
+                    start
+                }
+                .padding(.top, 22)
+            }
+        }
+    }
+
+    private func loadLanguages() async {
+        let device: [String: any Sendable] = DeviceCaps.language.map { ["device": $0] } ?? [:]
+        languages = (try? await core.call("languages", device, as: [LanguageChoice].self)) ?? []
+    }
+
+    /// Start watching: one `setPrefs` (the shown chip always, the stream patch only for Best quality), then the
+    /// recommended sources, or the import's sheet first. A failure keeps every answer and says which part failed; a
+    /// part that worked is not sent again.
+    private func startWatching() async {
+        guard !busy else { return }
+        busy = true
+        failure = nil
+        defer { busy = false }
+        if !prefsSaved {
+            let patch = FirstRunRules.setupPatch(chip: selectedChip, best: best ? StreamChoice.patch(StreamChoice.words.question.best) : nil)
+            do {
+                try await core.perform("setPrefs", ["patch": patch])
+                prefsSaved = true
+            } catch {
+                failure = words.setupPrefsFailed
+                return
+            }
+        }
+        let next = FirstRunRules.afterSetup(bring: bring)
+        if next == .importing {
+            go(.importing)
+        } else {
+            await installSources()
+        }
+    }
+
+    /// Skip (D8): the recommended sources, no prefs, then Home.
+    private func skipSetup() async {
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
+        await installSources()
+    }
+
+    /// Every absent recommended source on, then Home; a failure keeps the sheet with its line.
+    private func installSources() async {
+        if await DefaultsStep(core: core, scope: .missing).install() {
+            go(.home)
+        } else {
+            failure = words.setupSourcesFailed
+        }
+    }
+
+    // MARK: Import
+
+    private var importSheet: some View {
+        WallSheet(sheet: .importing) {
+            VStack(alignment: .leading, spacing: Theme.Space.s) {
+                Button { go(.setup) } label: { Label("Back", glyph: "chevron-left") }
+                    .buttonStyle(.textLink)
+                    .textFont(17, weight: .semibold, relativeTo: .body)
+                    .foregroundStyle(tvForm ? Theme.Palette.text : Theme.Palette.key)
+                    .frame(minHeight: FirstRunRules.Size.link)
+                    .contentShape(Rectangle())
+                // Done brings the defaults the import did not bring and opens Home; Skip import the same without it.
+                ImportScreen(core: core, finished: { Task { await installSources() } }, skip: { Task { await installSources() } })
+                if let failure { StatusDot(tone: .bad, text: failure) }
+            }
+        }
+    }
+}
+
+/// Settings' setup check, alone as a page: every line has a dot, a word and, when something is missing, its fix.
+private struct SetupCheckPage: View {
+    let core: CoreClient
+    @State private var addons: LiveRecord<AddonsSnapshot>
     /// The defaults the check's fixes read, again whenever the list changes.
     @State private var fixer: DefaultsStep
-    /// The addons step follows a Stremio import: defaults it brought say so.
-    @State private var imported = false
-    /// Browse first passed through the addons step: Continue goes Home.
-    @State private var thenHome = false
     @State private var pingMs: Int?
     @State private var pinged = false
     @State private var online = true
     @State private var busy: String?
     @State private var note: (ok: Bool, text: String)?
-    @State private var showImport = false
-    @State private var showPairing = false
-    /// The still the framed steps show (V1), asked as first run opens and at each step until one came.
-    @State private var still: FirstRunStill?
-    /// TV: the doors step enters on the first door, not on Browse first.
-    @FocusState private var firstDoor: Bool
-    /// TV: the addons step enters on Continue, so one press keeps them all.
-    @FocusState private var onContinue: Bool
-    /// The question enters on Start fast, the default.
-    @FocusState private var onFast: Bool
-    /// The subtitles step enters on Continue, so one press keeps the device's language.
-    @FocusState private var onSubtitles: Bool
-    /// The setup check opens on Done, its way on (the tvOS walk, ATV-F3).
-    @FocusState private var onDone: Bool
     @Environment(\.metrics) private var metrics
-    @Environment(SyncModel.self) private var sync
 
-    init(core: CoreClient, start: Step = .doors, close: (() -> Void)? = nil) {
+    init(core: CoreClient) {
         self.core = core
-        self.close = close
-        #if DEBUG
-        let walk = UserDefaults.standard.string(forKey: "MQOnboardingStep")
-        #else
-        let walk: String? = nil
-        #endif
-        // `-MQOnboardingStep subtitles` (or `question`) opens a first run on that step, for a walk.
-        let opened: Step? = start != .doors ? nil
-            : DefaultsRules.walkOpensDefaults(walk, debug: true) ? .defaults : walk == "subtitles" ? .subtitles : walk == "question" ? .question : nil
-        _step = State(initialValue: opened ?? Self.first(start))
         _addons = State(initialValue: LiveRecord("addons", core: core))
-        _prefs = State(initialValue: LiveRecord("settings", core: core))
-        _defaults = State(initialValue: DefaultsStep(core: core, scope: .all))
         _fixer = State(initialValue: DefaultsStep(core: core, scope: .all))
     }
 
-    /// With a hosted relay, first run begins at sign-in: a TV with the phone's QR.
-    @MainActor private static func first(_ start: Step) -> Step {
-        guard start == .doors, AccountServer.default != nil else { return start }
-        #if os(tvOS)
-        return .tvSignIn
-        #else
-        return .signIn
-        #endif
-    }
-
     var body: some View {
-        Group {
-            if step == .tvSignIn, let server = AccountServer.default {
-                tvSignInStep(server)
-            } else {
-                steps
-            }
-        }
-        .background(Theme.Palette.bg)
-        .animation(Theme.Motion.panel, value: step)
-        // Already in an account when first run opens: sign-in is done. (A join made
-        // in it ends it there, Home or the doors.)
-        .onAppear { if sync.joined, step == .signIn || step == .tvSignIn { step = .doors } }
-    }
-
-    /// A TV's first run (plans/tv-qr-login.md 5.5): the QR a phone's camera
-    /// scans, "Scan with your phone's camera", and Browse first, the one focus
-    /// stop, which leads to the doors (a recovery kit is reachable from there).
-    /// A TV that joined goes Home, past the doors.
-    private func tvSignInStep(_ server: String) -> some View {
-        PairingScreen(core: core, done: close, autostart: server,
-                      heading: AccountWords.shared.tvSignIn, lede: AccountWords.shared.tvScanHow,
-                      more: [
-                          PairingMore(title: AccountWords.shared.browseFirst, glyph: "chevron-right") {
-                              sync.endPairing()
-                              step = .doors
-                          },
-                      ],
-                      doneOnJoin: true)
-    }
-
-    /// The question steps are framed (V1, the still full bleed); the addons, sign-in and the check keep a column.
-    private var steps: some View {
-        Group {
-            switch step {
-            case .signIn: signInStep
-            case .tvSignIn, .doors: doorsStep
-            case .defaults: column { defaultsStep }
-            case .question: questionStep
-            case .subtitles: subtitlesStep
-            case .check: column { checkStep }
-            }
-        }
-        // The still is asked as first run opens, so a step rarely waits for it, and again at each step while none came.
-        .task(id: step) {
-            guard still == nil else { return }
-            still = await StillOnce.shared.get { [core] in try await core.call("firstRunStill", as: FirstRunStill?.self) }
-        }
-        .navigationDestination(isPresented: $showImport) {
-            ImportScreen(core: core) {
-                showImport = false
-                imported = true
-                openDefaults()
-            }
-        }
-        // A join is the way in: Done goes Home, as the other doors end.
-        .navigationDestination(isPresented: $showPairing) { PairingScreen(core: core, done: close) }
-        .task(id: addons.taskId) { addons.start() }
-        .task(id: prefs.taskId) { prefs.start() }
-        .task(id: addons.snapshot) { if step == .check { await fixer.load() } }
-        .task(id: step) {
-            if step == .check { await fixer.load() }
-            if step == .defaults, defaults.list == nil { await defaults.load() }
-            if step == .subtitles, languages.isEmpty {
-                let device: [String: any Sendable] = Self.device.map { ["device": $0] } ?? [:]
-                do {
-                    languages = try await core.call("languages", device, as: [LanguageChoice].self)
-                } catch {
-                    note = (false, "\(SubtitleStepRules.listFailed): \(ErrorWords.of(error))")
-                }
-                subtitle = SubtitleStepRules.loaded(subtitle, touched: subtitleTouched, all: languages)
-                languagesLoaded = true
-            }
-        }
-        .task { await pingLoop() }
-        .task { await watchNetwork() }
-    }
-
-    private func column<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: Theme.Space.l) { content() }
+            VStack(alignment: .leading, spacing: Theme.Space.l) { checkStep }
                 .frame(maxWidth: DefaultsRules.column(wide: metrics.wide, tv: onTV) ?? .infinity, alignment: .leading)
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, metrics.gutter)
@@ -176,256 +643,25 @@ struct OnboardingScreen: View {
         }
         .scrollIndicators(.hidden)
         .topScrim()
-    }
-
-    /// The step's header: its count, Back to the step before, and its skip.
-    private func header(_ place: FilmRules.Place, skip: String? = nil, skipDisabled: Bool = false, onSkip: @escaping () -> Void = {}) -> StepHeader {
-        StepHeader(count: FilmRules.count(place), back: back(place), skip: skip, skipDisabled: skipDisabled || busy != nil, onSkip: onSkip)
-    }
-
-    private func back(_ place: FilmRules.Place) -> (() -> Void)? {
-        switch place {
-        case .defaults: { step = .doors }
-        case .question: { step = .defaults }
-        case .subtitles: { step = .question }
-        case .doors, .other: nil
-        }
-    }
-
-    // MARK: steps
-
-    /// "How should Marquee pick what to play?": Start fast (focused) or Best
-    /// quality, each a patch of the stream preferences from the shared words.
-    /// Skip writes nothing: the defaults are Start fast's.
-    private var questionStep: some View {
-        let q = StreamChoice.words.question
-        return FramedStep(header: header(.question, skip: q.skip.label) { afterQuestion() }, still: still, question: q.title, lead: q.lead) {
-            VStack(spacing: Theme.Space.s) {
-                FilmChoices {
-                    Button { Task { await answer(q.fast) } } label: { FilmChoice(symbol: "zap", title: q.fast.label, text: q.fast.text) }
-                        .focused($onFast)
-                    Button { Task { await answer(q.best) } } label: { FilmChoice(symbol: "gem", title: q.best.label, text: q.best.text) }
-                }
-                .buttonStyle(.filmChoice(wide: metrics.wide))
-                .disabled(busy != nil)
-                if let note, !note.ok {
-                    StatusDot(tone: .bad, text: note.text)
-                }
-            }
-        }
-        .defaultFocus($onFast, true)
-    }
-
-    private func answer(_ answer: StreamChoiceWords.Question.Answer) async {
-        guard busy == nil else { return }
-        busy = "question"
-        note = nil
-        defer { busy = nil }
-        do {
-            try await core.perform("setPrefs", ["patch": StreamChoice.patch(answer)])
-            afterQuestion()
-        } catch {
-            note = (false, "Could not save the choice: \(ErrorWords.of(error))")
-        }
-    }
-
-    /// The subtitles step next, unless the profile has languages already.
-    private func afterQuestion() {
-        go(SubtitleStepRules.afterQuestion(prefs.snapshot?.subtitleLanguages, thenHome: thenHome))
-    }
-
-    /// Browse first goes Home; Start fresh and an import go to the setup check.
-    private func afterSubtitles() {
-        go(SubtitleStepRules.afterSubtitles(thenHome: thenHome))
-    }
-
-    private func go(_ next: SubtitleStepRules.Next) {
-        switch next {
-        case .subtitles: step = .subtitles
-        case .home: if let close { close() } else { step = .check }
-        case .check: step = .check
-        }
-    }
-
-    /// This device's language, as the core's tags begin ("tr").
-    private static var device: String? { DeviceCaps.language }
-
-    /// The language subtitles start in, one choice: this device's chosen at
-    /// first, then the common ones and No subtitles, the rest behind More
-    /// languages. Continue writes it; Skip writes nothing.
-    private var subtitlesStep: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: Theme.Space.xs, alignment: .top), count: 2)
-        // Skip is off while Continue saves: the step leaves once.
-        return FramedStep(header: header(.subtitles, skip: "Skip") { afterSubtitles() }, still: still,
-                          question: SubtitleStepRules.title, lead: SubtitleStepRules.lead) {
-            subtitleChoices(columns)
-        }
-        .defaultFocus($onSubtitles, true)
-        // A disabled Continue cannot take the focus: TV gives it once the list is in.
-        .onChange(of: languagesLoaded) { _, loaded in if loaded { onSubtitles = true } }
-    }
-
-    /// The languages in two columns, Continue (the white primary) and More languages under them: full width and
-    /// stacked on the phone, side by side in the wide column.
-    private func subtitleChoices(_ columns: [GridItem]) -> some View {
-        let full = !metrics.wide
-        let acts = full ? AnyLayout(VStackLayout(spacing: Theme.Space.xs)) : AnyLayout(HStackLayout(spacing: 12))
-        return VStack(alignment: .leading, spacing: 14) {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.Space.xs) {
-                let mine = SubtitleStepRules.listed(languages)
-                ForEach(SubtitleStepRules.common(languages, device: mine), id: \.code) { language in
-                    languageRow(language.code, language.name, line: language.code == mine ? SubtitleStepRules.device : nil)
-                }
-                languageRow(nil, SubtitleStepRules.none, line: SubtitleStepRules.noneLine)
-            }
-            if let note, !note.ok {
-                StatusDot(tone: .bad, text: note.text)
-            }
-            acts {
-                Button { Task { await saveSubtitle() } } label: {
-                    Text(busy == "subtitles" ? "Saving" : "Continue").frame(maxWidth: full ? CGFloat.infinity : nil)
-                }
-                .buttonStyle(PillButtonStyle(prominent: true))
-                .disabled(busy != nil || !languagesLoaded)
-                .focused($onSubtitles)
-                Button { moreLanguages.toggle() } label: {
-                    Text(moreLanguages ? SubtitleStepRules.fewer : SubtitleStepRules.more).frame(maxWidth: full ? CGFloat.infinity : nil)
-                }
-                .buttonStyle(PillButtonStyle())
-            }
-            if moreLanguages {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: Theme.Space.xs) {
-                    ForEach(SubtitleStepRules.rest(languages, device: SubtitleStepRules.listed(languages)), id: \.code) { language in
-                        languageRow(language.code, language.name, line: nil)
-                    }
-                }
-            }
-        }
-    }
-
-    /// One language: its name, a line when it has one, a check when chosen.
-    private func languageRow(_ code: String?, _ name: String, line: String?) -> some View {
-        let on = subtitle == code
-        return Button {
-            subtitleTouched = true
-            subtitle = code
-        } label: {
-            FilmLanguage(name: name, line: line, on: on)
-        }
-        .buttonStyle(.filmLanguage(on: on))
-        .accessibilityAddTraits(on ? .isSelected : [])
-    }
-
-    private func saveSubtitle() async {
-        guard busy == nil, languagesLoaded else { return }
-        busy = "subtitles"
-        note = nil
-        defer { busy = nil }
-        do {
-            try await core.perform("setPrefs", ["patch": SubtitleStepRules.patch(subtitle)])
-            afterSubtitles()
-        } catch {
-            note = (false, "Could not save the language: \(ErrorWords.of(error))")
-        }
-    }
-
-    /// Sign in (4.1): Not now and Use my own sync server lead to the doors;
-    /// an account that existed goes Home; a new one goes on to the doors.
-    @ViewBuilder private var signInStep: some View {
-        #if os(tvOS)
-        doorsStep
-        #else
-        if let server = AccountServer.default {
-            #if os(macOS)
-            // The Mac's sign-in is a stage of its own (SignInStage): the still and the window's whole size.
-            signIn(server)
-            #else
-            column { signIn(server) }
-            #endif
-        } else {
-            doorsStep
-        }
-        #endif
-    }
-
-    #if !os(tvOS)
-    private func signIn(_ server: String) -> some View {
-        SignInScreen(server: server, sync: sync,
-                     notNow: { step = .doors },
-                     joined: { if let close { close() } else { step = .doors } },
-                     created: { step = .doors })
-    }
-    #endif
-
-    private var doorsStep: some View {
-        let skip = close.map { close in { browseFirst(close) } }
-        // The lead is said to someone without an account only: after Create it is not so.
-        return FramedStep(header: header(.doors, skip: skip == nil ? nil : "Browse first") { skip?() }, still: still,
-                          question: "How would you like to begin?",
-                          lead: sync.joined ? nil : "No account needed. Everything stays on this device until you turn on sync.") {
-            VStack(spacing: Theme.Space.s) {
-                FilmChoices {
-                    Button { showImport = true } label: {
-                        FilmChoice(symbol: "door-open", title: "I use Stremio", text: "Bring your addons, library and Continue Watching over with a code.")
-                    }
-                    .focused($firstDoor)
-                    Button { openDefaults() } label: {
-                        FilmChoice(symbol: "sparkle", title: "Start fresh", text: "Pick from the recommended addons, then browse and play.")
-                    }
-                    if !sync.joined {
-                        Button { showPairing = true } label: {
-                            FilmChoice(symbol: "qr-code", title: "I already use Momotus", text: "Join your other device's sync account with a code. Library and addons follow.")
-                        }
-                    }
-                }
-                .buttonStyle(.filmChoice(wide: metrics.wide))
-                if let note, !note.ok {
-                    StatusDot(tone: .bad, text: note.text)
-                }
-            }
-        }
-        .defaultFocus($firstDoor, true)
-    }
-
-    private var defaultsStep: some View {
-        VStack(alignment: .leading, spacing: Theme.Space.m) {
-            header(.defaults)
-            stepHeading(DefaultsRules.title, DefaultsRules.lead)
-            RecommendedAddons(model: defaults, imported: imported, hasCatalog: !names("catalog").isEmpty)
-            #if !os(tvOS)
-            // TV adds more from Settings: typing a link with a remote is no first step.
-            VStack(alignment: .leading, spacing: Theme.Space.s) {
-                Text("Add another addon")
-                    .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
-                    .foregroundStyle(Theme.Palette.text)
-                    .accessibilityAddTraits(.isHeader)
-                // Continue stays the one white action, also with a link typed.
-                InstallField(core: core, primary: false)
-                FindAddonsLink(core: core)
-            }
-            .padding(.top, Theme.Space.s)
-            #endif
-            HStack {
-                Spacer()
-                Button(defaults.busy ? "Adding" : "Continue") {
-                    Task {
-                        guard await defaults.install() else { return }
-                        // A first run asks the one question next (stream choice 4.5).
-                        step = .question
-                    }
-                }
-                .buttonStyle(PillButtonStyle(prominent: true))
-                .disabled(defaults.busy)
-                .focused($onContinue)
-            }
-            .padding(.top, Theme.Space.s)
-        }
-        .defaultFocus($onContinue, true)
+        .background(Theme.Palette.bg)
+        .task(id: addons.taskId) { addons.start() }
+        .task(id: addons.snapshot) { await fixer.load() }
+        .task { await pingLoop() }
+        .task { await watchNetwork() }
     }
 
     private var checkStep: some View {
         VStack(alignment: .leading, spacing: Theme.Space.m) {
-            stepHeading("Setup check", "Every line says what it found, and what to do when something is missing.")
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Setup check")
+                    .display(metrics.wide ? 44 : Theme.type.title1 + 4)
+                    .foregroundStyle(Theme.Palette.text)
+                    .accessibilityAddTraits(.isHeader)
+                Text("Every line says what it found, and what to do when something is missing.")
+                    .textFont(Theme.type.body)
+                    .foregroundStyle(Theme.Palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             VStack(alignment: .leading, spacing: 14) {
                 ForEach(checks, id: \.label) { check in
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -450,34 +686,8 @@ struct OnboardingScreen: View {
             .padding(Theme.Space.s + 4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .glass(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-            if let close {
-                HStack {
-                    Button("Back") { step = .defaults }.buttonStyle(PillButtonStyle())
-                    Spacer()
-                    Button("Done", action: close).buttonStyle(PillButtonStyle(prominent: true))
-                        .focused($onDone)
-                }
-                .padding(.top, Theme.Space.s)
-            }
         }
-        .defaultFocus($onDone, true)
     }
-
-    private func stepHeading(_ title: String, _ text: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .display(metrics.wide ? 44 : Theme.type.title1 + 4)
-                .foregroundStyle(Theme.Palette.text)
-                .accessibilityAddTraits(.isHeader)
-            Text(text)
-                .textFont(Theme.type.body)
-                .foregroundStyle(Theme.Palette.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.top, close == nil ? 0 : Theme.Space.s)
-    }
-
-    // MARK: the check
 
     private struct Check {
         let label: String
@@ -531,19 +741,6 @@ struct OnboardingScreen: View {
         note = await fixer.set(addon.key, on: true)
             ? (true, added ? "Added \(addon.name)" : "Turned \(addon.name) on")
             : (false, "\(words) did not work: \(fixer.failure ?? "unknown error")")
-    }
-
-    /// The addons step with every switch on.
-    private func openDefaults(thenHome: Bool = false) {
-        self.thenHome = thenHome
-        defaults = DefaultsStep(core: core, scope: .all)
-        step = .defaults
-    }
-
-    /// Browse first: a new profile still passes the switches (nothing is
-    /// installed unasked) and then goes Home; one with a list goes Home.
-    private func browseFirst(_ close: () -> Void) {
-        if addons.snapshot?.fresh == true { openDefaults(thenHome: true) } else { close() }
     }
 
     /// Liveness from the core itself, every few seconds while this screen is open.

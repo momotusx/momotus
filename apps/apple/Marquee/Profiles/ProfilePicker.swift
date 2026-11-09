@@ -21,17 +21,44 @@ struct ProfilePicker: View {
     @State private var keypad: ProfileInfo?
 
     /// `manage`: opened on Manage profiles (the Mac panel's pill), Back to the tiles.
-    init(mode: Mode, core: CoreClient, pinFor: ProfileInfo? = nil, manage: Bool = false) {
-        (self.mode, self.core, self.pinFor) = (mode, core, pinFor)
+    /// `joinedLine`: the start picker after a first-run join, a sheet over the poster wall with the line that says how
+    /// this device signed in (plans/first-screens.md 3.4).
+    init(mode: Mode, core: CoreClient, pinFor: ProfileInfo? = nil, manage: Bool = false, joinedLine: String? = nil) {
+        (self.mode, self.core, self.pinFor, self.joinedLine) = (mode, core, pinFor, joinedLine)
         _keypad = State(initialValue: pinFor)
         _showManage = State(initialValue: manage)
     }
+    let joinedLine: String?
     @State private var said: String?
     @State private var showManage: Bool
     @State private var showAdd = false
     @FocusState private var focused: String?
 
     var body: some View {
+        page
+            .navigationDestination(isPresented: $showManage) { ManageProfiles(core: core) }
+            .navigationDestination(isPresented: $showAdd) { EditProfile(profileId: nil) }
+            .onChange(of: profiles.gone?.count) {
+                // A profile removed on another device while its PIN is asked.
+                guard let gone = profiles.gone, keypad?.id == gone.id else { return }
+                keypad = nil
+                said = "That profile was removed on another device."
+            }
+    }
+
+    @ViewBuilder private var page: some View {
+        if joinedLine != nil {
+            WallSheet(sheet: .who) {
+                VStack(alignment: .leading, spacing: Theme.Space.m) {
+                    if let snapshot = profiles.snapshot { content(snapshot) }
+                }
+            }
+        } else {
+            plainPage
+        }
+    }
+
+    private var plainPage: some View {
         ScrollView(.vertical) {
             VStack(spacing: Theme.Space.l) {
                 if let snapshot = profiles.snapshot {
@@ -47,14 +74,6 @@ struct ProfilePicker: View {
         .background(Theme.Palette.bg)
         // At large text sizes the grid scrolls: names never pass under the status bar bare.
         .topScrim()
-        .navigationDestination(isPresented: $showManage) { ManageProfiles(core: core) }
-        .navigationDestination(isPresented: $showAdd) { EditProfile(profileId: nil) }
-        .onChange(of: profiles.gone?.count) {
-            // A profile removed on another device while its PIN is asked.
-            guard let gone = profiles.gone, keypad?.id == gone.id else { return }
-            keypad = nil
-            said = "That profile was removed on another device."
-        }
     }
 
     @ViewBuilder private func content(_ snapshot: ProfilesSnapshot) -> some View {
@@ -98,7 +117,16 @@ struct ProfilePicker: View {
         }
     }
 
-    private func header(_ snapshot: ProfilesSnapshot) -> some View {
+    @ViewBuilder private func header(_ snapshot: ProfilesSnapshot) -> some View {
+        if let joinedLine {
+            // No Edit on the first-run picker (D6): the start picker never manages profiles.
+            SheetHead(title: FirstRunWords.shared.whoTitle, line: joinedLine)
+        } else {
+            plainHeader(snapshot)
+        }
+    }
+
+    private func plainHeader(_ snapshot: ProfilesSnapshot) -> some View {
         VStack(spacing: Theme.Space.xs) {
             Text("Who's watching?")
                 .display(metrics.wide ? 44 : Theme.type.title1 + 4)
@@ -114,18 +142,21 @@ struct ProfilePicker: View {
     }
 
     private var tile: CGFloat {
+        // The first-run sheet's tiles: 84 on the phone, 104 wide and on TV (round2.html `.pk`).
+        if joinedLine != nil { return metrics.wide ? 104 : 84 }
         #if os(tvOS)
-        168
+        return 168
         #else
-        metrics.wide ? 140 : 112
+        return metrics.wide ? 140 : 112
         #endif
     }
 
     private func tiles(_ snapshot: ProfilesSnapshot) -> some View {
-        let addable = canManage(snapshot) && snapshot.profiles.count < snapshot.max
+        let addable = (canManage(snapshot) || joinedLine != nil) && snapshot.profiles.count < snapshot.max
         let incognito = Incognito.offered(snapshot)
         let count = snapshot.profiles.count + (incognito ? 1 : 0) + (addable ? 1 : 0)
-        let columns = Array(repeating: GridItem(.fixed(tile + 24), spacing: Theme.Space.m), count: metrics.wide ? min(max(count, 1), 6) : 2)
+        let wideColumns = joinedLine != nil ? 4 : min(max(count, 1), 6)
+        let columns = Array(repeating: GridItem(.fixed(tile + 24), spacing: Theme.Space.m), count: metrics.wide ? wideColumns : 2)
         return LazyVGrid(columns: columns, spacing: Theme.Space.m) {
             ForEach(snapshot.profiles) { profile in
                 Button { pick(profile, snapshot) } label: {
@@ -138,6 +169,8 @@ struct ProfilePicker: View {
                         .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
                         if profile.syncing {
                             Text("Syncing").textFont(Theme.type.caption, relativeTo: .caption).foregroundStyle(Theme.Palette.muted)
+                        } else if joinedLine != nil, metrics.wide, profile.kids {
+                            Text(FirstRunWords.shared.whoKids).textFont(13, relativeTo: .caption).foregroundStyle(Color.white.opacity(0.64))
                         }
                     }
                     .foregroundStyle(Theme.Palette.text)

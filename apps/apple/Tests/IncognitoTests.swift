@@ -370,6 +370,8 @@ private let main = profile("main", owner: true)
         "Player/PlayerModel.swift: coreLog.notice(\"metric subtitles_settled_ms=",
         "Player/PlayerModel.swift: coreLog.notice(\"metric engine_fallback_ms=",
         "Player/PlayerSwipe.swift: coreLog.notice(\"debug: walk ",
+        // The walk's wall line: two numbers, no title (plans/first-screens.md 3.1).
+        "Onboarding/PosterWall.swift: coreLog.notice(\"\\(line, privacy: .public)\")",
         "Profiles/ProfileSession.swift: coreLog.error(\"leave on close: ", "Profiles/ProfileSession.swift: coreLog.error(\"switch: views still open: ",
         "Settings/DebridSession.swift: coreLog.notice(\"\\($0", "Sync/SyncModel.swift: coreLog.error(\"sync: the Keychain did not give the record: ",
         "Trakt/TraktModel.swift: coreLog.notice(\"trakt: the record was not handed over: ",

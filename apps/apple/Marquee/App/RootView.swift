@@ -66,6 +66,16 @@ struct RootView: View {
             } else if core.failure != nil {
                 // The core stopped: only its message and the way back show, in the overlay.
                 Theme.Palette.bg.ignoresSafeArea()
+            } else if debrid.ready, profiles.snapshot != nil, let line = profiles.joinedWho {
+                // After a first-run join (plans/first-screens.md 3.4): the start picker over the still wall, Add
+                // profile on its own stack.
+                NavigationStack {
+                    ZStack {
+                        PosterWall(posters: WallOnce.shared.posters, columns: FirstRunRules.columns(FirstRunRules.form(wide: metrics.wide, tv: tvForm)),
+                                   running: false, dimmed: true)
+                        ProfilePicker(mode: .gate, core: core, joinedLine: line)
+                    }
+                }
             } else if debrid.ready, profiles.snapshot != nil {
                 ProfilePicker(mode: .gate, core: core)
             } else if debrid.ready, let problem = profiles.loadProblem {

@@ -13,7 +13,9 @@ import Observation
 final class ProfileSession {
     let view: LiveRecord<ProfilesSnapshot>
     /// The start picker was answered this launch (decided on the first snapshot).
-    private(set) var chosen = false
+    private(set) var chosen = false {
+        didSet { if chosen { joinedWho = nil } }
+    }
     /// A switch under way: the profile asked for. The gate is shut until it ends.
     private(set) var switching: String?
     /// Why the last switch failed; the picker that takes over shows it.
@@ -130,6 +132,15 @@ final class ProfileSession {
     /// The current profile, unlocked: the start picker's answer.
     func markChosen() {
         chosen = true
+    }
+
+    /// A first-run join into an account with two or more profiles or a PIN (plans/first-screens.md 2, D2): the start
+    /// picker shows over the still poster wall, with the line that says how this device signed in.
+    private(set) var joinedWho: String?
+
+    func askAfterJoin(line: String) {
+        joinedWho = line
+        chosen = false
     }
 
     /// Unlocks the locked session as its own profile; throws the core's refusal.

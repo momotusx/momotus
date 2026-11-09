@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-// The first run's subtitles step and Settings' Subtitle language row
+// First run's "Subtitles start in" chips (plans/first-screens.md 3.5, D11) and Settings' Subtitle language row
 // (plans/m13-subtitle-languages.md 7).
 
 private let known = [
@@ -10,59 +10,24 @@ private let known = [
     LanguageChoice(code: "tr", name: "Turkish"),
 ]
 
-@Test func theStepListsTheDevicesLanguageFirstThenTheCommonOnes() {
-    let common = SubtitleStepRules.common(known, device: "tr")
-    #expect(common.map(\.code) == ["tr", "en", "es", "fr", "de", "it", "pt", "ja"])
-    #expect(common.first?.name == "Turkish")
-    // The rest in the core's order, none listed twice.
-    #expect(SubtitleStepRules.rest(known, device: "tr").map(\.code) == ["pl", "pt-BR"])
-    // A language off the common ones leads when it is the device's.
-    #expect(SubtitleStepRules.common(known, device: "pl").map(\.code).prefix(2) == ["pl", "en"])
-    #expect(SubtitleStepRules.common(known, device: nil).map(\.code).first == "en")
-}
-
-@Test func anEnglishDeviceStartsOnNoSubtitles() {
-    #expect(SubtitleStepRules.initial("en") == nil)
-    #expect(SubtitleStepRules.initial("tr") == "tr")
-    #expect(SubtitleStepRules.initial(nil) == nil)
-    // English still leads the list on an English device.
-    #expect(SubtitleStepRules.common(known, device: "en").first?.code == "en")
-}
-
 @Test func theDevicesLanguageIsTheOneTheCoreMarks() {
-    // Norway's Bokmål: the core lists Norwegian as "no" and marks it.
+    // Norway's Bokmål: the core lists Norwegian as "no" and marks it, and the setup's first chip is that.
     let norwegian = known + [LanguageChoice(code: "no", name: "Norwegian", device: true)]
     #expect(SubtitleStepRules.listed(norwegian) == "no")
-    #expect(SubtitleStepRules.loaded(nil, touched: false, all: norwegian) == "no")
-    #expect(SubtitleStepRules.common(norwegian, device: SubtitleStepRules.listed(norwegian)).first?.name == "Norwegian")
-    // A code the core does not list: nothing marked, No subtitles.
+    #expect(FirstRunRules.chips(device: SubtitleStepRules.listed(norwegian), chosen: []).chips == ["no", "en", "none", "more"])
+    // A code the core does not list counts as absent: English is chosen (D11), never No subtitles.
     #expect(SubtitleStepRules.listed(known) == nil)
-    #expect(SubtitleStepRules.loaded(nil, touched: false, all: known) == nil)
-    // English stays on No subtitles; a choice made stays.
-    let english = [LanguageChoice(code: "en", name: "English", device: true)]
-    #expect(SubtitleStepRules.loaded(nil, touched: false, all: english) == nil)
-    #expect(SubtitleStepRules.loaded("de", touched: true, all: norwegian) == "de")
-    // No subtitles, chosen before the list came, stays.
-    #expect(SubtitleStepRules.loaded(nil, touched: true, all: norwegian) == nil)
+    #expect(FirstRunRules.chips(device: SubtitleStepRules.listed(known), chosen: []).selected == "en")
 }
 
-@Test func theQuestionLeadsToTheStepUnlessTheProfileHasLanguages() {
-    #expect(SubtitleStepRules.afterQuestion([], thenHome: false) == .subtitles)
-    #expect(SubtitleStepRules.afterQuestion(nil, thenHome: true) == .subtitles)
-    #expect(SubtitleStepRules.afterQuestion(["tr"], thenHome: false) == .check)
-    #expect(SubtitleStepRules.afterQuestion(["tr"], thenHome: true) == .home)
-    // Skip and Continue go on alike.
-    #expect(SubtitleStepRules.afterSubtitles(thenHome: false) == .check)
-    #expect(SubtitleStepRules.afterSubtitles(thenHome: true) == .home)
-}
-
-@Test func continueWritesTheChoiceAndNoSubtitlesWritesNone() {
-    #expect(SubtitleStepRules.patch("tr")["subtitleLanguages"] as? [String] == ["tr"])
-    #expect(SubtitleStepRules.patch(nil)["subtitleLanguages"] as? [String] == [])
-    // A profile with languages already passes the step.
-    #expect(SubtitleStepRules.asks(nil))
-    #expect(SubtitleStepRules.asks([]))
-    #expect(!SubtitleStepRules.asks(["tr"]))
+@Test func startWatchingWritesTheShownChipAndBestQualityOnlyWhenChosen() throws {
+    #expect(FirstRunRules.setupPatch(chip: "tr", best: nil)["subtitleLanguages"] as? [String] == ["tr"])
+    // No subtitles is written too, as none.
+    #expect(FirstRunRules.setupPatch(chip: FirstRunRules.none, best: nil)["subtitleLanguages"] as? [String] == [])
+    #expect(FirstRunRules.setupPatch(chip: "en", best: nil)["streams"] == nil, "Start fast writes no stream patch")
+    let best = StreamChoice.patch(StreamChoice.words.question.best)
+    let streams = try #require(FirstRunRules.setupPatch(chip: "en", best: best)["streams"] as? [String: any Sendable])
+    #expect(streams["minSeeders"] as? Int == StreamChoice.words.question.best.patch.minSeeders)
 }
 
 @Test func settingsReadsEverySpellingAsOneLanguageInOrder() {
