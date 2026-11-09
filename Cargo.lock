@@ -2787,10 +2787,14 @@ dependencies = [
 name = "mq-http"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "bytes",
  "futures-util",
+ "http",
+ "js-sys",
  "libc",
  "mq-http",
+ "percent-encoding",
  "reqwest",
  "rustls",
  "serde",
@@ -2800,6 +2804,8 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
