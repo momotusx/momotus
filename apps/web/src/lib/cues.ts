@@ -4,7 +4,8 @@
  * else hung from a foot 8% of the picture's height over the picture's foot
  * (Media3's own default on its content frame; every platform's, plans/dual-subtitles.md
  * section 11), growing upward, and while the controls show 8 px over the scrubber.
- * Lines that would still meet the transport shrink to 85% while the controls show.
+ * Lines that would still meet the transport shrink to 85% while the controls show; with a strip open, lines that
+ * would meet it even at 85% go over it.
  * Never under a control, never at the top, never under the title-safe line, never
  * on the band of a landscape screen. */
 
@@ -59,6 +60,10 @@ export function cuePlace({ box, video, bar, scrubber, transport, strip, up, line
     if (scrubber) foot = Math.min(foot, scrubber.top - 8);
     if (strip) foot = Math.min(foot, strip.top - 8);
     foot -= picture * Math.max(0, share - FOOT);
+    // An open strip (with its Style row most of all) can leave no room under a transport in the screen's middle
+    // (a phone across): the lines go over it, 8 px clear, and stay readable while the viewer tunes them (Pixel walk
+    // 2026-11-09 L23), instead of landing under Back 10, Play and Forward 10.
+    if (strip && transport && foot > transport.top && foot - lines * 0.85 < transport.bottom) foot = transport.top - 8;
   } else foot = Math.min(pictureFoot - picture * share, safe);
   return { at: { bottom: box.bottom - foot }, shrink: up && !!transport && foot - lines < transport.bottom && foot > transport.top };
 }

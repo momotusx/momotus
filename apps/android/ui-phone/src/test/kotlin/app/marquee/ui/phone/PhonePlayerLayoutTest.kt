@@ -6,12 +6,15 @@ import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.media3.common.VideoSize
 import androidx.media3.common.text.Cue
 import androidx.media3.ui.SubtitleView
@@ -25,6 +28,7 @@ import app.marquee.player.CUE_LINE
 import app.marquee.player.CUE_LINES
 import app.marquee.player.CUE_RISE
 import app.marquee.player.PlaybackController
+import app.marquee.player.STRIP_TAG
 import app.marquee.player.SUBTITLES_TAG
 import app.marquee.player.subtitleScale
 import kotlinx.coroutines.CoroutineDispatcher
@@ -258,6 +262,31 @@ class PhonePlayerLayoutTest {
         controlsHidden()
         val hidden = cues()
         assertTrue(hidden.right <= skip(), "clear of Skip at the foot: ${hidden.right} against ${skip()}")
+    }
+
+    /**
+     * Pixel walk 2026-11-09 L23: with the strip and its Style row open the lift put the lines on the transport, so
+     * they could not be read while the viewer tuned them. They go over the transport instead, under the title bar,
+     * and stay clear of the strip.
+     */
+    @Test
+    fun `with the strip and Style open the lines go over the transport, never under it`() {
+        playing()
+        compose.onNode(hasContentDescription("Subtitles", substring = true) and hasClickAction()).performClick()
+        compose.onNodeWithText("Style").performClick()
+        compose.onNodeWithText("Size").assertExists()
+        player.say("You're a fool for traveling alone\nso completely unprepared")
+        compose.waitForIdle()
+        val shown = cues()
+        val back = bounds("Back 10 seconds")
+        val play = bounds("Pause")
+        val transport = minOf(back.top, play.top) to maxOf(back.bottom, play.bottom)
+        val strip = compose.onNodeWithTag(STRIP_TAG).fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            shown.foot <= transport.first || shown.top >= transport.second,
+            "the lines ${shown.top} to ${shown.foot} meet the transport ${transport.first} to ${transport.second}",
+        )
+        assertTrue(shown.foot <= strip.top - 4f, "the lines' foot ${shown.foot} reaches the strip at ${strip.top}")
     }
 
     private companion object {

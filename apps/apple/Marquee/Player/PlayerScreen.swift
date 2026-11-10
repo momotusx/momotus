@@ -641,7 +641,8 @@ struct PlayerScreen: View {
                 screenHeight: size.height, pictureHeight: fittedHeight(size), safeBottom: safeBottom,
                 controlsShown: controlsShown, scrubberTop: size.height - safeBottom - controlsHeight, boxHeight: subtitleBox,
                 pillTop: pillHeight.map { size.height - safeBottom - PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight) - $0 },
-                position: model.subtitlePosition)
+                position: model.subtitlePosition,
+                stripUnder: controlsShown && model.strip != nil ? topBarFoot : nil)
         }
         #endif
         let foot = PlayerLayout.subtitleFoot(

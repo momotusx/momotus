@@ -108,6 +108,21 @@ test("the controls up: the lifted foot plus the position's share over 8, and 8 p
   expect(at(12, { top: 800, bottom: 848 })).toBeCloseTo(792 - 1080 * 0.04, 5);
 });
 
+test("a phone across with the strip and Style open hangs the lines over the transport, not under it", () => {
+  // Pixel walk 2026-11-09 L23 at 844 x 390: the Style row's top at 220 lifted the foot to 212, inside the transport
+  // (164 to 226), and the lines landed under Back 10, Play and Forward 10.
+  const phone = { top: 0, bottom: 390, width: 844, height: 390 };
+  const video = { width: 1920, height: 1080 };
+  const transport = { top: 164, bottom: 226 };
+  const lines = 2 * 24 * 1.3;
+  const open = drawn({ box: phone, video, scrubber: { top: 350, bottom: 358 }, transport, strip: { top: 220, bottom: 330 }, up: true, lines });
+  expect(open.bottom).toBeCloseTo(transport.top - 8, 5);
+  expect(open.shrink).toBe(false);
+  // No strip: the old rule, 8 px over the scrubber, 85% when it would meet the transport.
+  const closed = drawn({ box: phone, video, scrubber: { top: 350, bottom: 358 }, transport, up: true, lines });
+  expect(closed.bottom).toBeCloseTo(342, 5);
+});
+
 test("a phone upright keeps the band whatever the position", () => {
   const phone = { top: 0, bottom: 844, width: 390, height: 844 };
   const pictureFoot = 844 - (844 - (1080 * 390) / 1920) / 2;

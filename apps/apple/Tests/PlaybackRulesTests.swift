@@ -865,6 +865,23 @@ private func route(_ key: String, sub: UInt64 = 3) -> PlayRoute {
     }
 }
 
+@Test func anOpenStripHangsTheiPhoneLinesOverTheTransport() {
+    // Pixel walk 2026-11-09 L23, the iPhone across the same: the strip and its Style row lift the foot to 167 pt,
+    // inside the transport (161 to 229 pt), so the lines sat under Back 10, Play and Forward 10. With a strip open
+    // they go over the transport, 8 pt clear, under the top bar (its foot at 60 pt), whole.
+    let mid: CGFloat = 195
+    let transportTop = mid - PhoneFrame.transportHalfHeight
+    let open = PhoneFrame.subtitle(screenHeight: 390, pictureHeight: 390, safeBottom: 21, controlsShown: true, scrubberTop: 175,
+                                   boxHeight: 50, stripUnder: 60)
+    #expect(open.foot == transportTop - PhoneFrame.subtitleGap)
+    #expect(open.scale == 1)
+    #expect(open.foot - 50 >= 60 + PhoneFrame.subtitleGap, "under the top bar")
+    // No strip: today's rule, on the scrubber at the floor size.
+    let shut = PhoneFrame.subtitle(screenHeight: 390, pictureHeight: 390, safeBottom: 21, controlsShown: true, scrubberTop: 175, boxHeight: 50)
+    #expect(shut.foot == 175 - PhoneFrame.subtitleGap)
+    #expect(shut.scale == PhoneFrame.subtitleFloor)
+}
+
 @Test func drawnSubtitlesKeepOverTheTitleSafeLine() {
     // A 2.39:1 film on a 1080 pt TV (tvOS safe area 60 pt): two lines hang from a foot inside the picture, over
     // the 5% line, and grow upward (the view keeps the foot and aligns the box to it).

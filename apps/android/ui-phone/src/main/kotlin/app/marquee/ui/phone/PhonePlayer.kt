@@ -183,6 +183,8 @@ fun PhonePlayer(
     var titleFoot by remember { mutableStateOf(0.dp) }
     // The foot of the transport in the middle of the screen: the subtitles keep under it while it shows.
     var transportFoot by remember { mutableStateOf(0.dp) }
+    // Its top: with a strip open, lines with no room under the transport go over it.
+    var transportTop by remember { mutableStateOf(0.dp) }
     // Skip or Up Next in the bottom corner, as last laid out: the subtitles' lines keep clear of it.
     var corner by remember { mutableStateOf<Rect?>(null) }
     val live = stage == Stage.Playing || stage == Stage.Paused || stage == Stage.Buffering || stage == Stage.Ended
@@ -360,6 +362,7 @@ fun PhonePlayer(
             controller.subtitleSize,
             subtitleLift = if (showControls) controlsHeight + stripCover else 0.dp,
             subtitleCeiling = if (showControls) maxOf(titleFoot, transportFoot) else 0.dp,
+            subtitleOver = if (showControls && strip != null) transportTop else 0.dp,
             subtitleCorner = corner.takeIf { showSkip || showNextCard },
             addonCues = { controller.addonCues() }.takeIf { controller.addonOn },
             videoRatio = controller.videoRatio,
@@ -617,7 +620,9 @@ fun PhonePlayer(
                 onTouch = { wake++ },
                 modifier =
                     Modifier.onGloballyPositioned {
-                        transportFoot = with(density) { it.boundsInRoot().bottom.toDp() }
+                        val box = it.boundsInRoot()
+                        transportTop = with(density) { box.top.toDp() }
+                        transportFoot = with(density) { box.bottom.toDp() }
                     },
                 closeStrip = closeStrip.takeIf { strip != null },
             )

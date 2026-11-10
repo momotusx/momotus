@@ -71,6 +71,9 @@ fun PlayerVideo(
     subtitleLift: Dp = 0.dp,
     /** While the controls show: the foot of the controls over the subtitles (the transport), which they keep clear of. */
     subtitleCeiling: Dp = 0.dp,
+    /** While the controls show: the top of the transport in the middle, which the lines go over when under it is too
+     * tight ([cueSpan]); 0 for none. */
+    subtitleOver: Dp = 0.dp,
     /** A control in the bottom corner (Skip, Up Next), in px: the subtitles' lines keep clear of it. */
     subtitleCorner: Rect? = null,
     /** An addon track drawn by the app ([PlaybackController.addonCues]): its cues now, read every frame; null for none. */
@@ -168,18 +171,26 @@ fun PlayerVideo(
                 if (height <= 0f || width <= 0f) {
                     CueFrame(SubtitleView.DEFAULT_BOTTOM_PADDING_FRACTION, text)
                 } else {
+                    val (foot, ceiling) =
+                        cueSpan(
+                            foot =
+                                cueFoot(
+                                    height,
+                                    width,
+                                    videoRatio,
+                                    lifted = (height - subtitleLift.toPx() - gap).takeIf { subtitleLift > 0.dp },
+                                    position = subtitlePosition,
+                                ),
+                            ceiling = if (subtitleCeiling > 0.dp) (subtitleCeiling + CUE_CLEARANCE).toPx() else 0f,
+                            over = (subtitleOver.toPx() - gap).takeIf { subtitleOver > 0.dp },
+                            top = if (subtitleTop > 0.dp) (subtitleTop + CUE_CLEARANCE).toPx() else 0f,
+                            twoLines = CUE_LINES * CUE_LINE * text * height,
+                        )
                     cueFrame(
                         height = height,
                         width = width,
-                        foot =
-                            cueFoot(
-                                height,
-                                width,
-                                videoRatio,
-                                lifted = (height - subtitleLift.toPx() - gap).takeIf { subtitleLift > 0.dp },
-                                position = subtitlePosition,
-                            ),
-                        ceiling = if (subtitleCeiling > 0.dp) (subtitleCeiling + CUE_CLEARANCE).toPx() else 0f,
+                        foot = foot,
+                        ceiling = ceiling,
                         text = text,
                         corner = subtitleCorner?.let { Rect(it.left - gap, it.top - gap, it.right, it.bottom) },
                         lines = { span -> cueLines(drawn, text * height, span) },
@@ -258,6 +269,26 @@ internal fun cueFoot(
     val plain = min((height + picture) / 2 - picture * position / 100f, height * (1 - SAFE_LINE))
     return lifted?.let { min(plain, it - picture * max(0, position - DEFAULT_POSITION) / 100f) } ?: plain
 }
+
+/**
+ * The cues' foot and ceiling, px from the top, with the controls up: the lifted [foot] under the transport in the
+ * middle ([ceiling], its foot) while that room holds [twoLines] at the smallest size ([CUE_FLOOR]). When it does not
+ * (a phone across with an open strip and its Style row), the lines hang over the transport instead, their foot at
+ * [over] (its top, less the gap) under [top] (the title bar's foot), when that room is the larger: the lines stay
+ * readable while the viewer tunes them, never under Back 10, Play and Forward 10 (Pixel walk 2026-11-09 L23).
+ */
+internal fun cueSpan(
+    foot: Float,
+    ceiling: Float,
+    over: Float?,
+    top: Float,
+    twoLines: Float,
+): Pair<Float, Float> =
+    if (over != null && foot - ceiling < twoLines * CUE_FLOOR && over - top > foot - ceiling) {
+        over to top
+    } else {
+        foot to ceiling
+    }
 
 /** The profile's default position, today's rule: the cues' foot 8% of the picture over its foot ([CUE_RISE]). */
 const val DEFAULT_POSITION = 8

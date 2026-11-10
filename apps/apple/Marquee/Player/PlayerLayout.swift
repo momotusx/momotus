@@ -652,9 +652,12 @@ extension PhoneFrame {
     /// capsule and the pill covers its end while they show (a phone across).
     /// `boxHeight` is the box at full size.
     /// `position` (D7) moves a line that hangs from the picture's foot; in the band it does nothing.
+    /// `stripUnder` is the top bar's foot while a strip is open over the bar: when the lift leaves the box no room
+    /// under the transport even at 75% (the Style row open, a phone across), the box goes over the transport, 8 pt
+    /// clear, under the top bar, so it stays readable while the viewer tunes it (Pixel walk 2026-11-09 L23).
     static func subtitle(
         screenHeight: CGFloat, pictureHeight: CGFloat, safeBottom: CGFloat, controlsShown: Bool, scrubberTop: CGFloat, boxHeight: CGFloat,
-        pillTop: CGFloat? = nil, position: Int = PlayerLayout.defaultPosition
+        pillTop: CGFloat? = nil, position: Int = PlayerLayout.defaultPosition, stripUnder: CGFloat? = nil
     ) -> (foot: CGFloat, scale: CGFloat) {
         let pictureBottom = (screenHeight + pictureHeight) / 2
         let plain = controlsShown ? scrubberTop - subtitleGap : screenHeight - PlayerLayout.subtitleClear(screenHeight: screenHeight, safeBottom: safeBottom)
@@ -671,9 +674,19 @@ extension PhoneFrame {
         let low = min(pictureFoot, plain) - PlayerLayout.extraLift(pictureHeight: pictureHeight, position: position)
         let foot = overPill - boxHeight * subtitleFloor >= clear ? min(low, overPill) : low
         let room = foot - clear
-        guard boxHeight > room else { return (foot, 1) }
-        if boxHeight * subtitleShrink <= room { return (foot, subtitleShrink) }
-        return (foot, max(room / boxHeight, subtitleFloor))
+        if let top = stripUnder, boxHeight * subtitleFloor > room {
+            let over = screenHeight / 2 - transportHalfHeight - subtitleGap
+            let roomOver = over - top - subtitleGap
+            if roomOver > room { return (over, fit(boxHeight, in: roomOver)) }
+        }
+        return (foot, fit(boxHeight, in: room))
+    }
+
+    /// The size a box draws at in `room`: whole, else 85%, else smaller down to the floor.
+    private static func fit(_ boxHeight: CGFloat, in room: CGFloat) -> CGFloat {
+        guard boxHeight > room else { return 1 }
+        if boxHeight * subtitleShrink <= room { return subtitleShrink }
+        return max(room / boxHeight, subtitleFloor)
     }
 }
 
