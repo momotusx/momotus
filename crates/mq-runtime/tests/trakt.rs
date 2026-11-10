@@ -380,7 +380,7 @@ fn record(account: &str) -> TraktRecord {
     serde_json::from_value(json!({
         "accessToken": "access", "refreshToken": "refresh", "createdAtMs": now,
         "expiresAtMs": now + 7 * 86_400_000, "scope": "public", "account": account,
-        "user": "tester", "revision": 0, "generation": 1
+        "user": "tester", "revision": 0, "generation": 1, "chain": "c0"
     }))
     .unwrap()
 }
@@ -1377,7 +1377,7 @@ async fn signing_out_drops_the_accounts_work_and_keeps_the_library() {
     core.library()
         .set_setting("p", "trakt.device.42", "\"a-out\"", core.clock())
         .unwrap();
-    core.trakt_sign_out().await.unwrap();
+    core.trakt_sign_out(false).await.unwrap();
     fake.wait_for("the revoke", |f| f.seen("POST", "/oauth/revoke").len() == 1)
         .await;
     assert_eq!(pending(&core, "a-out"), 0);
@@ -1388,7 +1388,7 @@ async fn signing_out_drops_the_accounts_work_and_keeps_the_library() {
     core.library()
         .set_setting("p", "trakt.device.42", "null", core.clock())
         .unwrap();
-    core.trakt_sign_out().await.unwrap();
+    core.trakt_sign_out(false).await.unwrap();
     assert_eq!(status(&core).state, TraktState::Off);
 }
 
@@ -1705,7 +1705,7 @@ async fn a_sign_out_during_a_sign_in_stays_signed_out() {
         !f.seen("GET", "/users/settings").is_empty()
     })
     .await;
-    core.trakt_sign_out().await.unwrap();
+    core.trakt_sign_out(false).await.unwrap();
     until("the sign-in's end", || {
         matches!(login.snapshot(), TraktLoginSnapshot::Failed { .. })
     })
@@ -2712,7 +2712,7 @@ async fn signing_out_never_waits_for_the_network() {
     })
     .await;
     let started = std::time::Instant::now();
-    core.trakt_sign_out().await.unwrap();
+    core.trakt_sign_out(false).await.unwrap();
     let took = started.elapsed();
     assert!(took < Duration::from_secs(1), "sign-out took {took:?}");
     assert_eq!(status(&core).state, TraktState::Off);
@@ -2789,7 +2789,7 @@ async fn a_lookup_answered_after_sign_out_writes_nothing() {
         !f.seen("GET", "/meta/series/tt300.json").is_empty()
     })
     .await;
-    core.trakt_sign_out().await.unwrap();
+    core.trakt_sign_out(false).await.unwrap();
     let _ = round.await.unwrap();
     let rows = core.library().tracker_states(key("a-out-map"), "").unwrap();
     assert!(rows.is_empty(), "written after the sign-out: {rows:?}");
@@ -3340,4 +3340,686 @@ async fn a_device_whose_user_connected_never_reads_not_signed_in() {
     drop(next);
     let after = PlaybackView::open(&core, Vec::new(), episode(3));
     assert_eq!(after.snapshot().trakt, TraktPlayback::Reconnect);
+}
+
+// Trakt for the whole Momotus account (plans/trakt-account.md): devices of
+// one account over a local relay, each on the fake Trakt.
+
+/// A device of the account: its core and its sync record.
+struct Member {
+    core: Core,
+    record: std::sync::Mutex<mq_sync::SyncConfig>,
+}
+
+impl Member {
+    fn new(core: Core, config: mq_sync::SyncConfig) -> Self {
+        Self {
+            core,
+            record: std::sync::Mutex::new(config),
+        }
+    }
+
+    fn config(&self) -> mq_sync::SyncConfig {
+        self.record.lock().unwrap().clone()
+    }
+
+    /// One round, as the apps run it: a changed record is kept and the
+    /// round runs again at once.
+    async fn sync(&self) {
+        self.try_sync().await.unwrap();
+    }
+
+    async fn try_sync(&self) -> Result<(), mq_sync::SyncError> {
+        loop {
+            let report = self.core.sync_from(&self.config(), None).await?;
+            if let Some(record) = report.record {
+                *self.record.lock().unwrap() = record;
+            }
+            if !report.again {
+                return Ok(());
+            }
+        }
+    }
+
+    /// This member ran the profile's rounds for an hour: it may refresh.
+    fn settle(&self) {
+        let now = mq_library::hlc::now_ms();
+        self.beat(&self.config().member_hex(), now - 3_600_000, now);
+    }
+
+    /// Writes `member`'s activity as this device saw it.
+    fn beat(&self, member: &str, since: u64, at: u64) {
+        let value = json!({"since": since, "at": at}).to_string();
+        let key = format!("trakt.active.{member}");
+        self.core
+            .library()
+            .set_setting(self.core.profile(), &key, &value, self.core.clock())
+            .unwrap();
+    }
+
+    /// Stores the record the `trakt` view offers, as the app does.
+    async fn store(&self) -> TraktRecord {
+        let offered = status(&self.core).record.expect("offered to the app");
+        self.core.set_trakt(Some(offered.clone())).await.unwrap();
+        offered
+    }
+
+    fn link(&self) -> Value {
+        let settings = self.core.library().settings(self.core.profile()).unwrap();
+        let (_, value) = settings
+            .into_iter()
+            .rev()
+            .find(|(k, _)| k == "trakt.link")
+            .expect("a link");
+        serde_json::from_str(&value).unwrap()
+    }
+}
+
+struct Account {
+    fake: Fake,
+    base: String,
+    a: Member,
+    b: Member,
+    _relay: Dir,
+}
+
+fn http() -> mq_http::HttpClient {
+    mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap()
+}
+
+/// A local relay with its database in `dir`.
+async fn relay(dir: &Dir) -> String {
+    let app = mq_sync_server::router(&dir.0.join("relay.sqlite"), Default::default()).unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+    server
+}
+
+async fn on_fake(core: &Core, base: &str) {
+    core.set_trakt_config(Some(config(base)));
+    core.install_addon(&format!("{base}/manifest.json"))
+        .await
+        .unwrap();
+}
+
+/// A creates a Momotus account and B joins it; both ran a round.
+async fn account(name: &str) -> Account {
+    let fake = Fake::new(name);
+    let base = fake.start().await;
+    let dir = Dir::new(name);
+    let server = relay(&dir).await;
+    let (a, b) = (Core::temporary("p").unwrap(), Core::temporary("p").unwrap());
+    on_fake(&a, &base).await;
+    on_fake(&b, &base).await;
+    let http = http();
+    let config = mq_sync::create_account(&http, &server, None, "A")
+        .await
+        .unwrap();
+    let a = Member::new(a, config);
+    a.sync().await;
+    let joining = mq_sync::pair::start_pairing(&http, &server).await.unwrap();
+    let (_, config) = mq_sync::pair::approve_pairing(
+        a.core.library(),
+        &http,
+        &a.config(),
+        a.core.clock(),
+        &joining.qr,
+    )
+    .await
+    .unwrap();
+    *a.record.lock().unwrap() = config;
+    let offer = joining.poll(&http).await.unwrap().expect("approved");
+    let joined = joining.claim(&http, offer, "B").await.unwrap();
+    let b = Member::new(b, joined);
+    a.sync().await;
+    b.sync().await;
+    Account {
+        fake,
+        base,
+        a,
+        b,
+        _relay: dir,
+    }
+}
+
+/// A record past three quarters of its life: due for the refresh.
+fn aging(account: &str) -> TraktRecord {
+    let now = mq_library::hlc::now_ms();
+    TraktRecord {
+        created_at_ms: now - 6 * 86_400_000,
+        expires_at_ms: now + 86_400_000,
+        ..record(account)
+    }
+}
+
+/// A stored record handed over as after an app restart: the process holds
+/// no newer connection, so only the account's rules can refuse it.
+fn restarted(record: TraktRecord) -> TraktRecord {
+    TraktRecord {
+        generation: 99,
+        ..record
+    }
+}
+
+fn rotated(access: &str) -> Reply {
+    reply(
+        200,
+        json!({"access_token": access, "refresh_token": format!("{access}-refresh"),
+               "expires_in": 604_800, "created_at": now() / 1000, "scope": "public",
+               "token_type": "bearer"}),
+    )
+}
+
+/// The bearer tokens the fake saw on scrobbles, in order.
+fn scrobble_tokens(fake: &Fake) -> Vec<String> {
+    let seen = fake.seen.lock().unwrap();
+    seen.iter()
+        .filter(|r| r.path.starts_with("/scrobble/"))
+        .map(|r| r.token.clone())
+        .collect()
+}
+
+/// Connected once on A: B's sync gives it the account's sign-in, it says so,
+/// and its plays reach Trakt. Before the link reaches its round it says it
+/// is waiting for the sign-in, never "not signed in".
+#[tokio::test]
+async fn a_link_reaches_the_second_device_and_it_scrobbles() {
+    let t = account("a-link").await;
+    t.a.core.set_trakt(Some(record("a-link"))).await.unwrap();
+    t.a.sync().await;
+    assert!(status(&t.a.core).shared, "A's sign-in is the account's");
+    let link = t.a.link();
+    assert_eq!(link["chain"], "c0");
+    assert!(link["sealed"].is_string(), "{link}");
+    // B pulls the link without running its round (no Trakt app for now).
+    t.b.core.set_trakt_config(None);
+    t.b.sync().await;
+    t.b.core.set_trakt_config(Some(config(&t.base)));
+    assert_eq!(status(&t.b.core).state, TraktState::Linking);
+    let waiting = PlaybackView::open(&t.b.core, Vec::new(), episode(1));
+    assert_eq!(waiting.snapshot().trakt, TraktPlayback::Linking);
+    drop(waiting);
+    t.b.sync().await;
+    let s = status(&t.b.core);
+    assert_eq!(s.state, TraktState::Connected);
+    assert!(s.shared);
+    assert_eq!(s.user.as_deref(), Some("tester"));
+    assert_eq!(t.b.store().await.chain, "c0");
+    assert!(status(&t.b.core).record.is_none(), "stored");
+    let playing = PlaybackView::open(&t.b.core, Vec::new(), episode(1));
+    playing.report_progress(at(10), MINUTES, false);
+    t.fake
+        .wait_for("B's start", |f| f.scrobbles().len() == 1)
+        .await;
+    until("recorded", || playing.snapshot().trakt == TraktPlayback::On).await;
+    assert_eq!(scrobble_tokens(&t.fake), ["access"]);
+}
+
+/// The owner's update (2026-11-11: never sign in to Trakt again on a device of
+/// the account): A holds a per-device sign-in stored before chains existed.
+/// After the update it publishes it to the account on its own, with no user
+/// action, and B, holding no record (a reinstalled TV), takes it at its next
+/// sync and scrobbles. A also stores the record again, now with its chain.
+#[tokio::test]
+async fn a_legacy_sign_in_is_published_and_a_device_with_none_scrobbles() {
+    let t = account("a-legacy").await;
+    let legacy = TraktRecord {
+        chain: String::new(),
+        ..record("a-legacy")
+    };
+    t.a.core.set_trakt(Some(legacy)).await.unwrap();
+    let chained = t.a.store().await;
+    assert_eq!(chained.chain.len(), 32, "a chain id is given");
+    assert_eq!(status(&t.b.core).state, TraktState::Off);
+    t.a.sync().await;
+    assert_eq!(t.a.link()["chain"], chained.chain.as_str());
+    t.b.sync().await;
+    let s = status(&t.b.core);
+    assert_eq!((s.state, s.shared), (TraktState::Connected, true));
+    assert_eq!(t.b.store().await.chain, chained.chain);
+    let playing = PlaybackView::open(&t.b.core, Vec::new(), episode(1));
+    playing.report_progress(at(10), MINUTES, false);
+    t.fake
+        .wait_for("B's start", |f| f.scrobbles().len() == 1)
+        .await;
+    until("recorded", || playing.snapshot().trakt == TraktPlayback::On).await;
+    assert_eq!(scrobble_tokens(&t.fake), ["access"]);
+    assert!(
+        t.fake.seen("POST", "/oauth/device/code").is_empty(),
+        "no sign-in anywhere"
+    );
+}
+
+/// The first sync after the update: A and B each hold their own sign-in at
+/// revision 0. The link's chain wins on both, with no revoke.
+#[tokio::test]
+async fn two_chains_at_equal_revision_converge() {
+    let t = account("a-mig").await;
+    let own = |chain: &str, access: &str| TraktRecord {
+        chain: chain.into(),
+        access_token: access.into(),
+        ..record("a-mig")
+    };
+    t.a.core
+        .set_trakt(Some(own("chain-a", "access-a")))
+        .await
+        .unwrap();
+    t.b.core
+        .set_trakt(Some(own("chain-b", "access-b")))
+        .await
+        .unwrap();
+    t.a.sync().await;
+    t.b.sync().await;
+    t.a.sync().await;
+    assert_eq!(t.a.link()["chain"], "chain-a");
+    assert_eq!(t.b.link()["chain"], "chain-a");
+    assert_eq!(t.b.store().await.access_token, "access-a");
+    let playing = PlaybackView::open(&t.b.core, Vec::new(), episode(1));
+    playing.report_progress(at(10), MINUTES, false);
+    t.fake
+        .wait_for("B's start", |f| f.scrobbles().len() == 1)
+        .await;
+    assert_eq!(scrobble_tokens(&t.fake), ["access-a"]);
+    assert!(t.fake.seen("POST", "/oauth/revoke").is_empty());
+}
+
+/// Signs in by device code, as a TV does; the app stores the record.
+async fn sign_in_by_code(core: &Core, fake: &Fake, code: &str, access: &str) {
+    fake.queue(
+        "POST /oauth/device/code",
+        vec![reply(
+            200,
+            json!({"device_code": code, "user_code": "CODE1234",
+                   "verification_url": "https://auth.trakt.tv/activate", "expires_in": 600, "interval": 1}),
+        )],
+    );
+    fake.queue(
+        &format!("POST /oauth/device/token#{code}"),
+        vec![rotated(access)],
+    );
+    let login = TraktLoginView::open(core);
+    until("the sign-in", || {
+        matches!(login.snapshot(), TraktLoginSnapshot::Done { .. })
+    })
+    .await;
+    let offered = status(core).record.expect("offered");
+    core.set_trakt(Some(offered)).await.unwrap();
+}
+
+/// A and B both sign in before either syncs: the link written last wins on
+/// both.
+#[tokio::test]
+async fn two_sign_ins_at_once_converge() {
+    let t = account("a-twice").await;
+    sign_in_by_code(&t.a.core, &t.fake, "dev-a", "access-a").await;
+    sign_in_by_code(&t.b.core, &t.fake, "dev-b", "access-b").await;
+    t.a.sync().await;
+    t.b.sync().await;
+    t.a.sync().await;
+    t.b.sync().await;
+    let chain = t.b.link()["chain"].clone();
+    assert_eq!(t.a.link()["chain"], chain);
+    let taken = t.a.store().await;
+    assert_eq!(taken.chain, chain.as_str().unwrap());
+    assert_eq!(taken.access_token, "access-b", "B's sign-in came last");
+    assert!(status(&t.b.core).record.is_none(), "B keeps its own");
+}
+
+/// A, the account's refresher, rotates the chain while B plays: B takes the
+/// newer revision at its next sync, its playing session goes on, and its
+/// next scrobble carries the new token. B never refreshes by itself.
+#[tokio::test]
+async fn a_rotation_keeps_bound_and_the_playing_session_scrobbles() {
+    let t = account("a-rot").await;
+    t.a.core.set_trakt(Some(aging("a-rot"))).await.unwrap();
+    t.a.sync().await;
+    t.b.sync().await;
+    t.b.store().await;
+    let playing = PlaybackView::open(&t.b.core, Vec::new(), episode(1));
+    playing.report_progress(at(10), MINUTES, false);
+    t.fake
+        .wait_for("B's start", |f| f.scrobbles().len() == 1)
+        .await;
+    t.a.settle();
+    t.fake
+        .queue("POST /oauth/token", vec![rotated("new-access")]);
+    t.a.sync().await;
+    assert_eq!(t.a.link()["chain"], "c0");
+    t.b.sync().await;
+    let rotation = t.b.store().await;
+    assert_eq!(
+        (rotation.revision, rotation.access_token.as_str()),
+        (1, "new-access")
+    );
+    playing.report_progress(at(20), MINUTES, true);
+    t.fake
+        .wait_for("B's pause", |f| f.scrobbles().len() == 2)
+        .await;
+    assert_eq!(scrobble_tokens(&t.fake), ["access", "new-access"]);
+    assert_eq!(
+        t.fake.seen("POST", "/oauth/token").len(),
+        1,
+        "only A refreshed"
+    );
+}
+
+/// B is the refresher, but its refresh is refused (as if another device had
+/// spent the token): it keeps using the held token, is never told to sign in
+/// again, and takes the newer revision once it arrives.
+#[tokio::test]
+async fn the_refresh_loser_waits_and_adopts_the_winner() {
+    let t = account("a-lose").await;
+    t.a.core.set_trakt(Some(aging("a-lose"))).await.unwrap();
+    t.a.sync().await;
+    t.b.sync().await;
+    t.b.store().await;
+    t.b.settle();
+    t.fake.queue(
+        "POST /oauth/token",
+        vec![reply(400, json!({"error": "invalid_grant"}))],
+    );
+    t.b.sync().await;
+    assert_eq!(t.fake.seen("POST", "/oauth/token").len(), 1);
+    assert_eq!(status(&t.b.core).state, TraktState::Connected, "waiting");
+    let playing = PlaybackView::open(&t.b.core, Vec::new(), episode(1));
+    playing.report_progress(at(10), MINUTES, false);
+    t.fake
+        .wait_for("B's start", |f| f.scrobbles().len() == 1)
+        .await;
+    until("recorded", || playing.snapshot().trakt == TraktPlayback::On).await;
+    // A refreshes: B is not active as A sees it, A is settled.
+    let now = mq_library::hlc::now_ms();
+    t.a.beat(
+        &t.b.config().member_hex(),
+        now - 3 * 86_400_000,
+        now - 2 * 86_400_000,
+    );
+    t.a.settle();
+    t.fake.queue("POST /oauth/token", vec![rotated("won")]);
+    t.a.sync().await;
+    t.b.sync().await;
+    assert_eq!(t.b.store().await.access_token, "won");
+    playing.report_progress(at(20), MINUTES, true);
+    t.fake
+        .wait_for("B's pause", |f| f.scrobbles().len() == 2)
+        .await;
+    assert_eq!(scrobble_tokens(&t.fake), ["access", "won"]);
+    assert_eq!(t.fake.seen("POST", "/oauth/token").len(), 2, "B tried once");
+}
+
+/// The chain ended on Trakt (revoked there): the refresh is refused and the
+/// held token is refused too, with no newer revision anywhere. Then, and only
+/// then, the device says to sign in again; it tries no further refresh.
+#[tokio::test]
+async fn a_revoked_chain_with_no_newer_link_reaches_reconnect() {
+    let t = account("a-revoked").await;
+    t.a.core.set_trakt(Some(aging("a-revoked"))).await.unwrap();
+    t.a.settle();
+    t.fake.queue(
+        "POST /oauth/token",
+        vec![reply(400, json!({"error": "invalid_grant"}))],
+    );
+    t.a.sync().await;
+    assert_eq!(status(&t.a.core).state, TraktState::Connected, "waiting");
+    t.fake
+        .queue("POST /scrobble/start", vec![reply(401, json!({}))]);
+    let playing = PlaybackView::open(&t.a.core, Vec::new(), episode(1));
+    playing.report_progress(at(10), MINUTES, false);
+    until("the refused token seen", || {
+        matches!(status(&t.a.core).state, TraktState::Reconnect { .. })
+    })
+    .await;
+    until("shown", || {
+        playing.snapshot().trakt == TraktPlayback::Reconnect
+    })
+    .await;
+    t.a.sync().await;
+    assert_eq!(
+        t.fake.seen("POST", "/oauth/token").len(),
+        1,
+        "no second refresh"
+    );
+}
+
+/// A disconnects while B rotates the chain: B's rotation lands on the relay
+/// after A's disconnect, and A writes the disconnect again, so B drops too.
+#[tokio::test]
+async fn off_survives_a_concurrent_rotation() {
+    let t = account("a-offrot").await;
+    t.a.core.set_trakt(Some(aging("a-offrot"))).await.unwrap();
+    t.a.sync().await;
+    t.b.sync().await;
+    t.b.store().await;
+    t.a.core.trakt_sign_out(false).await.unwrap();
+    t.b.settle();
+    t.fake.queue("POST /oauth/token", vec![rotated("rotated")]);
+    t.b.sync().await;
+    assert!(t.b.link()["sealed"].is_string(), "B's rotation");
+    t.a.sync().await;
+    t.b.sync().await;
+    assert_eq!(t.b.link()["off"], true);
+    let s = status(&t.b.core);
+    assert_eq!(s.state, TraktState::OffEverywhere);
+    assert!(s.drop_stored, "the app deletes its record");
+    let playing = PlaybackView::open(&t.b.core, Vec::new(), episode(1));
+    assert_eq!(playing.snapshot().trakt, TraktPlayback::Off);
+}
+
+/// Disconnect on B: one revoke, and A drops the sign-in at its next sync.
+/// A's app then hands over its old stored record at start: refused.
+#[tokio::test]
+async fn disconnect_on_one_device_drops_every_device() {
+    let t = account("a-off").await;
+    t.a.core.set_trakt(Some(record("a-off"))).await.unwrap();
+    t.a.sync().await;
+    t.b.sync().await;
+    t.b.store().await;
+    t.b.core.trakt_sign_out(false).await.unwrap();
+    assert_eq!(status(&t.b.core).state, TraktState::OffEverywhere);
+    t.b.sync().await;
+    t.a.sync().await;
+    let s = status(&t.a.core);
+    assert_eq!(s.state, TraktState::OffEverywhere);
+    assert!(s.drop_stored);
+    assert!(!t.a.core.trakt_held().unwrap());
+    t.fake
+        .wait_for("one revoke", |f| f.seen("POST", "/oauth/revoke").len() == 1)
+        .await;
+    // a_stale_keystore_record_of_an_off_chain_is_refused_at_start: as after a
+    // restart, no newer connection in memory to refuse it (a high generation).
+    t.a.core
+        .set_trakt(Some(restarted(record("a-off"))))
+        .await
+        .unwrap();
+    let s = status(&t.a.core);
+    assert_eq!(s.state, TraktState::OffEverywhere);
+    assert!(s.drop_stored && s.record.is_none());
+    // Connected again on B: the new sign-in is the account's link, and A takes it.
+    sign_in_by_code(&t.b.core, &t.fake, "dev-again", "again").await;
+    t.b.sync().await;
+    t.a.sync().await;
+    assert_eq!(status(&t.a.core).state, TraktState::Connected);
+    assert_eq!(t.a.store().await.access_token, "again");
+}
+
+/// Leaving the account (D13) drops only B's copy: no revoke, A stays
+/// connected, and B's wipe is no longer held back.
+#[tokio::test]
+async fn leaving_the_account_sends_no_revoke() {
+    let t = account("a-leave").await;
+    t.a.core.set_trakt(Some(record("a-leave"))).await.unwrap();
+    t.a.sync().await;
+    t.b.sync().await;
+    t.b.store().await;
+    assert!(t.b.core.trakt_held().unwrap());
+    t.b.core.trakt_sign_out(true).await.unwrap();
+    assert!(!t.b.core.trakt_held().unwrap(), "the wipe may go on");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(t.fake.seen("POST", "/oauth/revoke").is_empty());
+    t.a.sync().await;
+    assert_eq!(status(&t.a.core).state, TraktState::Connected);
+    assert_eq!(t.a.link()["chain"], "c0", "the account's link stays");
+}
+
+/// B is removed from the account. It refreshes only after a pull, and its
+/// pull says it is out: it never refreshes the shared chain, drops its copy,
+/// refuses it when the app hands it over again, and A stays connected.
+#[tokio::test]
+async fn a_removed_device_never_refreshes_and_the_others_stay_connected() {
+    let t = account("a-removed").await;
+    t.a.core.set_trakt(Some(aging("a-removed"))).await.unwrap();
+    t.a.sync().await;
+    t.b.sync().await;
+    let stored = t.b.store().await;
+    t.b.settle();
+    let gone = vec![t.b.config().secret().id()];
+    let kept = mq_sync::remove_devices(
+        t.a.core.library(),
+        &http(),
+        &t.a.config(),
+        t.a.core.clock(),
+        gone,
+    )
+    .await
+    .unwrap();
+    *t.a.record.lock().unwrap() = kept;
+    let out = t.b.try_sync().await;
+    assert!(matches!(out, Err(mq_sync::SyncError::Dropped)), "{out:?}");
+    assert!(status(&t.b.core).drop_stored);
+    t.b.core.set_trakt(Some(restarted(stored))).await.unwrap();
+    assert_ne!(status(&t.b.core).state, TraktState::Connected);
+    assert!(
+        t.fake.seen("POST", "/oauth/token").is_empty(),
+        "B never refreshed"
+    );
+    assert!(t.fake.seen("POST", "/oauth/revoke").is_empty());
+    assert_eq!(status(&t.a.core).state, TraktState::Connected);
+}
+
+/// The refresher rotates and the app never stores the rotation (killed
+/// first). After the restart the old stored record is handed over, and the
+/// next sync takes the rotation back from the link.
+#[tokio::test]
+async fn an_unacked_rotation_comes_back_from_the_link_after_a_restart() {
+    let fake = Fake::new("a-restart");
+    let base = fake.start().await;
+    let relay_dir = Dir::new("restart-relay");
+    let server = relay(&relay_dir).await;
+    let dir = Dir::new("restart");
+    let sync = mq_sync::create_account(&http(), &server, None, "A")
+        .await
+        .unwrap();
+    let sync = {
+        let a = Member::new(dir.core(), sync);
+        on_fake(&a.core, &base).await;
+        // In the account before the app hands its record over, as at any start.
+        a.sync().await;
+        a.core.set_trakt(Some(aging("a-restart"))).await.unwrap();
+        a.sync().await;
+        a.settle();
+        fake.queue("POST /oauth/token", vec![rotated("kept")]);
+        a.sync().await;
+        assert_eq!(status(&a.core).record.unwrap().revision, 1, "not stored");
+        a.config()
+    };
+    let a = Member::new(dir.core(), sync);
+    a.core.set_trakt_config(Some(config(&base)));
+    a.core.set_trakt(Some(aging("a-restart"))).await.unwrap();
+    a.sync().await;
+    let back = a.store().await;
+    assert_eq!((back.revision, back.access_token.as_str()), (1, "kept"));
+    assert_eq!(fake.seen("POST", "/oauth/token").len(), 1);
+}
+
+fn set_kids(core: &Core, kids: bool) {
+    let access = mq_library::SyncRecord {
+        coll: mq_library::coll::PROFILE_ACCESS,
+        key: "p".into(),
+        value: json!({"profile": "p", "kids": kids}),
+        hlc: core.hlc(),
+    };
+    core.library().apply(&[access]).unwrap();
+}
+
+/// A kids profile never opens the account's link and never says Trakt is
+/// waiting; turned back to adult, it takes the link at its next sync.
+#[tokio::test]
+async fn a_kids_profile_never_opens_the_link() {
+    let t = account("a-kids").await;
+    t.a.core.set_trakt(Some(record("a-kids"))).await.unwrap();
+    t.a.sync().await;
+    set_kids(&t.b.core, true);
+    t.b.sync().await;
+    let s = status(&t.b.core);
+    assert_eq!(s.state, TraktState::Off);
+    assert!(s.record.is_none());
+    set_kids(&t.b.core, false);
+    t.b.sync().await;
+    assert_eq!(status(&t.b.core).state, TraktState::Connected);
+}
+
+/// Neither the library files nor an Incognito directory opened after the
+/// round hold a token, and Incognito copies no Trakt setting.
+#[tokio::test]
+async fn the_library_files_hold_no_token() {
+    let fake = Fake::new("a-files");
+    let base = fake.start().await;
+    let relay_dir = Dir::new("files-relay");
+    let server = relay(&relay_dir).await;
+    let dir = Dir::new("files");
+    let config = mq_sync::create_account(&http(), &server, None, "A")
+        .await
+        .unwrap();
+    let a = Member::new(dir.core(), config);
+    on_fake(&a.core, &base).await;
+    let secret = TraktRecord {
+        access_token: "tok-access-7f3a91".into(),
+        refresh_token: "tok-refresh-9c1e52".into(),
+        ..record("a-files")
+    };
+    a.core.set_trakt(Some(secret)).await.unwrap();
+    a.sync().await;
+    assert!(a.link()["sealed"].is_string());
+    // incognito_copies_no_trakt_key
+    let incognito = a.core.open_incognito().unwrap();
+    let copied = incognito.library().settings(incognito.profile()).unwrap();
+    assert!(
+        !copied.iter().any(|(k, _)| k.starts_with("trakt.")),
+        "{copied:?}"
+    );
+    let mut files = vec![dir.0.clone()];
+    let mut read = 0;
+    while let Some(path) = files.pop() {
+        if path.is_dir() {
+            files.extend(std::fs::read_dir(&path).unwrap().map(|e| e.unwrap().path()));
+            continue;
+        }
+        let bytes = std::fs::read(&path).unwrap_or_default();
+        read += 1;
+        for token in ["tok-access-7f3a91", "tok-refresh-9c1e52"] {
+            let found = bytes.windows(token.len()).any(|w| w == token.as_bytes());
+            assert!(!found, "{token} in {}", path.display());
+        }
+    }
+    assert!(read >= 2, "the library and its log were read");
+    drop(incognito);
+}
+
+/// No Momotus account: the device keeps its own sign-in as before. It
+/// refreshes by itself and writes no link.
+#[tokio::test]
+async fn a_device_without_an_account_keeps_its_own_link() {
+    let (core, fake) = setup("a-solo").await;
+    core.set_trakt(Some(aging("a-solo"))).await.unwrap();
+    fake.queue("POST /oauth/token", vec![rotated("own")]);
+    let playing = PlaybackView::open(&core, Vec::new(), episode(1));
+    playing.report_progress(at(10), MINUTES, false);
+    fake.wait_for("the start", |f| f.scrobbles().len() == 1)
+        .await;
+    assert_eq!(scrobble_tokens(&fake), ["own"]);
+    let s = status(&core);
+    assert!(!s.shared);
+    let settings = core.library().settings("p").unwrap();
+    assert!(!settings.iter().any(|(k, _)| k == "trakt.link"));
 }

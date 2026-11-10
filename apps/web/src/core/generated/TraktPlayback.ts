@@ -3,4 +3,4 @@
 /**
  * Trakt's side of a playback (`PlaybackSnapshot.trakt`).
  */
-export type TraktPlayback = "on" | "unmapped" | "off" | "thisDeviceOff" | "reconnect";
+export type TraktPlayback = "on" | "unmapped" | "off" | "thisDeviceOff" | "reconnect" | "linking";

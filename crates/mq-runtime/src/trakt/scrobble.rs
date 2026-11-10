@@ -59,6 +59,9 @@ pub enum TraktPlayback {
     /// This device signed in, but Trakt ended its sign-in (a refresh
     /// refused): sign in again. Never shown as "not signed in".
     Reconnect,
+    /// In a Momotus account: the account's Trakt sign-in has not reached
+    /// this device yet.
+    Linking,
 }
 
 pub(crate) type Report = Box<dyn Fn(TraktPlayback) + Send>;
@@ -183,6 +186,10 @@ impl Core {
         let bound = futures_util::FutureExt::now_or_never(conn.auth.bound()).flatten();
         report(match bound {
             Some(_) => shown(&conn),
+            None if super::link::in_account(self) => match super::account_state(self) {
+                super::TraktState::Linking => TraktPlayback::Linking,
+                _ => TraktPlayback::Off,
+            },
             None if super::setting(self, ACCOUNT_SETTING).is_some() => TraktPlayback::ThisDeviceOff,
             None => TraktPlayback::Off,
         });

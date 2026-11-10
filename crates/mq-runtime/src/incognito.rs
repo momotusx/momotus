@@ -142,7 +142,12 @@ impl Core {
                     library.set_plugin_off(INCOGNITO, &repo.url, off, true)?;
                 }
             }
+            // Never a Trakt setting: Incognito has no Trakt, and the
+            // account's sealed link stays out of this directory.
             for (key, value) in from.settings(profile)? {
+                if key.starts_with("trakt.") {
+                    continue;
+                }
                 library.set_setting(INCOGNITO, &key, &value, self.clock())?;
             }
             Ok::<_, IncognitoError>((lock, library))

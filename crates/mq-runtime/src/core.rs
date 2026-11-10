@@ -738,6 +738,20 @@ impl Core {
         core.note_sync_member(config);
         let report =
             mq_sync::sync_from(core.library(), core.http(), config, core.clock(), home).await;
+        // The account's Trakt link, right after the pull (plans/trakt-account.md
+        // 3.3); never for an Incognito session. A device that left the
+        // account keeps no copy of its shared Trakt sign-in.
+        match &report {
+            // A record the round changed is the one to push with.
+            Ok(r) if !self.incognito() => {
+                core.trakt_link_round(r.record.as_ref().unwrap_or(config))
+                    .await;
+            }
+            Err(mq_sync::SyncError::Dropped | mq_sync::SyncError::AccountGone) => {
+                core.trakt_left_account();
+            }
+            _ => {}
+        }
         // A synced switch, kids register or removal may leave no profile
         // that wants the Archive's list (plans/plugins-and-marketplace.md 5.1).
         if report.is_ok() {

@@ -62,6 +62,8 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["s
 
 [dev-dependencies]
 mq-http = { path = "../mq-http", features = ["test-dns"] }
+# Devices of one account over a local relay (tests/trakt.rs, the account's link).
+mq-sync-server = { path = "../mq-sync-server" }
 mq-relparse = { path = "../mq-relparse" }
 mq-streams = { path = "../mq-streams" }
 # Tests make a stored row unreadable behind the library's back.

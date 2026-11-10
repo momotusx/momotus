@@ -2,6 +2,7 @@
 //! tokens the app hands over, scrobbles from the playback views, pull rounds
 //! into the library through the tracker intents, and their views.
 
+mod link;
 mod login;
 mod lookups;
 mod map;
@@ -92,6 +93,11 @@ pub struct TraktStatus {
     /// A record the app has not stored: store it, then `setTrakt(record)`.
     #[cfg_attr(feature = "ts", ts(type = "unknown"))]
     pub record: Option<TraktRecord>,
+    /// The connection is the Momotus account's: every device of it uses it.
+    pub shared: bool,
+    /// The record this device stored for the profile is no longer its own
+    /// (disconnected for the account, or the account was left): delete it.
+    pub drop_stored: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -116,8 +122,14 @@ pub enum TraktState {
         reason: String,
     },
     Off,
-    /// The profile uses Trakt, this device is not signed in.
+    /// The profile uses Trakt, this device is not signed in (no Momotus
+    /// account: each device signs in itself).
     ThisDeviceOff,
+    /// In a Momotus account: the account's Trakt sign-in has not reached
+    /// this device yet; it takes one sync.
+    Linking,
+    /// In a Momotus account: Trakt was disconnected on every device of it.
+    OffEverywhere,
     /// This build has no Trakt app.
     NotConfigured,
 }
@@ -202,6 +214,13 @@ pub(crate) struct Conn {
     /// When the outbox next has a retry due (ms).
     retry_at: Mutex<Option<u64>>,
     created: tokio::time::Instant,
+    /// A sign-in made here that the account's link has not taken yet.
+    signed_in_here: AtomicBool,
+    /// The link holds another Trakt account; one round went by under the
+    /// old one for its waiting writes.
+    deferred: AtomicBool,
+    /// Tells the app to delete its stored record (`TraktStatus::drop_stored`).
+    drop_stored: AtomicBool,
 }
 
 #[derive(Default)]
@@ -282,6 +301,8 @@ impl Trakt {
                         unmapped: Vec::new(),
                         importing: None,
                         record: None,
+                        shared: false,
+                        drop_stored: false,
                     }),
                     health: Mutex::default(),
                     round: tokio::sync::Mutex::new(()),
@@ -295,6 +316,9 @@ impl Trakt {
                     retry_at: Mutex::new(None),
                     stop: self.shutdown.child_token(),
                     created: tokio::time::Instant::now(),
+                    signed_in_here: AtomicBool::new(false),
+                    deferred: AtomicBool::new(false),
+                    drop_stored: AtomicBool::new(false),
                 })
             })
             .clone()
@@ -431,6 +455,14 @@ impl Core {
             return Err(CoreError::Trakt(KIDS.into()));
         }
         let conn = self.trakt_conn();
+        // A disconnected chain, or the shared chain of an account this device
+        // left, is never used again: the app deletes it.
+        if record.as_ref().is_some_and(|r| link::refused(self, r)) {
+            conn.drop_stored.store(true, Ordering::SeqCst);
+            self.trakt_refresh(&conn);
+            return Ok(());
+        }
+        conn.auth.set_shared(link::in_account(self)).await;
         let account = record.as_ref().map(|r| (r.account.clone(), r.generation));
         if conn.auth.set(record).await
             && let Some((account, generation)) = account
@@ -461,6 +493,8 @@ impl Core {
             // record (at start, after `open`) connects it.
             None => return Err(CoreError::Trakt(READ_AGAIN.into())),
         }
+        conn.drop_stored.store(false, Ordering::SeqCst);
+        let _ = futures_util::FutureExt::now_or_never(conn.auth.set_shared(link::in_account(self)));
         let library = self.library();
         let profile = self.profile();
         let known = library.tracker_account(profile, TRACKER)?;
@@ -572,9 +606,19 @@ impl Core {
     /// cursors are dropped, the library keeps what it has. The profile
     /// stops using Trakt when no other device is signed in. The app deletes
     /// its record. Nothing here waits for the network.
-    pub async fn trakt_sign_out(&self) -> Result<(), CoreError> {
+    ///
+    /// In a Momotus account this disconnects every device of it: the chain
+    /// is marked off in the account's link (plans/trakt-account.md 3.5).
+    /// `local` (leaving the account, D13) only drops this device's copy:
+    /// no revoke, the account's connection stays.
+    pub async fn trakt_sign_out(&self, local: bool) -> Result<(), CoreError> {
         let trakt = self.trakt();
         let conn = self.trakt_conn();
+        if local {
+            self.trakt_drop_here(&conn);
+            return Ok(());
+        }
+        let chain = conn.auth.record().await.map(|r| r.chain);
         let token = conn.auth.held_token().await;
         // A sign-in still running loses its claim.
         if let Some(login) = lock(&conn.login).take() {
@@ -593,6 +637,12 @@ impl Core {
         let (library, profile) = (self.library(), self.profile());
         library.set_tracker_account(profile, TRACKER, None, 0, now_ms() as i64)?;
         library.set_setting(profile, &self.trakt_device_setting(), "null", self.clock())?;
+        conn.drop_stored.store(false, Ordering::SeqCst);
+        if link::in_account(self) {
+            self.trakt_off_for_account(chain.as_deref())?;
+            self.trakt_refresh(&conn);
+            return Ok(());
+        }
         let counts = self.trakt_flag_counts()?;
         let others = library
             .settings(profile)?
@@ -680,8 +730,12 @@ impl Core {
             unmapped: Vec::new(),
             importing,
             record,
+            shared: false,
+            drop_stored: conn.drop_stored.load(Ordering::SeqCst),
         };
+        let in_account = link::in_account(self);
         if let Some(account) = &account {
+            status.shared = in_account;
             let key = conn.key(account);
             let (pending, oldest) = self.library().tracker_pending(key).unwrap_or((0, None));
             status.pending_writes = pending as u32;
@@ -699,6 +753,10 @@ impl Core {
                 },
                 _ => TraktState::Connected,
             };
+        } else if in_account {
+            // The account's link says, never `trakt.account` (older builds
+            // write that one at every start).
+            status.state = account_state(self);
         } else if setting(self, ACCOUNT_SETTING).is_some() {
             status.state = TraktState::ThisDeviceOff;
         }
@@ -706,6 +764,19 @@ impl Core {
             status.state = TraktState::NotConfigured;
         }
         status
+    }
+}
+
+/// In a Momotus account with no record held here: what the account's link
+/// says. Kids profiles never see it.
+fn account_state(core: &Core) -> TraktState {
+    if kids(core) {
+        return TraktState::Off;
+    }
+    match link::read(core) {
+        Some(l) if !l.off && !link::offs(core).contains(&l.chain) => TraktState::Linking,
+        Some(_) => TraktState::OffEverywhere,
+        None => TraktState::Off,
     }
 }
 

@@ -160,6 +160,7 @@ fn aging_record() -> TraktRecord {
         user: "someone".into(),
         revision: 0,
         generation: 1,
+        chain: "chain".into(),
     }
 }
 
@@ -750,6 +751,95 @@ async fn a_second_401_after_a_refresh_needs_a_new_sign_in() {
     assert!(matches!(answer, Err(AuthError::Reconnect(_))), "{answer:?}");
     assert!(matches!(auth.status().await, Err(AuthError::Reconnect(_))));
     assert_eq!(mock.seen("/oauth/token").len(), 1, "one refresh, no more");
+}
+
+/// A record rotated on another device and handed over here, on a clock ten
+/// minutes behind Trakt's: its `created_at` reads as the future, yet a 401
+/// refreshes it like any other (the 60-second check reads only this device's
+/// own time of taking it).
+#[tokio::test]
+async fn an_adopted_record_on_a_clock_ten_minutes_behind_is_not_dead() {
+    let mock = Mock::default();
+    mock.on(
+        "/sync/x",
+        vec![json(401, "{}"), json(200, r#"{"ok":true}"#)],
+    );
+    mock.on(
+        "/oauth/token",
+        vec![json(200, &tokens_body("new-access", "new-refresh"))],
+    );
+    let api = api(mock.start().await);
+    let auth = Auth::new("https://example.org/trakt");
+    let now = auth::now_ms();
+    let ahead = TraktRecord {
+        created_at_ms: now + 10 * 60_000,
+        expires_at_ms: now + 7 * 86_400_000,
+        revision: 3,
+        ..aging_record()
+    };
+    assert!(auth.set(Some(ahead)).await);
+    let gate = mq_tracking::trakt::Gate::default();
+    let body = call::body(call::get(&api, &gate, &auth, &bound(), "/sync/x").await).unwrap();
+    assert_eq!(body["ok"], true);
+    assert_eq!(mock.seen("/oauth/token").len(), 1);
+    assert_eq!(auth.status().await, Ok(()));
+}
+
+/// A chain shared by the Momotus account is never refreshed by a call: an
+/// aging token goes out as it is, a 401 waits (`Reconnect`, no refresh), and
+/// a newer revision of the same chain from the account makes it usable again
+/// at the same connection.
+#[tokio::test]
+async fn a_shared_chain_waits_for_the_accounts_refresh() {
+    let mock = Mock::default();
+    mock.on(
+        "/sync/x",
+        vec![json(200, "{}"), json(401, "{}"), json(200, "{}")],
+    );
+    let api = api(mock.start().await);
+    let auth = Auth::new("https://example.org/trakt");
+    auth.set_shared(true).await;
+    assert!(auth.set(Some(aging_record())).await);
+    let gate = mq_tracking::trakt::Gate::default();
+    call::get(&api, &gate, &auth, &bound(), "/sync/x")
+        .await
+        .unwrap();
+    let refused = call::get(&api, &gate, &auth, &bound(), "/sync/x").await;
+    assert!(
+        matches!(refused, Err(AuthError::Reconnect(_))),
+        "{refused:?}"
+    );
+    assert!(
+        mock.seen("/oauth/token").is_empty(),
+        "never refreshed by a call"
+    );
+    let newer = TraktRecord {
+        access_token: "new-access".into(),
+        refresh_token: "new-refresh".into(),
+        revision: 1,
+        generation: 9,
+        ..aging_record()
+    };
+    let other_chain = TraktRecord {
+        chain: "other".into(),
+        revision: 2,
+        ..newer.clone()
+    };
+    assert!(
+        !auth.advance(&other_chain).await,
+        "another chain is no rotation"
+    );
+    assert!(auth.advance(&newer).await);
+    assert!(
+        !auth.advance(&newer).await,
+        "the same revision again is nothing"
+    );
+    assert_eq!(auth.status().await, Ok(()));
+    assert_eq!(auth.bound().await, Some(bound()), "the same connection");
+    call::get(&api, &gate, &auth, &bound(), "/sync/x")
+        .await
+        .unwrap();
+    assert!(mock.seen("/sync/x")[2].head.contains("bearer new-access"));
 }
 
 #[tokio::test]

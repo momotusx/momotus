@@ -32,12 +32,18 @@ pub struct TraktRecord {
     pub revision: u64,
     /// Raised on every new connection.
     pub generation: u64,
+    /// The sign-in this token chain came from (16 random bytes, hex), kept
+    /// through rotations; one Momotus account shares it (plans/trakt-account.md
+    /// 3.1). Empty in a record stored before chains existed.
+    #[serde(default)]
+    pub chain: String,
 }
 
 impl fmt::Debug for TraktRecord {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TraktRecord")
             .field("account", &self.account)
+            .field("chain", &self.chain)
             .field("revision", &self.revision)
             .field("generation", &self.generation)
             .finish_non_exhaustive()
@@ -237,6 +243,27 @@ struct State {
     logins: u64,
     /// After a refresh that got no answer, no new refresh before this.
     retry_at: Option<Instant>,
+    /// When this device rotated the record or took it from the account, by
+    /// its own clock (0: handed over by the app). The 60-second check reads
+    /// this, never Trakt's `created_at` from another device.
+    received_at_ms: u64,
+    /// In a Momotus account the chain is shared: calls use the held token
+    /// and only the account's round refreshes it (`refresh_now`), on one
+    /// device (plans/trakt-account.md 3.4).
+    shared: bool,
+    /// Shared: Trakt refused this revision's refresh token. The held access
+    /// token stays in use until a newer revision arrives or it is refused.
+    spent: bool,
+    /// Shared: Trakt refused the held access token. `Reconnect` until a
+    /// newer revision arrives or the round's refresh works.
+    refused: bool,
+}
+
+/// A new sign-in's chain id: 16 random bytes, hex.
+fn new_chain() -> String {
+    let mut bytes = [0u8; 16];
+    getrandom::fill(&mut bytes).expect("os randomness");
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// The tokens of one profile. The state sits behind a short lock that is
@@ -268,6 +295,7 @@ impl Auth {
                     generation: s.generation + 1,
                     // Every sign-in begun before is stale.
                     logins: s.logins + 1,
+                    shared: s.shared,
                     ..State::default()
                 };
                 true
@@ -278,18 +306,27 @@ impl Auth {
                 if r.revision != held.revision {
                     return false;
                 }
-                s.acked = true;
+                // A record without the chain it was given is not stored yet.
+                s.acked = r.chain == held.chain;
                 true
             }
             // A record from an older connection (a late acknowledgement after
             // a sign-out or a new sign-in) never comes back.
             (Some(r), _) if r.generation < s.generation => false,
-            (Some(r), _) => {
+            (Some(mut r), _) => {
                 s.generation = r.generation;
+                // A record stored before chains existed gets one, and is
+                // offered to the app again to store with it.
+                s.acked = !r.chain.is_empty();
+                if r.chain.is_empty() {
+                    r.chain = new_chain();
+                }
                 s.record = Some(r);
-                s.acked = true;
                 s.dead = None;
                 s.retry_at = None;
+                s.spent = false;
+                s.refused = false;
+                s.received_at_ms = 0;
                 // A record installed or replaced (even at the same
                 // generation) makes every sign-in begun before it stale.
                 s.logins += 1;
@@ -334,12 +371,97 @@ impl Auth {
             user: user.to_owned(),
             revision: 0,
             generation: s.generation,
+            chain: new_chain(),
         };
         s.record = Some(record.clone());
         s.acked = false;
         s.dead = None;
         s.retry_at = None;
+        s.spent = false;
+        s.refused = false;
         Some(record)
+    }
+
+    /// Another chain's record, from the account's link, as a new connection:
+    /// work started under the old one is fenced off. Held until the app
+    /// stores it.
+    pub async fn take(&self, record: TraktRecord) -> TraktRecord {
+        let mut s = lock(&self.state);
+        let generation = s.generation + 1;
+        let record = TraktRecord {
+            generation,
+            ..record
+        };
+        *s = State {
+            record: Some(record.clone()),
+            generation,
+            logins: s.logins + 1,
+            received_at_ms: now_ms(),
+            shared: s.shared,
+            ..State::default()
+        };
+        record
+    }
+
+    /// A newer revision of the held chain (another device rotated it): the
+    /// tokens are replaced and the connection goes on, so `Bound` and running
+    /// sessions keep working. Taken for the same account and chain at a
+    /// higher revision, or at the same one with other tokens.
+    pub async fn advance(&self, record: &TraktRecord) -> bool {
+        let mut s = lock(&self.state);
+        let generation = s.generation;
+        let Some(held) = &s.record else {
+            return false;
+        };
+        let newer = record.revision > held.revision
+            || (record.revision == held.revision && record.refresh_token != held.refresh_token);
+        if !newer
+            || held.chain.is_empty()
+            || (&held.account, &held.chain) != (&record.account, &record.chain)
+        {
+            return false;
+        }
+        s.record = Some(TraktRecord {
+            generation,
+            ..record.clone()
+        });
+        s.acked = false;
+        s.dead = None;
+        s.retry_at = None;
+        s.spent = false;
+        s.refused = false;
+        s.received_at_ms = now_ms();
+        true
+    }
+
+    /// The record held now, acknowledged or not.
+    pub async fn record(&self) -> Option<TraktRecord> {
+        lock(&self.state).record.clone()
+    }
+
+    /// Whether the chain is the Momotus account's (see `State::shared`).
+    pub async fn set_shared(&self, shared: bool) {
+        lock(&self.state).shared = shared;
+    }
+
+    /// The account's refresh, on the one device that makes it: rotates when
+    /// under the spread of the token's lifetime is left, or Trakt refused the
+    /// held token, unless this revision's refresh was already refused.
+    /// Returns the rotated record.
+    pub async fn refresh_now(&self, api: &Api) -> Option<TraktRecord> {
+        let bound = {
+            let s = lock(&self.state);
+            let record = s.record.as_ref()?;
+            if s.dead.is_some() || s.spent || (fresh(record) && !s.refused) {
+                return None;
+            }
+            Bound {
+                account: record.account.clone(),
+                generation: s.generation,
+            }
+        };
+        self.rotate(api, None, &bound, true).await.ok()?;
+        self.record().await
     }
 
     /// The record the app has not stored yet.
@@ -388,11 +510,12 @@ impl Auth {
         {
             let s = lock(&self.state);
             let record = usable_for(&s, bound)?;
-            if fresh(record) {
+            // A shared chain is refreshed only by the account's round.
+            if s.shared || fresh(record) {
                 return Ok(record.access_token.clone());
             }
         }
-        self.rotate(api, None, bound).await
+        self.rotate(api, None, bound, false).await
     }
 
     /// After a 401 with `used`: refresh once, unless another caller already
@@ -410,12 +533,18 @@ impl Auth {
             if record.access_token != used {
                 return Ok(record.access_token.clone());
             }
-            if record.revision > 0 && record.created_at_ms + 60_000 > now_ms() {
+            // A shared chain waits for a newer revision from the account,
+            // or for the round's refresh.
+            if s.shared {
+                s.refused = true;
+                return Err(AuthError::Reconnect("Trakt refused the token".into()));
+            }
+            if record.revision > 0 && s.received_at_ms + 60_000 > now_ms() {
                 s.dead = Some("Trakt refused a fresh token".into());
                 return Err(AuthError::Reconnect("Trakt refused a fresh token".into()));
             }
         }
-        self.rotate(api, Some(used), bound).await
+        self.rotate(api, Some(used), bound, false).await
     }
 
     /// Trakt refused `used` right after it was given: the chain is dead and
@@ -433,17 +562,23 @@ impl Auth {
         api: &Api,
         used: Option<&str>,
         bound: &Bound,
+        forced: bool,
     ) -> Result<String, AuthError> {
         // One refresh at a time; the guard moves into the refresh task, so
         // it is held until the refresh finishes even if this caller goes.
         let guard = self.refreshing.clone().lock_owned().await;
         let (old, generation) = {
             let s = lock(&self.state);
-            let record = usable_for(&s, bound)?;
+            // The account's refresh goes on for a refused token.
+            let record = if forced {
+                held_for(&s, bound)?
+            } else {
+                usable_for(&s, bound)?
+            };
             // Another caller may have rotated while this one waited.
             let rotated = match used {
                 Some(used) => record.access_token != used,
-                None => fresh(record),
+                None => !forced && fresh(record),
             };
             if rotated {
                 return Ok(record.access_token.clone());
@@ -482,7 +617,15 @@ impl Auth {
                     s.record = Some(record);
                     s.acked = false;
                     s.retry_at = None;
+                    s.refused = false;
+                    s.received_at_ms = now_ms();
                     Ok(token)
+                }
+                // A shared chain's refresh token may have been spent by
+                // another device: wait for its newer revision.
+                Err(AuthError::Reconnect(reason)) if s.shared => {
+                    s.spent = true;
+                    Err(AuthError::Reconnect(reason))
                 }
                 Err(AuthError::Reconnect(reason)) => {
                     s.dead = Some(reason.clone());
@@ -505,10 +648,28 @@ impl Auth {
     }
 }
 
-/// More than a quarter of the token's lifetime is left.
+/// More than the spread of the token's lifetime is left.
 fn fresh(record: &TraktRecord) -> bool {
+    fresh_at(record, now_ms(), spread())
+}
+
+/// Refreshed once under `lifetime * (0.25 + 0.15 * u)` is left, `u` in
+/// thousandths: Trakt documents 24-hour tokens, ours measured 7 days, so the
+/// margin follows the lifetime, never a fixed number of hours.
+fn fresh_at(record: &TraktRecord, now: u64, u_permille: u64) -> bool {
     let lifetime = record.expires_at_ms.saturating_sub(record.created_at_ms);
-    now_ms() + lifetime / 4 < record.expires_at_ms
+    let margin = lifetime.saturating_mul(250_000 + 150 * u_permille.min(1000)) / 1_000_000;
+    now.saturating_add(margin) < record.expires_at_ms
+}
+
+/// `u` for `fresh_at`, drawn once per process.
+fn spread() -> u64 {
+    static U: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *U.get_or_init(|| {
+        let mut bytes = [0u8; 2];
+        getrandom::fill(&mut bytes).expect("os randomness");
+        u64::from(u16::from_le_bytes(bytes)) % 1000
+    })
 }
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -516,6 +677,13 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 fn usable(s: &State) -> Result<&TraktRecord, AuthError> {
+    if s.refused {
+        return Err(AuthError::Reconnect("Trakt refused the token".into()));
+    }
+    held(s)
+}
+
+fn held(s: &State) -> Result<&TraktRecord, AuthError> {
     if let Some(reason) = &s.dead {
         return Err(AuthError::Reconnect(reason.clone()));
     }
@@ -524,10 +692,52 @@ fn usable(s: &State) -> Result<&TraktRecord, AuthError> {
 
 /// The record, when it is still `bound`'s connection.
 fn usable_for<'a>(s: &'a State, bound: &Bound) -> Result<&'a TraktRecord, AuthError> {
-    let record = usable(s)?;
+    usable(s)?;
+    held_for(s, bound)
+}
+
+/// `usable_for`, also while Trakt refuses the held token.
+fn held_for<'a>(s: &'a State, bound: &Bound) -> Result<&'a TraktRecord, AuthError> {
+    let record = held(s)?;
     if record.account == bound.account && s.generation == bound.generation {
         Ok(record)
     } else {
         Err(AuthError::Off)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lasting(lifetime_ms: u64) -> TraktRecord {
+        TraktRecord {
+            access_token: "a".into(),
+            refresh_token: "r".into(),
+            created_at_ms: 0,
+            expires_at_ms: lifetime_ms,
+            scope: String::new(),
+            account: "u".into(),
+            user: "u".into(),
+            revision: 0,
+            generation: 1,
+            chain: "c".into(),
+        }
+    }
+
+    /// For 24-hour and 7-day tokens alike: never refreshed with over 40% of
+    /// the lifetime left, always with under 25%, and the margin moves with u.
+    #[test]
+    fn the_refresh_spread_holds_for_24_hour_and_7_day_tokens() {
+        for lifetime in [86_400_000, 7 * 86_400_000] {
+            let record = lasting(lifetime);
+            let at = |left_percent: u64| lifetime - lifetime * left_percent / 100;
+            for u in [0, 500, 999] {
+                assert!(fresh_at(&record, at(41), u), "{lifetime} {u}");
+                assert!(!fresh_at(&record, at(24), u), "{lifetime} {u}");
+            }
+            assert!(fresh_at(&record, at(30), 0));
+            assert!(!fresh_at(&record, at(30), 999));
+        }
     }
 }

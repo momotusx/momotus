@@ -677,11 +677,15 @@ enum Request {
     },
     /// Signs this device out of Trakt for the profile, or for `profile` (the
     /// owner only, for another: a sign-out that removes the library signs
-    /// every profile out first, D13); the app then deletes its record.
+    /// every profile out first, D13); the app then deletes its record. In a
+    /// Momotus account this disconnects every device of it; `local` (leaving
+    /// the account, D13) drops only this device's copy, with no revoke.
     TraktSignOut {
         id: u64,
         #[serde(default)]
         profile: Option<String>,
+        #[serde(default)]
+        local: bool,
     },
     /// The owner adds a profile (no PIN, the owner's addons copied once).
     /// Profile ops reply `ProfilesSnapshot`.
@@ -2568,7 +2572,7 @@ impl Session {
                     to_value(&report).map_err(Failure::from)
                 });
             }
-            Request::TraktSignOut { id, profile } => {
+            Request::TraktSignOut { id, profile, local } => {
                 let target = match profile.filter(|p| p != core.profile()) {
                     None => core,
                     Some(other) => {
@@ -2583,7 +2587,7 @@ impl Session {
                     }
                 };
                 self.spawn_fenced(id, async move {
-                    target.trakt_sign_out().await.map_err(trakt_failure)?;
+                    target.trakt_sign_out(local).await.map_err(trakt_failure)?;
                     Ok::<_, Failure>(json!({}))
                 });
             }

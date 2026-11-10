@@ -253,6 +253,7 @@ mod tests {
                 user: "me".into(),
                 revision: 1,
                 generation: 1,
+                chain: "c".into(),
             }))
             .await;
         assert_eq!(core.trakt_titles("sintel!", "sintel").await.unwrap(), hits);

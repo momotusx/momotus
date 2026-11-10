@@ -5,16 +5,25 @@ import type { TraktUnmapped } from "./TraktUnmapped";
 /**
  * The profile's Trakt status (`trakt` view).
  */
-export type TraktStatus = { user: string | null, lastOkMs: number | null, 
+export type TraktStatus = { user: string | null, lastOkMs: number | null,
 /**
  * A status and Trakt's `error` field, never a body.
  */
-lastError: string | null, pendingWrites: number, 
+lastError: string | null, pendingWrites: number,
 /**
  * The newest items Trakt could not take or give, newest first.
  */
-unmapped: Array<TraktUnmapped>, importing: TraktImporting | null, 
+unmapped: Array<TraktUnmapped>, importing: TraktImporting | null,
 /**
  * A record the app has not stored: store it, then `setTrakt(record)`.
  */
-record: unknown, } & ({ "state": "connected" } | { "state": "failing", sinceMs: number, reason: string, } | { "state": "reconnect", reason: string, } | { "state": "off" } | { "state": "thisDeviceOff" } | { "state": "notConfigured" });
+record: unknown,
+/**
+ * The connection is the Momotus account's: every device of it uses it.
+ */
+shared: boolean,
+/**
+ * The record this device stored for the profile is no longer its own
+ * (disconnected for the account, or the account was left): delete it.
+ */
+dropStored: boolean, } & ({ "state": "connected" } | { "state": "failing", sinceMs: number, reason: string, } | { "state": "reconnect", reason: string, } | { "state": "off" } | { "state": "thisDeviceOff" } | { "state": "linking" } | { "state": "offEverywhere" } | { "state": "notConfigured" });

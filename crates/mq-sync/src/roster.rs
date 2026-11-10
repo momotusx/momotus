@@ -1191,20 +1191,37 @@ fn derived(ikm: &Hex<32>, info: &[u8]) -> XChaCha20Poly1305 {
 /// (32 bytes, or the next power of two), so its length tells the relay only
 /// the bucket: not a default name that would give the form away.
 pub fn seal_name(bundle: &Bundle, member: &Id, name: &str) -> String {
-    let nonce: [u8; NONCE] = random();
-    let aad = [&bundle.account.0[..], &member.0].concat();
     let mut padded = name.as_bytes().to_vec();
     padded.resize(padded.len().max(NAME_BUCKET).next_power_of_two(), 0);
-    let sealed = derived(&bundle.id_key, NAME_INFO)
-        .encrypt(
-            &XNonce::from(nonce),
+    seal_for_members(bundle, NAME_INFO, &member.0, &padded)
+}
+
+/// `msg` sealed for the account's members under a key derived from the id
+/// key with `info` (any member opens it at any epoch, the relay cannot),
+/// bound to `bundle.account || aad`. Base64 of the nonce and the sealed text.
+pub fn seal_for_members(bundle: &Bundle, info: &[u8], aad: &[u8], msg: &[u8]) -> String {
+    let nonce: [u8; NONCE] = random();
+    let aad = [&bundle.account.0[..], aad].concat();
+    let sealed = derived(&bundle.id_key, info)
+        .encrypt(&XNonce::from(nonce), Payload { msg, aad: &aad })
+        .expect("sealing never fails");
+    B64.encode([&nonce[..], &sealed].concat())
+}
+
+/// What `seal_for_members` sealed with the same `info` and `aad`, or none.
+pub fn open_for_members(bundle: &Bundle, info: &[u8], aad: &[u8], sealed: &str) -> Option<Vec<u8>> {
+    let blob = B64.decode(sealed).ok()?;
+    let (nonce, sealed) = blob.split_at_checked(NONCE)?;
+    let aad = [&bundle.account.0[..], aad].concat();
+    derived(&bundle.id_key, info)
+        .decrypt(
+            &XNonce::try_from(nonce).ok()?,
             Payload {
-                msg: &padded,
+                msg: sealed,
                 aad: &aad,
             },
         )
-        .expect("sealing never fails");
-    B64.encode([&nonce[..], &sealed].concat())
+        .ok()
 }
 
 /// A device's form (one of `FORMS`, checked by the caller), sealed as a
@@ -1221,18 +1238,7 @@ pub fn open_form(bundle: &Bundle, member: &Id, sealed: &str) -> Option<String> {
 }
 
 pub fn open_name(bundle: &Bundle, member: &Id, sealed: &str) -> Option<String> {
-    let blob = B64.decode(sealed).ok()?;
-    let (nonce, sealed) = blob.split_at_checked(NONCE)?;
-    let aad = [&bundle.account.0[..], &member.0].concat();
-    let plain = derived(&bundle.id_key, NAME_INFO)
-        .decrypt(
-            &XNonce::try_from(nonce).ok()?,
-            Payload {
-                msg: sealed,
-                aad: &aad,
-            },
-        )
-        .ok()?;
+    let plain = open_for_members(bundle, NAME_INFO, &member.0, sealed)?;
     let text = String::from_utf8(plain).ok()?;
     Some(text.trim_end_matches(char::from(0)).to_owned())
 }
