@@ -44,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -117,11 +118,13 @@ import app.marquee.design.SwitchRow
 import app.marquee.design.TextRole
 import app.marquee.design.Tokens
 import app.marquee.design.WallDrift
+import app.marquee.design.WallGeometry
 import app.marquee.design.avatarColor
 import app.marquee.design.focusClickable
 import app.marquee.design.focusPalette
 import app.marquee.design.focusSelectable
 import app.marquee.design.marqueeFocus
+import app.marquee.design.wallColumns
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -233,7 +236,8 @@ internal object WallPause {
 
 /**
  * The wall with the walk build's line (plans/first-screens.md 3.1, 9): `first-wall poster <ms> tiles6s <n>/<tiles>`,
- * the time from its first frame to its first poster and the tiles filled at 6 s (of every first-copy tile).
+ * the time from its first frame to its first poster and, at 6 s, the tiles on screen with their poster drawn over
+ * the tiles on screen. It reads the posters and the screen as they are at 6 s, not as the first frame saw them.
  */
 @Composable
 internal fun FirstWall(
@@ -243,28 +247,33 @@ internal fun FirstWall(
 ) {
     val walk = BuildConfig.WALK
     val shown = remember { SystemClock.elapsedRealtime() }
-    val seen = remember { longArrayOf(-1L, 0L) }
-    val tiles = if (Marquee.form == Form.Tv) 9 * 6 else 4 * 6
-    if (walk) {
-        LaunchedEffect(Unit) {
-            delay(6_000)
-            CoreLog.d("first-wall poster ${seen[0].takeIf { it >= 0 } ?: "none"} tiles6s ${seen[1]}/$tiles")
+    val first = remember { longArrayOf(-1L) }
+    val landed = remember { mutableSetOf<String>() }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val wall by rememberUpdatedState(WallGeometry(maxWidth.value, maxHeight.value, wallColumns(Marquee.form)))
+        val now by rememberUpdatedState(posters)
+        if (walk) {
+            LaunchedEffect(Unit) {
+                delay(6_000)
+                val (filled, visible) = wall.filled(drift.ms, now, landed)
+                CoreLog.d("first-wall poster ${first[0].takeIf { it >= 0 } ?: "none"} tiles6s $filled/$visible")
+            }
         }
+        PosterWall(
+            posters,
+            drift,
+            sheet,
+            onPoster =
+                if (walk) {
+                    { url ->
+                        if (first[0] < 0) first[0] = SystemClock.elapsedRealtime() - shown
+                        landed += url
+                    }
+                } else {
+                    null
+                },
+        )
     }
-    PosterWall(
-        posters,
-        drift,
-        sheet,
-        onPoster =
-            if (walk) {
-                {
-                    if (seen[0] < 0) seen[0] = SystemClock.elapsedRealtime() - shown
-                    seen[1]++
-                }
-            } else {
-                null
-            },
-    )
 }
 
 /**

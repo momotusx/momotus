@@ -3,6 +3,8 @@ package app.marquee.design
 import android.app.Application
 import android.graphics.Bitmap
 import android.provider.Settings
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import coil3.ImageLoader
@@ -21,6 +23,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -148,6 +151,62 @@ class FirstRunWallTest {
     fun `the walk's reduceMotion extra holds it still`() {
         launchReducedMotion = true
         assertEquals(0L, drifted())
+    }
+
+    /** The share of the wall's pixels that are plain background (no tile drawn there), on a still wall. */
+    private fun blackShare(form: Form): Float {
+        compose.setContent {
+            MarqueeTheme(form) { PosterWall(emptyList(), WallDrift().apply { paused = true }, sheet = false) }
+        }
+        val map = compose.onNodeWithTag(WALL).captureToImage().toPixelMap()
+        var black = 0
+        for (x in 0 until map.width step 4) {
+            for (y in 0 until map.height step 4) {
+                val p = map[x, y]
+                if (p.red + p.green + p.blue < 0.02f) black++
+            }
+        }
+        return black / (((map.width + 3) / 4) * ((map.height + 3) / 4)).toFloat()
+    }
+
+    /**
+     * Pixel walk 2026-11-09 L7, L31: every column is its list twice, about twice the wall's height. Measured inside the
+     * wall's height the tiles past its foot got no room, so the drift slid empty space into view: most of the phone
+     * and every other TV column stayed black. At first open only the 14 dp gaps between tiles show the background.
+     */
+    @Test
+    @Config(qualifiers = "w412dp-h915dp-xxhdpi")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `the phone wall fills the screen at first open`() {
+        val share = blackShare(Form.Phone)
+        assertTrue(share < 0.25f, "${(share * 100).toInt()} percent of the phone wall is empty")
+    }
+
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-xhdpi")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun `the TV wall fills the screen at first open`() {
+        val share = blackShare(Form.Tv)
+        assertTrue(share < 0.25f, "${(share * 100).toInt()} percent of the TV wall is empty")
+    }
+
+    /**
+     * Pixel walk 2026-11-09 L8: the walk line counts the tiles on screen, not every tile of the wall, so a wall that
+     * draws only part of the screen cannot read 24/24.
+     */
+    @Test
+    fun `the walk line counts the tiles on screen with their poster`() {
+        val phone = WallGeometry(412f, 915f, 4)
+        val shown = phone.visible(6_000)
+        assertTrue(shown.size in 6..20, "${shown.size} tiles on the phone")
+        assertTrue(shown.size < 4 * 12)
+        val tv = WallGeometry(960f, 540f, 9).visible(6_000)
+        assertTrue(tv.size in 10..40, "${tv.size} tiles on TV")
+        assertEquals(0 to shown.size, phone.filled(6_000, posters, emptySet()))
+        assertEquals(shown.size to shown.size, phone.filled(6_000, posters, posters.toSet()))
+        val one = column(posters, shown[0].first)[shown[0].second % 6]
+        val (some, of) = phone.filled(6_000, posters, setOf(one))
+        assertTrue(some in 1 until of, "$some of $of with one poster drawn")
     }
 
     @Test

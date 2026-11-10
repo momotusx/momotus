@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,6 +42,8 @@ import androidx.lifecycle.compose.currentStateAsState
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.size.Size
+import kotlin.math.cos
+import kotlin.math.sin
 
 /**
  * The wall's drift, kept for the app run (plans/first-screens.md 3.1): going back to Welcome resumes where it stopped.
@@ -59,7 +62,7 @@ class WallDrift {
  * ([sheet] false), never with reduced motion, while [WallDrift.paused] or while the app is not resumed. Under a
  * sheet it holds still under a 62 percent dim and an 8 dp blur, or a 72 percent dim where blur is missing (below
  * API 31). A tile with no poster yet is the empty rounded rectangle; posters fade in by opacity (none with reduced
- * motion). Decorative: no semantics, never focusable. [onPoster] hears each tile's first poster, for the walk's log.
+ * motion). Decorative: no semantics, never focusable. [onPoster] hears each poster that lands, for the walk's log.
  */
 @Composable
 fun PosterWall(
@@ -67,7 +70,7 @@ fun PosterWall(
     drift: WallDrift,
     sheet: Boolean,
     modifier: Modifier = Modifier,
-    onPoster: (() -> Unit)? = null,
+    onPoster: ((String) -> Unit)? = null,
 ) {
     val reduced = LocalReducedMotion.current
     val resumed by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
@@ -94,31 +97,27 @@ fun PosterWall(
             .clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
-        val width = maxWidth * 1.56f
-        val gap = 14.dp
-        val tile = (width - gap * (columns - 1)) / columns
-        val loop = with(LocalDensity.current) { ((tile * 1.5f + gap) * PER_COLUMN).toPx() }
-        val lower = with(LocalDensity.current) { 160.dp.toPx() }
+        val wall = WallGeometry(maxWidth.value, maxHeight.value, columns)
         Row(
             Modifier
-                .requiredSize(width, maxHeight * 1.36f)
-                .graphicsLayer { rotationZ = -9f }
+                .requiredSize(wall.width.dp, wall.height.dp)
+                .graphicsLayer { rotationZ = WallGeometry.DEGREES }
                 .then(if (blur) Modifier.blur(Tokens.wallBlur) else Modifier),
-            horizontalArrangement = Arrangement.spacedBy(gap),
+            horizontalArrangement = Arrangement.spacedBy(WallGeometry.GAP.dp),
         ) {
             for (c in 0 until columns) {
-                val seconds = 70 + (c % 3) * 14
-                val down = c % 2 == 1
+                // The column is its list twice, far taller than the wall: measured at its own height, or the tiles
+                // past the wall's foot get no room and the drift slides empty space into view.
                 Column(
-                    Modifier.weight(1f).graphicsLayer {
-                        val t = (drift.ms % (seconds * 1000L)) / (seconds * 1000f)
-                        translationY = if (down) -loop + t * loop - lower else -t * loop
-                    },
-                    verticalArrangement = Arrangement.spacedBy(gap),
+                    Modifier
+                        .weight(1f)
+                        .wrapContentHeight(Alignment.Top, unbounded = true)
+                        .graphicsLayer { translationY = wall.offset(c, drift.ms).dp.toPx() },
+                    verticalArrangement = Arrangement.spacedBy(WallGeometry.GAP.dp),
                 ) {
                     val list = column(posters, c)
                     for (i in 0 until PER_COLUMN * 2) {
-                        WallTile(list.getOrNull(i % PER_COLUMN), tile, reduced, onPoster.takeIf { i < PER_COLUMN })
+                        WallTile(list.getOrNull(i % PER_COLUMN), wall.tile.dp, reduced, onPoster)
                     }
                 }
             }
@@ -126,6 +125,69 @@ fun PosterWall(
         if (sheet) {
             Box(Modifier.matchParentSize().background(if (blur) Tokens.wallDim else Tokens.wallDimNoBlur))
         }
+    }
+}
+
+/**
+ * The wall's geometry in dp on a [w] by [h] screen (round2.html:171 to :176): a box 28 percent wider than the screen
+ * on each side and 18 percent taller, turned -9 degrees about the screen's centre, of [columns] columns of 2:3 tiles
+ * 14 apart; each column holds its list twice, odd columns run down and start 160 higher, 70, 84 or 98 s a loop.
+ */
+class WallGeometry(
+    val w: Float,
+    val h: Float,
+    val columns: Int,
+) {
+    val width = w * 1.56f
+    val height = h * 1.36f
+    val tile = (width - GAP * (columns - 1)) / columns
+    private val step = tile * 1.5f + GAP
+
+    /** One list's height: the drift's loop. */
+    val loop = step * PER_COLUMN
+
+    /** Column [c]'s offset after [ms] of drift. */
+    fun offset(
+        c: Int,
+        ms: Long,
+    ): Float {
+        val period = (70 + (c % 3) * 14) * 1000L
+        val t = (ms % period) / period.toFloat()
+        return if (c % 2 == 1) -loop + t * loop - LIFT else -t * loop
+    }
+
+    /** The tiles whose centres are on screen after [ms], as (column, row): what the walk counts as visible. */
+    fun visible(ms: Long): List<Pair<Int, Int>> {
+        val angle = Math.toRadians(DEGREES.toDouble())
+        val (ca, sa) = cos(angle) to sin(angle)
+        val left = -(width - w) / 2
+        val top = -(height - h) / 2
+        return (0 until columns).flatMap { c ->
+            val dx = left + c * (tile + GAP) + tile / 2 - w / 2
+            (0 until PER_COLUMN * 2).mapNotNull { r ->
+                val dy = top + offset(c, ms) + r * step + tile * 0.75f - h / 2
+                val x = w / 2 + dx * ca - dy * sa
+                val y = h / 2 + dx * sa + dy * ca
+                (c to r).takeIf { x in 0.0..w.toDouble() && y in 0.0..h.toDouble() }
+            }
+        }
+    }
+
+    /** The walk line's `<filled>/<visible>` after [ms]: visible tiles whose poster has [landed], over visible tiles. */
+    fun filled(
+        ms: Long,
+        posters: List<String>,
+        landed: Set<String>,
+    ): Pair<Int, Int> {
+        val shown = visible(ms)
+        val filled = shown.count { (c, r) -> column(posters, c).getOrNull(r % PER_COLUMN) in landed }
+        return filled to shown.size
+    }
+
+    companion object {
+        const val GAP = 14f
+        const val LIFT = 160f
+        const val DEGREES = -9f
     }
 }
 
@@ -155,7 +217,7 @@ private fun WallTile(
     url: String?,
     width: androidx.compose.ui.unit.Dp,
     reduced: Boolean,
-    onPoster: (() -> Unit)?,
+    onPoster: ((String) -> Unit)?,
 ) {
     val shape = RoundedCornerShape(12.dp)
     Box(
@@ -188,7 +250,7 @@ private fun WallTile(
             contentDescription = null,
             contentScale = ContentScale.Crop,
             onSuccess = {
-                if (!landed) onPoster?.invoke()
+                if (!landed) onPoster?.invoke(url)
                 landed = true
             },
             modifier = Modifier.matchParentSize().graphicsLayer { this.alpha = alpha },
