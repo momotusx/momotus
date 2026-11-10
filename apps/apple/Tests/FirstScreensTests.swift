@@ -455,9 +455,26 @@ private let sheet = over(29.0 / 255, 0.97, over(0, 0.62, 1))
 @MainActor @Test func aResizeInTheFirstSixSecondsStillLogsTheWallLine() {
     // P3.15: a second start (a rotation's new size) is let through until the line is logged.
     let log = WallLog()
+    let layout = WallLayout(screen: CGSize(width: 390, height: 844), columns: 4, count: 0)
     #expect(log.start())
     #expect(log.start(), "a size change stopped the bench line")
-    #expect(log.settled(filled: 1, visible: 2)?.hasPrefix("first-wall poster none tiles6s 1/2") == true)
+    let shown = layout.visible(at: 6).count
+    #expect(log.settled(layout, at: 6) == "first-wall poster none tiles6s 0/\(shown)")
     #expect(!log.start(), "logged twice")
-    #expect(log.settled(filled: 2, visible: 2) == nil)
+    #expect(log.settled(layout, at: 6) == nil)
+}
+
+@MainActor @Test func theWallLineCountsThePostersThatCameAfterTheFirstFrame() {
+    // Mac walk 2026-11-09 L3: the line read tiles6s 0/13 on a full wall. The wall's first frame has WallOnce's empty
+    // list; the count at 6 s must read the posters and art as they are then.
+    let log = WallLog()
+    let layout = WallLayout(screen: CGSize(width: 1440, height: 900), columns: 9, count: 0)
+    #expect(log.start())
+    log.show([])
+    let posters = (0..<30).map { "https://art.example/\($0).jpg" }
+    log.show(posters)
+    for url in posters { log.drew(url) }
+    let shown = layout.visible(at: 6).count
+    #expect(shown > 0)
+    #expect(log.settled(layout, at: 6)?.hasSuffix("tiles6s \(shown)/\(shown)") == true)
 }

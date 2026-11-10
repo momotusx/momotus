@@ -131,12 +131,18 @@ struct WallLayout: Equatable {
 }
 
 /// `first-wall poster <ms> tiles6s <n>/<visible>` (plans/first-screens.md 3.1, 9): the bench's line, once per app run;
-/// PosterWall writes it in walk and debug builds.
+/// PosterWall writes it in walk and debug builds. It keeps the wall's latest posters and the art drawn so far, so the
+/// count at 6 s reads the wall as it is then, not the list its first frame had (empty before the catalog came).
 @MainActor final class WallLog {
     static let shared = WallLog()
     private var began: ContinuousClock.Instant?
     private var firstMs: Int?
     private var done = false
+    private var posters: [String] = []
+    private var drawn: Set<String> = []
+
+    /// The wall's posters now.
+    func show(_ posters: [String]) { self.posters = posters }
 
     /// The wall's first frame; false once this run has logged. A size change in the first 6 s (a rotation, a window
     /// resize) starts the 6 s again and keeps the first poster's time.
@@ -146,16 +152,19 @@ struct WallLayout: Equatable {
         return true
     }
 
-    func drew() {
+    func drew(_ url: String) {
+        drawn.insert(url)
         guard firstMs == nil, let began else { return }
         let elapsed = ContinuousClock.now - began
         firstMs = Int(elapsed.components.seconds * 1000 + elapsed.components.attoseconds / 1_000_000_000_000_000)
     }
 
-    /// The line, the first time only.
-    func settled(filled: Int, visible: Int) -> String? {
+    /// The line, the first time only: the tiles on screen in `layout` at `t` with their art drawn, over those on screen.
+    func settled(_ layout: WallLayout, at t: TimeInterval) -> String? {
         guard !done else { return nil }
         done = true
-        return "first-wall poster \(firstMs.map(String.init) ?? "none") tiles6s \(filled)/\(visible)"
+        let shown = layout.visible(at: t)
+        let filled = shown.filter { layout.poster($0.column, $0.row, in: posters).map(drawn.contains) == true }.count
+        return "first-wall poster \(firstMs.map(String.init) ?? "none") tiles6s \(filled)/\(shown.count)"
     }
 }

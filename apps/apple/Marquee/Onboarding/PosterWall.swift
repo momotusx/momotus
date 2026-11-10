@@ -45,6 +45,7 @@ struct PosterWall: View {
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         .onChange(of: running, initial: true) { _, now in WallClock.shared.set(running: now, at: .now) }
+        .onChange(of: posters, initial: true) { _, now in WallLog.shared.show(now) }
         .task(id: posters) { await load() }
     }
 
@@ -81,20 +82,19 @@ struct PosterWall: View {
             }
             for await (url, image) in group {
                 guard let image else { continue }
-                WallLog.shared.drew()
+                WallLog.shared.drew(url)
                 withAnimation(reduceMotion ? nil : .easeOut(duration: 0.25)) { art[url] = image }
             }
         }
     }
 
     /// The walk's line, once per app run: the first poster's time and the tiles filled at 6 s over those on screen.
+    /// WallLog counts with the posters and art it holds at 6 s: this task began with the first frame's (empty) list.
     private func logWhenSettled(_ layout: WallLayout) async {
         guard layout.screen.width > 0, WallLog.shared.start() else { return }
         try? await Task.sleep(for: .seconds(6))
         guard !Task.isCancelled else { return }
-        let shown = layout.visible(at: WallClock.shared.elapsed(at: .now))
-        let filled = shown.filter { layout.poster($0.column, $0.row, in: posters).map { art[$0] != nil } == true }.count
-        guard let line = WallLog.shared.settled(filled: filled, visible: shown.count) else { return }
+        guard let line = WallLog.shared.settled(layout, at: WallClock.shared.elapsed(at: .now)) else { return }
         // Walk and debug builds only: the unified log (the Mac, the iPhone's console) and the walk log.
         #if DEBUG
         coreLog.notice("\(line, privacy: .public)")
