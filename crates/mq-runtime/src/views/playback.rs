@@ -1130,6 +1130,13 @@ impl PlaybackView {
             s.patient = true;
             #[cfg(feature = "torrent")]
             s.failed_hashes.clear();
+            // It starts where the play reached, not where the view opened
+            // (Pixel walk 2026-11-09 L27: Sintel failed at 1:05 and Try
+            // again went back to 0:13): every app starts the first source
+            // after a failure at `resume_ms`.
+            if let Some(at) = played_to(&s) {
+                s.snapshot.resume_ms = Some(at);
+            }
             s.snapshot.phase = PlaybackPhase::Resolving;
             s.snapshot.attempts.clear();
             s.snapshot.trying = None;
@@ -6028,6 +6035,13 @@ pub(crate) fn aired(video: &stremio_core::types::resource::Video, now_ms: i64) -
         .is_none_or(|r| r.timestamp_millis() <= now_ms)
 }
 
+/// Where this play reached: the last position the player reported, when it
+/// is one to resume at (`resume_point`) in a file of the title's runtime.
+fn played_to(s: &State) -> Option<u64> {
+    let (pos, dur) = s.last.filter(|&(_, dur)| !off_runtime(s.runtime_s, dur))?;
+    resume_point(Some((pos as i64, dur as i64)))
+}
+
 /// Where a play of a video resumes, from its saved `(position, duration)`:
 /// none at its start or once it is finished.
 pub(crate) fn resume_point(progress: Option<(i64, i64)>) -> Option<u64> {
@@ -6619,6 +6633,43 @@ mod tests {
         let s = view.snapshot();
         let errors: Vec<&str> = s.attempts.iter().map(|a| a.error.as_str()).collect();
         assert_eq!(errors, [RETRY_GAVE_UP]);
+    }
+
+    /// Pixel walk 2026-11-09 L27: Sintel opened at a saved 0:13, played to
+    /// 1:05 and failed; Try again went back to 0:13. It starts where the
+    /// play reached; with nothing played it keeps the saved point, and a
+    /// file off the title's runtime (another title) moves nothing.
+    #[tokio::test]
+    async fn try_again_starts_where_the_play_reached() {
+        let core = Core::temporary("default").unwrap();
+        let dead = stream(r#"{"url":"http://127.0.0.1:9/v.mkv"}"#);
+        let view = PlaybackView::open(&core, vec![dead], PlayTarget::default());
+        lock(&view.state).snapshot.resume_ms = Some(13_000);
+        let failed = || async {
+            for _ in 0..3000 {
+                if view.snapshot().phase == PlaybackPhase::Failed {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            panic!("never failed: {:?}", view.snapshot());
+        };
+        failed().await;
+        view.retry();
+        assert_eq!(view.snapshot().resume_ms, Some(13_000), "nothing played");
+        failed().await;
+        view.report_progress(65_000, 888_000, false);
+        view.retry();
+        assert_eq!(view.snapshot().resume_ms, Some(65_000));
+        failed().await;
+        lock(&view.state).runtime_s = Some(60);
+        view.report_progress(70_000, 888_000, false);
+        view.retry();
+        assert_eq!(
+            view.snapshot().resume_ms,
+            Some(65_000),
+            "another title's file"
+        );
     }
 
     /// "Try again" restarts the same versions from the first, patiently
