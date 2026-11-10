@@ -132,10 +132,11 @@ class TraktHolder(
     fun signOut() {
         if (busy) return
         asking = false
+        val shared = trakt.status?.shared == true
         act(TraktCopy::signOutFailed) {
             val stored = trakt.signOut()
             notStored = !stored
-            if (stored) TraktCopy.SIGNED_OUT to Status.Idle else TraktCopy.SIGN_OUT_NOT_STORED to Status.Warn
+            if (stored) TraktCopy.signedOut(shared) to Status.Idle else TraktCopy.SIGN_OUT_NOT_STORED to Status.Warn
         }
     }
 
@@ -304,11 +305,11 @@ private fun Account(
                 }
 
                 holder.asking -> {
-                    MqText(TraktCopy.SIGN_OUT_ASK, role = TextRole.Callout)
+                    MqText(TraktCopy.signOutAsk(status.shared), role = TextRole.Callout)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
                         // While Sync now runs the ask stays, its Sign out waiting until the round ends.
                         SecondaryButton(
-                            TraktCopy.SIGN_OUT,
+                            TraktCopy.signOut(status.shared),
                             holder::signOut,
                             icon = Icons.LogOut,
                             enabled = !holder.busy,
@@ -339,7 +340,11 @@ private fun Account(
                                     focusRequester = actionFocus,
                                 )
                             }
-                            SecondaryButton(TraktCopy.SIGN_OUT, { holder.asking = true }, icon = Icons.LogOut)
+                            SecondaryButton(
+                                TraktCopy.signOut(status.shared),
+                                { holder.asking = true },
+                                icon = Icons.LogOut,
+                            )
                         }
                     }
                 }

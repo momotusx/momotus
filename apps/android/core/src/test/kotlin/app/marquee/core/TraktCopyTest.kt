@@ -84,6 +84,12 @@ class TraktCopyTest {
                     "playerUnmapped" to PLAYER_UNMAPPED,
                     "playerThisDeviceOff" to PLAYER_THIS_DEVICE_OFF,
                     "playerReconnect" to PLAYER_RECONNECT,
+                    "connectedShared" to CONNECTED_SHARED,
+                    "linking" to LINKING,
+                    "offEverywhere" to OFF_EVERYWHERE,
+                    "signOutShared" to SIGN_OUT_SHARED,
+                    "signOutSharedAsk" to SIGN_OUT_SHARED_ASK,
+                    "playerLinking" to PLAYER_LINKING,
                 )
             }
         assertEquals(shared.keys, ours.keys)
@@ -111,6 +117,23 @@ class TraktCopyTest {
         assertEquals(TraktCopy.ROW_OFF, TraktCopy.row(status("off"), time))
         assertEquals(TraktCopy.ROW_OFF, TraktCopy.row(null, time))
         assertEquals("Connected as tester", TraktCopy.row(status("connected"), time))
+    }
+
+    /** plans/trakt-account.md 4: in a Momotus account the card speaks for the account. */
+    @Test
+    fun `in an account the words speak for the account`() {
+        val shared = TraktStatus(state = "connected", user = "tester", pendingWrites = 0, shared = true)
+        assertEquals("Connected for your account as tester", TraktCopy.state(shared, time))
+        assertEquals(TraktCopy.LINKING, TraktCopy.state(status("linking", user = null), time))
+        assertEquals(TraktCopy.OFF_EVERYWHERE, TraktCopy.state(status("offEverywhere", user = null), time))
+        // Waiting for the account's sign-in offers nothing to press; after a disconnect, Connect.
+        assertNull(TraktCopy.signIn("linking"))
+        assertFalse(TraktCopy.signedIn("linking"))
+        assertEquals(TraktCopy.CONNECT, TraktCopy.signIn("offEverywhere"))
+        assertEquals(TraktCopy.SIGN_OUT_SHARED, TraktCopy.signOut(shared = true))
+        assertEquals(TraktCopy.SIGN_OUT, TraktCopy.signOut(shared = false))
+        assertEquals(TraktCopy.OFF_EVERYWHERE, TraktCopy.signedOut(shared = true))
+        assertEquals(TraktCopy.PLAYER_LINKING, TraktCopy.player(TraktPlayback.Linking))
     }
 
     @Test

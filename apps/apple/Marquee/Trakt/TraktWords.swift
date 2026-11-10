@@ -8,11 +8,14 @@ enum TraktWords {
     static let lede = "Trakt keeps a record of what you watch. With it connected, what you play here reaches Trakt, and what you watched in other Trakt apps shows up here as watched and as places to resume. Each profile connects its own account."
     static let rowOff = "Keep watched marks and resume points in step with your Trakt account."
     static let connected = "Connected as {user}"
+    static let connectedShared = "Connected for your account as {user}"
     static let connectedNoUser = "Connected to Trakt"
     static let failing = "Trakt has not answered since {time}: {reason}. Momotus keeps trying, and nothing waiting here is lost."
     static let reconnect = "Trakt needs you to sign in again ({reason}). Until then nothing is sent or brought in."
     static let off = "Not connected."
     static let thisDeviceOff = "This profile uses Trakt on another device, but this device is not signed in, so what you play here does not reach Trakt."
+    static let linking = "Connecting this device to Trakt. It takes one sync."
+    static let offEverywhere = "Trakt was disconnected on every device of your account."
     static let notConfigured = "Trakt is not set up in this build of Momotus, so nothing is sent to Trakt."
     static let connect = "Connect Trakt"
     static let signInAgain = "Sign in again"
@@ -44,6 +47,8 @@ enum TraktWords {
     static let signOut = "Sign out"
     static let signOutAsk = "Sign out of Trakt on this device? Watched marks and progress stay here. Changes that have not reached Trakt yet are dropped."
     static let signedOut = "Signed out of Trakt on this device."
+    static let signOutShared = "Disconnect on every device"
+    static let signOutSharedAsk = "Disconnect Trakt on every device of your account? Watched marks and progress stay. Changes that have not reached Trakt yet are dropped."
     static let signOutFailed = "Not signed out: {reason}"
     static let memoryOnly = "Kept for this session only: this device could not store the sign-in. Sign in again after the app restarts."
     static let unmappedTitle = "Not matched"
@@ -52,6 +57,7 @@ enum TraktWords {
     static let playerUnmapped = "Trakt: this title could not be matched, so this play is not recorded"
     static let playerThisDeviceOff = "Trakt: this device is not signed in, so this play is not recorded"
     static let playerReconnect = "Trakt: sign in again in Settings, so this play is not recorded"
+    static let playerLinking = "Trakt: this device has not received the sign-in yet, so this play is not recorded"
 
     /// Every shared word by its key, for the parity test.
     static let table: [String: String] = [
@@ -60,11 +66,14 @@ enum TraktWords {
         "lede": lede,
         "rowOff": rowOff,
         "connected": connected,
+        "connectedShared": connectedShared,
         "connectedNoUser": connectedNoUser,
         "failing": failing,
         "reconnect": reconnect,
         "off": off,
         "thisDeviceOff": thisDeviceOff,
+        "linking": linking,
+        "offEverywhere": offEverywhere,
         "notConfigured": notConfigured,
         "connect": connect,
         "signInAgain": signInAgain,
@@ -96,6 +105,8 @@ enum TraktWords {
         "signOut": signOut,
         "signOutAsk": signOutAsk,
         "signedOut": signedOut,
+        "signOutShared": signOutShared,
+        "signOutSharedAsk": signOutSharedAsk,
         "signOutFailed": signOutFailed,
         "memoryOnly": memoryOnly,
         "unmappedTitle": unmappedTitle,
@@ -104,6 +115,7 @@ enum TraktWords {
         "playerUnmapped": playerUnmapped,
         "playerThisDeviceOff": playerThisDeviceOff,
         "playerReconnect": playerReconnect,
+        "playerLinking": playerLinking,
     ]
 }
 
@@ -172,7 +184,8 @@ enum TraktRules {
     static func card(_ status: TraktStatus, clock: (Int64) -> String) -> (line: String, detail: String?, actions: [Action]) {
         switch status.state {
         case .connected:
-            (status.user.map { fill(TraktWords.connected, ["user": $0]) } ?? TraktWords.connectedNoUser, nil, [.syncNow, .signOut])
+            (status.user.map { fill(status.shared ? TraktWords.connectedShared : TraktWords.connected, ["user": $0]) }
+                ?? TraktWords.connectedNoUser, nil, [.syncNow, .signOut])
         case .failing(let since, let reason):
             (fill(TraktWords.failing, ["time": clock(since), "reason": reason]),
              status.lastError.map { fill(TraktWords.lastError, ["error": $0]) }, [.syncNow, .signOut])
@@ -180,9 +193,19 @@ enum TraktRules {
             (fill(TraktWords.reconnect, ["reason": reason]), nil, [.signInAgain, .signOut])
         case .off: (TraktWords.off, nil, [.connect])
         case .thisDeviceOff: (TraktWords.thisDeviceOff, nil, [.signInHere])
+        // The account's sign-in reaches this device with its next sync: nothing to do here.
+        case .linking: (TraktWords.linking, nil, [])
+        case .offEverywhere: (TraktWords.offEverywhere, nil, [.connect])
         case .notConfigured: (TraktWords.notConfigured, nil, [])
         }
     }
+
+    /// In a Momotus account the connection is the account's: signing out disconnects every device.
+    static func signOut(shared: Bool) -> String { shared ? TraktWords.signOutShared : TraktWords.signOut }
+
+    static func signOutAsk(shared: Bool) -> String { shared ? TraktWords.signOutSharedAsk : TraktWords.signOutAsk }
+
+    static func signedOut(shared: Bool) -> String { shared ? TraktWords.offEverywhere : TraktWords.signedOut }
 
     /// Settings' line: off (or not read yet) invites, the other states say themselves.
     static func rowLine(_ status: TraktStatus?, clock: (Int64) -> String) -> String {

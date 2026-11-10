@@ -121,6 +121,12 @@ final class TraktModel {
     /// runs: a switch or a lock in between drops the acknowledgement.
     func received(_ snapshot: TraktStatus, in session: Session) {
         if self.session === session { status = snapshot.withoutRecord() }
+        // The stored record is no longer this device's (disconnected for the account, or the account was left).
+        if snapshot.dropStored, snapshot.record == nil, record(of: session.profile) != nil {
+            session.acked = nil
+            forget(session.profile)
+            return
+        }
         guard let record = snapshot.record, record != session.acked else { return }
         session.acked = record
         if keystore.store(session.profile, record) {

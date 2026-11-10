@@ -2384,6 +2384,7 @@ enum class TraktPlayback(
     Off("off"),
     ThisDeviceOff("thisDeviceOff"),
     Reconnect("reconnect"),
+    Linking("linking"),
 
     /** A value from a newer core that this app does not know yet. */
     Unknown(""),
@@ -2436,6 +2437,14 @@ sealed interface TraktState {
     data object ThisDeviceOff : TraktState
 
     @Serializable
+    @SerialName("linking")
+    data object Linking : TraktState
+
+    @Serializable
+    @SerialName("offEverywhere")
+    data object OffEverywhere : TraktState
+
+    @Serializable
     @SerialName("notConfigured")
     data object NotConfigured : TraktState
 }
@@ -2456,9 +2465,13 @@ data class TraktStatus(
     val importing: TraktImporting? = null,
     /** A record the app has not stored: store it, then `setTrakt(record)`. */
     val record: KeystoreRecord? = null,
+    /** The connection is the Momotus account's: every device of it uses it. */
+    val shared: Boolean = false,
+    /** The record this device stored for the profile is no longer its own (disconnected for the account, or the account was left): delete it. */
+    val dropStored: Boolean = false,
 ) {
     // Holds keys or a token: never printed.
-    override fun toString() = "TraktStatus(state=$state, sinceMs=$sinceMs, reason=$reason, user=$user, lastOkMs=$lastOkMs, lastError=$lastError, pendingWrites=$pendingWrites, unmapped=$unmapped, importing=$importing, record=${record?.let { "hidden" }})"
+    override fun toString() = "TraktStatus(state=$state, sinceMs=$sinceMs, reason=$reason, user=$user, lastOkMs=$lastOkMs, lastError=$lastError, pendingWrites=$pendingWrites, unmapped=$unmapped, importing=$importing, record=${record?.let { "hidden" }}, shared=$shared, dropStored=$dropStored)"
 }
 
 @Serializable

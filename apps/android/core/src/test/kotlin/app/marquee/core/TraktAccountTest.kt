@@ -246,6 +246,32 @@ class TraktAccountTest {
             )
         }
 
+    /** plans/trakt-account.md 3.5: `dropStored` deletes with the existing delete; leaving drops locally. */
+    @Test
+    fun `a record the core drops leaves the file, and leaving the account drops every profile locally`() =
+        runBlocking {
+            val records =
+                Records().apply {
+                    held["p1"] = record("r1")
+                    held["p2"] = record("r2")
+                }
+            val sync = account(records)
+            begin(sync, "p1")
+            until("open") { "open p1" in events }
+            views.getValue("p1")(TraktStatus(state = "offEverywhere", pendingWrites = 0, dropStored = true))
+            until("p1 gone") { records.held["p1"] == null }
+            assertEquals(record("r2"), records.held["p2"], "only the profile it was for")
+            val sent = CopyOnWriteArrayList<JsonObject>()
+            answers["traktSignOut"] = { msg ->
+                sent += msg
+                """"ok":true,"result":{}"""
+            }
+            assertTrue(sync.signOutEvery(listOf("p1", "p2")))
+            assertEquals(listOf("true", "true"), sent.map { it["local"]?.jsonPrimitive?.content })
+            assertEquals(listOf(null, "p2"), sent.map { it["profile"]?.jsonPrimitive?.content })
+            assertNull(records.held["p2"])
+        }
+
     @Test
     fun `a deleted profile's record goes, from this device's delete and from the core's gone push`() =
         runBlocking {

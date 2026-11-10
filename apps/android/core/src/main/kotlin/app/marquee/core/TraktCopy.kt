@@ -19,6 +19,7 @@ object TraktCopy {
             "connects its own account."
     const val ROW_OFF = "Keep watched marks and resume points in step with your Trakt account."
     const val CONNECTED = "Connected as {user}"
+    const val CONNECTED_SHARED = "Connected for your account as {user}"
     const val CONNECTED_NO_USER = "Connected to Trakt"
     const val FAILING =
         "Trakt has not answered since {time}: {reason}. Momotus keeps trying, and nothing waiting here is " +
@@ -28,6 +29,8 @@ object TraktCopy {
     const val THIS_DEVICE_OFF =
         "This profile uses Trakt on another device, but this device is not signed in, so what you play here " +
             "does not reach Trakt."
+    const val LINKING = "Connecting this device to Trakt. It takes one sync."
+    const val OFF_EVERYWHERE = "Trakt was disconnected on every device of your account."
     const val NOT_CONFIGURED = "Trakt is not set up in this build of Momotus, so nothing is sent to Trakt."
     const val CONNECT = "Connect Trakt"
     const val SIGN_IN_AGAIN = "Sign in again"
@@ -61,6 +64,10 @@ object TraktCopy {
         "Sign out of Trakt on this device? Watched marks and progress stay here. Changes that have not " +
             "reached Trakt yet are dropped."
     const val SIGNED_OUT = "Signed out of Trakt on this device."
+    const val SIGN_OUT_SHARED = "Disconnect on every device"
+    const val SIGN_OUT_SHARED_ASK =
+        "Disconnect Trakt on every device of your account? Watched marks and progress stay. Changes that have " +
+            "not reached Trakt yet are dropped."
     const val SIGN_OUT_FAILED = "Not signed out: {reason}"
     const val MEMORY_ONLY =
         "Kept for this session only: this device could not store the sign-in. Sign in again after the app " +
@@ -71,6 +78,7 @@ object TraktCopy {
     const val PLAYER_UNMAPPED = "Trakt: this title could not be matched, so this play is not recorded"
     const val PLAYER_THIS_DEVICE_OFF = "Trakt: this device is not signed in, so this play is not recorded"
     const val PLAYER_RECONNECT = "Trakt: sign in again in Settings, so this play is not recorded"
+    const val PLAYER_LINKING = "Trakt: this device has not received the sign-in yet, so this play is not recorded"
 
     /** Android only, not in the shared words: the core signed out, the file kept the sign-in. */
     const val SIGN_OUT_NOT_STORED =
@@ -90,18 +98,39 @@ object TraktCopy {
         time: (Long) -> String,
     ): String =
         when (status.state) {
-            "connected" -> status.user?.let { CONNECTED.fill("user" to it) } ?: CONNECTED_NO_USER
+            "connected" -> {
+                status.user?.let { (if (status.shared) CONNECTED_SHARED else CONNECTED).fill("user" to it) }
+                    ?: CONNECTED_NO_USER
+            }
 
-            "failing" -> FAILING.fill("time" to time(status.sinceMs ?: 0), "reason" to status.reason.orEmpty())
+            "failing" -> {
+                FAILING.fill("time" to time(status.sinceMs ?: 0), "reason" to status.reason.orEmpty())
+            }
 
-            "reconnect" -> RECONNECT.fill("reason" to status.reason.orEmpty())
+            "reconnect" -> {
+                RECONNECT.fill("reason" to status.reason.orEmpty())
+            }
 
-            "thisDeviceOff" -> THIS_DEVICE_OFF
+            "thisDeviceOff" -> {
+                THIS_DEVICE_OFF
+            }
 
-            "notConfigured" -> NOT_CONFIGURED
+            "linking" -> {
+                LINKING
+            }
+
+            "offEverywhere" -> {
+                OFF_EVERYWHERE
+            }
+
+            "notConfigured" -> {
+                NOT_CONFIGURED
+            }
 
             // `off`, and a state this app does not know yet: nothing is promised.
-            else -> OFF
+            else -> {
+                OFF
+            }
         }
 
     /** The Settings row: what Trakt does while it is off, else the state. */
@@ -113,11 +142,18 @@ object TraktCopy {
     /** The sign-in each state offers, or none (connected, failing, a build without Trakt). */
     fun signIn(state: String): String? =
         when (state) {
-            "off" -> CONNECT
+            "off", "offEverywhere" -> CONNECT
             "reconnect" -> SIGN_IN_AGAIN
             "thisDeviceOff" -> SIGN_IN_HERE
             else -> null
         }
+
+    /** In a Momotus account the connection is the account's: signing out disconnects every device. */
+    fun signOut(shared: Boolean) = if (shared) SIGN_OUT_SHARED else SIGN_OUT
+
+    fun signOutAsk(shared: Boolean) = if (shared) SIGN_OUT_SHARED_ASK else SIGN_OUT_ASK
+
+    fun signedOut(shared: Boolean) = if (shared) OFF_EVERYWHERE else SIGNED_OUT
 
     /** A state the user can sync and sign out of: an account is held on this device. */
     fun signedIn(state: String) = state == "connected" || state == "failing" || state == "reconnect"
@@ -165,6 +201,7 @@ object TraktCopy {
             TraktPlayback.Unmapped -> PLAYER_UNMAPPED
             TraktPlayback.ThisDeviceOff -> PLAYER_THIS_DEVICE_OFF
             TraktPlayback.Reconnect -> PLAYER_RECONNECT
+            TraktPlayback.Linking -> PLAYER_LINKING
             TraktPlayback.Off, TraktPlayback.Unknown, null -> null
         }
 }

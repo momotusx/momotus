@@ -130,20 +130,20 @@ private struct TraktCard: View {
             // The sync's result and Signed out, said once each.
             if let now { announce(now) }
         }
-        .confirmationDialog(W.signOut, isPresented: $asking, titleVisibility: .visible) {
-            Button(W.signOut, role: .destructive) { Task { await signOut() } }
+        .confirmationDialog(TraktRules.signOut(shared: status.shared), isPresented: $asking, titleVisibility: .visible) {
+            Button(TraktRules.signOut(shared: status.shared), role: .destructive) { Task { await signOut() } }
             Button(W.cancel, role: .cancel) {}
         } message: {
-            Text(W.signOutAsk)
+            Text(TraktRules.signOutAsk(shared: status.shared))
         }
     }
 
     private var tone: StatusDot.Tone {
         switch status.state {
         case .connected: .ok
-        case .failing, .thisDeviceOff: .warn
+        case .failing, .thisDeviceOff, .linking: .warn
         case .reconnect: .bad
-        case .off, .notConfigured: .idle
+        case .off, .offEverywhere, .notConfigured: .idle
         }
     }
 
@@ -178,7 +178,7 @@ private struct TraktCard: View {
                 .buttonStyle(PillButtonStyle(prominent: first))
                 .disabled(busy)
         case .signOut:
-            Button { asking = true } label: { Label(W.signOut, glyph: "log-out") }
+            Button { asking = true } label: { Label(TraktRules.signOut(shared: status.shared), glyph: "log-out") }
                 .buttonStyle(DestructiveTextStyle())
                 .disabled(busy)
         }
@@ -209,10 +209,11 @@ private struct TraktCard: View {
         busy = true
         defer { busy = false }
         said = nil
+        let done = TraktRules.signedOut(shared: status.shared)
         do {
             try await trakt.signOut()
             // A record the Keychain kept is said at the top instead.
-            if !trakt.deleteFailed { said = (.ok, W.signedOut) }
+            if !trakt.deleteFailed { said = (.ok, done) }
         } catch {
             said = (.bad, TraktRules.fill(W.signOutFailed, ["reason": ErrorWords.of(error)]))
         }

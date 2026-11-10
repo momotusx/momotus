@@ -71,7 +71,10 @@ export function stateCard(status: TraktStatus, clock: (ms: number) => string, lo
   if (lockedHere && (status.state === "off" || status.state === "thisDeviceOff")) return { line: traktWords.lockedLine, actions: ["unlock"] };
   switch (status.state) {
     case "connected":
-      return { line: status.user ? fill(traktWords.connected, { user: status.user }) : traktWords.connectedNoUser, actions: ["syncNow", "signOut"] };
+      return {
+        line: status.user ? fill(status.shared ? traktWords.connectedShared : traktWords.connected, { user: status.user }) : traktWords.connectedNoUser,
+        actions: ["syncNow", "signOut"],
+      };
     case "failing":
       return {
         line: fill(traktWords.failing, { time: clock(status.sinceMs), reason: status.reason }),
@@ -84,6 +87,11 @@ export function stateCard(status: TraktStatus, clock: (ms: number) => string, lo
       return { line: traktWords.off, actions: ["connect"] };
     case "thisDeviceOff":
       return { line: traktWords.thisDeviceOff, actions: ["signInHere"] };
+    // The account's sign-in reaches this device with its next sync: nothing to do here.
+    case "linking":
+      return { line: traktWords.linking, actions: [] };
+    case "offEverywhere":
+      return { line: traktWords.offEverywhere, actions: ["connect"] };
     case "notConfigured":
       return { line: traktWords.notConfigured, actions: [] };
   }
@@ -129,6 +137,8 @@ export interface TraktRecord {
   user: string;
   revision: number;
   generation: number;
+  /** The sign-in the token chain came from; absent in records stored before it existed. */
+  chain?: string;
 }
 
 /** The newer of two records: a later connection, then a later rotation. */

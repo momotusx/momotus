@@ -822,9 +822,21 @@ class CoreOps(
     /** One round now, the "Sync now" button; the core schedules the others. */
     suspend fun traktSync(): TraktReport = call("traktSync", emptyMap(), TraktReport.serializer())
 
-    /** Signs this device out of Trakt for the profile (revoke best effort); the app then deletes the record. */
-    suspend fun traktSignOut(profile: String? = null) {
-        client.request("traktSignOut", profile?.let { mapOf("profile" to text(it)) } ?: emptyMap())
+    /**
+     * Signs this device out of Trakt for the profile (revoke best effort; in a Momotus account every device
+     * of it); the app then deletes the record. [local] (leaving the account, D13): only this device's copy
+     * goes, with no revoke.
+     */
+    suspend fun traktSignOut(
+        profile: String? = null,
+        local: Boolean = false,
+    ) {
+        val fields =
+            buildMap {
+                profile?.let { put("profile", text(it)) }
+                if (local) put("local", JsonPrimitive(true))
+            }
+        client.request("traktSignOut", fields)
     }
 
     /**

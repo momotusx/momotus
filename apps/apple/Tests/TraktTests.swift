@@ -38,6 +38,22 @@ private func status(_ json: String) throws -> TraktStatus {
         #expect(TraktRules.pendingLine(0) == nil && TraktRules.pendingLine(1) == W.pendingOne && TraktRules.pendingLine(3) == "3 changes waiting to go to Trakt")
     }
 
+    /// plans/trakt-account.md 4: in a Momotus account the card speaks for the account.
+    @Test func inAnAccountTheCardSpeaksForTheAccount() throws {
+        let clock: (Int64) -> String = { _ in "9:41" }
+        let shared = try status(#"{"state":"connected","user":"ana","pendingWrites":0,"unmapped":[],"shared":true}"#)
+        #expect(TraktRules.card(shared, clock: clock).line == "Connected for your account as ana")
+        #expect(TraktRules.signOut(shared: true) == W.signOutShared && TraktRules.signOut(shared: false) == W.signOut)
+        #expect(TraktRules.signedOut(shared: true) == W.offEverywhere)
+        // Waiting for the account's sign-in: no sign-in button, it takes one sync.
+        let linking = try status(#"{"state":"linking","pendingWrites":0,"unmapped":[]}"#)
+        #expect(TraktRules.card(linking, clock: clock).line == W.linking && TraktRules.card(linking, clock: clock).actions.isEmpty)
+        let everywhere = try status(#"{"state":"offEverywhere","pendingWrites":0,"unmapped":[],"dropStored":true}"#)
+        #expect(TraktRules.card(everywhere, clock: clock).actions == [.connect] && everywhere.dropStored)
+        // An older core sends neither flag.
+        #expect(!linking.shared && !linking.dropStored)
+    }
+
     @Test func aSignInSaysWhereItStandsAndOffersANewCodeOnlyWhereItHelps() throws {
         let decode = { (json: String) in try JSONDecoder().decode(TraktLoginSnapshot.self, from: Data(json.utf8)) }
         let code = try decode(#"{"phase":"code","userCode":"AB12","url":"https://auth.trakt.tv/activate","qr":"https://auth.trakt.tv/activate/AB12","expiresMs":600000}"#)
@@ -255,6 +271,22 @@ enum DevCore {
         model.deleteAgain()
         #expect(!model.deleteFailed && keys.held["default"] == nil)
         withExtendedLifetime(core) {}
+    }
+
+    /// plans/trakt-account.md 3.5: a record the core says is no longer this device's leaves the Keychain.
+    @Test func aRecordTheCoreDropsLeavesTheKeychain() async throws {
+        let core = RealCore()
+        #expect(await core.ready())
+        let keys = FakeTraktKeystore()
+        keys.held["default"] = .string("a stored sign-in")
+        let model = TraktModel(core: core.client, keystore: keys.keystore, defaults: try fresh())
+        await model.begin(profile: "default")
+        let session = try #require(model.session)
+        let drop = try JSONDecoder().decode(TraktStatus.self, from: Data(
+            #"{"state":"offEverywhere","pendingWrites":0,"unmapped":[],"dropStored":true}"#.utf8))
+        model.received(drop, in: session)
+        #expect(keys.held["default"] == nil)
+        #expect(model.status?.state == .offEverywhere)
     }
 
     @Test func aDeletedProfilesRecordGoesFromTheKeychain() async throws {

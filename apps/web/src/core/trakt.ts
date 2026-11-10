@@ -93,10 +93,17 @@ function got(session: Session, snapshot: TraktStatus) {
   if (current !== session) return;
   const { record, ...rest } = snapshot;
   setStatus({ ...rest, record: null } as TraktStatus);
+  // The kept record is no longer this device's (disconnected for the account, or the account was
+  // left): it goes from this browser, once per session.
+  if (snapshot.dropStored && !record && session.offered !== "dropped") {
+    session.offered = "dropped";
+    dropPending(session.profile);
+    track(records.signedOut(session.profile).catch(() => undefined));
+  }
   if (!record) return;
   // Every push carries the record until it is acknowledged: one store and one acknowledgement each.
   const r = record as TraktRecord;
-  const name = `${r.account}:${r.generation}:${r.revision}`;
+  const name = `${r.account}:${r.chain ?? ""}:${r.generation}:${r.revision}`;
   if (session.offered === name) return;
   session.offered = name;
   track(store(session, r));
@@ -222,11 +229,12 @@ async function saveAgain() {
 /** "Sync now": one round. */
 export const traktSync = () => op<TraktReport>("traktSync");
 
-/** A sign-out that removes the library (D13): every profile here signed out of Trakt (the owner
- * signs the others out) and each record deleted from this browser, before the wipe. */
+/** A sign-out that removes the library (D13): every profile here drops its Trakt sign-in (the owner
+ * drops the others') and each record is deleted from this browser, before the wipe. `local`: only
+ * this device's copy goes, with no revoke, so the account's other devices stay connected. */
 export async function traktSignOutEvery(ids: readonly string[]) {
   for (const profile of ids) {
-    await op("traktSignOut", { profile });
+    await op("traktSignOut", { profile, local: true });
     dropPending(profile);
     await records.signedOut(profile);
   }

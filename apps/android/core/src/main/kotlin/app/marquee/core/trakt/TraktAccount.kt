@@ -140,6 +140,8 @@ class TraktAccount(
         next: TraktStatus,
     ) {
         if (profile == owner) status = next
+        // The stored record is no longer this device's (disconnected for the account, or the account was left).
+        if (next.dropStored && next.record == null) return dropStored(owner)
         val record = next.record ?: return
         if (record == acked) return
         acked = record
@@ -161,6 +163,19 @@ class TraktAccount(
                     acked = null
                     CoreLog.w("trakt: a stored record was not acknowledged: ${CoreLog.describe(e)}")
                 }
+            }
+        }
+    }
+
+    /** Deletes [owner]'s record from the file, once per push of `dropStored`; deleting what is gone is nothing. */
+    private fun dropStored(owner: String) {
+        acked = null
+        scope.launch {
+            line.withLock {
+                if (records.load(owner) == null) return@withLock
+                inMemory -= owner
+                if (profile == owner) memoryOnly = false
+                if (!records.delete(owner)) CoreLog.w("trakt: a record the core dropped could not be removed yet")
             }
         }
     }
@@ -193,9 +208,10 @@ class TraktAccount(
             }.await()
 
     /**
-     * D13's step 2 (plans/accounts.md): every profile on this device signs out of Trakt, its record leaves the
-     * file. The session's own profile takes the plain sign-out; the others are the owner's to end (`notOwner`
-     * from any other profile). False when a record could not be dropped (the wipe then waits for a retry).
+     * D13's step 2 (plans/accounts.md): every profile on this device drops its Trakt sign-in, its record leaves
+     * the file. Local only (plans/trakt-account.md 3.5): no revoke, so the account's other devices stay
+     * connected. The session's own profile goes as itself; the others are the owner's to end (`notOwner` from
+     * any other profile). False when a record could not be dropped (the wipe then waits for a retry).
      */
     suspend fun signOutEvery(profiles: List<String>): Boolean =
         scope
@@ -203,7 +219,7 @@ class TraktAccount(
                 line.withLock {
                     var dropped = true
                     for (p in profiles) {
-                        if (p == profile) ops.traktSignOut() else ops.traktSignOut(p)
+                        ops.traktSignOut(if (p == profile) null else p, local = true)
                         inMemory -= p
                         if (!records.delete(p)) dropped = false
                     }

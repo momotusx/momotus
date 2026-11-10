@@ -43,6 +43,8 @@ const tones: Record<TraktStatus["state"], "ok" | "warn" | "bad" | ""> = {
   reconnect: "bad",
   off: "",
   thisDeviceOff: "warn",
+  linking: "warn",
+  offEverywhere: "",
   notConfigured: "",
 };
 
@@ -86,13 +88,16 @@ function Card(props: { status: TraktStatus; connect: () => void }) {
       setBusy(null);
     }
   };
+  // In a Momotus account the connection is the account's: signing out disconnects every device.
+  const signOutLabel = () => (props.status.shared ? w.signOutShared : w.signOut);
   const signOut = async () => {
     if (busy()) return;
     setBusy("signOut");
     setSaid(null);
+    const done = props.status.shared ? w.offEverywhere : w.signedOut;
     try {
       // A sealed copy that stayed is said by the storage note instead.
-      if (await traktSignOut()) setSaid({ tone: "ok", text: w.signedOut });
+      if (await traktSignOut()) setSaid({ tone: "ok", text: done });
       setAsking(false);
     } catch (e) {
       setSaid({ tone: "bad", text: fill(w.signOutFailed, { reason: reasonOf(e) }) });
@@ -131,7 +136,7 @@ function Card(props: { status: TraktStatus; connect: () => void }) {
         return (
           <button class="btn" data-f="trakt:sign-out" onClick={() => setAsking(true)}>
             <LogOut aria-hidden />
-            {w.signOut}
+            {signOutLabel()}
           </button>
         );
     }
@@ -176,11 +181,11 @@ function Card(props: { status: TraktStatus; connect: () => void }) {
           when={!asking()}
           fallback={
             <div class="trakt-ask">
-              <p class="note">{w.signOutAsk}</p>
+              <p class="note">{props.status.shared ? w.signOutSharedAsk : w.signOutAsk}</p>
               <div class="acts">
                 <button class="btn danger" data-f="trakt:sign-out-confirm" data-autofocus aria-busy={busy() === "signOut" || undefined} onClick={() => void signOut()}>
                   <LogOut aria-hidden />
-                  {busy() === "signOut" ? w.signingOut : w.signOut}
+                  {busy() === "signOut" ? w.signingOut : signOutLabel()}
                 </button>
                 <button class="btn" data-f="trakt:sign-out-cancel" onClick={() => setAsking(false)}>
                   {w.cancel}

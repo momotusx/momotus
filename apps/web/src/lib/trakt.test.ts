@@ -30,6 +30,13 @@ test("each state says its own words and offers its one way on", () => {
   expect(cards[5]?.actions).toEqual([]);
 });
 
+test("in a Momotus account the card speaks for the account (plans/trakt-account.md 4)", () => {
+  expect(stateCard(status({ state: "connected", shared: true }), clock)).toEqual({ line: "Connected for your account as ana", actions: ["syncNow", "signOut"] });
+  // Waiting for the account's sign-in: no sign-in button, it takes one sync.
+  expect(stateCard(status({ state: "linking", user: null }), clock)).toEqual({ line: traktWords.linking, actions: [] });
+  expect(stateCard(status({ state: "offEverywhere", user: null }), clock)).toEqual({ line: traktWords.offEverywhere, actions: ["connect"] });
+});
+
 test("each sign-in phase has its own words, and only a sign-in that ended offers a new code", () => {
   const phases: TraktLoginSnapshot[] = [
     { phase: "starting" },

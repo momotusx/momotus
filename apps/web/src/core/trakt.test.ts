@@ -350,3 +350,33 @@ test("an earlier entry that does not open goes at the unlock, and a sign-out del
   expect(disk.has("trakt")).toBe(false);
   expect(sealed("p6")).toBeUndefined();
 });
+
+test("a record the core says is no longer this device's goes from this browser, once (plans/trakt-account.md 3.5)", async () => {
+  await vault.unlock();
+  await reset({ active: "p1", locked: false });
+  await offer("t8");
+  expect(sealed("p1")).toBeDefined();
+  told();
+  const drop = status({ state: "offEverywhere", user: null, dropStored: true });
+  live().at(-1)?.handlers.snapshot(drop);
+  live().at(-1)?.handlers.updates([drop]);
+  await settled();
+  expect(sealed("p1")).toBeUndefined();
+  expect(told()).toEqual([]);
+  // Connected again: the new record is stored as usual.
+  await offer("t9");
+  expect(sealed("p1")).toBeDefined();
+  expect(told()).toEqual(["setTrakt t9"]);
+});
+
+test("leaving the account (D13) drops each profile's copy locally, with no revoke for the account", async () => {
+  sent.splice(0);
+  await trakt.traktSignOutEvery(["p1", "p2"]);
+  const outs = sent.filter((s) => s.name === "traktSignOut").map((s) => s.fields);
+  expect(outs).toEqual([
+    { profile: "p1", local: true },
+    { profile: "p2", local: true },
+  ]);
+  expect(sealed("p1")).toBeUndefined();
+  expect(sealed("p2")).toBeUndefined();
+});

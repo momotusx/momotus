@@ -13,9 +13,14 @@ struct TraktStatus: Decodable, Hashable, Sendable {
     let importing: TraktImporting?
     /// A record the app has not stored: store it, then `setTrakt(record)`.
     let record: JSONValue?
+    /// The connection is the Momotus account's: every device of it uses it.
+    let shared: Bool
+    /// The record this device stored for the profile is no longer its own (disconnected for the account, or
+    /// the account was left): delete it.
+    let dropStored: Bool
 
     private enum Key: String, CodingKey {
-        case state, sinceMs, reason, user, lastOkMs, lastError, pendingWrites, unmapped, importing, record
+        case state, sinceMs, reason, user, lastOkMs, lastError, pendingWrites, unmapped, importing, record, shared, dropStored
     }
 
     init(from decoder: any Decoder) throws {
@@ -25,9 +30,14 @@ struct TraktStatus: Decodable, Hashable, Sendable {
         case "failing": .failing(sinceMs: try c.decode(Int64.self, forKey: .sinceMs), reason: try c.decode(String.self, forKey: .reason))
         case "reconnect": .reconnect(reason: try c.decode(String.self, forKey: .reason))
         case "thisDeviceOff": .thisDeviceOff
+        case "linking": .linking
+        case "offEverywhere": .offEverywhere
         case "notConfigured": .notConfigured
         default: .off
         }
+        // An older core sends neither.
+        shared = try c.decodeIfPresent(Bool.self, forKey: .shared) ?? false
+        dropStored = try c.decodeIfPresent(Bool.self, forKey: .dropStored) ?? false
         user = try c.decodeIfPresent(String.self, forKey: .user)
         lastOkMs = try c.decodeIfPresent(Int64.self, forKey: .lastOkMs)
         lastError = try c.decodeIfPresent(String.self, forKey: .lastError)
@@ -41,13 +51,15 @@ struct TraktStatus: Decodable, Hashable, Sendable {
     /// The same status without its record: what the screens read.
     func withoutRecord() -> TraktStatus {
         TraktStatus(state: state, user: user, lastOkMs: lastOkMs, lastError: lastError, pendingWrites: pendingWrites,
-                    unmapped: unmapped, importing: importing, record: nil)
+                    unmapped: unmapped, importing: importing, record: nil, shared: shared, dropStored: dropStored)
     }
 
     init(state: TraktState, user: String?, lastOkMs: Int64?, lastError: String?, pendingWrites: Int,
-         unmapped: [TraktUnmapped], importing: TraktImporting?, record: JSONValue?) {
+         unmapped: [TraktUnmapped], importing: TraktImporting?, record: JSONValue?, shared: Bool = false,
+         dropStored: Bool = false) {
         (self.state, self.user, self.lastOkMs, self.lastError, self.pendingWrites) = (state, user, lastOkMs, lastError, pendingWrites)
         (self.unmapped, self.importing, self.record) = (unmapped, importing, record)
+        (self.shared, self.dropStored) = (shared, dropStored)
     }
 }
 
@@ -57,6 +69,10 @@ enum TraktState: Hashable, Sendable {
     case reconnect(reason: String)
     case off
     case thisDeviceOff
+    /// In a Momotus account: the account's sign-in has not reached this device yet.
+    case linking
+    /// In a Momotus account: Trakt was disconnected on every device of it.
+    case offEverywhere
     case notConfigured
 }
 
@@ -109,5 +125,5 @@ struct TraktReport: Decodable, Hashable, Sendable {
 
 /// Trakt's side of a playback (`PlaybackSnapshot.trakt`).
 enum TraktPlayback: String, Decodable, Hashable, Sendable {
-    case on, unmapped, off, thisDeviceOff, reconnect
+    case on, unmapped, off, thisDeviceOff, reconnect, linking
 }

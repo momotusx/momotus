@@ -97,6 +97,9 @@ const DEFAULTED = new Map([
   // plans/plugins-and-marketplace.md 4.1: a row from an older core plays as a direct link.
   ["VersionRow.kind", "SourceKind.Direct"],
   ["PlaybackSnapshot.retries", "0"],
+  // Trakt for the whole Momotus account (plans/trakt-account.md): an older core sends neither.
+  ["TraktStatus.shared", "false"],
+  ["TraktStatus.dropStored", "false"],
   // plans/play-every-version.md 2e: an older core never offers another version mid-start.
   ["PlaybackSnapshot.chooseAnother", "false"],
   // Every start subtitle unreadable: an older core never says so.

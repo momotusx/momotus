@@ -61,7 +61,8 @@ final class AccountWipe {
         try? await finish(profiles: profiles, disconnectDebrid: pending.debrid)
     }
 
-    /// Steps 2 and 3. Each profile's Trakt sign-out comes before its record goes;
+    /// Steps 2 and 3. Each profile's Trakt sign-in is dropped here before its record goes (`local`: no revoke,
+    /// so the account's other devices stay connected, plans/trakt-account.md 3.5);
     /// each debrid account goes tombstone first; the wipe only confirms them.
     private func finish(profiles: [String], disconnectDebrid: Bool) async throws {
         guard !running else { return }
@@ -70,7 +71,7 @@ final class AccountWipe {
         defer { running = false }
         do {
             for profile in profiles {
-                try await core.perform("traktSignOut", ["profile": profile])
+                try await core.perform("traktSignOut", ["profile": profile, "local": true])
                 traktGone(profile)
             }
             if disconnectDebrid {
