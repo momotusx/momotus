@@ -3,6 +3,7 @@ package app.marquee.android
 import android.app.Application
 import android.graphics.Bitmap
 import android.os.Looper
+import android.view.View
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +22,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -609,6 +611,34 @@ class FirstScreensTest {
         val asked = ops("finishProfileStep").single()
         assertEquals("Deniz", asked.getValue("name").jsonPrimitive.content)
         assertEquals(ProfileCopy.formatAvatar("letter", SWATCHES[2]), asked.getValue("avatar").jsonPrimitive.content)
+    }
+
+    /**
+     * Pixel walk 2026-11-09 L32: the TV form on a touch device starts in touch mode, where a button takes no focus,
+     * so Welcome's first focus never landed and the first OK went to Pause motion at the top. Get started has it.
+     */
+    @Test
+    @Config(qualifiers = "w960dp-h540dp-xhdpi")
+    fun `TV Welcome's first focus is Get started, from touch mode too`() {
+        var window: View? = null
+        var shown by mutableStateOf(false)
+        compose.setContent {
+            window = LocalView.current
+            MarqueeTheme(Form.Tv) { if (shown) WelcomeScreen(WallDrift(), {}, {}) }
+        }
+        // As a phone starts: the window in touch mode, through the platform's own call.
+        compose.runOnUiThread {
+            val root = View::class.java.getMethod("getViewRootImpl").invoke(window)
+            root.javaClass
+                .getDeclaredMethod("ensureTouchMode", Boolean::class.javaPrimitiveType)
+                .apply { isAccessible = true }
+                .invoke(root, true)
+        }
+        assertTrue(window!!.isInTouchMode, "the window is in touch mode")
+        shown = true
+        compose.waitUntil(5_000) {
+            runCatching { compose.onNodeWithText(FirstRunCopy.GET_STARTED).assert(isFocused()) }.isSuccess
+        }
     }
 
     @Test

@@ -22,8 +22,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.unit.dp
 import app.marquee.core.route.Route
 import app.marquee.core.session.CoreHealth
@@ -49,11 +51,17 @@ internal fun AutoFocus(requester: FocusRequester) {
     // under a cover (the engine stopped) must not keep taking keys, so the touch screen lets go of focus.
     val dpad = Marquee.form == Form.Tv
     val focusManager = LocalFocusManager.current
+    val input = LocalInputModeManager.current
     LaunchedEffect(requester, dpad) {
         if (!dpad) {
             focusManager.clearFocus()
             return@LaunchedEffect
         }
+        // The TV form on a touch device (a phone's walk build) starts in touch mode, where a button takes no focus:
+        // the first focus never landed and the first OK, leaving touch mode, went to the first control from the top
+        // (Pixel walk 2026-11-09 L32, Pause motion over Get started). The remote's mode first, as FirstFocus asks; a
+        // real TV is never in touch mode and this does nothing there.
+        input.requestInputMode(InputMode.Keyboard)
         focusSoon(requester, AUTO_FOCUS_FRAMES)
     }
 }
