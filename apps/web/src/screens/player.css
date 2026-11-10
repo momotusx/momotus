@@ -128,6 +128,8 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .bsrow { display: flex; align-items: center; gap: calc(10 * var(--u)); min-width: 0; max-width: 100%; }
 .bsrow.s2 { padding: calc(8 * var(--u)); border-radius: var(--radius-pill); background: var(--glass-strong); -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); box-shadow: var(--glass-shadow), var(--glass-highlight); }
+/* The row's start (label, chips, shift) gives way first, so Style and Close after it stay in reach. */
+.sscr { display: flex; align-items: center; gap: calc(10 * var(--u)); min-width: 0; }
 .strk { display: flex; align-items: center; gap: calc(10 * var(--u)); min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .strk::-webkit-scrollbar { display: none; }
 .slb { display: inline-flex; align-items: center; gap: calc(10 * var(--u)); flex: none; color: var(--muted); white-space: nowrap; }
@@ -305,10 +307,12 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 [data-form="phone"] .qsb { min-width: 48px; padding: 0 10px; font-size: 14px; }
 [data-form="phone"] .qv { min-width: 4.8em; padding: 0 6px; font-size: 14px; }
 [data-form="phone"] .bstrip { left: 0; right: 0; bottom: calc(100% + 8px); gap: 6px; font-size: 14px; }
-/* A phone's strip row scrolls as one, at the right while it fits (the auto margin), from its start once it does not,
- * so nothing ends up under the shift or past the screen's edge. */
+/* A phone's strip row sits at the right while it fits (the auto margin); once it does not, its start (label, chips,
+ * shift) scrolls as one from its own start and Style and Close stay at the end, so nothing ends up under the shift or
+ * past the screen's edge (Pixel walk 2026-11-09 L21). */
 [data-form="phone"] .bstrip .bsrow { width: 100%; gap: 6px; overflow-x: auto; scrollbar-width: none; }
-[data-form="phone"] .bstrip .bsrow::-webkit-scrollbar { display: none; }
+[data-form="phone"] .bstrip :is(.bsrow, .sscr)::-webkit-scrollbar { display: none; }
+[data-form="phone"] .bstrip .sscr { gap: 6px; overflow-x: auto; scrollbar-width: none; }
 [data-form="phone"] .bstrip.sub .s1 > :first-child { margin-left: auto; }
 [data-form="phone"] .bstrip .strk { flex: none; overflow: visible; }
 [data-form="phone"] .bsrow.s2 { padding: 4px 10px; border-radius: 26px; overflow-x: auto; scrollbar-width: none; }

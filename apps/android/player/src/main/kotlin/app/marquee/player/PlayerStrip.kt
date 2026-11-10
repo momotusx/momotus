@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -645,11 +646,20 @@ fun SubtitleStrip(
         verticalArrangement = Arrangement.spacedBy(stripGap()),
     ) {
         if (style) StyleRow(controller, onSize, onPosition, onBackground, styleFocus)
-        Row(
-            Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = if (tv) 16.dp else 0.dp),
-            horizontalArrangement = Arrangement.spacedBy(stripGap()),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        StripRow(tv, pinned = {
+            if (!controller.subtitlePicture) {
+                StripRule()
+                StripChip(
+                    Bar.STYLE,
+                    { onStyle(!style) },
+                    down.focusRequester(styleChip),
+                    ghost = true,
+                    expanded = style,
+                    icon = Icons.Type,
+                )
+            }
+            StripChip(Bar.CLOSE, onClose, down, ghost = true, icon = Icons.X, spoken = Bar.CLOSE)
+        }) {
             StripLabel(Icons.Captions, Names.SUBTITLES)
             Row(
                 Modifier.selectableGroup().semantics { contentDescription = Names.SUBTITLE_LANGUAGE },
@@ -697,19 +707,36 @@ fun SubtitleStrip(
                     }, down)
                 }
             }
-            if (!controller.subtitlePicture) {
-                StripRule()
-                StripChip(
-                    Bar.STYLE,
-                    { onStyle(!style) },
-                    down.focusRequester(styleChip),
-                    ghost = true,
-                    expanded = style,
-                    icon = Icons.Type,
-                )
-            }
-            StripChip(Bar.CLOSE, onClose, down, ghost = true, icon = Icons.X, spoken = Bar.CLOSE)
         }
+    }
+}
+
+/**
+ * A strip's row: [content] (the label, the chips, the shift) scrolls sideways when the row is wider than the screen,
+ * and [pinned] (Style, Close) stays at its end in reach, never past the screen's edge (Pixel walk 2026-11-09 L21).
+ */
+@Composable
+private fun StripRow(
+    tv: Boolean,
+    modifier: Modifier = Modifier,
+    pinned: @Composable RowScope.() -> Unit,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier.padding(end = if (tv) 16.dp else 0.dp),
+        horizontalArrangement = Arrangement.spacedBy(stripGap()),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(
+            Modifier
+                .weight(1f, fill = false)
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = if (tv) 16.dp else 0.dp),
+            horizontalArrangement = Arrangement.spacedBy(stripGap()),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
+        pinned()
     }
 }
 
@@ -833,15 +860,9 @@ fun AudioStrip(
     val tracks = controller.audio
     val down = Modifier.focusProperties { opener?.let { down = it } }
     val checked = tracks.indexOfFirst { it.selected }.coerceAtLeast(0)
-    Row(
-        modifier
-            .semantics { paneTitle = Names.AUDIO }
-            .testTag(STRIP_TAG)
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = if (tv) 16.dp else 0.dp),
-        horizontalArrangement = Arrangement.spacedBy(stripGap()),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    StripRow(tv, modifier.semantics { paneTitle = Names.AUDIO }.testTag(STRIP_TAG), pinned = {
+        StripChip(Bar.CLOSE, onClose, down, ghost = true, icon = Icons.X, spoken = Bar.CLOSE)
+    }) {
         StripLabel(Icons.AudioLines, Names.AUDIO)
         Row(
             Modifier.selectableGroup().semantics { contentDescription = Names.AUDIO_TRACK },
@@ -868,6 +889,5 @@ fun AudioStrip(
                 icon = Icons.Layers,
             )
         }
-        StripChip(Bar.CLOSE, onClose, down, ghost = true, icon = Icons.X, spoken = Bar.CLOSE)
     }
 }

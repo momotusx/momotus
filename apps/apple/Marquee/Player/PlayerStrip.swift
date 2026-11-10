@@ -59,17 +59,30 @@ extension StripChip where Mark == EmptyView {
     Rectangle().fill(.white.opacity(0.24)).frame(width: 1, height: 26).accessibilityHidden(true)
 }
 
-/// One strip row: its parts in a glass capsule, scrolling sideways when the bar is narrower than it.
-private struct StripRow<Content: View>: View {
+/// One strip row: its parts in a glass capsule, scrolling sideways when the bar is narrower than it. `pinned` (Style,
+/// Close) stays at the row's end in reach and never scrolls past the screen's edge (Pixel walk 2026-11-09 L21).
+private struct StripRow<Content: View, Pinned: View>: View {
     @ViewBuilder let content: Content
+    @ViewBuilder var pinned: Pinned
 
     var body: some View {
-        let row = HStack(spacing: 8) { content }.padding(6)
-        ViewThatFits(in: .horizontal) {
-            row.fixedSize()
-            ScrollView(.horizontal) { row }.scrollIndicators(.hidden)
+        let row = HStack(spacing: 8) { content }.padding(.vertical, 6).padding(.leading, 6)
+        HStack(spacing: 8) {
+            ViewThatFits(in: .horizontal) {
+                row.fixedSize()
+                ScrollView(.horizontal) { row }.scrollIndicators(.hidden)
+            }
+            pinned
         }
+        .padding(.trailing, 6)
         .glass(Capsule(), strong: true)
+    }
+}
+
+extension StripRow where Pinned == EmptyView {
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+        self.pinned = EmptyView()
     }
 }
 
@@ -220,7 +233,7 @@ struct SubtitleStrip: View {
     var body: some View {
         VStack(alignment: .trailing, spacing: 10) {
             if model.styleOpen { StripRow { styleRow } }
-            StripRow { mainRow }
+            StripRow { mainRow } pinned: { mainEnd }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(bar.names.subtitles)
@@ -267,6 +280,10 @@ struct SubtitleStrip: View {
             QuickShift(value: model.subtitleDelay, track: key, chevrons: chevrons, textSize: phone ? 14 : Theme.type.callout,
                        move: { by, spoken in model.shiftSubtitles(by: by, spoken: spoken) }, holding: holding)
         }
+    }
+
+    /// Style and Close: always in reach at the row's end, the rest scrolls.
+    @ViewBuilder private var mainEnd: some View {
         divider
         // Nothing in Style applies to a subtitle drawn as pictures.
         if !model.pictureFirst {
@@ -369,6 +386,7 @@ struct AudioStrip: View {
             if model.audioTracks.count <= 1, let chooseVersion {
                 StripChip(title: bar.chooseVersion, ghost: true, mark: { EmptyView() }, action: chooseVersion)
             }
+        } pinned: {
             closeButton(close)
         }
         .accessibilityElement(children: .contain)

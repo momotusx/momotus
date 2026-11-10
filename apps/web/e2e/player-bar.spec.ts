@@ -571,6 +571,10 @@ test.describe("phone", () => {
         await expect(page.locator(".bstrip.sub")).toBeVisible();
         await expect(page.locator(".bstrip.sub").getByRole("radio")).toHaveCount(4);
         for (const t of await boxes(page, ".bstrip :is(.chip3, .qsb, .qv, .qb)")) expect(t.h, `${t.key} height`).toBeGreaterThanOrEqual(48);
+        // Pixel walk 2026-11-09 L21: Style and Close stay whole on screen with no sideways swipe; the chips scroll.
+        const ends = await boxes(page, '.bstrip :is([data-f="strip:style"], [data-f="strip:close"])');
+        expect(ends.map((t) => t.key)).toEqual(["strip:style", "strip:close"]);
+        for (const t of ends) expect([t.key, t.x >= 0 && t.right <= width]).toEqual([t.key, true]);
         await shot(page, `phone-${width}-strip`);
         await page.touchscreen.tap(width / 2, 80);
         await expect(page.locator(".bstrip")).toHaveCount(0);

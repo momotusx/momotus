@@ -41,6 +41,23 @@ private func source(_ path: String) throws -> String {
     #expect(season.contains(".frame(minHeight: Theme.minTarget)"), "the season pull-down lost the minimum")
 }
 
+@Test func styleAndCloseStayInReachOfAStripWiderThanTheScreen() throws {
+    // Pixel walk 2026-11-09 L21, the same row shape on the iPhone: the languages and the shift made the strip wider
+    // than a phone across and Style and Close started past its edge. Only the row's start scrolls; they stay pinned.
+    let strip = try source("Player/PlayerStrip.swift")
+    let row = try body(of: "private struct StripRow<Content: View, Pinned: View>: View", in: strip)
+    #expect(row.contains("ScrollView(.horizontal) { row }"))
+    #expect(try body(of: "ViewThatFits(in: .horizontal)", in: row).contains("pinned") == false, "the pinned end scrolls")
+    let subtitles = try body(of: "struct SubtitleStrip: View", in: strip)
+    #expect(subtitles.contains("StripRow { mainRow } pinned: { mainEnd }"))
+    let main = try body(of: "@ViewBuilder private var mainRow: some View", in: subtitles)
+    #expect(!main.contains("closeButton(") && !main.contains("bar.style"), "Style or Close scrolls with the chips")
+    let end = try body(of: "@ViewBuilder private var mainEnd: some View", in: subtitles)
+    #expect(end.contains("closeButton(close)") && end.contains("title: bar.style"))
+    let audio = try body(of: "struct AudioStrip: View", in: strip)
+    #expect(audio.contains("} pinned: {\n            closeButton(close)"), "the audio strip's Close scrolls")
+}
+
 @Test func theMacToolbarHoldsSearchAloneAndTheOrnamentEndsWithTheProfile() throws {
     // Read from the sources: a toolbar is not laid out in a hosted view. The profile took Settings' place in the
     // ornament (plans/nav-profile.md), so it shows once: at the ornament's end, never as a toolbar item of its own.

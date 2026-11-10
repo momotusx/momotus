@@ -166,6 +166,28 @@ class PhonePlayerBarTest {
         compose.onNodeWithText("More languages").assertDoesNotExist()
     }
 
+    /**
+     * Pixel walk 2026-11-09 L21: with a subtitle on, its shift and the languages made the strip wider than the screen
+     * across, and Style and Close started past its right edge. They stay whole on screen; the rest scrolls. A small
+     * phone across (640 dp), where this strip is wider than the screen.
+     */
+    @Test
+    @Config(qualifiers = "w640dp-h360dp")
+    fun `Style and Close stay on screen in a strip wider than the phone`() {
+        playing()
+        compose.onNodeWithContentDescription("Subtitles, Off, 2 languages").performClick()
+        compose.onNode(hasText("English")).performClick()
+        compose.waitUntil(10_000) { shift() >= 1 }
+        compose.waitForIdle()
+        val root = compose.onRoot().fetchSemanticsNode().boundsInRoot
+        for (name in listOf("Style", "Close")) {
+            val box = compose.onNodeWithText(name).fetchSemanticsNode().boundsInRoot
+            assertTrue(box.width >= 48f && box.left >= root.left && box.right <= root.right, "$name at $box in $root")
+        }
+        compose.onNodeWithText("Style").performClick()
+        compose.onNodeWithText("Size").assertExists()
+    }
+
     @Test
     fun `a chip turns its language on, and More languages opens the full picker`() {
         playing()

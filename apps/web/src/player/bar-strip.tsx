@@ -206,50 +206,54 @@ export function SubtitleStrip(props: SubtitleStripProps) {
   return (
     <div class="bstrip sub" role="region" aria-label={names.subtitles} data-fgroup="strip">
       <div class="bsrow s1">
-        <span class="slb">
-          <Captions aria-hidden />
-          {names.subtitles}
-        </span>
-        <div class="strk" role="radiogroup" aria-label={names.subtitleLanguage}>
-          <button class="chip3" role="radio" aria-checked={props.checked === null} data-f="strip:sub:off" onClick={() => props.pick(null)}>
-            <svg class="fs" viewBox="0 0 26 26" aria-hidden="true">
-              <circle cx="13" cy="13" r="12" fill="none" stroke="currentColor" stroke-opacity=".3" stroke-width="2" />
-            </svg>
-            <span class="cl">{barWords.off}</span>
-          </button>
-          <For each={props.languages}>
-            {(l) => (
-              <button class="chip3" role="radio" aria-checked={props.checked === l.language} data-f={`strip:sub:${l.language}`} onClick={() => props.pick(l.language)}>
-                <Flag language={l.language} />
-                <span class="cl">{l.name}</span>
-              </button>
-            )}
-          </For>
-          <Show when={props.searching}>
-            <span class="snote" role="status">
-              <LoaderCircle class="spin" aria-hidden />
-              {barWords.stillSearching}
-            </span>
-          </Show>
-          <button class="chip3 ghost" data-f="strip:more" onClick={() => props.more()}>
-            <span class="cl">{barWords.moreLanguages}</span>
-            <ChevronRight aria-hidden />
-          </button>
-        </div>
-        <Show when={props.shift}>
-          {(s) => (
-            <>
-              <span class="svr" aria-hidden="true" />
-              <QuickShift at="strip" value={s().value} set={s().set} track={s().track} adjusting={props.adjusting} setAdjusting={props.setAdjusting} onHold={props.onHold} />
-              {/* D22: a remote cannot press the value to reset (OK adjusts), so TV has Reset while it is not 0. */}
-              <Show when={tv() && s().value !== 0}>
-                <button class="chip3 ghost" data-f="strip:reset" onClick={() => s().set(0)}>
-                  <span class="cl">{barWords.reset}</span>
+        {/* The label, the chips and the shift scroll on a narrow screen; Style and Close stay in reach after them
+         * (Pixel walk 2026-11-09 L21). */}
+        <div class="sscr">
+          <span class="slb">
+            <Captions aria-hidden />
+            {names.subtitles}
+          </span>
+          <div class="strk" role="radiogroup" aria-label={names.subtitleLanguage}>
+            <button class="chip3" role="radio" aria-checked={props.checked === null} data-f="strip:sub:off" onClick={() => props.pick(null)}>
+              <svg class="fs" viewBox="0 0 26 26" aria-hidden="true">
+                <circle cx="13" cy="13" r="12" fill="none" stroke="currentColor" stroke-opacity=".3" stroke-width="2" />
+              </svg>
+              <span class="cl">{barWords.off}</span>
+            </button>
+            <For each={props.languages}>
+              {(l) => (
+                <button class="chip3" role="radio" aria-checked={props.checked === l.language} data-f={`strip:sub:${l.language}`} onClick={() => props.pick(l.language)}>
+                  <Flag language={l.language} />
+                  <span class="cl">{l.name}</span>
                 </button>
-              </Show>
-            </>
-          )}
-        </Show>
+              )}
+            </For>
+            <Show when={props.searching}>
+              <span class="snote" role="status">
+                <LoaderCircle class="spin" aria-hidden />
+                {barWords.stillSearching}
+              </span>
+            </Show>
+            <button class="chip3 ghost" data-f="strip:more" onClick={() => props.more()}>
+              <span class="cl">{barWords.moreLanguages}</span>
+              <ChevronRight aria-hidden />
+            </button>
+          </div>
+          <Show when={props.shift}>
+            {(s) => (
+              <>
+                <span class="svr" aria-hidden="true" />
+                <QuickShift at="strip" value={s().value} set={s().set} track={s().track} adjusting={props.adjusting} setAdjusting={props.setAdjusting} onHold={props.onHold} />
+                {/* D22: a remote cannot press the value to reset (OK adjusts), so TV has Reset while it is not 0. */}
+                <Show when={tv() && s().value !== 0}>
+                  <button class="chip3 ghost" data-f="strip:reset" onClick={() => s().set(0)}>
+                    <span class="cl">{barWords.reset}</span>
+                  </button>
+                </Show>
+              </>
+            )}
+          </Show>
+        </div>
         <span class="svr" aria-hidden="true" />
         <button class="chip3 ghost" data-f="strip:style" aria-expanded={props.style} onClick={() => props.toggleStyle()}>
           <Type aria-hidden />
@@ -302,29 +306,31 @@ export function AudioStrip(props: {
   return (
     <div class="bstrip aud" role="region" aria-label={names.audio} data-fgroup="strip">
       <div class="bsrow s1">
-        <span class="slb">
-          <AudioLines aria-hidden />
-          {names.audio}
-        </span>
-        <div class="strk" role="radiogroup" aria-label={names.audioTrack}>
-          <For each={props.tracks}>
-            {(t) => (
-              <button
-                class="chip3"
-                role="radio"
-                aria-checked={t.checked}
-                aria-label={t.detail ? `${t.name}, ${t.detail}` : undefined}
-                title={t.detail}
-                data-f={`strip:aud:${t.id}`}
-                onClick={() => props.pick(t.id)}
-              >
-                <AudioLines aria-hidden />
-                <span class="cl">{t.name}</span>
-              </button>
-            )}
-          </For>
-          <span class="snote">{props.note}</span>
-          {props.versions}
+        <div class="sscr">
+          <span class="slb">
+            <AudioLines aria-hidden />
+            {names.audio}
+          </span>
+          <div class="strk" role="radiogroup" aria-label={names.audioTrack}>
+            <For each={props.tracks}>
+              {(t) => (
+                <button
+                  class="chip3"
+                  role="radio"
+                  aria-checked={t.checked}
+                  aria-label={t.detail ? `${t.name}, ${t.detail}` : undefined}
+                  title={t.detail}
+                  data-f={`strip:aud:${t.id}`}
+                  onClick={() => props.pick(t.id)}
+                >
+                  <AudioLines aria-hidden />
+                  <span class="cl">{t.name}</span>
+                </button>
+              )}
+            </For>
+            <span class="snote">{props.note}</span>
+            {props.versions}
+          </div>
         </div>
         {closeButton(props.close)}
       </div>
