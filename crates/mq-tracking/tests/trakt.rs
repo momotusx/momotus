@@ -834,6 +834,14 @@ async fn a_shared_chain_waits_for_the_accounts_refresh() {
         !auth.advance(&newer).await,
         "the same revision again is nothing"
     );
+    // R2-9: the same revision with other tokens (two refreshes Trakt both
+    // took) is the account's choice: taken, and back again.
+    let twin = TraktRecord {
+        refresh_token: "twin-refresh".into(),
+        ..newer.clone()
+    };
+    assert!(auth.advance(&twin).await);
+    assert!(auth.advance(&newer).await);
     assert_eq!(auth.status().await, Ok(()));
     assert_eq!(auth.bound().await, Some(bound()), "the same connection");
     call::get(&api, &gate, &auth, &bound(), "/sync/x")

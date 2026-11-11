@@ -257,6 +257,11 @@ struct State {
     /// Shared: Trakt refused the held access token. `Reconnect` until a
     /// newer revision arrives or the round's refresh works.
     refused: bool,
+    /// Trakt answered a call with this record's token, or gave it (a sign-in
+    /// or a rotation), in this process: only such a record is published for
+    /// the account. A stored record is not, until it answers (its chain may
+    /// have died while the app was closed).
+    proven: bool,
 }
 
 /// A new sign-in's chain id: 16 random bytes, hex.
@@ -326,6 +331,7 @@ impl Auth {
                 s.retry_at = None;
                 s.spent = false;
                 s.refused = false;
+                s.proven = false;
                 s.received_at_ms = 0;
                 // A record installed or replaced (even at the same
                 // generation) makes every sign-in begun before it stale.
@@ -379,6 +385,7 @@ impl Auth {
         s.retry_at = None;
         s.spent = false;
         s.refused = false;
+        s.proven = true;
         Some(record)
     }
 
@@ -398,6 +405,8 @@ impl Auth {
             logins: s.logins + 1,
             received_at_ms: now_ms(),
             shared: s.shared,
+            // Published only once it answered on the device that wrote it.
+            proven: true,
             ..State::default()
         };
         record
@@ -430,8 +439,30 @@ impl Auth {
         s.retry_at = None;
         s.spent = false;
         s.refused = false;
+        s.proven = true;
         s.received_at_ms = now_ms();
         true
+    }
+
+    /// Trakt answered a call made with `used`: the held record works.
+    pub async fn confirm(&self, used: &str) {
+        let mut s = lock(&self.state);
+        if s.record.as_ref().is_some_and(|r| r.access_token == used) {
+            s.proven = true;
+        }
+    }
+
+    /// Whether the held record answered or came from Trakt in this process.
+    pub async fn proven(&self) -> bool {
+        lock(&self.state).proven
+    }
+
+    /// A shared chain whose held token Trakt refused while this device has
+    /// not tried its refresh: the account's refresher will give a newer
+    /// revision, so nothing is asked of the user yet.
+    pub async fn waiting(&self) -> bool {
+        let s = lock(&self.state);
+        s.refused && !s.spent && s.dead.is_none()
     }
 
     /// The record held now, acknowledged or not.
@@ -448,11 +479,13 @@ impl Auth {
     /// under the spread of the token's lifetime is left, or Trakt refused the
     /// held token, unless this revision's refresh was already refused.
     /// Returns the rotated record.
-    pub async fn refresh_now(&self, api: &Api) -> Option<TraktRecord> {
+    /// `asked`: the account asked for a rotation (a device was removed or
+    /// reported lost), so its copy of the refresh token is spent.
+    pub async fn refresh_now(&self, api: &Api, asked: bool) -> Option<TraktRecord> {
         let bound = {
             let s = lock(&self.state);
             let record = s.record.as_ref()?;
-            if s.dead.is_some() || s.spent || (fresh(record) && !s.refused) {
+            if s.dead.is_some() || s.spent || (fresh(record) && !s.refused && !asked) {
                 return None;
             }
             Bound {
@@ -618,6 +651,7 @@ impl Auth {
                     s.acked = false;
                     s.retry_at = None;
                     s.refused = false;
+                    s.proven = true;
                     s.received_at_ms = now_ms();
                     Ok(token)
                 }

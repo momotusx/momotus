@@ -72,6 +72,8 @@ struct Fake {
     /// The meta addon drops each connection unanswered (no network).
     meta_silent: Arc<std::sync::atomic::AtomicBool>,
     seen: Arc<Mutex<Vec<Req>>>,
+    /// Access tokens Trakt no longer takes: every call with one is a 401.
+    dead: Arc<Mutex<Vec<String>>>,
 }
 
 impl Fake {
@@ -91,6 +93,7 @@ impl Fake {
             meta_season_two: Arc::default(),
             meta_silent: Arc::default(),
             seen: Arc::default(),
+            dead: Arc::default(),
         }
     }
 
@@ -146,6 +149,9 @@ impl Fake {
     }
 
     fn answer(&self, req: &Req) -> Reply {
+        if !req.token.is_empty() && self.dead.lock().unwrap().contains(&req.token) {
+            return reply(401, json!({}));
+        }
         let route = format!("{} {}", req.method, req.path);
         // A device code's own polls first ("route#code").
         let keyed = req.body["code"]
@@ -3895,6 +3901,20 @@ async fn a_removed_device_never_refreshes_and_the_others_stay_connected() {
     );
     assert!(t.fake.seen("POST", "/oauth/revoke").is_empty());
     assert_eq!(status(&t.a.core).state, TraktState::Connected);
+    // A link written after the removal (a rotation) never reaches it.
+    let before = t.b.core.library().settings("p").unwrap();
+    t.a.settle();
+    t.fake
+        .queue("POST /oauth/token", vec![rotated("after-removal")]);
+    t.a.core.trakt_rotate_soon();
+    t.a.sync().await;
+    assert_eq!(t.a.store().await.access_token, "after-removal");
+    assert!(t.b.try_sync().await.is_err());
+    let link = |s: &[(String, String)]| s.iter().find(|(k, _)| k == "trakt.link").cloned();
+    assert_eq!(
+        link(&t.b.core.library().settings("p").unwrap()),
+        link(&before)
+    );
 }
 
 /// The refresher rotates and the app never stores the rotation (killed
@@ -4022,4 +4042,282 @@ async fn a_device_without_an_account_keeps_its_own_link() {
     assert!(!s.shared);
     let settings = core.library().settings("p").unwrap();
     assert!(!settings.iter().any(|(k, _)| k == "trakt.link"));
+}
+
+fn chained(account: &str, chain: &str, access: &str) -> TraktRecord {
+    TraktRecord {
+        chain: chain.into(),
+        access_token: access.into(),
+        ..record(account)
+    }
+}
+
+/// Code review P1: A's stored sign-in died while the app was closed, B's
+/// works. A never publishes its dead one (it is tried first and refused),
+/// B's is published, and both scrobble with B's.
+#[tokio::test]
+async fn a_dead_stored_sign_in_is_never_published_over_a_working_one() {
+    let t = account("a-dead-legacy").await;
+    t.fake.dead.lock().unwrap().push("dead-access".into());
+    let dead = TraktRecord {
+        chain: String::new(),
+        ..chained("a-dead-legacy", "", "dead-access")
+    };
+    t.a.core.set_trakt(Some(dead)).await.unwrap();
+    t.b.core
+        .set_trakt(Some(chained("a-dead-legacy", "chain-b", "live")))
+        .await
+        .unwrap();
+    t.a.sync().await;
+    assert!(
+        !t.a.core
+            .library()
+            .settings("p")
+            .unwrap()
+            .iter()
+            .any(|(k, _)| k == "trakt.link"),
+        "the dead one is not published"
+    );
+    t.b.sync().await;
+    t.a.sync().await;
+    assert_eq!(t.a.link()["chain"], "chain-b");
+    assert_eq!(t.b.link()["chain"], "chain-b");
+    assert_eq!(t.a.store().await.access_token, "live");
+    let playing = PlaybackView::open(&t.a.core, Vec::new(), episode(1));
+    playing.report_progress(at(10), MINUTES, false);
+    t.fake
+        .wait_for("A's start", |f| f.scrobbles().len() == 1)
+        .await;
+    assert_eq!(scrobble_tokens(&t.fake), ["live"]);
+}
+
+/// Code review P2-2: B disconnects before its round took the account's
+/// link, holding a chain of its own: the account's chain is the one turned
+/// off, so A drops it. A record of yet another chain A's app hands over
+/// later is dropped at the next round too.
+#[tokio::test]
+async fn a_disconnect_turns_off_the_accounts_chain_whatever_is_held() {
+    let t = account("a-off-race").await;
+    t.a.core
+        .set_trakt(Some(record("a-off-race")))
+        .await
+        .unwrap();
+    t.a.sync().await;
+    t.b.core
+        .set_trakt(Some(chained("a-off-race", "chain-b", "b-access")))
+        .await
+        .unwrap();
+    // B pulls the link without its round.
+    t.b.core.set_trakt_config(None);
+    t.b.sync().await;
+    t.b.core.set_trakt_config(Some(config(&t.base)));
+    t.b.core.trakt_sign_out(false).await.unwrap();
+    assert_eq!(
+        (t.b.link()["chain"].clone(), t.b.link()["off"].clone()),
+        (json!("c0"), json!(true))
+    );
+    t.b.sync().await;
+    t.a.sync().await;
+    assert_eq!(status(&t.a.core).state, TraktState::OffEverywhere);
+    t.a.core
+        .set_trakt(Some(restarted(chained("a-off-race", "chain-z", "z"))))
+        .await
+        .unwrap();
+    assert_eq!(status(&t.a.core).state, TraktState::Connected);
+    t.a.sync().await;
+    let s = status(&t.a.core);
+    assert_eq!(s.state, TraktState::OffEverywhere);
+    assert!(s.drop_stored);
+}
+
+/// Code review P2-3: the link moves to another Trakt account while A still
+/// has writes for its old one waiting. A keeps the old account until they
+/// went out, then takes the new one.
+#[tokio::test]
+async fn writes_of_the_old_trakt_account_go_out_before_another_is_taken() {
+    let t = account("a-x").await;
+    t.b.core
+        .set_trakt(Some(chained("a-y", "chain-y", "y")))
+        .await
+        .unwrap();
+    t.b.sync().await;
+    t.a.core
+        .set_trakt(Some(chained("a-x", "chain-x", "x")))
+        .await
+        .unwrap();
+    let down = Reply {
+        status: 503,
+        body: "{}".into(),
+        delay: Duration::ZERO,
+        headers: String::new(),
+    };
+    t.fake.queue("POST /sync/history", vec![down; 20]);
+    t.a.core
+        .library()
+        .set_watched_by_hand(
+            "p",
+            SHOW,
+            "tt100:1:1",
+            true,
+            t.a.core.clock(),
+            Some((key("a-x"), now())),
+        )
+        .unwrap();
+    for round in 0..2 {
+        t.a.sync().await;
+        assert_eq!(pending(&t.a.core, "a-x"), 1, "round {round}");
+        assert_eq!(status(&t.a.core).record, None, "still the old account");
+    }
+    t.fake.queued.lock().unwrap().remove("POST /sync/history");
+    due(&t.a.core, "a-x");
+    t.a.core.trakt_sync().await.unwrap();
+    assert_eq!(pending(&t.a.core, "a-x"), 0, "sent");
+    t.a.sync().await;
+    assert_eq!(t.a.store().await.account, "a-y");
+}
+
+/// Code review P2-4: the refresher leaves the profile; the other device
+/// takes the role at once. Meanwhile a device whose held token Trakt
+/// refused waits for the account's refresh: it is never told to sign in.
+#[tokio::test]
+async fn the_refresher_role_moves_when_its_device_leaves_the_profile() {
+    let t = account("a-switch").await;
+    t.a.core.set_trakt(Some(record("a-switch"))).await.unwrap();
+    t.a.sync().await;
+    t.b.sync().await;
+    t.b.store().await;
+    let (first, second) = if t.a.config().member_hex() < t.b.config().member_hex() {
+        (&t.a, &t.b)
+    } else {
+        (&t.b, &t.a)
+    };
+    first.settle();
+    second.settle();
+    first.sync().await;
+    second.sync().await;
+    assert!(
+        t.fake.seen("POST", "/oauth/token").is_empty(),
+        "refreshed by neither yet"
+    );
+    // The second's token is refused: it waits, no sign-in asked.
+    t.fake.dead.lock().unwrap().push("access".into());
+    let playing = PlaybackView::open(&second.core, Vec::new(), episode(1));
+    playing.report_progress(at(10), MINUTES, false);
+    until("refused", || {
+        status(&second.core).state != TraktState::Connected
+    })
+    .await;
+    assert_eq!(status(&second.core).state, TraktState::Linking);
+    until("shown", || {
+        playing.snapshot().trakt == TraktPlayback::Linking
+    })
+    .await;
+    // The first device leaves the profile.
+    first.core.make_active().unwrap();
+    let elsewhere = first.core.for_profile("default");
+    elsewhere.make_active().unwrap();
+    elsewhere.sync_from(&first.config(), None).await.unwrap();
+    t.fake.queue("POST /oauth/token", vec![rotated("moved")]);
+    second.sync().await;
+    assert_eq!(t.fake.seen("POST", "/oauth/token").len(), 1);
+    assert_eq!(status(&second.core).state, TraktState::Connected);
+    assert_eq!(second.link()["chain"], "c0");
+}
+
+/// Code review P2-5: a device removed or reported lost keeps a copy of the
+/// chain's refresh token. The account asks for a rotation and its refresher
+/// makes it at once, though the token is fresh, so that copy is spent; a
+/// member that is gone (sorting first) is no refresher.
+#[tokio::test]
+async fn removing_a_device_spends_its_copy_of_the_refresh_token() {
+    let t = account("a-lost").await;
+    t.a.core.set_trakt(Some(record("a-lost"))).await.unwrap();
+    t.a.sync().await;
+    t.b.sync().await;
+    t.b.store().await;
+    let now = mq_library::hlc::now_ms();
+    t.a.beat("00000000000000000000000000000000", now - 3_600_000, now);
+    t.a.settle();
+    let gone = vec![t.b.config().secret().id()];
+    let kept = mq_sync::remove_devices(
+        t.a.core.library(),
+        &http(),
+        &t.a.config(),
+        t.a.core.clock(),
+        gone,
+    )
+    .await
+    .unwrap();
+    *t.a.record.lock().unwrap() = kept;
+    t.a.core.trakt_rotate_soon();
+    t.fake.queue("POST /oauth/token", vec![rotated("spent-it")]);
+    t.a.sync().await;
+    assert_eq!(t.fake.seen("POST", "/oauth/token").len(), 1);
+    assert_eq!(t.a.store().await.access_token, "spent-it");
+    t.a.sync().await;
+    assert_eq!(t.fake.seen("POST", "/oauth/token").len(), 1, "once");
+}
+
+/// Code review P3-6: leaving drops a chain of the device's own (not the
+/// account's) with a revoke, as a sign-out always did.
+#[tokio::test]
+async fn leaving_with_a_chain_of_its_own_revokes_it() {
+    let (core, fake) = setup("a-own").await;
+    core.set_trakt(Some(record("a-own"))).await.unwrap();
+    core.trakt_sign_out(true).await.unwrap();
+    fake.wait_for("the revoke", |f| f.seen("POST", "/oauth/revoke").len() == 1)
+        .await;
+}
+
+/// Code review P3-10: a link that does not open here reads as off, with
+/// Connect, never "connecting" for good.
+#[tokio::test]
+async fn a_link_that_does_not_open_reads_as_off() {
+    let t = account("a-unopened").await;
+    let broken = json!({"chain": "zz", "sealed": "AAAA"}).to_string();
+    t.b.core
+        .library()
+        .set_setting("p", "trakt.link", &broken, t.b.core.clock())
+        .unwrap();
+    t.b.sync().await;
+    assert_eq!(status(&t.b.core).state, TraktState::Off);
+}
+
+/// Code review P3-12: a device that just came back (its beat younger than
+/// ten minutes) does not refresh yet, so the others hear of it first.
+#[tokio::test]
+async fn a_device_that_just_came_back_waits_before_it_refreshes() {
+    let t = account("a-back").await;
+    t.a.core.set_trakt(Some(aging("a-back"))).await.unwrap();
+    t.a.sync().await;
+    t.a.sync().await;
+    assert!(
+        t.fake.seen("POST", "/oauth/token").is_empty(),
+        "not settled yet"
+    );
+    t.a.settle();
+    t.fake.queue("POST /oauth/token", vec![rotated("settled")]);
+    t.a.sync().await;
+    assert_eq!(t.fake.seen("POST", "/oauth/token").len(), 1);
+}
+
+/// Code review P3-12: a stored record newer than the link (a rotation the
+/// link lost) is written to the link and reaches the other device.
+#[tokio::test]
+async fn a_newer_stored_revision_reaches_the_link() {
+    let t = account("a-newer").await;
+    t.a.core.set_trakt(Some(record("a-newer"))).await.unwrap();
+    t.a.sync().await;
+    t.b.sync().await;
+    t.b.store().await;
+    let newer = TraktRecord {
+        revision: 1,
+        access_token: "newer".into(),
+        refresh_token: "newer-r".into(),
+        ..restarted(record("a-newer"))
+    };
+    t.a.core.set_trakt(Some(newer)).await.unwrap();
+    t.a.sync().await;
+    t.b.sync().await;
+    assert_eq!(t.b.store().await.access_token, "newer");
 }

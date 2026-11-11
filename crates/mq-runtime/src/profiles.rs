@@ -114,6 +114,12 @@ impl Core {
 
     /// Remembers this handle's profile as the device's active one.
     pub fn make_active(&self) -> Result<(), ProfileError> {
+        // The profile left stops counting this device as its Trakt refresher.
+        if let Ok(Some(left)) = self.device_library().active_profile()
+            && left != self.profile()
+        {
+            self.for_profile(&left).trakt_leave_profile();
+        }
         Ok(self.device_library().set_active_profile(self.profile())?)
     }
 

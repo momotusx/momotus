@@ -732,7 +732,10 @@ fn remember(core: &Core, at: Bind<'_>, video_id: &str, percent: f64) {
 /// A dead one records nothing and says to sign in again: this device did
 /// sign in, so it never reads as `ThisDeviceOff`.
 fn shown(conn: &Conn) -> TraktPlayback {
+    let waiting = futures_util::FutureExt::now_or_never(conn.auth.waiting()).unwrap_or(false);
     match futures_util::FutureExt::now_or_never(conn.auth.status()) {
+        // The account's refresher gives a newer token: no sign-in asked.
+        Some(Err(AuthError::Reconnect(_))) if waiting => TraktPlayback::Linking,
         Some(Err(AuthError::Reconnect(_))) => TraktPlayback::Reconnect,
         _ => TraktPlayback::On,
     }

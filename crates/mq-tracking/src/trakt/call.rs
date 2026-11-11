@@ -48,6 +48,9 @@ where
     let token = auth.token(api, bound).await?;
     let answer = call(token.clone()).await;
     if !matches!(answer, Answer::Refused { status: 401, .. }) {
+        if matches!(answer, Answer::Ok { .. }) {
+            auth.confirm(&token).await;
+        }
         return Ok(answer);
     }
     let fresh = auth.after_401(api, &token, bound).await?;
@@ -55,6 +58,9 @@ where
     if matches!(again, Answer::Refused { status: 401, .. }) {
         auth.reject(&fresh, bound).await;
         return Err(AuthError::Reconnect("Trakt refused a fresh token".into()));
+    }
+    if matches!(again, Answer::Ok { .. }) {
+        auth.confirm(&fresh).await;
     }
     Ok(again)
 }

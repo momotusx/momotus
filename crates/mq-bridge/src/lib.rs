@@ -2253,7 +2253,14 @@ impl Session {
                     let _gate = core.sync_gate().await;
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
                     let devices = vec![device];
-                    answer(mq_sync::remove_devices(library, http, &record, clock, devices).await)
+                    let removed =
+                        mq_sync::remove_devices(library, http, &record, clock, devices).await;
+                    // Its copy of the account's Trakt refresh token is spent
+                    // at the refresher's next round (plans/trakt-account.md 3.5).
+                    if removed.is_ok() {
+                        core.device().trakt_rotate_soon();
+                    }
+                    answer(removed)
                 });
             }
             Request::ReportLost {
@@ -2265,7 +2272,12 @@ impl Session {
                 self.spawn(id, async move {
                     let _gate = core.sync_gate().await;
                     let (library, http, clock) = (core.library(), core.http(), core.clock());
-                    answer(mq_sync::report_lost(library, http, &record, clock, lost, keep).await)
+                    let reported =
+                        mq_sync::report_lost(library, http, &record, clock, lost, keep).await;
+                    if reported.is_ok() {
+                        core.device().trakt_rotate_soon();
+                    }
+                    answer(reported)
                 });
             }
             Request::SignOut {

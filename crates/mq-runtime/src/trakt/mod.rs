@@ -28,7 +28,7 @@ use mq_tracking::trakt::{Api, Auth, AuthError, Bound, Gate, Hosts, TraktRecord};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock};
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -216,11 +216,13 @@ pub(crate) struct Conn {
     created: tokio::time::Instant,
     /// A sign-in made here that the account's link has not taken yet.
     signed_in_here: AtomicBool,
-    /// The link holds another Trakt account; one round went by under the
-    /// old one for its waiting writes.
-    deferred: AtomicBool,
+    /// Rounds the link of another Trakt account waited for the old one's
+    /// writes.
+    deferred: AtomicU32,
     /// Tells the app to delete its stored record (`TraktStatus::drop_stored`).
     drop_stored: AtomicBool,
+    /// The account's link did not open here.
+    unopened: AtomicBool,
 }
 
 #[derive(Default)]
@@ -317,8 +319,9 @@ impl Trakt {
                     stop: self.shutdown.child_token(),
                     created: tokio::time::Instant::now(),
                     signed_in_here: AtomicBool::new(false),
-                    deferred: AtomicBool::new(false),
+                    deferred: AtomicU32::new(0),
                     drop_stored: AtomicBool::new(false),
+                    unopened: AtomicBool::new(false),
                 })
             })
             .clone()
@@ -615,7 +618,17 @@ impl Core {
         let trakt = self.trakt();
         let conn = self.trakt_conn();
         if local {
+            // A chain that is not the account's (never published, or of
+            // another Trakt account) is this device's own: revoked as before.
+            let own = conn.auth.record().await.filter(|h| {
+                !link::in_account(self) || link::read(self).is_none_or(|l| l.chain != h.chain)
+            });
             self.trakt_drop_here(&conn);
+            if let (Some(own), Some((api, _))) = (own, trakt.api()) {
+                tokio::spawn(async move {
+                    mq_tracking::trakt::auth::revoke(&api, &own.access_token).await
+                });
+            }
             return Ok(());
         }
         let chain = conn.auth.record().await.map(|r| r.chain);
@@ -712,15 +725,16 @@ impl Core {
         };
         let (last_ok_ms, failing_since, last_error, importing) = health;
         // The auth calls are async only by signature: they never wait.
-        let (account, user, record, auth) = futures_util::FutureExt::now_or_never(async {
+        let (account, user, record, auth, waiting) = futures_util::FutureExt::now_or_never(async {
             (
                 conn.auth.account().await,
                 conn.auth.user().await,
                 conn.auth.unacked().await,
                 conn.auth.status().await,
+                conn.auth.waiting().await,
             )
         })
-        .unwrap_or((None, None, None, Err(AuthError::Off)));
+        .unwrap_or((None, None, None, Err(AuthError::Off), false));
         let mut status = TraktStatus {
             state: TraktState::Off,
             user,
@@ -746,6 +760,8 @@ impl Core {
             let stale_calls =
                 failing_since.is_some_and(|since| now.saturating_sub(since) > FAILING_AFTER_MS);
             status.state = match auth {
+                // The account's refresher gives a newer token: nothing to do.
+                Err(AuthError::Reconnect(_)) if waiting => TraktState::Linking,
                 Err(AuthError::Reconnect(reason)) => TraktState::Reconnect { reason },
                 _ if stale_calls || stale_write => TraktState::Failing {
                     since_ms: failing_since.or(oldest.map(|o| o as u64)).unwrap_or(now),
@@ -773,8 +789,13 @@ fn account_state(core: &Core) -> TraktState {
     if kids(core) {
         return TraktState::Off;
     }
+    // A link that does not open here reads as off: Connect is offered.
+    let unopened = core.trakt_conn().unopened.load(Ordering::SeqCst);
     match link::read(core) {
-        Some(l) if !l.off && !link::offs(core).contains(&l.chain) => TraktState::Linking,
+        Some(l) if !l.off && !link::offs(core).contains(&l.chain) && !unopened => {
+            TraktState::Linking
+        }
+        Some(l) if !l.off && !link::offs(core).contains(&l.chain) => TraktState::Off,
         Some(_) => TraktState::OffEverywhere,
         None => TraktState::Off,
     }

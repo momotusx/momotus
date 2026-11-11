@@ -231,9 +231,12 @@ impl Login {
             // Approved but not taken: Trakt drops them too.
             return auth::revoke(&api, &approved).await;
         };
-        // The account's next round gives every device this sign-in.
-        conn.signed_in_here
-            .store(true, std::sync::atomic::Ordering::SeqCst);
+        // The account's next round gives every device this sign-in; one made
+        // before this device joined an account never overrides its link.
+        if super::link::in_account(&core) {
+            conn.signed_in_here
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+        }
         if let Err(e) = core.trakt_connected(&conn, &record.account, record.generation) {
             tracing::warn!("trakt: sign-in not recorded: {e}");
         }
