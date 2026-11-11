@@ -44,6 +44,7 @@
   "signOutAsk": "Sign out of Trakt on this device? Watched marks and progress stay here. Changes that have not reached Trakt yet are dropped.",
   "signedOut": "Signed out of Trakt on this device.",
   "signOutShared": "Disconnect on every device",
+  "disconnected": "Disconnected.",
   "signOutSharedAsk": "Disconnect Trakt on every device of your account? Watched marks and progress stay. Changes that have not reached Trakt yet are dropped.",
   "signOutFailed": "Not signed out: {reason}",
   "memoryOnly": "Kept for this session only: this device could not store the sign-in. Sign in again after the app restarts.",

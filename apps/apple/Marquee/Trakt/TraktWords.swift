@@ -48,6 +48,7 @@ enum TraktWords {
     static let signOutAsk = "Sign out of Trakt on this device? Watched marks and progress stay here. Changes that have not reached Trakt yet are dropped."
     static let signedOut = "Signed out of Trakt on this device."
     static let signOutShared = "Disconnect on every device"
+    static let disconnected = "Disconnected."
     static let signOutSharedAsk = "Disconnect Trakt on every device of your account? Watched marks and progress stay. Changes that have not reached Trakt yet are dropped."
     static let signOutFailed = "Not signed out: {reason}"
     static let memoryOnly = "Kept for this session only: this device could not store the sign-in. Sign in again after the app restarts."
@@ -106,6 +107,7 @@ enum TraktWords {
         "signOutAsk": signOutAsk,
         "signedOut": signedOut,
         "signOutShared": signOutShared,
+        "disconnected": disconnected,
         "signOutSharedAsk": signOutSharedAsk,
         "signOutFailed": signOutFailed,
         "memoryOnly": memoryOnly,
@@ -205,7 +207,7 @@ enum TraktRules {
 
     static func signOutAsk(shared: Bool) -> String { shared ? TraktWords.signOutSharedAsk : TraktWords.signOutAsk }
 
-    static func signedOut(shared: Bool) -> String { shared ? TraktWords.offEverywhere : TraktWords.signedOut }
+    static func signedOut(shared: Bool) -> String { shared ? TraktWords.disconnected : TraktWords.signedOut }
 
     /// Settings' line: off (or not read yet) invites, the other states say themselves.
     static func rowLine(_ status: TraktStatus?, clock: (Int64) -> String) -> String {

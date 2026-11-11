@@ -65,6 +65,7 @@ object TraktCopy {
             "reached Trakt yet are dropped."
     const val SIGNED_OUT = "Signed out of Trakt on this device."
     const val SIGN_OUT_SHARED = "Disconnect on every device"
+    const val DISCONNECTED = "Disconnected."
     const val SIGN_OUT_SHARED_ASK =
         "Disconnect Trakt on every device of your account? Watched marks and progress stay. Changes that have " +
             "not reached Trakt yet are dropped."
@@ -153,7 +154,7 @@ object TraktCopy {
 
     fun signOutAsk(shared: Boolean) = if (shared) SIGN_OUT_SHARED_ASK else SIGN_OUT_ASK
 
-    fun signedOut(shared: Boolean) = if (shared) OFF_EVERYWHERE else SIGNED_OUT
+    fun signedOut(shared: Boolean) = if (shared) DISCONNECTED else SIGNED_OUT
 
     /** A state the user can sync and sign out of: an account is held on this device. */
     fun signedIn(state: String) = state == "connected" || state == "failing" || state == "reconnect"

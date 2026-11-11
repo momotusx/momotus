@@ -88,6 +88,7 @@ class TraktCopyTest {
                     "linking" to LINKING,
                     "offEverywhere" to OFF_EVERYWHERE,
                     "signOutShared" to SIGN_OUT_SHARED,
+                    "disconnected" to DISCONNECTED,
                     "signOutSharedAsk" to SIGN_OUT_SHARED_ASK,
                     "playerLinking" to PLAYER_LINKING,
                 )
@@ -132,7 +133,7 @@ class TraktCopyTest {
         assertEquals(TraktCopy.CONNECT, TraktCopy.signIn("offEverywhere"))
         assertEquals(TraktCopy.SIGN_OUT_SHARED, TraktCopy.signOut(shared = true))
         assertEquals(TraktCopy.SIGN_OUT, TraktCopy.signOut(shared = false))
-        assertEquals(TraktCopy.OFF_EVERYWHERE, TraktCopy.signedOut(shared = true))
+        assertEquals(TraktCopy.DISCONNECTED, TraktCopy.signedOut(shared = true))
         assertEquals(TraktCopy.PLAYER_LINKING, TraktCopy.player(TraktPlayback.Linking))
     }
 

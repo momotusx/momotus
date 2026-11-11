@@ -94,7 +94,8 @@ function Card(props: { status: TraktStatus; connect: () => void }) {
     if (busy()) return;
     setBusy("signOut");
     setSaid(null);
-    const done = props.status.shared ? w.offEverywhere : w.signedOut;
+    // The card says the rest ("disconnected on every device"); the line only confirms.
+    const done = props.status.shared ? w.disconnected : w.signedOut;
     try {
       // A sealed copy that stayed is said by the storage note instead.
       if (await traktSignOut()) setSaid({ tone: "ok", text: done });

@@ -44,7 +44,7 @@ private func status(_ json: String) throws -> TraktStatus {
         let shared = try status(#"{"state":"connected","user":"ana","pendingWrites":0,"unmapped":[],"shared":true}"#)
         #expect(TraktRules.card(shared, clock: clock).line == "Connected for your account as ana")
         #expect(TraktRules.signOut(shared: true) == W.signOutShared && TraktRules.signOut(shared: false) == W.signOut)
-        #expect(TraktRules.signedOut(shared: true) == W.offEverywhere)
+        #expect(TraktRules.signedOut(shared: true) == W.disconnected)
         // Waiting for the account's sign-in: no sign-in button, it takes one sync.
         let linking = try status(#"{"state":"linking","pendingWrites":0,"unmapped":[]}"#)
         #expect(TraktRules.card(linking, clock: clock).line == W.linking && TraktRules.card(linking, clock: clock).actions.isEmpty)
