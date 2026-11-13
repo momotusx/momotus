@@ -331,7 +331,8 @@ private let sheet = over(29.0 / 255, 0.97, over(0, 0.62, 1))
     #expect(page.contains(".onExitCommand(perform: backShown ? { dismiss() } : nil)"), "Escape does not go back to Login")
     let screen = try source("Account/SignInScreen.swift")
     for push in ["otherWays.environment(\\.onWall, true)", "lede: words.phoneScanHow, doneOnJoin: true)\n                .environment(\\.onWall, true)",
-                 "SyncJoinScreen(kit: true, server: flow.server).environment(\\.onWall, true)", "RecoveryKitScreen().environment(\\.onWall, true)",
+                 "SyncJoinScreen(kit: true, server: flow.server, joined: { if flow.linkAfterJoin == nil { joined(nil) } })\n                .environment(\\.onWall, true)",
+                 "RecoveryKitScreen().environment(\\.onWall, true)",
                  "EmailSignIn(flow: flow) { otherAfterPop = true; flow.back() }.environment(\\.onWall, true)",
                  "EmailCode(flow: flow, otherWays: otherWays).environment(\\.onWall, onWall)"] {
         #expect(screen.contains(push), "\(push) is not on the wall")
