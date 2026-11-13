@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import Testing
 
 // Touch controls keep a 44 pt frame: the player's pills, Picture in Picture, AirPlay and the season pull-down.
@@ -41,21 +42,70 @@ private func source(_ path: String) throws -> String {
     #expect(season.contains(".frame(minHeight: Theme.minTarget)"), "the season pull-down lost the minimum")
 }
 
-@Test func styleAndCloseStayInReachOfAStripWiderThanTheScreen() throws {
-    // Pixel walk 2026-11-09 L21, the same row shape on the iPhone: the languages and the shift made the strip wider
-    // than a phone across and Style and Close started past its edge. Only the row's start scrolls; they stay pinned.
+@Test func everyPartOfAStripStaysInSightOnANarrowBar() throws {
+    // QA r5, R5-28: a row that scrolled had More languages cut under Style and Shadow past the iPhone's edge. Each
+    // row wraps instead, as the web's strips do: every chip and group in sight, Style and Close last.
     let strip = try source("Player/PlayerStrip.swift")
     let row = try body(of: "private struct StripRow<Content: View, Pinned: View>: View", in: strip)
-    #expect(row.contains("ScrollView(.horizontal) { row }"))
-    #expect(try body(of: "ViewThatFits(in: .horizontal)", in: row).contains("pinned") == false, "the pinned end scrolls")
+    #expect(row.contains("FlowRow(spacing: 8, middle: true) {\n            content\n            pinned\n        }"))
+    #expect(!row.contains("ScrollView"), "a strip row scrolls again")
     let subtitles = try body(of: "struct SubtitleStrip: View", in: strip)
     #expect(subtitles.contains("StripRow { mainRow } pinned: { mainEnd }"))
-    let main = try body(of: "@ViewBuilder private var mainRow: some View", in: subtitles)
-    #expect(!main.contains("closeButton(") && !main.contains("bar.style"), "Style or Close scrolls with the chips")
     let end = try body(of: "@ViewBuilder private var mainEnd: some View", in: subtitles)
     #expect(end.contains("closeButton(close)") && end.contains("title: bar.style"))
-    let audio = try body(of: "struct AudioStrip: View", in: strip)
-    #expect(audio.contains("} pinned: {\n            closeButton(close)"), "the audio strip's Close scrolls")
+}
+
+@MainActor @Test func aWrappingRowKeepsEveryItemInsideItsWidth() {
+    // Four 100 pt chips and a short label in 250 pt: two lines, nothing past the edge.
+    let host = NSHostingView(rootView: FlowRow(spacing: 8, middle: true) {
+        ForEach(0..<4, id: \.self) { _ in Color.white.frame(width: 100, height: 44) }
+        Color.white.frame(width: 10, height: 20)
+    }.frame(width: 250))
+    let size = host.fittingSize
+    #expect(size.width <= 250)
+    #expect(abs(size.height - (44 * 2 + 8)) < 0.5, "two chips and then two and the label on a second line")
+    withExtendedLifetime(host) {}
+}
+
+@Test func everyGlyphTheAppNamesIsInItsIcons() throws {
+    // QA r5, R5-28: Position's Higher drew an empty circle, its chevron-up missing from the catalog.
+    let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
+    let catalog = app.appending(path: "Resources/Icons.xcassets")
+    let names = try #require(FileManager.default.enumerator(atPath: app.path()))
+        .compactMap { $0 as? String }
+        .filter { $0.hasSuffix(".swift") }
+        .flatMap { file -> [String] in
+            let text = (try? String(contentsOf: app.appending(path: file), encoding: .utf8)) ?? ""
+            let found = text.matches(of: #/(?:Glyph\(|glyph: |Image\(|down: \(|up: \()"([a-z0-9]+(?:-[a-z0-9]+)*)"/#)
+            return found.map { String($0.output.1) }
+        }
+    #expect(names.contains("chevron-up") && names.count > 50)
+    // "letter" is an avatar's first-letter choice, drawn as text, not an icon.
+    let missing = Set(names).subtracting(["letter"]).filter { !FileManager.default.fileExists(atPath: catalog.appending(path: "\($0).imageset").path()) }
+    let others = ["Brand.xcassets", "Marks.xcassets", "Flags.xcassets"].map { app.appending(path: "Resources/\($0)") }
+    let lost = missing.filter { name in !others.contains { FileManager.default.fileExists(atPath: $0.appending(path: "\(name).imageset").path()) } }
+    #expect(lost.isEmpty, "no icon for \(lost.sorted())")
+}
+
+@Test func theIPhonesChipsLinksAndBacksKeepTheMinimum() throws {
+    // QA r5, R5-27: Kind 39, Clear 41 by 21, More 14, Versions and Find addons and Error reports chips 34, Calendar's
+    // Back 36. The shared chip and link styles take the minimum, as do the Kind segment and Calendar's Back.
+    let chip = try body(of: "private struct ChipBody: View", in: source("Common/Browse.swift"))
+    #expect(chip.contains("#if os(iOS)\n                // The drawn chip stays 34 tall; a touch reaches it over the minimum target (QA r5, R5-27).\n                .frame(minHeight: Theme.minTarget)\n                .contentShape(Rectangle())"),
+            "the chips lost the minimum")
+    let components = try source("Theme/Components.swift")
+    #expect(try body(of: "static var textLink: Self", in: components).contains("FocusPlainStyle(shape: Capsule(), minHeight: Theme.minTarget)"),
+            "the link style lost the minimum")
+    #expect(try body(of: "struct FocusPlainStyle<S: InsettableShape>: ButtonStyle", in: components).contains("configuration.label.frame(minHeight: minHeight)"))
+    let discover = try source("Discover/DiscoverParts.swift")
+    #expect(try body(of: "struct KindSegment: View", in: discover).contains(".padding(.vertical, metrics.wide ? 3 : 0)"))
+    let segment = try body(of: "private struct Segment: View", in: discover)
+    #expect(segment.contains("minHeight: wide ? Theme.Pill.desktop - 6 : Theme.Pill.phone)"), "a Kind segment is shorter than a target")
+    #expect(Theme.Pill.phone >= Theme.minTarget)
+    #expect(discover.contains("// A link's style: at least a target tall on a touch screen (QA r5, R5-27: Clear was 41 by 21).\n            .buttonStyle(.textLink)"))
+    let root = try source("App/RootView.swift")
+    let calendar = try #require(root.range(of: "Button { select(.library) } label: {")).upperBound
+    #expect(root[calendar...].prefix(300).contains(".frame(minWidth: Theme.minTarget, minHeight: Theme.minTarget)"), "Calendar's Back lost the minimum")
 }
 
 @Test func theMacToolbarHoldsSearchAloneAndTheOrnamentEndsWithTheProfile() throws {

@@ -382,7 +382,7 @@ struct PlayerScreen: View {
         #endif
         .accessibilityAction(.escape) { escape() }
         .onAppear {
-            immersion.active = true
+            immersion.enter()
             #if os(iOS)
             #if DEBUG
             if DebugHooks.playUpright, model.lastAcross == nil { model.lastAcross = false }
@@ -416,7 +416,7 @@ struct PlayerScreen: View {
             #endif
         }
         .onDisappear {
-            immersion.active = false
+            immersion.leave()
             #if os(macOS)
             if let pointerMoves { NSEvent.removeMonitor(pointerMoves) }
             pointerMoves = nil

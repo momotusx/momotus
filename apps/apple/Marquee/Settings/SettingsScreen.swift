@@ -107,6 +107,8 @@ struct SettingsScreen: View {
         GeometryReader { page in
             let pad = SettingsRules.pad(width: page.size.width, gutter: metrics.gutter, column: sizes.column)
             let stick = page.safeAreaInsets.top + Theme.Space.m
+            // Read here: the proxy is not used outside the reader's own closure.
+            let top = page.safeAreaInsets.top
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 0) {
                     if let only {
@@ -114,19 +116,19 @@ struct SettingsScreen: View {
                         ScreenTitle(text: only.title)
                             .padding(.horizontal, 20)
                             .padding(.top, page.safeAreaInsets.top + 8)
-                        list.padding(.horizontal, 16).padding(.top, 18)
+                        Deferred { list }.padding(.horizontal, 16).padding(.top, 18)
                     } else {
-                        header(pad: pad, top: page.safeAreaInsets.top)
+                        Deferred { header(pad: pad, top: top) }
                         if metrics.wide {
                             HStack(alignment: .top, spacing: sizes.gap) {
-                                menu
+                                Deferred { menu }
                                     .frame(width: sizes.menu)
                                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { menuHeight = $0 }
                                     .offset(y: SettingsRules.menuShift(columnTop: columnTop - offset, stick: stick, room: listHeight - menuHeight))
                                     #if os(tvOS)
                                     .focusSection()
                                     #endif
-                                list
+                                Deferred { list }
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { listHeight = $0 }
                                     #if os(tvOS)
@@ -137,8 +139,8 @@ struct SettingsScreen: View {
                             .padding(.top, tvForm ? 32 : 12)
                             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named(space)).minY } action: { columnTop = $0 }
                         } else {
-                            list.padding(.horizontal, 16).padding(.top, 18)
-                            sectionList.padding(.horizontal, 16).padding(.top, kids ? 18 : 30)
+                            Deferred { list }.padding(.horizontal, 16).padding(.top, 18)
+                            Deferred { sectionList }.padding(.horizontal, 16).padding(.top, kids ? 18 : 30)
                         }
                     }
                 }
@@ -512,16 +514,20 @@ struct SettingsScreen: View {
         }
     }
 
-    /// One section, when shown: its title (a heading; a section page has its own) over its groups.
-    @ViewBuilder private func section<Content: View>(_ s: SettingsSection, @ViewBuilder content: () -> Content) -> some View {
+    /// One section, when shown: its title (a heading; a section page has its own) over its groups, built in a body of
+    /// its own (`Deferred`), so the list's body never builds every section's rows in one call (QA r5, R5-26).
+    @ViewBuilder private func section<Content: View>(_ s: SettingsSection, @ViewBuilder content: @escaping () -> Content) -> some View {
         if shows(s) {
-            VStack(alignment: .leading, spacing: 0) {
-                if only == nil {
-                    Text(s.title)
-                        .modifier(SectionTitle(sizes: sizes, wide: metrics.wide))
-                        .accessibilityAddTraits(.isHeader)
+            let (title, sizes, wide) = (only == nil ? s.title : nil, sizes, metrics.wide)
+            Deferred {
+                VStack(alignment: .leading, spacing: 0) {
+                    if let title {
+                        Text(title)
+                            .modifier(SectionTitle(sizes: sizes, wide: wide))
+                            .accessibilityAddTraits(.isHeader)
+                    }
+                    content()
                 }
-                content()
             }
         }
     }

@@ -254,6 +254,9 @@ final class ProfileSession {
         return await work.value
     }
 
+    /// The views that stay open across a switch, as the core keeps them (`only_the_picker_open`).
+    static let keptViews: Set<String> = ["profiles", "debrid", "downloads"]
+
     private func runSwitch(_ op: String, _ fields: [String: any Sendable], done: (@MainActor () -> Void)?) async -> Bool {
         defer { inFlight = false }
         // The old profile's screens have left (the root acknowledges it), so
@@ -267,6 +270,9 @@ final class ProfileSession {
             switchProblem = CoreError("The old profile's screens did not close.", code: "viewsOpen")
             return false
         }
+        // The screens have left and saved what they keep (a film its place): whatever they still hold open closes
+        // here, every view but those a switch keeps (the core's `transition`).
+        core.closeViews(keeping: Self.keptViews)
         for attempt in 1...10 {
             do {
                 try await core.perform(op, fields)
@@ -291,6 +297,9 @@ final class ProfileSession {
         }
         return false
     }
+
+    /// A failed switch that a profile was open before: the picker's Back returns to it (QA r5, R5-25).
+    var canGoBack: Bool { switching != nil && switchProblem != nil && !inFlight && chosenBefore }
 
     /// A failed switch given up: the app is as it was before it, the current
     /// profile open if it was, else the start picker asking again.

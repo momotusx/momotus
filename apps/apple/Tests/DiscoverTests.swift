@@ -140,7 +140,7 @@ private func snapshot(
     // Dynamic Type grows the phone's parts (the Mac has none, so the iPhone walk shows it): heights are
     // floors and names wrap to two lines.
     #expect(parts.contains(".frame(minHeight: Theme.Pill.phone)"))
-    #expect(parts.contains(".frame(maxWidth: wide ? nil : .infinity, minHeight: (wide ? Theme.Pill.desktop : Theme.Pill.phone) - 6)"))
+    #expect(parts.contains(".frame(maxWidth: wide ? nil : .infinity, minHeight: wide ? Theme.Pill.desktop - 6 : Theme.Pill.phone)"))
     let phone = try body(of: "struct PhoneDiscoverGrid: View", in: parts)
     #expect(phone.contains(".lineLimit(2)"))
 }

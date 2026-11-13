@@ -182,3 +182,19 @@ func theColumnSitsInTheMiddleOfTheWindow(width: Double) {
     // The phone's large title: 34 pt bold is large text, but it keeps 4.5:1 too.
     #expect(ratio(1, x: 0, up: 0.45, wide: false) >= 4.5, "phone title")
 }
+
+@Test func settingsBuildsItsPartsInBodiesOfTheirOwn() throws {
+    // QA r5, R5-26: a Debug build overflowed the iPhone's main stack in SettingsScreen.body, which built the header,
+    // the menu and every section's rows in one call. Each part now builds in its own body (`Deferred`).
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Settings/SettingsScreen.swift")
+    let screen = try String(contentsOf: file, encoding: .utf8)
+    let page = try body(of: "    var body: some View {", in: screen)
+    for part in ["list", "menu", "sectionList", "header(pad: pad, top: top)"] {
+        let bare = page.components(separatedBy: .newlines).filter { $0.trimmingCharacters(in: .whitespaces).hasPrefix(part) }
+        #expect(bare.isEmpty, "\(part) is built in the page's own body again")
+    }
+    #expect(page.components(separatedBy: "Deferred { list }").count - 1 == 3)
+    #expect(page.contains("Deferred { header(pad: pad, top: top) }") && page.contains("Deferred { menu }") && page.contains("Deferred { sectionList }"))
+    let section = try body(of: "@ViewBuilder private func section<Content: View>(", in: screen)
+    #expect(section.contains("Deferred {"), "a section's rows are built in the list's body again")
+}
