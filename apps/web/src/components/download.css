@@ -26,8 +26,9 @@
   [data-form="desktop"] .info .acts .btn.dl:hover .dl-mark { background: rgba(255, 255, 255, .24); }
   [data-form="desktop"] .info .acts .btn.dl:hover .dl-mark svg { background: none; }
 }
-[data-form="phone"] .info .acts .btn .dl-mark { width: 20px; height: 20px; padding: 13px; }
-[data-form="phone"] .info .acts .btn .dl-mark.ring { width: 28px; height: 28px; padding: 9px; --dl-pad: 9px; }
+/* 48 round, as its neighbours' circles (title.css). */
+[data-form="phone"] .info .acts .btn .dl-mark { width: 20px; height: 20px; padding: 14px; }
+[data-form="phone"] .info .acts .btn .dl-mark.ring { width: 28px; height: 28px; padding: 10px; --dl-pad: 10px; }
 
 /* An episode's third action: the mark in the pill's glyph place; a ring a step larger than the glyph. */
 .ep-act .dl-mark { --dl: 22px; }
