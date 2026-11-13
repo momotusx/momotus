@@ -142,6 +142,19 @@ test("a phone upright draws under the picture, in the band over the controls, as
   expect(lines.bottom).toBeLessThanOrEqual(700);
 });
 
+test("a phone upright with a strip open over its band hangs the lines over the strip, never behind its chips", () => {
+  const phone = { top: 0, bottom: 844, width: 390, height: 844 };
+  const picture = (1080 * 390) / 1920;
+  const pictureFoot = 844 - (844 - picture) / 2;
+  const base = { box: phone, video: { width: 1920, height: 1080 }, bar: { top: 700, bottom: 820 }, scrubber: { top: 690, bottom: 698 }, up: true, lines: 2 * 24 * 1.3 };
+  // No strip: the band under the picture, as before.
+  expect(cuePlace(base).at.top).toBeCloseTo(pictureFoot + 10, 5);
+  // A strip whose top is above the picture's foot: the band is under it, so the lines go over its top, 8 px clear.
+  const open = cuePlace({ ...base, strip: { top: 350, bottom: 680 } });
+  expect(open.at.top).toBeUndefined();
+  expect(844 - (open.at.bottom ?? 0)).toBeLessThanOrEqual(350 - 8);
+});
+
 test("a phone upright with more lines than its band holds hangs them 8% of the picture over its foot", () => {
   const phone = { top: 0, bottom: 844, width: 390, height: 844 };
   const picture = (1080 * 390) / 1920;

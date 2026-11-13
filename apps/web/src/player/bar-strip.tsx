@@ -206,8 +206,8 @@ export function SubtitleStrip(props: SubtitleStripProps) {
   return (
     <div class="bstrip sub" role="region" aria-label={names.subtitles} data-fgroup="strip">
       <div class="bsrow s1">
-        {/* The label, the chips and the shift scroll on a narrow screen; Style and Close stay in reach after them
-         * (Pixel walk 2026-11-09 L21). */}
+        {/* The label, the chips, the shift, Style and Close flow as one wrapping row: nothing is clipped or hidden
+         * behind a scroll (QA r5 R5-3, R5-4). */}
         <div class="sscr">
           <span class="slb">
             <Captions aria-hidden />

@@ -51,8 +51,9 @@ export function cuePlace({ box, video, bar, scrubber, transport, strip, up, line
   const pictureFoot = box.bottom - band;
   const safe = box.bottom - box.height * SAFE_LINE;
   // The band takes the lines only upright: on a landscape screen it is a thin bar, and a cue that fits it while the
-  // next does not would jump between the bar and the picture.
-  if (box.height > box.width && band > 0 && Math.min(bar?.top ?? box.bottom, safe) - pictureFoot >= lines + 10) return { at: { top: pictureFoot - box.top + 10 }, shrink: false };
+  // next does not would jump between the bar and the picture. An open strip (wrapped, it reaches up over the band) is
+  // a wall as the bar is: the lines hang over it instead of under the picture where its chips are.
+  if (box.height > box.width && band > 0 && Math.min(bar?.top ?? box.bottom, strip?.top ?? box.bottom, safe) - pictureFoot >= lines + 10) return { at: { top: pictureFoot - box.top + 10 }, shrink: false };
   const share = position / 100;
   let foot: number;
   if (up && (scrubber || strip)) {

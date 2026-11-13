@@ -630,6 +630,13 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     const at = document.activeElement as HTMLElement | null;
     const box = osdEl?.querySelector<HTMLElement>(".bstrip");
     if (!at || !box) return false;
+    // Left and Right visit the row's controls in their order, wherever a wrapped row put them (R5-3): the spatial rule
+    // keeps to one line and would skip the rest. Past the row's last or first control it falls through as before.
+    const row = at.closest<HTMLElement>(".bstrip .bsrow");
+    if (row && (key === "ArrowLeft" || key === "ArrowRight")) {
+      const stops = [...row.querySelectorAll<HTMLElement>("[data-f]")].filter((el) => !(el as HTMLButtonElement).disabled && !el.closest("[inert]") && el.offsetWidth > 0);
+      return focusOn(stops[stops.indexOf(at) + (key === "ArrowLeft" ? -1 : 1)]);
+    }
     if (at.closest(".bstrip .s1")) {
       if (key === "ArrowDown") return focusOn(document.querySelector<HTMLElement>(`[data-f="player:${strip()}"]`));
       if (key === "ArrowUp" && styleOpen()) return focusOn(box.querySelector<HTMLElement>(".s2 [data-f]:not(:disabled)"));

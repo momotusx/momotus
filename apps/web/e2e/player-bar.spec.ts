@@ -394,9 +394,12 @@ test.describe("desktop", () => {
       // The cue's foot keeps 8 px over the open strip, Style row included.
       const strip = (await boxes(page, ".bstrip"))[0]!;
       expect(await foot()).toBeLessThanOrEqual(strip.y - 8 + 0.5);
-      // Bar, strip and Style row together: at most 240 px.
+      // Bar, strip and Style row together: at most 240 px with the strip on one line. A strip too wide for the window wraps
+      // (QA r5 R5-3) rather than hide a chip, and its second line of pills (48 px and the 10 px gap) is the one thing
+      // that may go past it.
       const osd = (await boxes(page, ".osd"))[0]!;
-      expect(osd.bottom - strip.y).toBeLessThanOrEqual(240);
+      const lines = new Set((await boxes(page, ".bstrip .s1 [data-f]")).map((b) => Math.round(b.y / 30))).size;
+      expect(osd.bottom - strip.y).toBeLessThanOrEqual(240 + (lines - 1) * 58);
       if (BENCH) writeFileSync(`${BENCH}/desktop-1440-style.json`, JSON.stringify({ stack: osd.bottom - strip.y, osd: osd.h }));
       await shot(page, "desktop-style");
       // The profile has them (the core's view, read on a fresh page).
@@ -729,6 +732,85 @@ test.describe("TV", () => {
       await page.keyboard.press("Enter");
       await expect.poll(() => focused(page)).toBe("strip:smaller");
       await shot(page, "tv-style");
+    } finally {
+      await close();
+    }
+  });
+});
+
+// QA r5 R5-3, R5-4: a strip row too wide for its screen wraps, so nothing is clipped under a neighbour or off the
+// screen, and a remote visits every control in order.
+test.describe("strips show every control", () => {
+  /** The strip's controls that are not whole on screen, or that a neighbour covers at their centre, and its words cut by their box. */
+  const hidden = (page: Page) =>
+    page.evaluate(() => {
+      const out: string[] = [];
+      for (const el of document.querySelectorAll<HTMLElement>(".bstrip [data-f]")) {
+        if (el.offsetWidth === 0 || (el as HTMLButtonElement).disabled) continue;
+        const r = el.getBoundingClientRect();
+        const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        const whole = r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight;
+        if (!whole || !top || !el.contains(top)) out.push(`${el.dataset.f} ${whole ? "covered" : "off screen"}`);
+      }
+      for (const el of document.querySelectorAll<HTMLElement>(".bstrip :is(.cl, .snote, .slb)")) if (el.scrollWidth > el.clientWidth + 1) out.push(`${el.textContent} cut`);
+      return out;
+    });
+  const focused = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "");
+
+  test("desktop 1440: the language chips, More languages, the shift, Style and Background are all in sight", async ({ browser }) => {
+    const { page, close } = await open(browser, S1E1, "desktop", { viewport: { width: 1440, height: 900 } });
+    try {
+      await page.locator('[data-f="player:subs"]').click();
+      await expect(page.locator(".bstrip.sub")).toBeVisible();
+      await expect(page.locator('[data-f="strip:more"]')).toBeVisible();
+      expect(await hidden(page)).toEqual([]);
+      await page.locator('[data-f="strip:style"]').click();
+      await expect(page.locator('[data-f="strip:bg:shadow"]')).toBeVisible();
+      expect(await hidden(page)).toEqual([]);
+    } finally {
+      await close();
+    }
+  });
+
+  test("phone upright: the chips, the shift, Style's note and Background are all in sight", async ({ browser }) => {
+    const { page, close } = await open(browser, S1E1, "phone", { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    try {
+      await page.locator('[data-f="player:subs"]').tap();
+      await expect(page.locator(".bstrip.sub")).toBeVisible();
+      expect(await hidden(page)).toEqual([]);
+      await page.locator('[data-f="strip:style"]').tap();
+      await expect(page.locator('[data-f="strip:bg:shadow"]')).toBeVisible();
+      expect(await hidden(page)).toEqual([]);
+      await page.waitForTimeout(500);
+      await shot(page, "phone-390-style-wrapped");
+    } finally {
+      await close();
+    }
+  });
+
+  test("TV: Right visits every control of the strip in order and Left comes back the same way", async ({ browser }) => {
+    const { page, close } = await open(browser, S1E1, "tv", { viewport: { width: 1920, height: 1080 } });
+    try {
+      await page.locator('[data-f="player:subs"]').focus();
+      await page.keyboard.press("Enter");
+      await expect(page.locator(".bstrip.sub")).toBeVisible();
+      expect(await hidden(page)).toEqual([]);
+      const order = await page.evaluate(() => [...document.querySelectorAll<HTMLElement>(".bstrip .s1 [data-f]")].filter((e) => e.offsetWidth > 0).map((e) => e.dataset.f ?? ""));
+      // Off, the languages, More languages, the shift's value, Style, Close.
+      expect(order.length).toBeGreaterThan(6);
+      await page.locator(`[data-f="${order[0]}"]`).focus();
+      const forward = [order[0]];
+      for (let i = 1; i < order.length; i++) {
+        await page.keyboard.press("ArrowRight");
+        forward.push(await focused(page));
+      }
+      expect(forward).toEqual(order);
+      const back = [order.at(-1)];
+      for (let i = 1; i < order.length; i++) {
+        await page.keyboard.press("ArrowLeft");
+        back.push(await focused(page));
+      }
+      expect(back).toEqual([...order].reverse());
     } finally {
       await close();
     }
