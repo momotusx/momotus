@@ -707,6 +707,16 @@ struct PhoneOSD<Top: View, Bottom: View>: View {
     }
 }
 
+/// Builds its content in its own body. What the content reads from an `@Observable` model (the playhead, four times a
+/// second) then re-renders this view alone, never the view that holds it: the player's stage and its bar read the
+/// playhead only through one of these (QA R5-23: the whole stage and its bar re-rendered on each tick, and a Mac playing
+/// a film sat in SwiftUI layout passes on the main thread).
+struct PlayheadView<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+
+    var body: some View { content() }
+}
+
 /// The clock a hold and the outbox run on: the time since a start and a sleep. Tests pass a virtual
 /// one, so the rules hold on a loaded machine too.
 struct StepperClock: Sendable {
