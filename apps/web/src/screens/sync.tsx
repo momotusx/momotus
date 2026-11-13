@@ -39,6 +39,7 @@ import { autoFocusSoon } from "../focus/dom";
 import { form } from "../form";
 import { Sheet, WallPage } from "../components/wall";
 import {
+  afterJoinForm,
   fingerprintGroups,
   forkDrop,
   forkKits,
@@ -71,7 +72,7 @@ import {
   syncWords as w,
 } from "../lib/words";
 import { LinkRow } from "./settings";
-import { createMail, EmailStages, FailureNote, type MailStage, SignInState, Tick, useSignIn } from "./sign-in";
+import { createMail, EmailStages, FailureNote, homeAfterPull, type MailStage, SignInState, Tick, useSignIn } from "./sign-in";
 import "./browse.css";
 import "./settings.css";
 import "./sync.css";
@@ -1077,6 +1078,7 @@ function NoSecondAccount(props: { children: JSX.Element }) {
  * known, so the normal flow never shows a host (Android and Apple do the same). */
 function JoinForm(props: { kit: boolean }) {
   const navigate = useNavigate();
+  const [params] = useSearchParams<{ from?: string }>();
   const known = signInServer();
   const [server, setServer] = createSignal(known);
   const [advanced, setAdvanced] = createSignal(!known);
@@ -1105,7 +1107,9 @@ function JoinForm(props: { kit: boolean }) {
       sync.rememberJoin(s, n);
       setExtra("");
       // A new account makes its kit next: without one, losing this device loses the account.
-      navigate(props.kit || tv() || !mayMakeKit(profiles()) ? "/sync" : "/sync/kit?first=1", { replace: true });
+      const next = afterJoinForm({ kit: props.kit, fromSignIn: params.from === "signin", tv: tv(), mayKit: mayMakeKit(profiles()) });
+      if (next === "pull") void homeAfterPull(navigate);
+      else navigate(next, { replace: true });
     } catch (err) {
       setError(say(err, props.kit ? "recover" : "start"));
       setBusy(false);

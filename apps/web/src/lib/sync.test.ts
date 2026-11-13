@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { MemberInfo } from "../core/generated/MemberInfo";
 import {
+  afterJoinForm,
   fingerprintGroups,
   forkDrop,
   forkKits,
@@ -308,4 +309,16 @@ test("Settings names what failed or waits before the time, and a lock or a probl
   expect(syncSummary({ ...base, joined: false, locked: true })).toBe(syncWords.locked);
   // Storage that could not be read counts as locked, and its own words win.
   expect(syncSummary({ ...base, joined: false, locked: true, problem: syncWords.vaultUnreadable })).toBe(syncWords.vaultUnreadable);
+});
+
+test("a kit join from sign-in goes on to Home or Who's watching?, from Account it stays there (QA r5 Q2 rows 31, 44)", () => {
+  const e = { kit: true, fromSignIn: true, tv: false, mayKit: true };
+  expect(afterJoinForm(e)).toBe("pull");
+  expect(afterJoinForm({ ...e, tv: true })).toBe("pull");
+  expect(afterJoinForm({ ...e, fromSignIn: false })).toBe("/sync");
+  // A new account makes its kit next, but on a TV or a profile that may not make kits.
+  const made = { ...e, kit: false };
+  expect(afterJoinForm(made)).toBe("/sync/kit?first=1");
+  expect(afterJoinForm({ ...made, tv: true })).toBe("/sync");
+  expect(afterJoinForm({ ...made, mayKit: false })).toBe("/sync");
 });

@@ -74,7 +74,12 @@ struct SignInScreen: View {
             PairingScreen(core: core, done: { joined(nil) }, autostart: flow.server, lede: words.phoneScanHow, doneOnJoin: true)
                 .environment(\.onWall, true)
         }
-        .navigationDestination(isPresented: $showKit) { SyncJoinScreen(kit: true, server: flow.server).environment(\.onWall, true) }
+        // A kit join goes on to Who's watching? or Home (QA r5 Q2 row 31); one holding a provider's sign-in goes on
+        // once that is linked (`linkHeld`), with the provider's line.
+        .navigationDestination(isPresented: $showKit) {
+            SyncJoinScreen(kit: true, server: flow.server, joined: { if flow.linkAfterJoin == nil { joined(nil) } })
+                .environment(\.onWall, true)
+        }
         .navigationDestination(isPresented: $showMakeKit) { RecoveryKitScreen().environment(\.onWall, true) }
         // Sign in with email as a push, so the system Back and the edge swipe work (accounts-email.md 4.8).
         .navigationDestination(isPresented: Binding(get: { flow.onEmail }, set: { shown in if !shown, flow.onEmail { flow.back() } })) {

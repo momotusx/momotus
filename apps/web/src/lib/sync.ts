@@ -14,6 +14,15 @@ export const mayDeleteAccount = onOwner;
  * portable copy of the whole account key (D17). */
 export const mayMakeKit = onOwner;
 
+/** Where the start or kit form goes once it joined. A kit join reached from sign-in (Other ways, the Found sheet) pulls,
+ * then opens Home or Who's watching? as every other sign-in join does (plans/first-screens.md, QA r5 Q2 rows 31 and 44);
+ * from Account it stays on Account, whose callout says to make a new kit. A new account makes its kit next, but on a TV
+ * or a profile that may not make kits (D17). */
+export function afterJoinForm(e: { kit: boolean; fromSignIn: boolean; tv: boolean; mayKit: boolean }): "pull" | "/sync" | "/sync/kit?first=1" {
+  if (e.kit) return e.fromSignIn ? "pull" : "/sync";
+  return e.tv || !e.mayKit ? "/sync" : "/sync/kit?first=1";
+}
+
 /** The keystore record (`SyncConfig`): opaque to the app but for its revision. */
 export type SyncRecord = Record<string, unknown>;
 

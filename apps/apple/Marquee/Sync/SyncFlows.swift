@@ -14,6 +14,8 @@ private typealias W = SyncWords
 /// first, since a join replaces its account here.
 struct SyncJoinScreen: View {
     let kit: Bool
+    /// Told once the join is in, before the page closes: sign-in goes on from a kit join as from any other.
+    let joined: (() -> Void)?
     @Environment(SyncModel.self) private var sync
     @Environment(\.metrics) private var metrics
     @Environment(\.dismiss) private var dismiss
@@ -22,8 +24,9 @@ struct SyncJoinScreen: View {
     @State private var advanced: Bool
 
     /// `server`: the build's hosted relay, filled in from sign-in; else the build's own, else the last one used.
-    init(kit: Bool, server: String? = nil) {
+    init(kit: Bool, server: String? = nil, joined: (() -> Void)? = nil) {
         self.kit = kit
+        self.joined = joined
         let known = server ?? AccountServer.default ?? SyncJoinScreen.rememberedServer
         _server = State(initialValue: known.isEmpty ? "https://" : known)
         _advanced = State(initialValue: known.isEmpty)
@@ -91,6 +94,7 @@ struct SyncJoinScreen: View {
                 UserDefaults.standard.set(address, forKey: SyncRecord.serverKey)
                 UserDefaults.standard.set(device, forKey: "syncName")
                 extra = ""
+                joined?()
                 dismiss()
             } catch {
                 self.error = SyncProblem(error, action: kit ? .recover : .start).words

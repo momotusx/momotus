@@ -418,7 +418,7 @@ export function OtherWays() {
     <Frame label={w.otherWays}>
       <h1>{w.otherWays}</h1>
       <div class="doors" data-fgroup="other-ways">
-        {door("/sync/recover", "signin:kit", <LifeBuoy aria-hidden />, w.useRecoveryKit, true)}
+        {door("/sync/recover?from=signin", "signin:kit", <LifeBuoy aria-hidden />, w.useRecoveryKit, true)}
         {door("/pair", "signin:scan", <QrCode aria-hidden />, w.scanFromDevice)}
         {door(`/sign-in/server${tail(fromOf(q))}`, "signin:server", <Server aria-hidden />, w.useOwnServer)}
       </div>
@@ -1076,7 +1076,7 @@ export function Found() {
             <Session server={h().server} name={name} how={w.tvScanHow} onJoined={joined} />
           </Show>
           <div class="acts">
-            <A class="btn" href="/sync/recover" data-f="signin:found-kit" data-autofocus>
+            <A class="btn" href="/sync/recover?from=signin" data-f="signin:found-kit" data-autofocus>
               {w.useRecoveryKit}
             </A>
             <button class="btn" data-f="signin:cant" aria-expanded={asking()} onClick={() => setAsking(!asking())}>
