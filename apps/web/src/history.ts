@@ -198,7 +198,11 @@ window.addEventListener("popstate", () => {
   }
   const owner = stampOf();
   const active = shown();
-  if (open() && owner && active && owner !== active) {
+  // An entry below the base is from before the app's root (first run's sheets, an old profile's pages): Back never
+  // lands on it, Home does (plans/first-screens.md 3.6). A stamped depth only: an entry the router has not stamped is not one.
+  const stamped = (history.state as { _depth?: unknown } | null)?._depth;
+  const below = typeof stamped === "number" && stamped < base;
+  if (below || (open() && owner && active && owner !== active)) {
     history.replaceState(history.state, "", `/${window.location.search}`);
     base = historyDepth();
     try {

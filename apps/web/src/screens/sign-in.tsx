@@ -6,6 +6,7 @@
 
 import { A, Navigate, useNavigate, useSearchParams } from "@solidjs/router";
 import Check from "lucide-solid/icons/check";
+import ChevronLeft from "lucide-solid/icons/chevron-left";
 import ChevronRight from "lucide-solid/icons/chevron-right";
 import LifeBuoy from "lucide-solid/icons/life-buoy";
 import Mail from "lucide-solid/icons/mail";
@@ -42,7 +43,7 @@ import {
 import { firstRunWords as fw, nextStep } from "../lib/first-run";
 import { kidsSession } from "../lib/kids";
 import { mayMakeKit } from "../lib/sync";
-import { plainAddress, syncWords } from "../lib/words";
+import { plainAddress, syncWords, versionsWords } from "../lib/words";
 import { goBack } from "../focus/dom";
 import { Session } from "./pairing";
 import "./browse.css";
@@ -160,7 +161,12 @@ function Page(props: { label: string; size?: "login" | "narrow"; children: JSX.E
   onMount(() => autoFocusSoon(() => document.querySelector<HTMLElement>(".sheet [data-autofocus]")));
   return (
     <WallPage>
-      <Sheet size={props.size ?? "narrow"} label={props.label} busy={pulling()}>
+      <Sheet size={props.size ?? "narrow"} label={props.label} busy={pulling()} onGrab={goBack}>
+        {/* A visible way out, as Not now is on the Login sheet: Escape and the browser's Back do the same. */}
+        <button class="flink sheet-back" data-f="signin:back" onClick={goBack}>
+          <ChevronLeft aria-hidden />
+          {versionsWords.back}
+        </button>
         <UnlessPulling title={props.label}>{props.children}</UnlessPulling>
       </Sheet>
     </WallPage>

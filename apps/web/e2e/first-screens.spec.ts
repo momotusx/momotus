@@ -430,6 +430,56 @@ test("Skip on setup installs the defaults and writes no preference", async ({ br
   await d.context.close();
 });
 
+/** QA r5, R5-10: Home is the history root once first run ends, by Start watching and by Skip alike. */
+for (const [form, end] of [["wide", "setup:start"], ["phone", "setup:skip"]] as const) {
+  test(`Back from Home after first run (${end}, ${form}) never returns to a first run step`, async ({ browser }) => {
+    const d = await device(browser, form, { world: { profileStepDone: false } });
+    const page = d.page;
+    await open(d, form);
+    await page.locator('[data-f="welcome:start"]').click();
+    await page.locator('[data-f="signin:not-now"]').click();
+    await page.locator('[data-f="profile:continue"]').click();
+    await page.locator(`[data-f="${end}"]`).click();
+    await expect.poll(() => screen(page)).toBe("home");
+    for (let i = 0; i < 3; i++) {
+      await page.goBack();
+      await page.waitForTimeout(400);
+      expect(await screen(page), `Back ${i + 1}`).toBe("home");
+      expect(new URL(page.url()).pathname).toBe("/");
+    }
+    await d.context.close();
+  });
+}
+
+/** QA r5, R5-11: every sign-in sheet has a visible way out, and its form sits under its heading, at the left. */
+test("the email and Other ways sheets have a visible Back, and the form starts under the heading", async ({ browser }) => {
+  const d = await device(browser, "wide");
+  const page = d.page;
+  await open(d, "wide");
+  await page.locator('[data-f="welcome:start"]').click();
+  await expect.poll(() => screen(page)).toBe("login");
+  await page.locator('[data-f="signin:email"]').click();
+  const back = page.locator('[data-f="signin:back"]');
+  await expect(back).toBeVisible();
+  const box = async (sel: string) => (await page.locator(sel).first().boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
+  const h = await box(".sheet h1");
+  const label = await box(".email-form .kicker");
+  const field = await box('.email-form input[name="email"]');
+  expect(label.y, "label under the heading").toBeGreaterThanOrEqual(h.y + h.height + 8);
+  expect(Math.abs(field.x - h.x), "field at the heading's left").toBeLessThanOrEqual(2);
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${SHOTS}/r5-email-wide.png` });
+  await back.click();
+  await expect.poll(() => screen(page)).toBe("login");
+  await page.locator('[data-f="signin:other"]').click();
+  await expect(page.locator('[data-f="signin:back"]')).toBeVisible();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${SHOTS}/r5-other-wide.png` });
+  await page.locator('[data-f="signin:back"]').click();
+  await expect.poll(() => screen(page)).toBe("login");
+  await d.context.close();
+});
+
 test("a start lands where the run stopped: the profile form in an account, setup once answered, none when not fresh", async ({ browser }) => {
   const done = await device(browser, "wide", { world: { profileStepDone: true } });
   await open(done, "wide");

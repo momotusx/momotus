@@ -88,6 +88,12 @@
 .sheet-grab { position: relative; height: 28px; margin: -10px -20px 4px; touch-action: none; cursor: grab; }
 .sheet-grab::after { content: ""; position: absolute; left: 50%; top: 10px; width: 40px; height: 5px; margin-left: -20px; border-radius: 3px; background: rgba(255, 255, 255, .3); }
 
+/* A sign-in page's Back, above its heading. */
+.first .sheet-back { gap: calc(4 * var(--u)); margin: calc(-8 * var(--u)) 0 calc(8 * var(--u)) calc(-6 * var(--u)); padding-left: calc(2 * var(--u)); }
+.first .sheet-back svg { width: calc(22 * var(--u)); height: calc(22 * var(--u)); }
+/* A form under a sheet's heading starts below it and at the left (Settings' .install centres its items on the bottom edge and loads later). */
+.sheet .install { margin: calc(18 * var(--u)) 0 0; }
+.sheet .email-form { align-items: flex-start; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: calc(16 * var(--u)); }
 .sheet-head h1, .sheet h1 { font: 700 calc(28 * var(--u)) / 1.15 var(--font-text); letter-spacing: -.022em; color: #fff; }
 .sheet h1:focus { outline: none; }
