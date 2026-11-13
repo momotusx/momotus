@@ -47,7 +47,13 @@ export function PluginDirectorySection() {
     <Show when={repos().length > 0}>
       <section class="fa-plugins" aria-labelledby="fa-plugins-h">
         <h2 id="fa-plugins-h">{w.directoryTitle}</h2>
-        <p class="fa-plugins-from">{fill(w.directoryFrom, { source: listed()?.source ?? "" })}</p>
+        {/* The directory by its own name; its host only behind Details (a TV has none), as an addon's row does. */}
+        <Show when={!tv()}>
+          <details class="why-raw fa-details">
+            <summary data-f="fa-plugins:from-details">Details</summary>
+            <code>{fill(w.directoryFrom, { source: listed()?.source ?? "" })}</code>
+          </details>
+        </Show>
         <Show when={!tv()}>
           <input
             class="fa-search"
@@ -71,7 +77,12 @@ export function PluginDirectorySection() {
                     </div>
                     <div class="fa-text">
                       <h2 dir="auto">{r.name}</h2>
-                      <p class="fa-host">{fill(w.directoryFrom, { source: listed()?.source ?? "" })}</p>
+                      <Show when={!tv()}>
+                        <details class="why-raw fa-details">
+                          <summary data-f={`fa-plugin:${i()}:details`}>Details</summary>
+                          <code class="fa-host">{fill(w.directoryFrom, { source: listed()?.source ?? "" })}</code>
+                        </details>
+                      </Show>
                       <p class="fa-provides">{directoryLine(r)}</p>
                       <Show when={r.description}>
                         <p class="fa-desc" dir="auto">

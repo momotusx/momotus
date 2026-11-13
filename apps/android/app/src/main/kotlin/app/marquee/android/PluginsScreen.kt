@@ -103,7 +103,8 @@ fun PluginDirectoryScreen(session: CoreSession) {
         verticalArrangement = Arrangement.spacedBy(Marquee.space.m),
     ) {
         item(key = "head") { BrowseHeader(PluginCopy.DIRECTORY_TITLE) }
-        item(key = "from") { Note(PluginCopy.fill(PluginCopy.DIRECTORY_FROM, "source" to source)) }
+        // The directory by its own name; its host only behind Details (a TV shows none), as a repository's row does.
+        if (!tv) item(key = "from") { SourceDetails(PluginCopy.DIRECTORY_TITLE, source) }
         when {
             listed == null -> {
                 item(key = "loading") { Note(PluginCopy.LOADING) }
@@ -144,6 +145,31 @@ fun PluginDirectoryScreen(session: CoreSession) {
     }
 }
 
+/** A name's host behind Details (R5-9): a raw address is never printed under the name. */
+@Composable
+private fun SourceDetails(
+    name: String,
+    source: String,
+) {
+    var shown by remember(name) { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
+        SecondaryButton(
+            AddonsCopy.DETAILS,
+            { shown = !shown },
+            selected = shown,
+            spoken = "$name ${AddonsCopy.DETAILS.lowercase()}",
+        )
+        if (shown) {
+            MqText(
+                PluginCopy.fill(PluginCopy.DIRECTORY_FROM, "source" to source),
+                role = TextRole.Caption,
+                color = Marquee.colors.dim,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
 /** One listed repository: name, the directory it comes from, its line and description, Add or Installed. */
 @Composable
 private fun ListedCard(
@@ -156,12 +182,7 @@ private fun ListedCard(
     Section {
         Column(verticalArrangement = Arrangement.spacedBy(Marquee.space.xs)) {
             MqText(r.name, role = TextRole.Headline, weight = FontWeight.Bold, maxLines = 2)
-            MqText(
-                PluginCopy.fill(PluginCopy.DIRECTORY_FROM, "source" to source),
-                role = TextRole.Caption,
-                color = colors.dim,
-                maxLines = 1,
-            )
+            if (Marquee.form != Form.Tv) SourceDetails(r.name, source)
             MqText(PluginCopy.directoryLine(r), role = TextRole.Caption, weight = FontWeight.SemiBold)
             if (r.description.isNotEmpty()) {
                 MqText(

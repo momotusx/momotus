@@ -107,7 +107,12 @@ test("Find addons lists the directory's repositories, searched on the device, ad
   const card = section.locator(".fa-pcard");
   await expect(card).toHaveCount(1);
   await expect(card).toContainText("Momotus test plugins");
-  await expect(card).toContainText("From nuvioplugins.com");
+  // R5-9: the repository by its own name; the directory's host only behind Details, on the header and on the card.
+  await expect(section).not.toContainText("nuvioplugins.com", { useInnerText: true });
+  await section.locator('[data-f="fa-plugin:0:details"]').click();
+  await expect(card).toContainText("From nuvioplugins.com", { useInnerText: true });
+  await section.locator('[data-f="fa-plugins:from-details"]').click();
+  await expect(section.locator(":scope > .fa-details code")).toHaveText("From nuvioplugins.com");
   await expect(card).toContainText("1 provider for films and series. Languages: en.");
   await section.locator('[data-f="fa-plugins:search"]').fill("nothing like it");
   await expect(section.getByText("No repository matches.")).toBeVisible();

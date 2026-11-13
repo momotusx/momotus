@@ -153,6 +153,28 @@ struct PluginsScreen: View {
     }
 }
 
+/// A name's host behind "Details" (R5-9): the host is a raw address, so it is never printed under the name. A TV has no
+/// Details: its cards are one stop each.
+struct SourceDetails: View {
+    let name: String
+    let host: String
+    @State private var shown = false
+
+    var body: some View {
+        #if os(tvOS)
+        EmptyView()
+        #else
+        VStack(alignment: .leading, spacing: 4) {
+            Button(InstallSheetRules.details) { shown.toggle() }
+                .buttonStyle(PillButtonStyle())
+                .accessibilityLabel("\(name) \(InstallSheetRules.details.lowercased())")
+                .accessibilityAddTraits(shown ? .isSelected : [])
+            if shown { Text(host).textFont(Theme.type.caption).foregroundStyle(Theme.Palette.muted) }
+        }
+        #endif
+    }
+}
+
 /// Find addons > Nuvio plugins (R8): the repositories nuvioplugins.com lists, in its order, each with
 /// its provider count, kinds and languages, searched on the device (not on TV); Add reads one and asks
 /// on the install sheet first, and one the profile has says Installed (removed in Settings > Plugins).
@@ -168,9 +190,8 @@ struct PluginDirectoryScreen: View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: Theme.Space.m) {
                 ScreenTitle(text: PluginWords.directoryTitle)
-                Text(PluginWords.fill(PluginWords.directoryFrom, ["source": listed?.source ?? "nuvioplugins.com"]))
-                    .textFont(Theme.type.body)
-                    .foregroundStyle(Theme.Palette.muted)
+                // The directory by its own name; its host only behind Details (a TV shows none), as a repository's row does.
+                SourceDetails(name: PluginWords.directoryTitle, host: PluginWords.fill(PluginWords.directoryFrom, ["source": listed?.source ?? "nuvioplugins.com"]))
                 if let listed {
                     if listed.repos.isEmpty {
                         StateLine(symbol: "circle-slash", text: PluginWords.notAvailable)
@@ -211,8 +232,7 @@ struct PluginDirectoryScreen: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(r.name).textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
-                    Text(PluginWords.fill(PluginWords.directoryFrom, ["source": source]))
-                        .textFont(Theme.type.caption).foregroundStyle(Theme.Palette.muted)
+                    SourceDetails(name: r.name, host: PluginWords.fill(PluginWords.directoryFrom, ["source": source]))
                 }
                 Spacer(minLength: 12)
                 if r.installed {

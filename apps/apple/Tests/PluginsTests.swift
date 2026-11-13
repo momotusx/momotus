@@ -87,3 +87,11 @@ private func shared() throws -> [String: String] {
     #expect(VersionWords.count(looking) == nil)
     #expect(VersionWords.status(looking) == StreamChoice.words.page.finding)
 }
+
+/// QA r5 R5-9: the plugin directory's header and cards name the repository, and the host waits behind Details, as a
+/// repository's own row does. A raw "From nuvioplugins.com" under a name is a printed host.
+@Test func theDirectoryNeverPrintsItsHostUnderAName() throws {
+    let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Settings/PluginsScreen.swift"), encoding: .utf8)
+    #expect(!screen.contains("Text(PluginWords.fill(PluginWords.directoryFrom"))
+    #expect(screen.contains("SourceDetails(name: r.name"))
+}

@@ -486,10 +486,7 @@ fun FindAddonsScreen(
                         LinkRow(
                             Icons.Power,
                             PluginCopy.DIRECTORY_TITLE,
-                            PluginCopy.fill(
-                                PluginCopy.DIRECTORY_FROM,
-                                "source" to "nuvioplugins.com",
-                            ),
+                            "",
                             onPlugins,
                             side = 0.dp,
                         )

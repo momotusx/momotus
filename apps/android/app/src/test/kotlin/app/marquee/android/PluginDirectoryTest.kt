@@ -5,6 +5,9 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.junit4.createComposeRule
 import app.marquee.core.client.CoreJson
 import app.marquee.core.session.CoreSession
@@ -55,5 +58,25 @@ class PluginDirectoryTest {
         val pixels = (0 until field.width).flatMap { x -> (0 until field.height).map { y -> field[x, y] } }
         val light = pixels.count { it.luminance() > 0.3f }
         assertTrue(light > 20, "the empty field draws no words ($light light pixels)")
+    }
+
+    /**
+     * QA r5 R5-9: a card names its repository; the directory's host is behind Details, as a repository's own row has it.
+     */
+    @Test
+    fun `a card prints no host until Details is pressed`() {
+        val session = CoreSession(RuntimeEnvironment.getApplication())
+        session.client.attach { text ->
+            val msg = CoreJson.parseToJsonElement(text).jsonObject
+            val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
+            val result = if (msg["op"]?.jsonPrimitive?.content == "pluginDirectory") directory else "{}"
+            session.client.onMessage("""{"id":$id,"ok":true,"result":$result}""")
+        }
+        compose.setContent { MarqueeTheme(Form.Phone) { PluginDirectoryScreen(session) } }
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Yoru's Repo")).fetchSemanticsNodes().isNotEmpty() }
+        val host = hasText("nuvioplugins.com", substring = true)
+        assertTrue(compose.onAllNodes(host).fetchSemanticsNodes().isEmpty(), "a host is printed before Details")
+        compose.onAllNodes(hasText("Details")).onFirst().performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(host).fetchSemanticsNodes().isNotEmpty() }
     }
 }
