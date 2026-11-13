@@ -114,6 +114,11 @@ struct ProfilePicker: View {
                     .foregroundStyle(Theme.Palette.text)
                     .multilineTextAlignment(.center)
             }
+            // A switch out of an open profile failed: the way back to it, in sight (QA r5, R5-25).
+            if mode == .gate, profiles.canGoBack {
+                Button { profiles.cancelSwitch() } label: { Label("Back", glyph: "chevron-left") }
+                    .buttonStyle(PillButtonStyle())
+            }
             tiles(snapshot)
             if canManage(snapshot) {
                 Button { showManage = true } label: { Label("Manage profiles", glyph: "users") }

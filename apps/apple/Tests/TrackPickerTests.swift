@@ -254,7 +254,7 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .appending(path: "../Marquee/Player/PlayerScreen.swift"), encoding: .utf8)
     #expect(screen.contains("pointerMoves = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { event in\n                touched(toggle: false)\n                return event"))
-    #expect(screen.contains(".onDisappear {\n            immersion.active = false\n            #if os(macOS)\n            if let pointerMoves { NSEvent.removeMonitor(pointerMoves) }"))
+    #expect(screen.contains(".onDisappear {\n            immersion.leave()\n            #if os(macOS)\n            if let pointerMoves { NSEvent.removeMonitor(pointerMoves) }"))
     // The iPad's pointer keeps the hover.
     #expect(screen.contains("#if os(iOS)\n        .onContinuousHover { _ in touched(toggle: false) }"))
 }

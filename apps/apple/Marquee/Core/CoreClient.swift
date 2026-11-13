@@ -36,6 +36,9 @@ final class CoreClient {
     private(set) var serverMoves = 0
 
     @ObservationIgnored private var router = CoreRouter()
+    /// The views open on this core: each one's name and the end of its stream, so a switch can close what the old
+    /// profile's screens left open (`closeViews`).
+    @ObservationIgnored private var views: [UInt64: (name: String, end: () -> Void)] = [:]
     @ObservationIgnored private var core: MarqueeCore?
     /// Messages sent while the core opens, in order; they go out once it is open.
     @ObservationIgnored private var queued: [String] = []
@@ -85,7 +88,7 @@ final class CoreClient {
         router.onIncognito { [weak self] event in
             Task { @MainActor in self?.onIncognito?(event) }
         }
-        (self.router, core, queued, failure) = (router, nil, [], nil)
+        (self.router, core, queued, failure, views) = (router, nil, [], nil, [:])
         let dir = directory
         // Started here, not from a main-actor task, so it runs while the first
         // frame is built rather than after it.
@@ -170,13 +173,27 @@ final class CoreClient {
         sink.onTermination = { [weak self] _ in
             router.unroute(sub: sub)
             // Only to the core that made it: numbers start at 1 again on a new
-            // core, where this one could name another view.
+            // core, where this one could name another view. Once: `closeViews` may have sent it.
             Task { @MainActor in
-                guard let self, self.router === router else { return }
+                guard let self, self.router === router, self.views.removeValue(forKey: sub) != nil else { return }
                 self.send("unsubscribe", ["sub": sub])
             }
         }
+        views[sub] = (view, { sink.finish() })
         return CoreView(sub: sub, events: events)
+    }
+
+    /// Closes every open view but `keeping`'s, its unsubscribe sent before anything sent after this call. A profile
+    /// switch closes what the old profile's screens left: the core refuses it while any of them is open, and a model
+    /// kept alive by anything (a closure, a menu) would otherwise refuse it until the app restarts (QA r5, R5-25).
+    func closeViews(keeping: Set<String>) {
+        for sub in views.keys.sorted() where !keeping.contains(views[sub]?.name ?? "") {
+            guard let view = views.removeValue(forKey: sub) else { continue }
+            router.unroute(sub: sub)
+            send("unsubscribe", ["sub": sub])
+            // Its reader's loop ends; the stream's own unsubscribe finds it gone.
+            view.end()
+        }
     }
 
     func command(_ sub: UInt64, _ command: [String: any Sendable]) async throws {

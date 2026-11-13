@@ -9,7 +9,7 @@ import { join } from "node:path";
 const VERSION = "1.58.0";
 const ICONS = [
   "arrow-down", "arrow-down-to-line", "arrow-up", "audio-lines", "ban", "bookmark-check", "bookmark-plus", "calendar", "calendar-x", "camera", "captions", "cat",
-  "check", "chevron-down", "chevron-left", "chevron-right", "chevrons-up-down", "circle-alert", "circle-check", "circle-dashed",
+  "check", "chevron-down", "chevron-left", "chevron-right", "chevron-up", "chevrons-up-down", "circle-alert", "circle-check", "circle-dashed",
   "circle-minus", "circle-play", "circle-slash", "circle-x", "clapperboard", "clock", "clock-alert", "compass", "copy", "delete",
   "dog", "door-open", "download", "ellipsis", "external-link", "eye", "eye-off", "film", "flame", "gamepad-2", "gauge", "gem",
   "ghost", "hat-glasses", "headphones", "history", "house", "inbox", "info", "key-round", "languages", "layers", "leaf", "library-big", "life-buoy",

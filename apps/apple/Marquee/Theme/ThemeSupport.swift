@@ -220,7 +220,14 @@ extension EnvironmentValues {
 /// The player asks for the whole window (the navigation hides) while it is up.
 @MainActor @Observable
 final class Immersion {
-    var active = false
+    /// Players on screen. A second can appear before the first has gone (the film brought back from Picture in
+    /// Picture while its old page leaves): a flag the first cleared on its way out showed the tab bar over the
+    /// second (QA r5, R5-29).
+    private(set) var players = 0
+    var active: Bool { players > 0 }
+
+    func enter() { players += 1 }
+    func leave() { players = max(0, players - 1) }
 }
 
 extension Theme {

@@ -9,9 +9,12 @@ enum PlayerOrientation {
     /// Answered by the app delegate for every window.
     private(set) static var allowed: UIInterfaceOrientationMask = .all
     private static var before: UIInterfaceOrientation?
+    /// Players on screen: the last to leave hands the turn back, never one leaving under another (QA r5, R5-29).
+    private static var players = 0
 
     /// `across`: turn across (a play's first appear), else upright.
     static func enter(across: Bool) {
+        players += 1
         guard UIDevice.current.userInterfaceIdiom == .phone, let scene else { return }
         // A second appear (back from Versions over the player) keeps the pages' first one.
         before = before ?? scene.effectiveGeometry.interfaceOrientation
@@ -20,7 +23,10 @@ enum PlayerOrientation {
 
     /// Whether the player was across as it left, for its next appear; nil off the phone.
     @discardableResult static func leave() -> Bool? {
-        guard UIDevice.current.userInterfaceIdiom == .phone, let scene, let before else { return nil }
+        players = max(0, players - 1)
+        // Another player is up (the film brought back from Picture in Picture before this one's page went): it keeps
+        // its turn. Handed back here, the phone turned upright under it.
+        guard players == 0, UIDevice.current.userInterfaceIdiom == .phone, let scene, let before else { return nil }
         let across = scene.effectiveGeometry.interfaceOrientation.isLandscape
         self.before = nil
         turn(scene, allowing: .all, to: before.isLandscape ? .landscape : .portrait)

@@ -113,6 +113,11 @@ struct ChipStyle: ButtonStyle {
                 .modifier(FocusRing(shape: Capsule(), active: focused))
                 .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
                 .animation(Theme.Motion.focus, value: configuration.isPressed)
+                #if os(iOS)
+                // The drawn chip stays 34 tall; a touch reaches it over the minimum target (QA r5, R5-27).
+                .frame(minHeight: Theme.minTarget)
+                .contentShape(Rectangle())
+                #endif
                 #if !os(tvOS)
                 .onHover { hovered = $0 }
                 #endif

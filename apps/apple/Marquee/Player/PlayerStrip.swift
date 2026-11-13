@@ -59,23 +59,21 @@ extension StripChip where Mark == EmptyView {
     Rectangle().fill(.white.opacity(0.24)).frame(width: 1, height: 26).accessibilityHidden(true)
 }
 
-/// One strip row: its parts in a glass capsule, scrolling sideways when the bar is narrower than it. `pinned` (Style,
-/// Close) stays at the row's end in reach and never scrolls past the screen's edge (Pixel walk 2026-11-09 L21).
+/// One strip row: its parts in glass, one line while they fit, wrapping onto more lines when the bar is narrower than
+/// them, as the web's strips do: every chip and group stays in sight and in reach, `pinned` (Style, Close) last. A
+/// row that scrolled had More languages cut under Style and Shadow past the edge on an iPhone (QA r5, R5-28).
 private struct StripRow<Content: View, Pinned: View>: View {
     @ViewBuilder let content: Content
     @ViewBuilder var pinned: Pinned
 
     var body: some View {
-        let row = HStack(spacing: 8) { content }.padding(.vertical, 6).padding(.leading, 6)
-        HStack(spacing: 8) {
-            ViewThatFits(in: .horizontal) {
-                row.fixedSize()
-                ScrollView(.horizontal) { row }.scrollIndicators(.hidden)
-            }
+        FlowRow(spacing: 8, middle: true) {
+            content
             pinned
         }
-        .padding(.trailing, 6)
-        .glass(Capsule(), strong: true)
+        .padding(6)
+        // A capsule on one line (44 and 6 around it), its corners kept on more.
+        .glass(RoundedRectangle(cornerRadius: 28, style: .continuous), strong: true)
     }
 }
 
@@ -282,7 +280,7 @@ struct SubtitleStrip: View {
         }
     }
 
-    /// Style and Close: always in reach at the row's end, the rest scrolls.
+    /// Style and Close: at the row's end, wrapping with it.
     @ViewBuilder private var mainEnd: some View {
         divider
         // Nothing in Style applies to a subtitle drawn as pictures.

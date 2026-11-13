@@ -459,11 +459,13 @@ struct ReadableOnTV: ViewModifier {
 struct FocusPlainStyle<S: InsettableShape>: ButtonStyle {
     let shape: S
     var scale = Theme.Focus.scaleTile
+    /// The tap area's least height: words drawn smaller than a target keep one around them.
+    var minHeight: CGFloat = 0
 
     func makeBody(configuration: Configuration) -> some View {
         Interactive(
             configuration: configuration, shape: shape, focusScale: scale,
-            content: AnyView(configuration.label.contentShape(shape)))
+            content: AnyView(configuration.label.frame(minHeight: minHeight).contentShape(shape)))
     }
 }
 
@@ -478,8 +480,15 @@ extension ButtonStyle where Self == FocusPlainStyle<Circle> {
 }
 
 extension ButtonStyle where Self == FocusPlainStyle<Capsule> {
-    /// Words as a link ("More", "Browse first", "Get a key").
-    static var textLink: Self { FocusPlainStyle(shape: Capsule()) }
+    /// Words as a link ("More", "Browse first", "Get a key"); on a touch screen at least a target tall (QA r5, R5-27:
+    /// the title's More was 14 pt).
+    static var textLink: Self {
+        #if os(iOS)
+        FocusPlainStyle(shape: Capsule(), minHeight: Theme.minTarget)
+        #else
+        FocusPlainStyle(shape: Capsule())
+        #endif
+    }
 }
 
 /// A destructive action as words in the error token: no fill, never the
@@ -543,10 +552,24 @@ struct Shelf<Content: View>: View {
 }
 
 /// Lays children out left to right, wrapping onto new lines when they do not fit.
+/// Builds `make` in a body of its own, when SwiftUI asks, not inside the body that names it: a long page's parts then
+/// never stack up in one call (Settings' body overflowed the iPhone's main stack in a Debug build, QA r5, R5-26).
+struct Deferred<Content: View>: View {
+    let make: () -> Content
+
+    init(@ViewBuilder _ make: @escaping () -> Content) {
+        self.make = make
+    }
+
+    var body: some View { make() }
+}
+
 struct FlowRow: Layout {
     var spacing: CGFloat = 12
     /// Each line centered in the row (the iPhone title's secondaries), else from the leading edge.
     var centered = false
+    /// Each item centered on its line's height (a label beside taller chips), else at the line's top.
+    var middle = false
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let frames = place(subviews, width: proposal.width ?? .infinity)
@@ -557,9 +580,11 @@ struct FlowRow: Layout {
         let frames = place(subviews, width: bounds.width)
         // A line's shift to center it: the room its last frame leaves.
         let ends = Dictionary(frames.map { ($0.minY, $0.maxX) }, uniquingKeysWith: max)
+        let heights = Dictionary(frames.map { ($0.minY, $0.height) }, uniquingKeysWith: max)
         for (subview, frame) in zip(subviews, frames) {
             let shift = centered ? (bounds.width - (ends[frame.minY] ?? bounds.width)) / 2 : 0
-            subview.place(at: CGPoint(x: bounds.minX + frame.minX + shift, y: bounds.minY + frame.minY), proposal: ProposedViewSize(frame.size))
+            let drop = middle ? ((heights[frame.minY] ?? frame.height) - frame.height) / 2 : 0
+            subview.place(at: CGPoint(x: bounds.minX + frame.minX + shift, y: bounds.minY + frame.minY + drop), proposal: ProposedViewSize(frame.size))
         }
     }
 

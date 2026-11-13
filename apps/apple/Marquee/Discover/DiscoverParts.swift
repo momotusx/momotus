@@ -138,7 +138,8 @@ struct DiscoverFilters: View {
                 focus = DiscoverWords.clearTarget(s)
                 select(["platform": NSNull(), "genre": NSNull(), "decade": NSNull()])
             }
-            .buttonStyle(.plain)
+            // A link's style: at least a target tall on a touch screen (QA r5, R5-27: Clear was 41 by 21).
+            .buttonStyle(.textLink)
             .textFont(metrics.wide ? 13 : 17, weight: .semibold, relativeTo: .body)
             .foregroundStyle(Theme.Palette.key)
             .accessibilityLabel("Clear filters")
@@ -247,7 +248,9 @@ struct KindSegment: View {
                     .accessibilityAddTraits(on ? .isSelected : [])
             }
         }
-        .padding(3)
+        // On the iPhone each segment takes the track's whole height, so a segment is a full target (QA r5, R5-27: 39).
+        .padding(.horizontal, 3)
+        .padding(.vertical, metrics.wide ? 3 : 0)
         .background(Capsule().fill(ChipFill.trackColor.opacity(ChipFill.rest)))
         .fixedSize(horizontal: metrics.wide, vertical: false)
         .accessibilityElement(children: .contain)
@@ -275,9 +278,10 @@ private struct SegmentStyle: ButtonStyle {
                 .foregroundStyle(on ? Color.white : Theme.Palette.muted)
                 .lineLimit(1)
                 .padding(.horizontal, 14)
-                .frame(maxWidth: wide ? nil : .infinity, minHeight: (wide ? Theme.Pill.desktop : Theme.Pill.phone) - 6)
-                .background { if on { Capsule().fill(Theme.Palette.selectedFill) } }
-                .contentShape(Capsule())
+                .frame(maxWidth: wide ? nil : .infinity, minHeight: wide ? Theme.Pill.desktop - 6 : Theme.Pill.phone)
+                // The selected fill keeps its 3 pt inset inside the track.
+                .background { if on { Capsule().fill(Theme.Palette.selectedFill).padding(.vertical, wide ? 0 : 3) } }
+                .contentShape(Rectangle())
                 .pressVeil(Capsule(), pressed: configuration.isPressed)
                 .modifier(FocusRing(shape: Capsule(), active: focused))
         }

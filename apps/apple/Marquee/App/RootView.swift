@@ -280,8 +280,14 @@ struct MainShell: View {
                 TabBar(selection: tab, select: { select($0) }, pin: pin, bottomInset: bottomInset)
             }
         }
-        // The screen's own bottom inset (the home indicator), read outside the bar's inset.
-        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { if !typing { bottomInset = $0 } }
+        // The screen's own bottom inset (the home indicator), read outside the bar's inset and inside a view that
+        // ignores the keyboard, so the keyboard's region is never in it. Read with that region, a height kept from the
+        // keyboard's way down left the bar off screen after typing until a relaunch (QA r5, R5-24).
+        .background {
+            Color.clear
+                .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { bottomInset = $0 }
+                .ignoresSafeArea(.keyboard)
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in typing = true }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in typing = false }
         // The film brought back from Picture in Picture, over whichever place is open.
@@ -553,7 +559,12 @@ struct MainShell: View {
                     .toolbar {
                         ToolbarItem(placement: .topBarLeading) {
                             // A blue back link, the chevron and the word (DECISION Navigation).
-                            Button { select(.library) } label: { Label("Library", glyph: "chevron-left") }
+                            Button { select(.library) } label: {
+                                Label("Library", glyph: "chevron-left")
+                                    // Its 44 pt target, as every other Back (QA r5, R5-27: the bar drew it at 36).
+                                    .frame(minWidth: Theme.minTarget, minHeight: Theme.minTarget)
+                                    .contentShape(Rectangle())
+                            }
                                 .labelStyle(.titleAndIcon)
                                 .tint(Theme.Palette.key)
                                 .foregroundStyle(Theme.Palette.key)

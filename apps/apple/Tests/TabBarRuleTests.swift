@@ -144,3 +144,33 @@ import Testing
     #expect(!AppTab.goMenu(kids: true).contains(.calendar))
     #expect(AppTab.goMenu(kids: false) == AppTab.allCases)
 }
+
+@Test func theBarsInsetNeverTakesTheKeyboardsHeight() throws {
+    // QA r5, R5-24: after typing in Search or a name field the bar sat off screen until a relaunch. Its inset is read
+    // inside a view that ignores the keyboard, so no keyboard height can be kept in it, whatever order the keyboard's
+    // notices and the layout come in.
+    let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/App/RootView.swift")
+    let root = try String(contentsOf: file, encoding: .utf8)
+    #expect(root.contains("""
+                Color.clear
+                    .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { bottomInset = $0 }
+                    .ignoresSafeArea(.keyboard)
+    """), "the bar's inset is read with the keyboard's region")
+    #expect(!root.contains("if !typing { bottomInset = $0 }"))
+    #expect(root.components(separatedBy: "bottomInset = ").count - 1 == 1, "another write of the bar's inset")
+}
+
+@MainActor @Test func thePlayerKeepsTheWindowWhileAnyPlayerIsUp() {
+    // QA r5, R5-29: the film brought back from Picture in Picture appeared before its old page left; that page's leave
+    // cleared a flag and the tab bar came back over the film.
+    let immersion = Immersion()
+    immersion.enter()
+    immersion.enter()
+    immersion.leave()
+    #expect(immersion.active, "one player left, the other is still up")
+    immersion.leave()
+    #expect(!immersion.active)
+    immersion.leave()
+    immersion.enter()
+    #expect(immersion.active, "an extra leave counts below none")
+}
