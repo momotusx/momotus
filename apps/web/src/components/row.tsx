@@ -402,7 +402,9 @@ export function Row(props: {
         setNear(e.isIntersecting);
         wasNear.set(id(), e.isIntersecting);
       },
-      { root: props.root(), rootMargin: "100% 0px" },
+      // The phone's page scrolls the document, so the page element is as tall as its content and every row would meet it:
+      // the viewport is the root there (R5-12: all 520 tiles mounted and their posters starved the hero).
+      { root: form() === "phone" ? null : props.root(), rootMargin: "100% 0px" },
     );
     io.observe(section);
     onCleanup(() => {

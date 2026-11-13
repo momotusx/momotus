@@ -178,3 +178,79 @@ test("desktop: a key on a fresh Home focuses Play with the page at its top", asy
   expect(await top(page)).toBe(0);
   await context.close();
 });
+
+/** QA r5, R5-13: Tab onto a row's tile that is only partly in view (Top 10's ninth, 16 px of 153 on a 1440 window)
+ * scrolls the row until the whole tile shows. */
+test("desktop: Tab onto a Top 10 tile at the row's right edge brings the whole tile into view", async ({ browser }) => {
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await page.goto("/?form=desktop");
+  await expect(page.locator(".row .tile img.in").first()).toBeVisible({ timeout: 30_000 });
+  const topRow = '[data-fgroup*=":movie:top"] [data-f^="tile:"]';
+  await expect(page.locator(topRow)).not.toHaveCount(0);
+  const visible = () =>
+    page.evaluate(() => {
+      const r = (document.activeElement as HTMLElement).getBoundingClientRect();
+      return r.left >= 0 && r.right <= innerWidth;
+    });
+  let seen = 0;
+  for (let i = 0; i < 60 && seen < 10; i++) {
+    await page.keyboard.press("Tab");
+    if (!(await page.evaluate(() => (document.activeElement as HTMLElement).dataset.f?.includes(":movie:top:") ?? false))) continue;
+    seen++;
+    await expect.poll(visible, { message: `Top 10 tile ${seen} fully in view` }).toBe(true);
+  }
+  expect(seen).toBe(10);
+  await page.close();
+});
+
+/** QA r5, R5-12: the phone's page scrolls the document, so its rows were all "near" and mounted every tile (361
+ * poster requests in 15 s on a slow link, starving the hero's art). A Home of about 500 tiles mounts only the rows
+ * within a screen of the viewport, and the first hero's art is asked for first. */
+test("phone: a Home of 500 tiles mounts only the rows near the screen; the hero's art has the first fetch priority", async ({ browser }) => {
+  type Tile = { poster?: string | null; posterFallback?: string | null };
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const tag = (u: unknown, n: number) => (typeof u === "string" ? `${u}${u.includes("?") ? "&" : "?"}q=${n}` : u);
+  const expand = (rows: Row[]) =>
+    rows.flatMap((r) =>
+      r.rowId === "continue-watching" || r.tiles.length === 0
+        ? [r]
+        : Array.from({ length: 12 }, (_, n) => ({ ...r, rowId: `${r.rowId}~${n}`, title: `${(r as Row & { title: string }).title} ${n}`, tiles: (r.tiles as Tile[]).map((t) => ({ ...t, poster: tag(t.poster, n), posterFallback: tag(t.posterFallback, n) })) })),
+    );
+  await context.routeWebSocket(/\/ws$/, (ws) => {
+    const core = ws.connectToServer();
+    let homeId: number | null = null;
+    let sub: number | null = null;
+    let rows: Row[] = [];
+    ws.onMessage((m) => {
+      const msg = JSON.parse(String(m));
+      if (msg.op === "subscribe" && msg.view === "home") homeId = msg.id;
+      core.send(m);
+    });
+    core.onMessage((m) => {
+      const msg = JSON.parse(String(m));
+      if (homeId !== null && msg.id === homeId && msg.ok) {
+        sub = msg.result.sub;
+        rows = msg.result.snapshot.rows;
+        return void ws.send(JSON.stringify({ ...msg, result: { ...msg.result, snapshot: { ...msg.result.snapshot, rows: expand(rows) } } }));
+      }
+      if (msg.sub !== sub || !msg.updates) return void ws.send(m);
+      const updates = (msg.updates as Update[]).map((u) => {
+        if (u.kind !== "rows") return u;
+        rows = (u.diffs ?? []).reduce(apply, rows);
+        return { ...u, diffs: [{ op: "reset", values: expand(rows) }] };
+      });
+      ws.send(JSON.stringify({ ...msg, updates }));
+    });
+  });
+  const page = await context.newPage();
+  const posters: string[] = [];
+  page.on("request", (r) => r.resourceType() === "image" && posters.push(r.url()));
+  await page.goto("/?form=phone");
+  await expect(page.locator(".hero-bd img").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".hero-bd img").first()).toHaveAttribute("fetchpriority", "high");
+  await expect.poll(() => page.locator("[data-row]").count(), { timeout: 30_000 }).toBeGreaterThan(40);
+  await page.waitForTimeout(1500);
+  const mounted = await page.locator(".row .tile").count();
+  expect(mounted, `${mounted} tiles mounted, ${posters.length} image requests`).toBeLessThan(120);
+  await context.close();
+});

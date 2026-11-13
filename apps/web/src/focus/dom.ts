@@ -234,6 +234,17 @@ export function reveal(el: HTMLElement) {
 // A focusin on the element the app placed last is no move (the window or tab regaining focus re-announces it, and a
 // focus placed while the document had none arrives late): it is not counted.
 let placing = 0;
+// A Tab key is under way: the focus it moves is the browser's, which scrolls a row only as far as it thinks needed.
+let tabbing = false;
+window.addEventListener(
+  "keydown",
+  (e) => {
+    if (e.key !== "Tab") return;
+    tabbing = true;
+    setTimeout(() => (tabbing = false));
+  },
+  { capture: true },
+);
 let placed: Element | null = null;
 
 export function focusEl(el: HTMLElement) {
@@ -560,7 +571,12 @@ export function installFocus(onBack: () => void) {
   }).observe(document.body, { childList: true, subtree: true });
   document.addEventListener("focusin", (e) => {
     const el = e.target as HTMLElement;
-    if (placedElsewhere(e.target)) inputs++;
+    if (placedElsewhere(e.target)) {
+      inputs++;
+      // Tab's own focus (R5-13): the browser leaves a row's tile that is partly in view where it is (Top 10's ninth,
+      // 16 px of 153 on a desktop window), so the row's scroll rule runs for it as it does for a key's move.
+      if (tabbing) reveal(el);
+    }
     const key = el.dataset?.f;
     if (!key) return;
     const group = groupOf(el);

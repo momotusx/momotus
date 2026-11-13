@@ -377,7 +377,7 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
                 aria-roledescription="slide"
                 aria-label={`${i() + 1} of ${list().length}, ${h.tile.name}`}
               >
-                <Backdrop src={near() ? h.tile.background : null} class="hero-bd" ramp={form() === "phone" ? "heroPhone" : "hero"} />
+                <Backdrop src={near() ? h.tile.background : null} priority={i() === 0} class="hero-bd" ramp={form() === "phone" ? "heroPhone" : "hero"} />
                 <HeroWords hero={h} active={on()} labels={labels()} />
               </div>
             );

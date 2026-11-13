@@ -19,6 +19,8 @@ export function Backdrop(props: {
    * box never shows blank. */
   under?: string | null;
   onMissing?: () => void;
+  /** The first screen's art (Home's first hero): fetched ahead of the tiles' posters on a slow link. */
+  priority?: boolean;
   /** Drawn under the picture: a title header's trailer. */
   children?: JSX.Element;
 }) {
@@ -38,6 +40,7 @@ export function Backdrop(props: {
             src={src}
             alt=""
             decoding="async"
+            fetchpriority={props.priority ? "high" : undefined}
             class="fade"
             onLoad={(e) => e.currentTarget.classList.add("in")}
             onError={() => src === props.src && setFailed(true)}
