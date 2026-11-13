@@ -1618,7 +1618,8 @@ final class PlayerModel {
         // A track delivered whole (HLS) sends nothing more: the observer moves on with the playhead.
         if position > edgesUntil { watchCueEdges() }
         if watchPicture() { return }
-        if let total = player.currentItem?.duration, total.isNumeric { duration = total.seconds }
+        // Set only when it moved: each set tells every view that reads the length, equal or not (QA R5-23).
+        if let total = player.currentItem?.duration, total.isNumeric, total.seconds != duration { duration = total.seconds }
         if duration != publishedDuration { publishNowPlaying() }
         if playing, ContinuousClock.now - lastReport > .seconds(5) { report() }
     }

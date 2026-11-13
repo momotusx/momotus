@@ -190,95 +190,14 @@ struct PlayerScreen: View {
                     episodes: model.route.target.season == nil ? nil : { openEpisodes() }, windowWidth: windowWidth)
                         .transition(.opacity)
                 }
-                // The file's bitmap subtitles (PGS, DVD, DVB) on the second engine, where the disc placed them.
-                if model.playback?.phase != "failed" {
-                    let images = model.subtitleImages
-                    if !images.isEmpty {
-                        GeometryReader { geo in
-                            ForEach(images.indices, id: \.self) { index in
-                                let rect = PlayerLayout.imageCueRect(position: images[index].position, video: model.videoSize, view: geo.size)
-                                Image(decorative: images[index].image, scale: 1)
-                                    .resizable()
-                                    .frame(width: rect.width, height: rect.height)
-                                    .position(x: rect.midX, y: rect.midY)
-                            }
-                        }
-                        .ignoresSafeArea()
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                    }
-                }
-                // Over the controls and their scrim, so a line never reads dimmed with
-                // them up (the iPhone walk, round 3); the rules keep it off their buttons.
-                // The second subtitle line (plans/dual-subtitles.md 4): Stacked and One box draw it over the first in
-                // one block hung from the foot; Split hangs it from the top.
-                let first = model.subtitleText
-                let second = model.secondText
-                let split = model.subtitleLayout == .split
-                if first != nil || (second != nil && !split), model.playback?.phase != "failed" {
-                    GeometryReader { geo in
-                        let place = subtitlePlace(geo.size)
-                        // Its foot stays put; a larger caption style or a second line grows upward. Scaled as one, so
-                        // the shrink near the controls takes both lines.
-                        SubtitleBlock(
-                            first: first, second: split ? nil : second, size: model.subtitleSize, background: model.subtitleBackground,
-                            insists: model.captionInsists,
-                            oneBox: model.subtitleLayout == .oneBox, firstHidden: model.subtitle == nil)
-                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { subtitleBox = $0 }
-                            .scaleEffect(place.scale, anchor: .bottom)
-                            .frame(width: geo.size.width, height: max(place.foot, 0), alignment: .bottom)
-                    }
-                    .ignoresSafeArea()
-                    .allowsHitTesting(false)
-                    .animation(Theme.Motion.panel, value: controls)
-                }
-                if split, let second, model.playback?.phase != "failed" {
-                    GeometryReader { geo in
-                        SubtitleBlock(first: nil, second: second, size: model.subtitleSize, background: model.subtitleBackground, insists: model.captionInsists, scale: 1)
-                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { secondBox = $0 }
-                            .padding(.top, subtitleTop(geo.size))
-                            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
-                    }
-                    .ignoresSafeArea()
-                    .allowsHitTesting(false)
-                    .animation(Theme.Motion.panel, value: controls)
-                }
-                if let status = model.statusLine, model.playback?.phase != "failed" {
-                    // The status line (a subtitle trouble, a move or pause for heat) for a few seconds, clear of Skip at the other corner.
-                    Text(status)
-                        .textFont(Theme.type.callout, relativeTo: .callout)
-                        .foregroundStyle(.white)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, Theme.Space.s)
-                        .padding(.vertical, Theme.Space.xs)
-                        .background(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).fill(.black.opacity(0.62)))
-                        .frame(maxWidth: 520, alignment: .leading)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                        .padding(.leading, Theme.Space.m)
-                        .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
-                        .allowsHitTesting(false)
-                        .transition(.opacity)
-                }
-                if skipShown, let segment = model.segment {
-                    // Netflix places it bottom right on the controls' top line, and it
-                    // stays there whether or not the controls show.
-                    SkipButton(segment: segment) { model.skip(segment) }
-                        .id(segment)
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { skipHeight = $0 }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                        .padding(.trailing, Theme.Space.m)
-                        .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
-                        .transition(.opacity)
-                }
-                if upNextShown {
-                    // Just over the measured controls while they show; on a short window it waits for them to hide.
-                    UpNextCard(model: model, short: windowHeight > 0 && windowHeight < PlayerLayout.upNextRoom)
-                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { upNextHeight = $0 }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                        .padding(.horizontal, Theme.Space.m)
-                        .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                        .animation(Theme.Motion.panel, value: controls)
+                // The subtitles, the status line, Skip and Up Next follow the playhead: built in their own view, so a
+                // tick re-renders them alone, never the stage (QA R5-23).
+                PlayheadView {
+                    ZStack { overPicture }
+                        .animation(Theme.Motion.panel, value: model.showNext)
+                        .animation(Theme.Motion.panel, value: model.segment)
+                        // Skip or Up Next appearing closes an open strip (D23).
+                        .onChange(of: skipShown || upNextShown, closeStripForPills)
                 }
                 if model.showEndCard {
                     EndCard(model: model, back: close) { showNextVersions = true }
@@ -331,14 +250,105 @@ struct PlayerScreen: View {
             assistive = assistiveTechRunning
         }
         #endif
-        .animation(Theme.Motion.panel, value: model.showNext)
+        // Up Next and Skip animate in `overPicture`, which reads the playhead; the stage never does.
         .animation(Theme.Motion.panel, value: model.showEndCard)
-        .animation(Theme.Motion.panel, value: model.segment)
         .animation(Theme.Motion.panel, value: model.statusLine)
         // Said once, as it shows (Trakt's `reconnect` line included, plans/player-bar.md 5.1).
         .onChange(of: model.statusLine) { _, now in if let now { announce(now) } }
-        // Skip or Up Next appearing closes an open strip (D23).
-        .onChange(of: skipShown || upNextShown, closeStripForPills)
+    }
+
+    /// What the playhead moves over the picture: the drawn subtitles, the status line, Skip and Up Next, in that order.
+    @ViewBuilder private var overPicture: some View {
+        // The file's bitmap subtitles (PGS, DVD, DVB) on the second engine, where the disc placed them.
+        if model.playback?.phase != "failed" {
+            let images = model.subtitleImages
+            if !images.isEmpty {
+                GeometryReader { geo in
+                    ForEach(images.indices, id: \.self) { index in
+                        let rect = PlayerLayout.imageCueRect(position: images[index].position, video: model.videoSize, view: geo.size)
+                        Image(decorative: images[index].image, scale: 1)
+                            .resizable()
+                            .frame(width: rect.width, height: rect.height)
+                            .position(x: rect.midX, y: rect.midY)
+                    }
+                }
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        }
+        // Over the controls and their scrim, so a line never reads dimmed with
+        // them up (the iPhone walk, round 3); the rules keep it off their buttons.
+        // The second subtitle line (plans/dual-subtitles.md 4): Stacked and One box draw it over the first in
+        // one block hung from the foot; Split hangs it from the top.
+        let first = model.subtitleText
+        let second = model.secondText
+        let split = model.subtitleLayout == .split
+        if first != nil || (second != nil && !split), model.playback?.phase != "failed" {
+            GeometryReader { geo in
+                let place = subtitlePlace(geo.size)
+                // Its foot stays put; a larger caption style or a second line grows upward. Scaled as one, so
+                // the shrink near the controls takes both lines.
+                SubtitleBlock(
+                    first: first, second: split ? nil : second, size: model.subtitleSize, background: model.subtitleBackground,
+                    insists: model.captionInsists,
+                    oneBox: model.subtitleLayout == .oneBox, firstHidden: model.subtitle == nil)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { subtitleBox = $0 }
+                    .scaleEffect(place.scale, anchor: .bottom)
+                    .frame(width: geo.size.width, height: max(place.foot, 0), alignment: .bottom)
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            .animation(Theme.Motion.panel, value: controls)
+        }
+        if split, let second, model.playback?.phase != "failed" {
+            GeometryReader { geo in
+                SubtitleBlock(first: nil, second: second, size: model.subtitleSize, background: model.subtitleBackground, insists: model.captionInsists, scale: 1)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { secondBox = $0 }
+                    .padding(.top, subtitleTop(geo.size))
+                    .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+            .animation(Theme.Motion.panel, value: controls)
+        }
+        if let status = model.statusLine, model.playback?.phase != "failed" {
+            // The status line (a subtitle trouble, a move or pause for heat) for a few seconds, clear of Skip at the other corner.
+            Text(status)
+                .textFont(Theme.type.callout, relativeTo: .callout)
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, Theme.Space.s)
+                .padding(.vertical, Theme.Space.xs)
+                .background(RoundedRectangle(cornerRadius: Theme.Radius.m, style: .continuous).fill(.black.opacity(0.62)))
+                .frame(maxWidth: 520, alignment: .leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .padding(.leading, Theme.Space.m)
+                .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
+                .allowsHitTesting(false)
+                .transition(.opacity)
+        }
+        if skipShown, let segment = model.segment {
+            // Netflix places it bottom right on the controls' top line, and it
+            // stays there whether or not the controls show.
+            SkipButton(segment: segment) { model.skip(segment) }
+                .id(segment)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { skipHeight = $0 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .padding(.trailing, Theme.Space.m)
+                .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
+                .transition(.opacity)
+        }
+        if upNextShown {
+            // Just over the measured controls while they show; on a short window it waits for them to hide.
+            UpNextCard(model: model, short: windowHeight > 0 && windowHeight < PlayerLayout.upNextRoom)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { upNextHeight = $0 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .padding(.horizontal, Theme.Space.m)
+                .padding(.bottom, PlayerLayout.overlayBottom(controlsShown: controlsShown, controlsHeight: controlsHeight))
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+                .animation(Theme.Motion.panel, value: controls)
+        }
     }
 
     var body: some View {

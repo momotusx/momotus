@@ -259,11 +259,14 @@ struct PlayerControls: View {
                     .accessibilityLabel("AirPlay")
             }
             #endif
-            if model.duration > 0, model.playback?.phase != "failed" {
-                Text("Ends at \(endsAt.formatted(date: .omitted, time: .shortened))")
-                    .textFont(Theme.type.callout, relativeTo: .callout)
-                    .foregroundStyle(.white.opacity(0.8))
-                    .frame(minHeight: 40)
+            // The end time follows the playhead: only this line reads it, never the bar (QA R5-23).
+            PlayheadView {
+                if model.duration > 0, model.playback?.phase != "failed" {
+                    Text("Ends at \(endsAt.formatted(date: .omitted, time: .shortened))")
+                        .textFont(Theme.type.callout, relativeTo: .callout)
+                        .foregroundStyle(.white.opacity(0.8))
+                        .frame(minHeight: 40)
+                }
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { measuredTop($0) }
@@ -288,37 +291,40 @@ struct PlayerControls: View {
             #if os(tvOS)
             // The whole row takes focus, so nothing lies left or right of it:
             // Left and Right seek 10 s a press instead of moving focus.
-            HStack(spacing: 12) {
-                Text(timecode(model.position)).monospacedDigit()
-                ProgressLine(value: model.duration > 0 ? model.position / model.duration : 0)
-                Text("-" + timecode(max(0, model.duration - model.position))).monospacedDigit()
-            }
-            .textFont(Theme.type.callout, relativeTo: .callout)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 14)
-            .contentShape(Capsule())
-            .focusable()
-            .focused($focus, equals: .scrub)
-            .modifier(FocusRing(shape: Capsule(), active: focus == .scrub))
-            // Left and Right seek, faster while pressed again quickly; Up and
-            // Down leave the bar for Back and Play by name, not by geometry.
-            .onMoveCommand { direction in
-                switch direction {
-                case .left: seek(-1)
-                case .right: seek(1)
-                case .up: focus = .back
-                case .down: focus = .play
-                @unknown default: break
+            // The row follows the playhead: only it reads the position, never the bar (QA R5-23).
+            PlayheadView {
+                HStack(spacing: 12) {
+                    Text(timecode(model.position)).monospacedDigit()
+                    ProgressLine(value: model.duration > 0 ? model.position / model.duration : 0)
+                    Text("-" + timecode(max(0, model.duration - model.position))).monospacedDigit()
                 }
-            }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Position")
-            .accessibilityValue("\(timecode(model.position)) of \(timecode(model.duration))")
-            .accessibilityAdjustableAction { direction in
-                switch direction {
-                case .increment: model.skip(10)
-                case .decrement: model.skip(-10)
-                @unknown default: break
+                .textFont(Theme.type.callout, relativeTo: .callout)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 14)
+                .contentShape(Capsule())
+                .focusable()
+                .focused($focus, equals: .scrub)
+                .modifier(FocusRing(shape: Capsule(), active: focus == .scrub))
+                // Left and Right seek, faster while pressed again quickly; Up and
+                // Down leave the bar for Back and Play by name, not by geometry.
+                .onMoveCommand { direction in
+                    switch direction {
+                    case .left: seek(-1)
+                    case .right: seek(1)
+                    case .up: focus = .back
+                    case .down: focus = .play
+                    @unknown default: break
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Position")
+                .accessibilityValue("\(timecode(model.position)) of \(timecode(model.duration))")
+                .accessibilityAdjustableAction { direction in
+                    switch direction {
+                    case .increment: model.skip(10)
+                    case .decrement: model.skip(-10)
+                    @unknown default: break
+                    }
                 }
             }
             // tvOS keeps its row as it was (the owner, 2026-10-21: tvOS only has to keep compiling): the transport at
@@ -474,25 +480,28 @@ struct PlayerControls: View {
     #if !os(tvOS)
     /// Elapsed, the slider, remaining.
     private func scrubRow(spacing: CGFloat) -> some View {
-        HStack(spacing: spacing) {
-            Text(timecode(scrub ?? model.position)).monospacedDigit()
-            Slider(
-                value: Binding(get: { scrub ?? model.position }, set: { scrub = $0 }),
-                in: 0...max(model.duration, 1)
-            ) { editing in
-                // A drag on the bar holds the controls up, and their hide timer starts again from its end, as on
-                // Android: before, the 3 s from the tap that showed them ran out under the finger (bench PGW10).
-                hold(editing)
-                if !editing, let value = scrub {
-                    model.seek(to: value)
-                    scrub = nil
+        // Only this row reads the playhead, four times a second; the bar around it never does (QA R5-23).
+        PlayheadView {
+            HStack(spacing: spacing) {
+                Text(timecode(scrub ?? model.position)).monospacedDigit()
+                Slider(
+                    value: Binding(get: { scrub ?? model.position }, set: { scrub = $0 }),
+                    in: 0...max(model.duration, 1)
+                ) { editing in
+                    // A drag on the bar holds the controls up, and their hide timer starts again from its end, as on
+                    // Android: before, the 3 s from the tap that showed them ran out under the finger (bench PGW10).
+                    hold(editing)
+                    if !editing, let value = scrub {
+                        model.seek(to: value)
+                        scrub = nil
+                    }
                 }
+                .tint(.white)
+                .accessibilityLabel("Position")
+                // As on TV: "12:04 of 45:10", not raw seconds.
+                .accessibilityValue("\(timecode(scrub ?? model.position)) of \(timecode(model.duration))")
+                Text("-" + timecode(max(0, model.duration - (scrub ?? model.position)))).monospacedDigit()
             }
-            .tint(.white)
-            .accessibilityLabel("Position")
-            // As on TV: "12:04 of 45:10", not raw seconds.
-            .accessibilityValue("\(timecode(scrub ?? model.position)) of \(timecode(model.duration))")
-            Text("-" + timecode(max(0, model.duration - (scrub ?? model.position)))).monospacedDigit()
         }
     }
     #endif

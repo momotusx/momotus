@@ -481,3 +481,87 @@ private func longRight(subtitle: String) -> [BarFit.Pill] {
     let insisted = base.with(.outline, systemInsists: true)
     #expect(insisted.highlight == base.highlight && insisted.edge == .none)
 }
+
+// MARK: the playhead's reach (QA R5-23)
+
+/// A model whose position moves as the player's does.
+@MainActor @Observable private final class Playhead {
+    var position = 0.0
+}
+
+/// How often each part's body ran.
+@MainActor private final class Renders {
+    var stage = 0
+    var row = 0
+}
+
+/// The player's shape in small: a stage that holds a row showing the position.
+private struct StageSketch: View {
+    let playhead: Playhead
+    let renders: Renders
+
+    var body: some View {
+        let _ = renders.stage += 1
+        VStack {
+            Text("Title")
+            PlayheadView {
+                let _ = renders.row += 1
+                Text("\(Int(playhead.position))")
+            }
+        }
+    }
+}
+
+@MainActor @Test func aTickRendersTheRowThatShowsThePlayheadNotTheStage() {
+    let playhead = Playhead()
+    let renders = Renders()
+    let host = NSHostingView(rootView: StageSketch(playhead: playhead, renders: renders).frame(width: 300, height: 100))
+    host.layoutSubtreeIfNeeded()
+    let (stage, row) = (renders.stage, renders.row)
+    #expect(stage >= 1 && row >= 1)
+    for tick in 1...8 {
+        playhead.position = Double(tick)
+        RunLoop.main.run(until: .now + 0.02)
+        host.layoutSubtreeIfNeeded()
+    }
+    #expect(renders.row >= row + 8)
+    #expect(renders.stage == stage)
+}
+
+/// The text with every `PlayheadView { ... }` block cut out, and every `.onAppear { ... }` (it runs once, not in a body).
+private func outsidePlayhead(_ text: String) -> String {
+    var out = text
+    while let start = out.range(of: "PlayheadView {") ?? out.range(of: ".onAppear {") {
+        var depth = 0
+        var end = start.upperBound
+        for index in out[start.lowerBound...].indices {
+            if out[index] == "{" { depth += 1 }
+            if out[index] == "}" { depth -= 1; if depth == 0 { end = out.index(after: index); break } }
+        }
+        out.removeSubrange(start.lowerBound..<end)
+    }
+    return out
+}
+
+/// One member: from its first line to the brace that closes it at the type's indent.
+private func member(_ text: String, _ head: String) -> String {
+    guard let start = text.range(of: head), let end = text.range(of: "\n    }\n", range: start.upperBound..<text.endIndex) else { return "" }
+    return String(text[start.lowerBound..<end.upperBound])
+}
+
+@Test func theStageAndTheBarReadThePlayheadOnlyInsideAPlayheadView() throws {
+    let player = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player")
+    let screen = try String(contentsOf: player.appending(path: "PlayerScreen.swift"), encoding: .utf8)
+    let controls = try String(contentsOf: player.appending(path: "PlayerControls.swift"), encoding: .utf8)
+    let ticking = ["model.position", "model.segment", "model.showNext", "subtitleText", "secondText", "subtitleImages", "skipShown", "upNextShown", "endsAt"]
+    let stage = member(screen, "    private var stage: some View {")
+    let body = member(screen, "    var body: some View {")
+    #expect(!stage.isEmpty && !body.isEmpty)
+    for part in [stage, body] {
+        let outside = outsidePlayhead(part)
+        #expect(ticking.filter { outside.contains($0) } == [])
+    }
+    // The bar: everything but the end time's own sum.
+    let bar = outsidePlayhead(controls.replacingOccurrences(of: member(controls, "    private var endsAt: Date {"), with: ""))
+    #expect(ticking.filter { bar.contains($0) } == [])
+}
