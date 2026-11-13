@@ -258,6 +258,10 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 /* The core's own text for a problem, behind Details, for support. */
 .why-raw { font: 400 var(--type-caption) / 1.35 var(--font-text); color: var(--dim); }
 .why-raw summary { cursor: pointer; color: var(--muted); }
+/* A finger's 48 on the phone: every "Details" (an addon's row, a plugin card, the install sheet) and an inline link in a
+ * note (Privacy) is drawn 48 high, not reached by an invisible pseudo-element a neighbour can cut (QA r5 R5-7, R5-8). */
+[data-form="phone"] .why-raw summary { width: fit-content; min-width: 48px; padding-block: 0; line-height: 48px; }
+[data-form="phone"] .note a { display: inline-flex; align-items: center; min-width: 48px; min-height: 48px; }
 .why-raw code { display: block; margin-top: 6px; font-family: var(--font-mono); overflow-wrap: anywhere; }
 .problem h2 { font-size: var(--type-title2); line-height: 1.1; }
 .problem p { color: var(--dim); font-size: var(--type-callout); line-height: 1.4; }
@@ -295,13 +299,13 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 [data-form="phone"] .problem { gap: 10px; }
 /* Under the shell's offline banner, the fixed back sits below it: the banner holds the notch and sets `--notch` to 0. */
 [data-form="phone"] .backbar { position: fixed; left: 8px; top: calc(4px + var(--offline-h, 0px) + var(--notch, env(safe-area-inset-top))); }
-[data-form="phone"] .back { height: 44px; padding: 0 14px 0 8px; font-size: 17px; }
+[data-form="phone"] .back { height: 48px; padding: 0 14px 0 8px; font-size: 17px; }
 [data-form="phone"] .back svg { width: 24px; height: 24px; }
 /* Over a title's art (R4, the owner, 2026-10-30): one round button as the iPhone's own, a white chevron on a black 64
  * percent circle that reads over any art (6.4:1 over white), the word kept for screen readers. Small, it stays clear
  * of a cover's printed title, which starts under its row (title.css, `--back-row`). A solid fill, no backdrop blur: a
  * blur over the page re-renders under the fixed button on every frame of a scroll (home-perf's title glide). */
-[data-form="phone"] .backbar:not(.bar) .back { width: 44px; padding: 0; justify-content: center; border-radius: 50%; color: #fff;
+[data-form="phone"] .backbar:not(.bar) .back { width: 48px; padding: 0; justify-content: center; border-radius: 50%; color: #fff;
   background: rgba(0, 0, 0, .64); }
 /* Once the page scrolls, Back's row takes the page color, as the iPhone's navigation bar does at a scroll edge (R4,
  * Pixel walk 2026-10-30 F5): what scrolls up passes under the row, so Back never sits on Play or a cover's printed

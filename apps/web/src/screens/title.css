@@ -196,6 +196,7 @@
 [data-form="phone"] .logo-slot .title-logo.logo { max-width: 280px; object-position: center bottom; }
 [data-form="phone"] .info .meta { margin-bottom: 8px; font-size: 14px; }
 [data-form="phone"] .syn { -webkit-line-clamp: 3; font-size: 15px; text-align: left; }
+[data-form="phone"] .syn-more { display: inline-flex; align-items: center; min-width: 48px; min-height: 48px; margin-top: 0; }
 .syn-more { margin-top: 4px; font: 700 15px / 1.4 var(--font-text); color: var(--text); }
 /* No art on a phone: no empty band, the page starts at the title. */
 [data-form="phone"] .title-scr.noart .title-bd { display: none; }
@@ -220,8 +221,8 @@
 [data-form="phone"] .play-row .btn.again { flex: none; padding: 0 16px; }
 /* Secondary actions on a phone: a centered row of circles with their word. */
 [data-form="phone"] .info .acts { display: flex; justify-content: center; gap: 22px; width: 100%; }
-[data-form="phone"] .info .acts .btn { font-size: 12px; gap: 6px; }
-[data-form="phone"] .info .acts .btn svg { width: 20px; height: 20px; padding: 13px; }
+[data-form="phone"] .info .acts .btn { min-width: 48px; font-size: 12px; gap: 6px; }
+[data-form="phone"] .info .acts .btn svg { width: 20px; height: 20px; padding: 14px; }
 [data-form="phone"] .facts { margin-top: 22px; max-width: none; text-align: left; }
 [data-form="phone"] .facts dt, [data-form="phone"] .facts dd { padding: 11px 14px; font-size: 13px; }
 [data-form="phone"] .title-skel { width: 100%; margin-top: 0; }
@@ -336,6 +337,7 @@
 .scores .slot { display: contents; }
 /* A link's target: 44 tall around the 24 row, and half the 22 gap each side, so neighbours split it and the row never grows. */
 a.score { padding: 10px 11px; margin: -10px -11px; }
+[data-form="phone"] a.score { padding: 12px 11px; margin: -12px -11px; }
 [data-form="tv"] .scores { height: 36px; gap: 30px; margin-left: 30px; }
 [data-form="tv"] .score { gap: 12px; }
 [data-form="tv"] .score .mark { height: 28px; }

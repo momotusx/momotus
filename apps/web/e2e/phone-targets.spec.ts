@@ -180,3 +180,37 @@ test("phone: Continue Watching's remove X, the profile menu's rows and the share
   }
   await context.close();
 });
+
+// QA r5 R5-5 to R5-8 (Q4 rows 19, 28; Q5 row 28; Q6 rows 7, 8; Q7 rows 74, 76, 77): the drawn box, not a reach an overflow
+// or a neighbour cuts. A control that says 48 here but is clipped by its scroller shows as a short box.
+const DRAWN: [string, string][] = [
+  ["/title/movie/tt0056923", ".backbar .back"],
+  ["/title/movie/tt0056923", ".info .acts .btn"],
+  ["/title/movie/tt0056923", ".syn-more"],
+  ["/title/movie/tt0056923", "a.score"],
+  [`/title/movie/tt1254207/versions/tt1254207`, ".backbar .back"],
+  ["/discover", ".dv-filters .chip, .dv-kinds .chip"],
+  ["/addons", "summary"],
+  ["/find-addons", "summary"],
+];
+
+test("phone: back, title actions, More, ratings, Versions tabs, filters and every Details are drawn 48 x 48", async ({ browser }) => {
+  test.setTimeout(240_000);
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
+  const page = await context.newPage();
+  const short: string[] = [];
+  for (const [path, selector] of DRAWN) {
+    await page.goto(`${path}?form=phone`);
+    await expect(page.locator(selector).first()).toBeVisible({ timeout: 30_000 });
+    const rows = await page.locator(selector).evaluateAll((els) =>
+      els.filter((e) => (e as HTMLElement).offsetWidth > 0).slice(0, 12).map((e) => {
+        const r = e.getBoundingClientRect();
+        return { name: (e as HTMLElement).dataset.f ?? e.className ?? e.tagName, w: r.width, h: r.height };
+      }),
+    );
+    expect(rows.length, `${path} ${selector}`).toBeGreaterThan(0);
+    short.push(...rows.filter((r) => r.w < 48 - HALF_PX || r.h < 48 - HALF_PX).map((r) => `${path} ${selector} ${r.name} ${r.w}x${r.h}`));
+  }
+  expect(short).toEqual([]);
+  await context.close();
+});

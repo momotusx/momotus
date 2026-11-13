@@ -77,7 +77,10 @@
 [data-form="phone"] .chips-track { overflow-x: auto; gap: 8px; padding: 8px 16px; margin: -6px -16px; }
 [data-form="phone"] .chips-track { --chip-fade: 40px; }
 [data-form="phone"] .chips-track.wrap { row-gap: 12px; }
-[data-form="phone"] .chip { height: 36px; padding: 0 14px; border-radius: 18px; font-size: 14px; gap: 6px; min-width: 48px; justify-content: center; }
+[data-form="phone"] .chip { height: 48px; padding: 0 14px; border-radius: 18px; font-size: 14px; gap: 6px; min-width: 48px; justify-content: center; }
+/* A tick (Sign out's "Remove your profiles and library from this device?", R5-18) is a sentence: it wraps inside the column and
+ * grows by lines, never wider than the page and never under 48. */
+[data-form="phone"] .chip[role="checkbox"] { height: auto; min-height: 48px; max-width: 100%; padding-block: 8px; white-space: normal; text-align: start; }
 [data-form="phone"] .chip small { font-size: 12px; }
 [data-form="phone"] .chip svg { width: 16px; height: 16px; }
 [data-form="phone"] .pull { align-self: flex-start; }
@@ -146,4 +149,4 @@
 [data-form="phone"] .svc-tile { height: 48px; padding: 0 16px; font-size: 15px; }
 [data-form="phone"] .dv-filters { gap: 8px; margin: 0 0 18px; }
 [data-form="phone"] .dv-filters .chips-row { flex-direction: row; }
-[data-form="phone"] .dv-clear { height: 40px; padding: 0 8px; font-size: 15px; }
+[data-form="phone"] .dv-clear { height: 48px; min-width: 48px; padding: 0 8px; font-size: 15px; }

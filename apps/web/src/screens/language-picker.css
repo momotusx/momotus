@@ -114,20 +114,20 @@
  * every control at least 44 tall. */
 [data-form="phone"] .lp { gap: 14px; }
 [data-form="phone"] .lp .flag { width: 28px; height: 28px; font-size: 11px; }
-[data-form="phone"] .lp-field { height: 44px; padding: 0 12px; gap: 8px; border-radius: var(--radius-m); }
+[data-form="phone"] .lp-field { height: 48px; padding: 0 12px; gap: 8px; border-radius: var(--radius-m); }
 [data-form="phone"] .lp-field svg { width: 18px; height: 18px; }
 [data-form="phone"] .lp-field input { font: 400 var(--type-body) / 1 var(--font-text); }
 [data-form="phone"] .lp-sug { gap: 8px; }
-[data-form="phone"] .lp-chip { width: calc(50% - 4px); height: 44px; gap: 8px; padding: 0 12px 0 6px; }
+[data-form="phone"] .lp-chip { width: calc(50% - 4px); height: 48px; gap: 8px; padding: 0 12px 0 6px; }
 [data-form="phone"] .lp-list { grid-template-columns: 1fr; gap: 0; }
 [data-form="phone"] .lp-row { height: 56px; padding: 0 4px; gap: 12px; border-radius: var(--radius-m); }
 [data-form="phone"] .lp-names .lp-name { font-size: var(--type-body); }
 [data-form="phone"] .lp-check { width: 20px; height: 20px; }
 [data-form="phone"] .lp-rank { padding: 2px 6px; border-width: 1.5px; }
-[data-form="phone"] :is(.lp-retry, .lp-clear) { height: 44px; padding: 0 14px; }
+[data-form="phone"] :is(.lp-retry, .lp-clear) { height: 48px; padding: 0 14px; }
 [data-form="phone"] .lp-top { padding: calc(env(safe-area-inset-top) + 12px) 16px 8px; }
 [data-form="phone"] .lp-top h2 { font-size: var(--type-headline); font-weight: 600; }
-[data-form="phone"] .lp-done { height: 44px; padding: 0 16px; font-size: var(--type-body); background: none; color: var(--key); }
+[data-form="phone"] .lp-done { min-width: 48px; height: 48px; padding: 0 16px; font-size: var(--type-body); background: none; color: var(--key); }
 [data-form="phone"] .lp-body { padding: 0 16px calc(env(safe-area-inset-bottom) + 24px); }
 
 .lp-foot .acts { margin: 0; }
