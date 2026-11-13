@@ -449,6 +449,9 @@ struct State {
     /// connection, or none in time): a status is an answer.
     addons: usize,
     unreached: usize,
+    /// A source is installed at all (`has_sources`): with none asked for
+    /// this video, nothing has it, and "Add a source" would be false.
+    sources: bool,
     /// Whether this device keeps the version last played is known
     /// (`kept_start`): until then every source failing says nothing, so
     /// Try again never turns into Play from this device.
@@ -1164,6 +1167,7 @@ impl VersionsView {
             unreached: 0,
             kept_checked: !cfg!(feature = "torrent"),
             addons: eligible.len(),
+            sources: has_sources(core),
             kids: verified.is_some(),
             archive: Vec::new(),
             archive_ranked: Ranked::default(),
@@ -1288,6 +1292,7 @@ impl VersionsView {
             unreached: 0,
             kept_checked: true,
             addons: 0,
+            sources: false,
             kids: true,
             archive: Vec::new(),
             archive_ranked: Ranked::default(),
@@ -1568,6 +1573,24 @@ fn eligible(core: &Core, path: &ResourcePath) -> Vec<InstalledAddon> {
     addons.into_iter().filter(|a| a.supports(path)).collect()
 }
 
+/// An installed addon lists streams for some video, or a plugin repository
+/// is on (QA r5 Q5 row 29: a bad episode id no addon claims is not a
+/// missing source).
+fn has_sources(core: &Core) -> bool {
+    use stremio_core::types::addon::ManifestResource;
+    let streams = |a: &InstalledAddon| {
+        a.manifest.resources.iter().any(|r| match r {
+            ManifestResource::Short(name) | ManifestResource::Full { name, .. } => name == "stream",
+        })
+    };
+    core.plugins_wanted()
+        || core
+            .installed_addons()
+            .unwrap_or_default()
+            .iter()
+            .any(streams)
+}
+
 /// The version last played for this video says "On this device" when this
 /// device holds its start (`playback::kept_start`).
 #[cfg(feature = "torrent")]
@@ -1638,6 +1661,7 @@ async fn supervise(
             accounts_moved(&core, &mut s);
         }
         restart(&mut s, &addons);
+        s.sources = has_sources(&core);
         snapshot.set(render(&s));
     }
 }
@@ -2934,8 +2958,13 @@ fn empty(s: &State) -> Option<EmptyVersions> {
     if !s.done || !s.ranked.rows.is_empty() || s.download.is_some() {
         return None;
     }
-    if s.addons == 0 {
+    if s.addons == 0 && !s.sources {
         return named(EmptyKind::NoSource, EmptyAction::SettingsAddons);
+    }
+    // Sources installed, none for this video's id (a bad link): nothing
+    // has it, and none was out of reach.
+    if s.addons == 0 {
+        return named(EmptyKind::NoResults, EmptyAction::None);
     }
     if s.unreached >= s.addons {
         // Settled first: no Try again that turns into Play from this device.

@@ -1958,6 +1958,27 @@ async fn with_no_source_the_view_says_add_one() {
     assert!(view.snapshot().empty.is_none());
 }
 
+/// QA r5 Q5 row 29: a bad episode id that no installed source claims (its
+/// prefix is no addon's) is not a missing source: it reads "No source has
+/// this yet", with no Settings link.
+#[tokio::test]
+async fn a_bad_id_with_sources_installed_says_no_source_has_it() {
+    let (core, _server) = answering(200, &torrents()).await;
+    let facts = TitleFacts::read(Some("52 min"), Some("2019-"), Some("2019-05-01"), Some(2));
+    let view = VersionsView::open(
+        &core,
+        VersionsParams {
+            video_id: "garbage".into(),
+            ..params(facts)
+        },
+    );
+    until("done", || view.snapshot().done).await;
+    assert_eq!(
+        kind_and_action(&empty_of(&view).await),
+        (EmptyKind::NoResults, EmptyAction::None)
+    );
+}
+
 /// 2a: no addon answering (offline too: no connection, or none in time)
 /// offers Try again; with nothing kept on this device there is nothing to
 /// play from it. A status is an answer: a 404 or a 500 reads "No source has
@@ -2238,6 +2259,40 @@ async fn playing_on_ends_a_stall_the_player_did_not_end() {
         !playback.snapshot().choose_another,
         "the button over a playing video"
     );
+}
+
+/// QA r5 Q5 row 17: the player keeps reporting progress while it waits,
+/// at the frozen frame. That report is past the one before the stall, but
+/// not past the stall: it is no playing on, and the stall still moves the
+/// recommendation on 30 s after it began.
+#[tokio::test]
+async fn a_report_at_the_frozen_frame_keeps_the_stall() {
+    let row = |name| (name, media_fixture("h264.mp4"));
+    let (core, _server, keys) = direct_rows(vec![
+        row("Show.S01E01.1080p.WEB-DL.x264-ONE"),
+        row("Show.S01E01.720p.WEB-DL.x264-TWO"),
+    ])
+    .await;
+    let view = versions_for(&core, DeviceCaps::basic_1080p()).await;
+    let playback = play(&core, &view, &keys[0]);
+    until("ready", || playback.snapshot().url.is_some()).await;
+    for at in [10_000, 15_000] {
+        playback.report_progress(at, 600_000, false);
+    }
+    let begun = Instant::now();
+    playback.stalled(true, 18_200);
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    playback.report_progress(18_200, 600_000, false);
+    until("the move", || {
+        playback.snapshot().key.as_ref() == Some(&keys[1])
+    })
+    .await;
+    assert!(
+        begun.elapsed() < Duration::from_secs(36),
+        "{:?}",
+        begun.elapsed()
+    );
+    assert_eq!(playback.snapshot().resume_ms, Some(18_200));
 }
 
 /// 2e, bench EW-3's shape: a stall right after a seek (17.2 s there) never

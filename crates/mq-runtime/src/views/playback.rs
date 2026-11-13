@@ -803,6 +803,9 @@ struct State {
     /// The generation the stall now on began with: a repeated
     /// `stalled(true)` while it lasts keeps its clock.
     stall_on: Option<u64>,
+    /// The position the stall now on began at: only a report past it
+    /// plays on.
+    stall_at: u64,
     /// The playing source's steady stalls: the progress (`played_ms`) each
     /// began at and how long it lasted (plans/stream-ranking.md 10).
     stutter: Vec<(u64, Duration)>,
@@ -937,6 +940,7 @@ impl State {
             stall: 0,
             stall_moved: false,
             stall_on: None,
+            stall_at: 0,
             stutter: Vec::new(),
             stall_from: None,
             resume_key: None,
@@ -1687,7 +1691,11 @@ impl PlaybackView {
             if let Some(step) = step {
                 s.played_ms += step;
             }
-            s.advancing = step.is_some() && !paused;
+            // A report at the frozen frame of a stall still on is not playing
+            // on, though it is past the report before the stall (QA r5 Q5
+            // row 17: the web's 5 s report after a stall ended its watcher).
+            let frozen = s.stall_on == Some(s.stall) && position_ms <= s.stall_at;
+            s.advancing = step.is_some() && !paused && !frozen;
             // A paused network play holds no download; playing on holds
             // them again.
             if let Some(torrent) = &s.network {
@@ -1795,6 +1803,7 @@ impl PlaybackView {
                 position_ms >= was && position_ms - was <= PLAYED_STEP.as_millis() as u64
             });
         s.stall_on = Some(s.stall);
+        s.stall_at = position_ms;
         // A stall after a seek or a pause is not part of a stutter either.
         let wait = if steady {
             s.stall_begins(Instant::now())
