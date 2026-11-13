@@ -4,11 +4,11 @@ import android.app.Application
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.onFirst
-import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.performClick
 import app.marquee.core.client.CoreJson
 import app.marquee.core.session.CoreSession
 import app.marquee.design.Form
@@ -76,7 +76,8 @@ class PluginDirectoryTest {
         compose.waitUntil(10_000) { compose.onAllNodes(hasText("Yoru's Repo")).fetchSemanticsNodes().isNotEmpty() }
         val host = hasText("nuvioplugins.com", substring = true)
         assertTrue(compose.onAllNodes(host).fetchSemanticsNodes().isEmpty(), "a host is printed before Details")
-        compose.onAllNodes(hasText("Details")).onFirst().performClick()
+        // Details is spoken with the name it belongs to (its text is cleared from the tree).
+        compose.onNode(hasContentDescription("Yoru's Repo details")).performClick()
         compose.waitUntil(5_000) { compose.onAllNodes(host).fetchSemanticsNodes().isNotEmpty() }
     }
 }
