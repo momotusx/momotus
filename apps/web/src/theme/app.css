@@ -133,7 +133,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 
 /* A score as plain text (components/ratings.tsx): the source's name at 70 percent, the score in
  * white, one line. Screen readers get its spoken twin (`.sr`), the visible text is hidden from them. */
-.rate { display: inline-flex; align-items: center; color: #fff; white-space: nowrap; }
+.rate { display: inline-flex; align-items: center; color: var(--rate, #fff); white-space: nowrap; }
 .rate-src { color: var(--muted); }
 /* The IMDb score on a phone's title page is a link: a finger-sized target. */
 [data-form="phone"] .info .meta a.rate { min-height: 44px; }
@@ -329,7 +329,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 [data-form="tv"] .info .acts .btn:focus svg,
 [data-form="tv"] .palette .field:focus-within {
   --text: var(--on-primary); --muted: rgba(0, 0, 0, .64); --dim: rgba(0, 0, 0, .64); --line: rgba(0, 0, 0, .1);
-  --ok: var(--on-primary); --warn: rgba(0, 0, 0, .7); --bad: var(--on-primary);
+  --ok: var(--on-primary); --warn: rgba(0, 0, 0, .7); --bad: var(--on-primary); --rate: var(--on-primary);
   background: var(--primary); color: var(--on-primary); translate: 0 calc(-1 * var(--focus-rise)); box-shadow: var(--lift-focus-edge); }
 /* One white per screen (design/DECISION.md, TV focus): while another control in its action row
  * holds focus, the white primary takes the secondary fill, as tvOS draws an unfocused button.

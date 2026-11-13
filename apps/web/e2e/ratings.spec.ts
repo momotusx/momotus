@@ -252,6 +252,36 @@ for (const form of Object.keys(FORMS) as Form[]) {
   });
 }
 
+/** QA r5, R5-14: the focused TV row is a light fill, and "IMDb 7.6" kept its white. */
+test("TV: a focused search row keeps its score readable (4.5:1)", async ({ browser }) => {
+  const page = await open(browser, "tv");
+  await page.goto("/search?form=tv");
+  const field = page.locator('[data-f="search:input"]');
+  await expect(field).toBeVisible({ timeout: 30_000 });
+  await field.fill("widest");
+  await expect(page.locator(".hit-meta .rate").first()).toBeVisible({ timeout: 30_000 });
+  await page.locator(".hit").first().focus();
+  const ratio = () =>
+    page.evaluate(() => {
+      const rgb = (c: string) => (c.match(/[\d.]+/g) ?? []).map(Number);
+      const lum = ([r = 0, g = 0, b = 0]: number[]) => {
+        const f = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+      };
+      const hit = document.querySelector<HTMLElement>(".hit:focus");
+      const rate = hit?.querySelector<HTMLElement>(".rate");
+      if (!hit || !rate) return 0;
+      // The fill eases in with the focus: judged once it has landed (a fill under .9 is still on its way), over the dark page.
+      const [br = 0, bg = 0, bb = 0, ba = 1] = rgb(getComputedStyle(hit).backgroundColor);
+      if (ba < 0.9) return 0;
+      const bgc = [br * ba, bg * ba, bb * ba];
+      const [l1, l2] = [lum(rgb(getComputedStyle(rate).color)), lum(bgc)].sort((x, y) => y - x) as [number, number];
+      return (l1 + 0.05) / (l2 + 0.05);
+    });
+  await expect.poll(ratio, { timeout: 5_000 }).toBeGreaterThanOrEqual(4.5);
+  await page.context().close();
+});
+
 test("a cover that does not load gives way to the addon's poster, then to the name card", async ({ browser }) => {
   const page = await open(browser, "desktop");
   // RPDB answers 404 for an id it does not know.
