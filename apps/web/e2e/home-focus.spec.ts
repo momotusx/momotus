@@ -203,10 +203,11 @@ test("desktop: Tab onto a Top 10 tile at the row's right edge brings the whole t
   await page.close();
 });
 
-/** QA r5, R5-12: the phone's page scrolls the document, so its rows were all "near" and mounted every tile (361
- * poster requests in 15 s on a slow link, starving the hero's art). A Home of about 500 tiles mounts only the rows
- * within a screen of the viewport, and the first hero's art is asked for first. */
-test("phone: a Home of 500 tiles mounts only the rows near the screen; the hero's art has the first fetch priority", async ({ browser }) => {
+/** QA r5, R5-12: the phone's page scrolls the document, so its rows were all "near" and mounted every tile at once (361
+ * poster requests in 15 s on a slow link, starving the hero's art). A Home of about 500 tiles mounts only the rows near
+ * the screen while the first hero's art loads, asks for no other poster before it, and mounts the rest once it is in,
+ * so a later fling meets rows already there (home-perf's phone fling). */
+test("phone: a Home of 500 tiles mounts only the near rows until the hero's art is in, then the rest", async ({ browser }) => {
   type Tile = { poster?: string | null; posterFallback?: string | null };
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const tag = (u: unknown, n: number) => (typeof u === "string" ? `${u}${u.includes("?") ? "&" : "?"}q=${n}` : u);
@@ -216,6 +217,13 @@ test("phone: a Home of 500 tiles mounts only the rows near the screen; the hero'
         ? [r]
         : Array.from({ length: 12 }, (_, n) => ({ ...r, rowId: `${r.rowId}~${n}`, title: `${(r as Row & { title: string }).title} ${n}`, tiles: (r.tiles as Tile[]).map((t) => ({ ...t, poster: tag(t.poster, n), posterFallback: tag(t.posterFallback, n) })) })),
     );
+  // The heroes' art, as the socket names it: held below, a slow link's first picture.
+  const heroArt = new Set<string>();
+  const noteHeroes = (heroes: unknown[] | undefined) =>
+    heroes?.forEach((h) => {
+      const art = (h as { tile: { background: string | null } }).tile.background;
+      if (art) heroArt.add(art);
+    });
   await context.routeWebSocket(/\/ws$/, (ws) => {
     const core = ws.connectToServer();
     let homeId: number | null = null;
@@ -231,10 +239,12 @@ test("phone: a Home of 500 tiles mounts only the rows near the screen; the hero'
       if (homeId !== null && msg.id === homeId && msg.ok) {
         sub = msg.result.sub;
         rows = msg.result.snapshot.rows;
+        noteHeroes(msg.result.snapshot.header?.heroes);
         return void ws.send(JSON.stringify({ ...msg, result: { ...msg.result, snapshot: { ...msg.result.snapshot, rows: expand(rows) } } }));
       }
       if (msg.sub !== sub || !msg.updates) return void ws.send(m);
       const updates = (msg.updates as Update[]).map((u) => {
+        noteHeroes(u.header?.heroes);
         if (u.kind !== "rows") return u;
         rows = (u.diffs ?? []).reduce(apply, rows);
         return { ...u, diffs: [{ op: "reset", values: expand(rows) }] };
@@ -242,15 +252,40 @@ test("phone: a Home of 500 tiles mounts only the rows near the screen; the hero'
       ws.send(JSON.stringify({ ...msg, updates }));
     });
   });
+  // Every image request in order; the heroes' art waits until the test lets it in.
+  const images: string[] = [];
+  let letArtIn = () => {};
+  const artHeld = new Promise<void>((done) => (letArtIn = done));
+  await context.route("**/*", async (route) => {
+    const r = route.request();
+    if (r.resourceType() === "image") {
+      images.push(r.url());
+      if (heroArt.has(r.url())) await artHeld;
+    }
+    await route.fallback();
+  });
   const page = await context.newPage();
-  const posters: string[] = [];
-  page.on("request", (r) => r.resourceType() === "image" && posters.push(r.url()));
   await page.goto("/?form=phone");
-  await expect(page.locator(".hero-bd img").first()).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator(".hero-bd img").first()).toHaveAttribute("fetchpriority", "high");
+  const art = page.locator(".hero-bd img").first();
+  await expect(art).toHaveAttribute("fetchpriority", "high", { timeout: 30_000 });
   await expect.poll(() => page.locator("[data-row]").count(), { timeout: 30_000 }).toBeGreaterThan(40);
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(500);
+  // While the art loads: only the rows near the screen have tiles, and no poster but theirs was asked for before it.
+  const src = await art.evaluate((e) => (e as HTMLImageElement).src);
+  const first = images.indexOf(src);
+  expect(first, `the hero's art ${src} was not asked for`).toBeGreaterThanOrEqual(0);
+  // A copied row's posters carry its copy (`q=n` for row `~n`): the copies with tiles now are the near ones.
+  const keys = await page.locator('.row [data-f^="tile:"]').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.f ?? ""));
+  const near = new Set(keys.map((f) => /~(\d+):[^:]+$/.exec(f)?.[1]));
   const mounted = await page.locator(".row .tile").count();
-  expect(mounted, `${mounted} tiles mounted, ${posters.length} image requests`).toBeLessThan(120);
+  expect(mounted, `${mounted} tiles mounted while the hero's art loads`).toBeLessThan(120);
+  const early = images.slice(0, first).filter((u) => {
+    const copy = /[?&]q=(\d+)/.exec(u)?.[1];
+    return copy !== undefined && !near.has(copy);
+  });
+  expect(early, "posters of far rows asked for before the hero's art").toEqual([]);
+  // Once the art is in, the far rows mount too, ready for a fling.
+  letArtIn();
+  await expect.poll(() => page.locator(".row .tile").count(), { timeout: 15_000 }).toBeGreaterThan(200);
   await context.close();
 });

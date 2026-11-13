@@ -17,6 +17,7 @@ import { playPath, ratingParts, titlePath } from "../lib/format";
 import { kindLabel } from "../lib/words";
 import { Backdrop, Logo } from "./art";
 import { Ratings } from "./ratings";
+import { releaseRows } from "./row";
 import { separators } from "./separators";
 import { muted, playTrailer, setMuted, stopTrailer, trailerPlaying } from "./yt-player";
 import { incognito } from "../core/profiles";
@@ -377,7 +378,14 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
                 aria-roledescription="slide"
                 aria-label={`${i() + 1} of ${list().length}, ${h.tile.name}`}
               >
-                <Backdrop src={near() ? h.tile.background : null} priority={i() === 0} class="hero-bd" ramp={form() === "phone" ? "heroPhone" : "hero"} />
+                {/* The first hero's art, once loaded, lets the phone's far rows mount (row.tsx, `releaseRows`). */}
+                <Backdrop
+                  src={near() ? h.tile.background : null}
+                  priority={i() === 0}
+                  onLoaded={i() === 0 ? releaseRows : undefined}
+                  class="hero-bd"
+                  ramp={form() === "phone" ? "heroPhone" : "hero"}
+                />
                 <HeroWords hero={h} active={on()} labels={labels()} />
               </div>
             );

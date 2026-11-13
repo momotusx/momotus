@@ -89,6 +89,32 @@ onProfileReset(() => {
   wasNear.clear();
 });
 
+// The phone's Home (R5-12): only the rows near the screen mount at first, so the first hero's art is fetched ahead of
+// posters on a slow link. Once it has loaded (or 3 s on, whichever is first) every other row joins, a few per idle moment,
+// and stays, its posters loading at once: a later fling meets rows and pictures already there instead of building and
+// decoding them mid-scroll (lazy posters cost the phone fling 8 to 14 ms of paint against its 12, eager ones 1 to 2).
+const [released, setReleased] = createSignal(false);
+let releaseTimer: ReturnType<typeof setTimeout> | undefined;
+export function releaseRows() {
+  clearTimeout(releaseTimer);
+  setReleased(true);
+}
+const joining: (() => void)[] = [];
+let draining = false;
+const idle = (f: () => void) => (typeof requestIdleCallback === "function" ? requestIdleCallback(f, { timeout: 500 }) : setTimeout(f, 50));
+function drain() {
+  draining = joining.length > 0;
+  if (!draining) return;
+  idle(() => {
+    for (const join of joining.splice(0, 4)) join();
+    drain();
+  });
+}
+function join(row: () => void) {
+  joining.push(row);
+  if (!draining) drain();
+}
+
 export function TileCard(props: {
   tile: TileData;
   fkey: string;
@@ -382,8 +408,13 @@ export function Row(props: {
   const [viewport, setViewport] = createSignal(1920);
   const [focused, setFocused] = createSignal(-1);
   const [near, setNear] = createSignal(wasNear.get(id()) ?? props.startNear ?? true);
+  // On the phone, a row joins for good once the rows are released (see `releaseRows`).
+  const [joined, setJoined] = createSignal(false);
+  createEffect(() => {
+    if (form() === "phone" && released() && !joined()) join(() => setJoined(true));
+  });
   const range = createMemo(
-    () => (near() ? visibleRange(scroll() - m().inset, viewport(), stride(), props.row.tiles.length, focused()) : ([0, 0] as const)),
+    () => (near() || joined() ? visibleRange(scroll() - m().inset, viewport(), stride(), props.row.tiles.length, focused()) : ([0, 0] as const)),
     [0, 0] as const,
     { equals: (a, b) => a[0] === b[0] && a[1] === b[1] },
   );
@@ -393,6 +424,7 @@ export function Row(props: {
   });
 
   onMount(() => {
+    if (form() === "phone" && !released()) releaseTimer ??= setTimeout(releaseRows, 3000);
     const measure = () => track && setViewport(track.clientWidth);
     measure();
     window.addEventListener("resize", measure, { passive: true });

@@ -21,6 +21,8 @@ export function Backdrop(props: {
   onMissing?: () => void;
   /** The first screen's art (Home's first hero): fetched ahead of the tiles' posters on a slow link. */
   priority?: boolean;
+  /** The picture has loaded. */
+  onLoaded?: () => void;
   /** Drawn under the picture: a title header's trailer. */
   children?: JSX.Element;
 }) {
@@ -42,7 +44,10 @@ export function Backdrop(props: {
             decoding="async"
             fetchpriority={props.priority ? "high" : undefined}
             class="fade"
-            onLoad={(e) => e.currentTarget.classList.add("in")}
+            onLoad={(e) => {
+              e.currentTarget.classList.add("in");
+              props.onLoaded?.();
+            }}
             onError={() => src === props.src && setFailed(true)}
           />
         )}
