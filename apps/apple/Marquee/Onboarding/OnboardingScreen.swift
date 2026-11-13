@@ -123,7 +123,9 @@ private struct FirstRun: View {
                 showLanguages = false
             })
         }
-        .navigationDestination(isPresented: $showReview) { RecommendedAddonsPage(core: core, scope: .all) }
+        // The Review the line names: the sources not added yet, each on until turned off (as on the web and Android),
+        // not Settings' page, whose switches show what the profile has (every one Off before Start watching).
+        .navigationDestination(isPresented: $showReview) { RecommendedAddonsPage(core: core, scope: .missing) }
     }
 
     private var form: FirstRunRules.Form { FirstRunRules.form(wide: metrics.wide, tv: tvForm) }

@@ -30,6 +30,16 @@ private func on(_ choices: [DefaultChoice]) -> [String: Bool] {
     #expect(DefaultsRules.shown(mixed, scope: .all).count == 4)
 }
 
+@Test func setupsReviewShowsTheSourcesOnAsItsLineSays() throws {
+    // "Recommended sources are on." then Review: the missing ones, each on until turned off, never Settings' page
+    // (scope .all), whose switches read Off on a new profile until Start watching (QA R5-22).
+    let setup = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Onboarding/OnboardingScreen.swift"), encoding: .utf8)
+    #expect(setup.contains("$showReview) { RecommendedAddonsPage(core: core, scope: .missing) }"))
+    let new = mixed.map { addon($0.key, .absent, group: $0.group) }
+    let review = DefaultsRules.shown(new, scope: .missing)
+    #expect(review.count == new.count && review.allSatisfy(DefaultsRules.hasSwitch))
+}
+
 @Test func aDefaultTheProfileHasSaysSoInsteadOfASwitch() {
     #expect(mixed.map(DefaultsRules.hasSwitch) == [false, true, false, true])
     #expect(DefaultsRules.presentWord(mixed[2], imported: true) == "From Stremio")
