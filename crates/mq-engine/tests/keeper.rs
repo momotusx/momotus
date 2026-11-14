@@ -17,7 +17,7 @@ use std::time::{Duration, Instant};
 
 use mq_engine::librqbit::sync_log::{self, Fail, Point};
 use mq_engine::{
-    APFS_HEAD_BYTES, Claim, Engine, EngineError, FLOOR_BYTES, FileHint, HARD_STOP_BYTES,
+    Claim, Engine, EngineError, FLOOR_BYTES, FileHint, HARD_STOP_BYTES, HEAD_ALLOWANCE_BYTES,
     RAM_CEILING_BYTES, RESERVE_BYTES, RESUME_BYTES, RING_BYTES, STOP_BYTES, TorrentHandle, Window,
     WindowPlan, test_hooks,
 };
@@ -34,7 +34,7 @@ const W: u64 = 24 * MIB;
 
 fn plan() -> WindowPlan {
     WindowPlan {
-        budget: W + APFS_HEAD_BYTES,
+        budget: W + HEAD_ALLOWANCE_BYTES,
         behind: 2 * MIB,
         slack: 4 * MIB,
         ahead: 4 * MIB,
@@ -236,7 +236,7 @@ async fn a_ram_ring_plays_without_the_disk() {
     // as for every window here (a RAM ring only plays where holes do not
     // punch, never on APFS).
     let ring = WindowPlan {
-        budget: 6 * MIB + APFS_HEAD_BYTES,
+        budget: 6 * MIB + HEAD_ALLOWANCE_BYTES,
         behind: 3 * MIB / 2,
         slack: 3 * MIB / 2,
         ahead: 0,
@@ -321,7 +321,7 @@ async fn a_ram_ring_of_large_pieces_plays() {
     assert!(ring.memory && ring.playing >= u64::from(BIG), "{ring:?}");
     let budget = ring.budget;
     // The scheduler's budget leaves out APFS's head on this Mac.
-    ring.budget += APFS_HEAD_BYTES;
+    ring.budget += HEAD_ALLOWANCE_BYTES;
     let s = support::swarm_big(128 << 20, BIG).await;
     let root = tempfile::tempdir().unwrap();
     sync_log::fail(root.path(), Fail::PunchRefused, usize::MAX);
@@ -423,7 +423,7 @@ async fn a_scrub_stays_within_the_budget() {
 async fn a_scrub_with_large_pieces_settles_within_the_budget() {
     const BIG: u32 = 16 << 20;
     let wide = WindowPlan {
-        budget: 160 * MIB + APFS_HEAD_BYTES,
+        budget: 160 * MIB + HEAD_ALLOWANCE_BYTES,
         behind: 16 * MIB,
         slack: 32 * MIB,
         ahead: 16 * MIB,
@@ -566,7 +566,7 @@ async fn a_trimmed_window_resumes_warm() {
     // its trigger by more than the head pieces they leave behind, and the
     // reader waits out the index read's grace.
     let small = WindowPlan {
-        budget: 10 * MIB + APFS_HEAD_BYTES,
+        budget: 10 * MIB + HEAD_ALLOWANCE_BYTES,
         ..plan()
     };
     let w = windowed_on(s, root, small, Some(at)).await;
@@ -612,7 +612,7 @@ async fn a_window_set_during_the_trim_stays_and_is_kept() {
     // A first window large enough that nothing leaves before the trim, so
     // the trim always has a round to hold.
     let first = WindowPlan {
-        budget: 40 * MIB + APFS_HEAD_BYTES,
+        budget: 40 * MIB + HEAD_ALLOWANCE_BYTES,
         ..plan()
     };
     let mut w = windowed(48 << 20, first, None).await;
@@ -652,7 +652,7 @@ async fn a_window_set_during_the_trim_stays_and_is_kept() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn the_trim_keeps_180_s_at_the_rate_the_player_gave() {
     let first = WindowPlan {
-        budget: 40 * MIB + APFS_HEAD_BYTES,
+        budget: 40 * MIB + HEAD_ALLOWANCE_BYTES,
         ..plan()
     };
     let mut w = windowed(48 << 20, first, None).await;
@@ -780,7 +780,7 @@ async fn a_shortfall_shrinks_the_window_and_the_read_finishes() {
     // 40 MiB: a full window holds about 34, its kept set about 14, so it
     // has 6 MiB to give.
     let wide = WindowPlan {
-        budget: 40 * MIB + APFS_HEAD_BYTES,
+        budget: 40 * MIB + HEAD_ALLOWANCE_BYTES,
         ..plan()
     };
     let w = windowed(64 << 20, wide, None).await;
@@ -846,7 +846,7 @@ async fn a_shortfall_shrinks_the_window_and_the_read_finishes() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_sustained_write_takes_the_readahead_farthest_first() {
     let remux = WindowPlan {
-        budget: 160 * MIB + APFS_HEAD_BYTES,
+        budget: 160 * MIB + HEAD_ALLOWANCE_BYTES,
         behind: 4 * MIB,
         slack: 8 * MIB,
         ahead: 96 * MIB,
@@ -947,7 +947,7 @@ async fn a_sustained_write_takes_the_readahead_farthest_first() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_window_follows_the_network_to_the_mobile_preset_and_back() {
     let remux = WindowPlan {
-        budget: 400 * MIB + APFS_HEAD_BYTES,
+        budget: 400 * MIB + HEAD_ALLOWANCE_BYTES,
         ahead: 300 * MIB,
         ..plan()
     };
@@ -1173,7 +1173,7 @@ async fn a_torrent_a_full_disk_stopped_plays_again_at_the_next_read() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn under_the_stop_a_full_window_evicts_to_its_ring_and_plays_on() {
     let wide = WindowPlan {
-        budget: 72 * MIB + APFS_HEAD_BYTES,
+        budget: 72 * MIB + HEAD_ALLOWANCE_BYTES,
         ahead: 8 * MIB,
         ..plan()
     };
@@ -1318,7 +1318,7 @@ async fn a_stale_replan_never_replaces_a_newer_window() {
     let w = windowed(48 << 20, plan(), None).await;
     let seen = test_hooks::seen(&w.engine, w.t).unwrap();
     let newer = WindowPlan {
-        budget: 20 * MIB + APFS_HEAD_BYTES,
+        budget: 20 * MIB + HEAD_ALLOWANCE_BYTES,
         ..plan()
     };
     let window = Window {

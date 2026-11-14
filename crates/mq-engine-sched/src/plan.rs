@@ -22,14 +22,14 @@ pub const RING_BYTES: u64 = 45 * MIB;
 /// (plans/no-space-warnings.md): under three times Stremio's 45 MiB ring.
 pub const RAM_CEILING_BYTES: u64 = 128 * MIB;
 
-/// APFS keeps a file's first 16 MiB allocated through a punch (2.6): on
-/// Apple targets a window counts it in `F`, and the scheduler's budget
-/// leaves it out, so the folder stays within `W`.
-pub const APFS_HEAD_BYTES: u64 = if cfg!(target_vendor = "apple") {
-    16 * MIB
-} else {
-    0
-};
+/// What a window holds apart from the scheduler's budget, so the folder
+/// stays within `W`: a window counts it in `F`, and the budget leaves it
+/// out. On Apple it is the 16 MiB APFS keeps of a file's head through a
+/// punch (2.6). Elsewhere it takes the writes that land while a round waits
+/// on a data sync (plans/streaming-window.md, the slow-sync limit: 13.8 to
+/// 22.2 MB measured), which would otherwise come out of the reserve, as on
+/// the Fire TV's ext4.
+pub const HEAD_ALLOWANCE_BYTES: u64 = 16 * MIB;
 
 /// What a window needs to know of the device and the file.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -186,7 +186,7 @@ pub fn window_plan(cfg: &Config, i: WindowInputs) -> WindowPlan {
         let open = (2 * i.fill).clamp(open_floor, open_cap);
         // The head's blocking window and the container index, rounded out
         // to pieces.
-        let fixed = pinned + cfg.blocking_bytes + slack + open + APFS_HEAD_BYTES;
+        let fixed = pinned + cfg.blocking_bytes + slack + open + HEAD_ALLOWANCE_BYTES;
         (behind, slack, open_floor, open_cap, fixed)
     };
     let room = i.room();
@@ -196,7 +196,7 @@ pub fn window_plan(cfg: &Config, i: WindowInputs) -> WindowPlan {
     if room < floor + 64 * MIB {
         // The least ring that plays: two pieces, and past `B` (a quarter)
         // and the pins at least a piece to play in (review r2 N9).
-        let least = (2 * piece).max((pinned + APFS_HEAD_BYTES + piece).div_ceil(3) * 4);
+        let least = (2 * piece).max((pinned + HEAD_ALLOWANCE_BYTES + piece).div_ceil(3) * 4);
         let mut budget = room.max(RING_BYTES.max(least));
         let ram = i
             .available_ram
@@ -226,7 +226,7 @@ pub fn window_plan(cfg: &Config, i: WindowInputs) -> WindowPlan {
             open_floor,
             open_cap,
             floor: budget,
-            playing: budget.saturating_sub(behind + pinned + APFS_HEAD_BYTES),
+            playing: budget.saturating_sub(behind + pinned + HEAD_ALLOWANCE_BYTES),
             memory,
         };
     }

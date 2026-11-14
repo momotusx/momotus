@@ -30,7 +30,7 @@ pub use pick::FileHint;
 pub use reader::{RangeReader, StreamReader};
 pub use scrape::{SwarmCount, TrackerTrace};
 pub use window::{
-    APFS_HEAD_BYTES, Counted, FLOOR_BYTES, HARD_STOP_BYTES, HeldBytes, RAM_CEILING_BYTES,
+    Counted, FLOOR_BYTES, HARD_STOP_BYTES, HEAD_ALLOWANCE_BYTES, HeldBytes, RAM_CEILING_BYTES,
     RESERVE_BYTES, RESUME_BYTES, RING_BYTES, STOP_BYTES, WindowInputs, WindowPlan, available_ram,
     counted_on_disk, counted_on_disk_keeping, free_space, window_plan, window_within,
 };

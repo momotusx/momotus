@@ -468,7 +468,7 @@ async fn a_stream_of_a_packs_other_file_keeps_the_download() {
     let w = Window {
         // The keeper tests' plan: a 24 MiB window under a 48 MiB file.
         plan: WindowPlan {
-            budget: 24 * MIB + mq_engine::APFS_HEAD_BYTES,
+            budget: 24 * MIB + mq_engine::HEAD_ALLOWANCE_BYTES,
             behind: 2 * MIB,
             slack: 4 * MIB,
             ahead: 4 * MIB,

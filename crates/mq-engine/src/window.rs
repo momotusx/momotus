@@ -11,7 +11,7 @@ use std::time::Duration;
 use crate::{DeviceClass, Engine, Inner, Torrent, TorrentHandle, adapter, lock};
 
 pub use mq_engine_sched::{
-    APFS_HEAD_BYTES, HeldBytes, RAM_CEILING_BYTES, RESERVE_BYTES, RING_BYTES, WindowInputs,
+    HEAD_ALLOWANCE_BYTES, HeldBytes, RAM_CEILING_BYTES, RESERVE_BYTES, RING_BYTES, WindowInputs,
     WindowPlan,
 };
 
@@ -224,7 +224,7 @@ impl WindowState {
     pub fn budget(&self) -> u64 {
         self.plan
             .budget
-            .saturating_sub(self.shortfall + mq_engine_sched::APFS_HEAD_BYTES)
+            .saturating_sub(self.shortfall + mq_engine_sched::HEAD_ALLOWANCE_BYTES)
     }
 
     /// The readahead: the device preset on a metered network, else the

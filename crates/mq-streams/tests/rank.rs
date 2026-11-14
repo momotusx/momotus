@@ -1571,11 +1571,10 @@ fn prior_case(free: u64, runtime_s: Option<u32>, caps: DeviceCaps) -> Case {
     }
 }
 
-/// The owner's example (3.2): 7 min ahead, 6 on Apple targets, where the
-/// engine's `F` also counts the 16 MiB APFS keeps of the head (419 s).
+/// The owner's example (3.2): 7 min ahead in 3.2, 6 with the engine's `F`,
+/// which also counts its 16 MiB head allowance (419 s).
 fn owners_minutes() -> u32 {
-    // The engine's own condition for APFS_HEAD_BYTES: a `> 0` on the const is always false off Apple.
-    if cfg!(target_vendor = "apple") { 6 } else { 7 }
+    6
 }
 
 /// One row's line, ranked alone.

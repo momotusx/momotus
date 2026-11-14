@@ -13,7 +13,7 @@ mod plan;
 mod sched;
 
 pub use plan::{
-    APFS_HEAD_BYTES, HeldBytes, RAM_CEILING_BYTES, RESERVE_BYTES, RING_BYTES, WindowInputs,
+    HEAD_ALLOWANCE_BYTES, HeldBytes, RAM_CEILING_BYTES, RESERVE_BYTES, RING_BYTES, WindowInputs,
     WindowPlan, window_plan,
 };
 pub use sched::Scheduler;
