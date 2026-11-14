@@ -180,6 +180,93 @@ struct Playback {
     /// The source's last failure behind an answer to the player, and when
     /// (`Lease::source_failure`).
     fault: Mutex<Option<(Instant, SourceFault)>>,
+    /// The player's reads of a torrent body that waited for pieces
+    /// (`Lease::starved`).
+    waits: Arc<Mutex<Waits>>,
+}
+
+/// The player's torrent reads pending now (an id and when each began), and
+/// when the last one that waited `SLOW` or longer ended
+/// (plans/pace-at-ready.md v2).
+#[derive(Default)]
+struct Waits {
+    #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
+    next: u64,
+    pending: Vec<(u64, Instant)>,
+    last_long: Option<Instant>,
+}
+
+/// A read of the player's this long waited on the swarm, not the player.
+const SLOW: Duration = Duration::from_secs(5);
+/// How long a slow read explains the player's failure: narrower than
+/// `FAULT_FRESH`, so an older wait never hides a real decode failure.
+const STARVED_FRESH: Duration = Duration::from_secs(10);
+
+/// `Lease::source_failure`: the source's own fault within `FAULT_FRESH`
+/// first, else a starved torrent read as `timeout`.
+fn fault_of(
+    fault: Option<(Instant, SourceFault)>,
+    starved: bool,
+) -> Option<(&'static str, Option<u16>)> {
+    if let Some((at, SourceFault(status))) = fault
+        && at.elapsed() < FAULT_FRESH
+    {
+        return Some(match status {
+            Some(status) => ("http", Some(status)),
+            None => ("network", None),
+        });
+    }
+    starved.then_some(("timeout", None))
+}
+
+impl Waits {
+    /// A read pending `SLOW` or longer now, or one that ended within
+    /// `STARVED_FRESH` having waited that long.
+    fn starved(&self) -> bool {
+        self.pending
+            .iter()
+            .any(|&(_, began)| began.elapsed() >= SLOW)
+            || self
+                .last_long
+                .is_some_and(|at| at.elapsed() < STARVED_FRESH)
+    }
+}
+
+/// One player read in `waits` while it lasts. Dropped when the read ends
+/// or when the player drops the request mid-wait, which is how a player
+/// that gives a source up leaves it: either way a long wait is stamped.
+#[cfg(feature = "torrent")]
+struct WaitMark {
+    waits: Arc<Mutex<Waits>>,
+    id: u64,
+    began: Instant,
+}
+
+#[cfg(feature = "torrent")]
+impl WaitMark {
+    fn new(waits: &Arc<Mutex<Waits>>) -> Self {
+        let began = Instant::now();
+        let mut w = lock(waits);
+        w.next += 1;
+        let id = w.next;
+        w.pending.push((id, began));
+        Self {
+            waits: waits.clone(),
+            id,
+            began,
+        }
+    }
+}
+
+#[cfg(feature = "torrent")]
+impl Drop for WaitMark {
+    fn drop(&mut self) {
+        let mut w = lock(&self.waits);
+        w.pending.retain(|&(id, _)| id != self.id);
+        if self.began.elapsed() >= SLOW {
+            w.last_long = Some(Instant::now());
+        }
+    }
 }
 
 /// What the source did when an answer to the player failed: its error
@@ -481,6 +568,7 @@ impl StreamServer {
                     trouble: Mutex::default(),
                     relabel: Default::default(),
                     fault: Mutex::default(),
+                    waits: Arc::default(),
                 });
                 let name = manifest_name(filename, kind);
                 Ok(self.lease(token, playback, &name, Some(kind)))
@@ -648,6 +736,7 @@ impl StreamServer {
             trouble: Mutex::default(),
             relabel: Default::default(),
             fault: Mutex::default(),
+            waits: Arc::default(),
         })
     }
 
@@ -893,12 +982,17 @@ impl Lease {
     /// status, or `network` for no answer), for `failure_words`: a player
     /// that calls a failed segment a format or decode error then says what
     /// really failed.
+    /// A torrent read of the player's that waited `SLOW` for pieces answers
+    /// `timeout`: the swarm's, never the version's.
     pub fn source_failure(&self) -> Option<(&'static str, Option<u16>)> {
-        let (at, SourceFault(status)) = (*lock(&self.playback.fault))?;
-        (at.elapsed() < FAULT_FRESH).then_some(match status {
-            Some(status) => ("http", Some(status)),
-            None => ("network", None),
-        })
+        let fault = *lock(&self.playback.fault);
+        fault_of(fault, self.starved())
+    }
+
+    /// Whether a read of the player's has waited `SLOW` or longer for the
+    /// torrent's pieces (`Waits::starved`).
+    pub fn starved(&self) -> bool {
+        lock(&self.playback.waits).starved()
     }
 }
 
@@ -1237,7 +1331,19 @@ async fn serve(
         Content::Torrent { claim, file } => {
             let released = playback.released.clone();
             let relabel = relabels(playback.clone());
-            cors(torrent::serve(claim, *file, range.as_deref(), head_only, released, relabel).await)
+            let waits = playback.waits.clone();
+            cors(
+                torrent::serve(
+                    claim,
+                    *file,
+                    range.as_deref(),
+                    head_only,
+                    released,
+                    relabel,
+                    waits,
+                )
+                .await,
+            )
         }
         Content::File(local) => {
             let released = playback.released.clone();
@@ -1965,8 +2071,17 @@ mod torrent {
         head_only: bool,
         released: CancellationToken,
         relabel: Relabel,
+        waits: Arc<Mutex<Waits>>,
     ) -> Response {
-        let answer = open(claim, file, range, head_only, released.clone(), relabel);
+        let answer = open(
+            claim,
+            file,
+            range,
+            head_only,
+            released.clone(),
+            relabel,
+            waits,
+        );
         released
             .run_until_cancelled(answer)
             .await
@@ -1980,6 +2095,7 @@ mod torrent {
         head_only: bool,
         released: CancellationToken,
         relabel: Relabel,
+        waits: Arc<Mutex<Waits>>,
     ) -> Response {
         let reader = match claim.open_reader(file).await {
             Ok(r) => r,
@@ -2011,26 +2127,31 @@ mod torrent {
         };
         // Release ends the body: a read waiting for pieces stops at once,
         // and the range's demand goes.
-        let chunks = async move { chunks(body, start, relabel.await) }.flatten_stream();
+        let chunks = async move { chunks(body, start, relabel.await, waits) }.flatten_stream();
         (status, out, pumped(chunks, released)).into_response()
     }
 
-    /// `body`'s reads from file offset `start`, `relabel` applied.
+    /// `body`'s reads from file offset `start`, `relabel` applied, each
+    /// marked in `waits` while it lasts.
     pub(crate) fn chunks<R>(
         body: R,
         start: u64,
         relabel: Arc<[Relabelled]>,
+        waits: Arc<Mutex<Waits>>,
     ) -> impl Stream<Item = std::io::Result<bytes::Bytes>> + Send + 'static
     where
         R: AsyncRead + Unpin + Send + 'static,
     {
         stream::unfold(Some((body, start)), move |state| {
-            let relabel = relabel.clone();
+            let (relabel, waits) = (relabel.clone(), waits.clone());
             async move {
                 use tokio::io::AsyncReadExt;
                 let (mut body, pos) = state?;
                 let mut buf = vec![0u8; 64 * 1024];
-                match body.read(&mut buf).await {
+                let mark = WaitMark::new(&waits);
+                let read = body.read(&mut buf).await;
+                drop(mark);
+                match read {
                     Ok(0) => None,
                     Ok(n) => {
                         buf.truncate(n);
@@ -2109,6 +2230,7 @@ mod torrent {
                 false,
                 released,
                 Box::pin(async { Arc::from([]) }),
+                Arc::default(),
             )
             .await;
             assert_eq!(response.status(), StatusCode::NOT_FOUND);
@@ -2363,6 +2485,42 @@ mod tests {
         );
     }
 
+    /// Plans/pace-at-ready.md v2: a player read pending `SLOW` starves the
+    /// playback, and so does one that ended having waited that long, within
+    /// `STARVED_FRESH`; a fast read does not, and an old slow one is let go.
+    /// A read dropped mid-wait (the player gave the request up) stamps too.
+    #[cfg(feature = "torrent")]
+    #[test]
+    fn a_player_read_that_waited_starves_the_playback() {
+        let waits = Arc::new(Mutex::new(Waits::default()));
+        let fast = WaitMark::new(&waits);
+        assert!(!lock(&waits).starved());
+        drop(fast);
+        assert!(!lock(&waits).starved(), "a fast read");
+        let mut held = WaitMark::new(&waits);
+        held.began -= SLOW;
+        lock(&waits).pending[0].1 -= SLOW;
+        assert!(lock(&waits).starved(), "pending 5 s");
+        drop(held);
+        assert!(lock(&waits).pending.is_empty());
+        assert!(lock(&waits).starved(), "ended after 5 s, dropped mid-wait");
+        lock(&waits).last_long = Some(Instant::now() - STARVED_FRESH);
+        assert!(!lock(&waits).starved(), "an old wait is let go");
+    }
+
+    /// A starved read answers `timeout`; the source's own fault, when fresh,
+    /// comes first; an old fault leaves the starved answer.
+    #[test]
+    fn a_starved_read_is_a_timeout_after_the_source_s_own_fault() {
+        let now = Instant::now();
+        assert_eq!(fault_of(None, false), None);
+        assert_eq!(fault_of(None, true), Some(("timeout", None)));
+        let http = Some((now, SourceFault(Some(503))));
+        assert_eq!(fault_of(http, true), Some(("http", Some(503))));
+        let old = Some((now - FAULT_FRESH, SourceFault(None)));
+        assert_eq!(fault_of(old, true), Some(("timeout", None)));
+    }
+
     /// A torrent body read in pieces of any size: each read's file offset
     /// is where the last one ended.
     #[cfg(feature = "torrent")]
@@ -2376,7 +2534,9 @@ mod tests {
             .chain(std::io::Cursor::new(parts[2].to_vec()));
         let start = 100;
         let relabel: Arc<[Relabelled]> = Arc::from([(start + 20, *b"hvc1")]);
-        let chunks: Vec<_> = torrent::chunks(body, start, relabel).collect().await;
+        let chunks: Vec<_> = torrent::chunks(body, start, relabel, Arc::default())
+            .collect()
+            .await;
         assert_eq!(chunks.len(), 3, "one chunk per read");
         let served: Vec<u8> = chunks
             .into_iter()

@@ -1280,9 +1280,12 @@ impl PlaybackView {
         // A player calls a segment or file the source failed a format or
         // decode error (Chrome's own HLS, AVPlayer): the stream server saw
         // the source fail, so that is what failed, never the device.
-        let fault = matches!(kind, None | Some("decode" | "unreadable" | "other"))
-            .then(|| lock(&self.state).lease.as_ref()?.source_failure())
-            .flatten();
+        let fault = matches!(
+            kind,
+            None | Some("decode" | "picture" | "unreadable" | "other")
+        )
+        .then(|| lock(&self.state).lease.as_ref()?.source_failure())
+        .flatten();
         let (kind, status) = fault.map_or((kind, status), |(k, s)| (Some(k), s));
         let error = mq_server::failure_words(kind, status, error);
         let error = error.as_str();
@@ -1311,6 +1314,8 @@ impl PlaybackView {
             s.run += 1;
             let local = s.local_open;
             let progressed = s.progressed;
+            #[cfg(feature = "torrent")]
+            swarm_starved(&mut s, fault);
             release_all(&mut s);
             if local && s.next >= s.candidates.len() {
                 s.candidates.extend(online);
@@ -2072,6 +2077,21 @@ async fn reachable(
         }
     }
     false
+}
+
+/// A torrent whose player read waited on the swarm (`Lease::starved`, which
+/// `fail_over` reads as `timeout`) before it ever played: the swarm's, as one
+/// that did not start, so the start moves on and the same swarm is skipped
+/// (plans/pace-at-ready.md v2). After good playback it is the moment's.
+#[cfg(feature = "torrent")]
+fn swarm_starved(s: &mut State, fault: Option<(&str, Option<u16>)>) {
+    if !s.progressed
+        && fault == Some(("timeout", None))
+        && let Some(Some(hash)) = s.network.clone()
+    {
+        failed_to_start(s);
+        s.failed_hashes.push(torrent_id(&hash));
+    }
 }
 
 /// The stalled version is left for the ranking's next one, at the stall's
@@ -7206,6 +7226,51 @@ mod tests {
         let s = view.snapshot();
         assert_eq!(s.attempts.last().unwrap().error, RETRY_GAVE_UP);
         assert_eq!(s.offer.map(|o| o.key), Some(next));
+    }
+
+    /// Plans/pace-at-ready.md v2: a torrent the player starved on did not
+    /// start, its swarm is skipped and the next version follows; any other
+    /// fault leaves the version alone.
+    #[cfg(feature = "torrent")]
+    #[tokio::test]
+    async fn a_starved_torrent_moves_on_as_one_that_did_not_start() {
+        let core = Core::temporary("default").unwrap();
+        let versions = crate::views::versions::VersionsView::open(
+            &core,
+            crate::views::versions::film_params(),
+        );
+        let link = |name: &str, n: u32| {
+            stream(&format!(
+                r#"{{"title":"{name}","url":"http://127.0.0.1:9/{n}.mkv"}}"#
+            ))
+        };
+        let rows = crate::views::versions::rank_for_tests(vec![
+            link("Movie.2020.1080p.WEB-DL.x264-FIRST", 1),
+            link("Movie.2020.720p.WEB-DL.x264-NEXT", 2),
+        ]);
+        let first = rows[0].stream.key.clone();
+        while !versions.snapshot().done {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        versions.rows_for_tests(rows);
+        versions.recommend_first_for_tests();
+        let hash = "AB".repeat(20);
+
+        let mut s = State::new(Vec::new(), None);
+        s.network = Some(Some(hash.clone()));
+        s.progressed = true;
+        swarm_starved(&mut s, Some(("timeout", None)));
+        assert_eq!(s.version_failed, None, "after good playback: the moment's");
+        s.progressed = false;
+        swarm_starved(&mut s, Some(("network", None)));
+        swarm_starved(&mut s, None);
+        assert_eq!((s.version_failed, s.failed_hashes.len()), (None, 0));
+        swarm_starved(&mut s, Some(("timeout", None)));
+        assert_eq!(s.version_failed, Some(NOT_STARTED));
+        assert_eq!(s.failed_hashes, [hash.to_ascii_lowercase()]);
+        s.pick = Some(versions.pick(&first).handle);
+        s.tried = vec![first];
+        assert!(move_on(&mut s), "the next version follows");
     }
 
     /// A swarm that did not start reads "did not start here", unless the
