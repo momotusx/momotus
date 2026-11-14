@@ -34,7 +34,8 @@ pub fn is_empty_answer(answer: &serde_json::Value) -> bool {
 /// (`{"error": ...}`, a list for another resource) reads as stremio-core
 /// reads it, so a row still fails and is asked again.
 ///
-/// Each item's `imdbRating` reads as its IMDb rating (`imdb_rating_link`).
+/// Each item's `imdbRating` reads as its IMDb rating (`imdb_rating_link`), and its
+/// text has its HTML entities decoded (`decode_meta_text`).
 pub fn decode_catalog(body: &[u8]) -> Result<ResourceResponse, serde_json::Error> {
     let mut root: serde_json::Value = serde_json::from_slice(body)?;
     if is_empty_answer(&root) {
@@ -42,16 +43,19 @@ pub fn decode_catalog(body: &[u8]) -> Result<ResourceResponse, serde_json::Error
     }
     if let Some(metas) = root.get_mut("metas").and_then(|m| m.as_array_mut()) {
         metas.iter_mut().for_each(imdb_rating_link);
+        metas.iter_mut().for_each(decode_meta_text);
     }
     serde_json::from_value(root)
 }
 
 /// An addon's answer to a meta request, read as stremio-core reads it, with
-/// the meta's `imdbRating` read as its IMDb rating (`imdb_rating_link`).
+/// the meta's `imdbRating` read as its IMDb rating (`imdb_rating_link`) and its
+/// text with its HTML entities decoded (`decode_meta_text`).
 pub fn decode_meta(body: &[u8]) -> Result<ResourceResponse, serde_json::Error> {
     let mut root: serde_json::Value = serde_json::from_slice(body)?;
     if let Some(meta) = root.get_mut("meta") {
         imdb_rating_link(meta);
+        decode_meta_text(meta);
     }
     serde_json::from_value(root)
 }
@@ -103,4 +107,82 @@ fn imdb_rating_link(item: &mut serde_json::Value) {
         }
         Some(_) => {}
     }
+}
+
+/// `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`, `&nbsp;` and numeric
+/// references, decoded once (`&amp;lt;` reads `&lt;`); any other `&` stays.
+pub fn decode_entities(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find('&') {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + 1..];
+        let named = after.find(';').filter(|&end| end <= 8);
+        match named.and_then(|end| Some((entity(&after[..end])?, end))) {
+            Some((c, end)) => {
+                out.push(c);
+                rest = &after[end + 1..];
+            }
+            None => {
+                out.push('&');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+fn entity(name: &str) -> Option<char> {
+    let c = match name {
+        "amp" => '&',
+        "lt" => '<',
+        "gt" => '>',
+        "quot" => '"',
+        "apos" => '\'',
+        "nbsp" => ' ',
+        _ => {
+            let number = name.strip_prefix('#')?;
+            let code = match number.strip_prefix(['x', 'X']) {
+                Some(hex) => u32::from_str_radix(hex, 16).ok()?,
+                None => number.parse().ok()?,
+            };
+            char::from_u32(code)?
+        }
+    };
+    Some(c)
+}
+
+/// The text an addon's item shows (name, description, genres, each link's name, each
+/// video's title and overview) with its HTML entities decoded once: Cinemeta sends `O&apos;Dea`, and no app draws
+/// markup, so every reader gets plain text from here (the one place item text enters the core).
+fn decode_meta_text(item: &mut serde_json::Value) {
+    use serde_json::Value;
+    fn text(value: &mut Value) {
+        if let Value::String(s) = value
+            && s.contains('&')
+        {
+            *s = decode_entities(s);
+        }
+    }
+    fn each(value: Option<&mut Value>, f: impl Fn(&mut Value)) {
+        if let Some(Value::Array(list)) = value {
+            list.iter_mut().for_each(f);
+        }
+    }
+    let Some(item) = item.as_object_mut() else {
+        return;
+    };
+    for key in ["name", "description"] {
+        item.get_mut(key).map(text);
+    }
+    each(item.get_mut("genres"), text);
+    each(item.get_mut("links"), |link| {
+        link.get_mut("name").map(text);
+    });
+    each(item.get_mut("videos"), |video| {
+        for key in ["title", "name", "overview"] {
+            video.get_mut(key).map(text);
+        }
+    });
 }

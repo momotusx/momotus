@@ -1122,51 +1122,7 @@ fn plain(text: &str) -> String {
         }
     }
     out.push_str(rest);
-    collapse(&entities(&out))
-}
-
-/// `&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`, `&nbsp;` and numeric
-/// references, decoded once (`&amp;lt;` reads `&lt;`); any other `&` stays.
-fn entities(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(at) = rest.find('&') {
-        out.push_str(&rest[..at]);
-        let after = &rest[at + 1..];
-        let named = after.find(';').filter(|&end| end <= 8);
-        match named.and_then(|end| Some((entity(&after[..end])?, end))) {
-            Some((c, end)) => {
-                out.push(c);
-                rest = &after[end + 1..];
-            }
-            None => {
-                out.push('&');
-                rest = after;
-            }
-        }
-    }
-    out.push_str(rest);
-    out
-}
-
-fn entity(name: &str) -> Option<char> {
-    let c = match name {
-        "amp" => '&',
-        "lt" => '<',
-        "gt" => '>',
-        "quot" => '"',
-        "apos" => '\'',
-        "nbsp" => ' ',
-        _ => {
-            let number = name.strip_prefix('#')?;
-            let code = match number.strip_prefix(['x', 'X']) {
-                Some(hex) => u32::from_str_radix(hex, 16).ok()?,
-                None => number.parse().ok()?,
-            };
-            char::from_u32(code)?
-        }
-    };
-    Some(c)
+    collapse(&mq_protocol::decode_entities(&out))
 }
 
 /// One space between words; control characters count as spaces.
