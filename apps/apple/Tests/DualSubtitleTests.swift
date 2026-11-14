@@ -142,7 +142,7 @@ private func source(_ name: String) throws -> String {
     #expect(block.contains("VStack(spacing: SubtitleLine.points(style, size) * 0.25 * unit) {\n            if let second {"))
     #expect(block.contains("var scale = PlayerLayout.secondScale"))
     #expect(screen.contains("first: first, second: split ? nil : second, size: model.subtitleSize,"))
-    #expect(screen.contains(".onGeometryChange(for: CGFloat.self) { $0.size.height } action: { subtitleBox = $0 }\n                            .scaleEffect(place.scale, anchor: .bottom)"))
+    #expect(screen.contains(".onGeometryChange(for: CGFloat.self) { $0.size.height } action: { subtitleBox = $0 }\n                    .scaleEffect(place.scale, anchor: .bottom)"))
 }
 
 /// DP4: Split hangs the second line from the top, the mirror of the foot.
