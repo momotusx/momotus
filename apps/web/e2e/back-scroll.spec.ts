@@ -127,8 +127,16 @@ test("phone: the wheel and a swipe scroll Home and Discover", async ({ browser }
       }
       return names.join(" < ");
     });
+    // A finger's own touch events, 300 px up in 15 moves a frame apart: the synthetic scroll gesture is made
+    // differently per platform (a wheel on macOS), so it is not what a touchscreen sends.
     const cdp = await context.newCDPSession(page);
-    await cdp.send("Input.synthesizeScrollGesture", { x: 195, y: 600, yDistance: -300, speed: 1200, gestureSourceType: "touch" });
+    const at = (y: number) => [{ x: 195, y }];
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(600) });
+    for (let i = 1; i <= 15; i++) {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: at(600 - i * 20) });
+      await page.waitForTimeout(16);
+    }
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await expect.poll(() => page.evaluate(() => window.scrollY), { message: `${path}: swipe from ${under}` }).toBeGreaterThan(100);
     await cdp.detach();
   }
