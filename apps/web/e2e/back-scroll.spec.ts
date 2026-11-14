@@ -116,9 +116,20 @@ test("phone: the wheel and a swipe scroll Home and Discover", async ({ browser }
     await page.mouse.wheel(0, 300);
     await expect.poll(() => page.evaluate(() => window.scrollY), { message: `${path}: wheel` }).toBeGreaterThan(100);
     await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    // What the finger lands on, and every box above it that scrolls or snaps: said if the swipe moves nothing.
+    const under = await page.evaluate(() => {
+      const names: string[] = [];
+      for (let el = document.elementFromPoint(195, 600); el; el = el.parentElement) {
+        const s = getComputedStyle(el);
+        const name = `${el.tagName.toLowerCase()}${el.className && typeof el.className === "string" ? `.${el.className.trim().split(/\s+/).join(".")}` : ""}`;
+        if (names.length === 0 || s.overflowX !== "visible" || s.overflowY !== "visible" || s.touchAction !== "auto" || s.scrollSnapType !== "none")
+          names.push(`${name} [${s.overflowX}/${s.overflowY} touch:${s.touchAction} snap:${s.scrollSnapType} os:${s.overscrollBehaviorX}/${s.overscrollBehaviorY}]`);
+      }
+      return names.join(" < ");
+    });
     const cdp = await context.newCDPSession(page);
     await cdp.send("Input.synthesizeScrollGesture", { x: 195, y: 600, yDistance: -300, speed: 1200, gestureSourceType: "touch" });
-    await expect.poll(() => page.evaluate(() => window.scrollY), { message: `${path}: swipe` }).toBeGreaterThan(100);
+    await expect.poll(() => page.evaluate(() => window.scrollY), { message: `${path}: swipe from ${under}` }).toBeGreaterThan(100);
     await cdp.detach();
   }
   await context.close();
