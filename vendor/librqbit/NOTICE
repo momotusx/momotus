@@ -125,5 +125,9 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
   sent its metadata first among the peers it met (upstream kept them in
   hash order), so the torrent's own add dials the one known to answer
   first.
+- src/create_torrent_file.rs: a folder's files go into a new torrent in name
+  order. Upstream took the file system's order, hash order on Linux ext4,
+  so the same folder made another torrent (file indexes, piece layout,
+  info hash) on another machine.
 - Cargo.toml: a [patch.crates-io] table with the sibling forks, so this
   crate's own tests build on their own as in the Marquee workspace.

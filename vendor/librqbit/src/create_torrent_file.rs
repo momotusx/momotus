@@ -23,7 +23,10 @@ pub struct CreateTorrentOptions<'a> {
 
 fn walk_dir_find_paths(dir: &Path, out: &mut Vec<Cow<'_, Path>>) -> anyhow::Result<()> {
     out.extend(
+        // By name: the file system's own order (hash order on ext4) made the
+        // same folder a different torrent on another machine.
         walkdir::WalkDir::new(dir)
+            .sort_by_file_name()
             .into_iter()
             .filter_map(|e| e.ok())
             .filter(|e| e.file_type().is_file())
