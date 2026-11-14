@@ -29,6 +29,9 @@ android {
 
     testOptions {
         unitTests.all {
+            // Robolectric and Compose outgrow Gradle's 512 MB default test heap; near it the collector stalls the JVM
+            // for minutes and a test's wait runs out (CI, 2026-11-14).
+            it.maxHeapSize = "2g"
             // Robolectric's Android 16 sets up shared memory through JDK internals (CoreStartTest).
             it.jvmArgs("--add-opens=java.base/jdk.internal.access=ALL-UNNAMED")
         }
