@@ -3,6 +3,8 @@ package app.marquee.android
 import android.app.Application
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -128,9 +130,28 @@ class EditProfileTest {
         onDone: () -> Unit = {},
     ) {
         core()
-        compose.setContent { MarqueeTheme(form) { EditProfileScreen(gate, session, id, onDone) } }
-        until("the page") { compose.onAllNodesWithContentDescription("Name").fetchSemanticsNodes().isNotEmpty() }
+        compose.setContent {
+            key(
+                redraw.intValue,
+            ) { MarqueeTheme(form) { EditProfileScreen(gate, session, id, onDone) } }
+        }
+        val drawn = { compose.onAllNodesWithContentDescription("Name").fetchSemanticsNodes().isNotEmpty() }
+        try {
+            until("the page", drawn)
+        } catch (e: IllegalStateException) {
+            // Composed again from scratch: if the page shows now, the data was there and the first composition
+            // missed the change.
+            redraw.intValue++
+            Snapshot.sendApplyNotifications()
+            compose.waitForIdle()
+            throw IllegalStateException(
+                "${e.message}; composed again, the page ${if (drawn()) "drew" else "still did not draw"}",
+            )
+        }
     }
+
+    /** Bumped to compose the screen again from scratch. */
+    private val redraw = mutableIntStateOf(0)
 
     private fun name() = compose.onNodeWithContentDescription("Name")
 
