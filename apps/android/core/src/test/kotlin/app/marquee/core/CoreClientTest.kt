@@ -305,7 +305,9 @@ class CoreClientTest {
             )
             client.subscribe("x", JsonObject(emptyMap()), ViewBinding(String.serializer(), String.serializer(), sink))
 
-            // Hold the state thread, queue five pushes, release: they must arrive as one call.
+            // Hold the state thread, queue five pushes, release: they must arrive as one call. The subscribe's own
+            // work leaves the thread first, so no drain queued before the hold takes the first pushes.
+            executor.submit {}.get()
             val gate = CountDownLatch(1)
             executor.submit { gate.await() }
             repeat(5) { client.onMessage("""{"sub":3,"updates":["u$it"]}""") }
