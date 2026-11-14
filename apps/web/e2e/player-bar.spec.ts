@@ -590,6 +590,24 @@ test.describe("phone", () => {
   }
 });
 
+test.describe("phone speed", () => {
+  test("the Speed pill shows the current speed with the other words dropped, and the name follows it (R5-19)", async ({ browser }) => {
+    const { page, close } = await open(browser, S1E1, "phone", { viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+    try {
+      const speed = page.locator('[data-f="player:speed"]');
+      await expect(page.locator('[data-f="player:audio"] small')).toBeHidden();
+      await expect(speed.locator("small")).toBeVisible();
+      await expect(speed.locator("small")).toHaveText("1x");
+      await speed.tap();
+      await expect(speed.locator("small")).toHaveText("1.25x");
+      await expect(speed).toHaveAttribute("aria-label", /1\.25x$/);
+      expect((await boxes(page, '[data-f="player:speed"]'))[0]!.w).toBeGreaterThanOrEqual(48);
+    } finally {
+      await close();
+    }
+  });
+});
+
 test.describe("TV", () => {
   const tv: BrowserContextOptions = { viewport: { width: 1920, height: 1080 } };
   const focused = (page: Page) => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "");

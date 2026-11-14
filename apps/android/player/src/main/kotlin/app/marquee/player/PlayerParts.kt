@@ -887,6 +887,8 @@ fun ActionButton(
     words: Boolean = true,
     expanded: Boolean? = null,
     spoken: String? = null,
+    /** A value drawn beside an icon-only pill's icon (Speed: a state nothing else on the bar shows), read out when it changes. */
+    badge: String? = null,
 ) {
     val tv = Marquee.form == Form.Tv
     var focusHeld by remember { mutableStateOf(false) }
@@ -912,6 +914,7 @@ fun ActionButton(
             .semantics {
                 contentDescription =
                     spoken ?: listOfNotNull(label, detail, BUSY_WORDS.takeIf { busy }).joinToString(", ")
+                if (badge != null) liveRegion = LiveRegionMode.Polite
                 when (expanded) {
                     true -> collapse { onClick().let { true } }
                     false -> expand { onClick().let { true } }
@@ -919,7 +922,7 @@ fun ActionButton(
                 }
             }.focusClickable(onClick, Role.Button)
             .then(
-                if (words) {
+                if (words || badge != null) {
                     Modifier.padding(horizontal = if (tv) 24.dp else 12.dp)
                 } else {
                     Modifier.width(pillHeight())
@@ -930,6 +933,16 @@ fun ActionButton(
     ) {
         FocusInk(colors) {
             MqIcon(icon, tint = colors.text, size = pillIcon())
+            if (!words && badge != null) {
+                MqText(
+                    badge,
+                    Modifier.testTag(BADGE_TAG),
+                    role = pillText(),
+                    color = colors.text,
+                    weight = FontWeight.SemiBold,
+                    maxLines = 1,
+                )
+            }
             if (words) {
                 MqText(label, role = pillText(), weight = FontWeight.SemiBold, maxLines = 1)
                 detail?.let {
@@ -962,6 +975,9 @@ val PILL_VALUE_MAX = 150.dp
 
 /** Read out after an action's line while more is on the way. */
 const val BUSY_WORDS = "still searching"
+
+/** An icon-only pill's value, for tests. */
+const val BADGE_TAG = "action-badge"
 
 /** The turning mark beside an action's line, for tests. */
 const val BUSY_TAG = "action-busy"

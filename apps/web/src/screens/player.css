@@ -92,7 +92,7 @@ html[data-engine="mpv"] .player-scr.started .player-bd { opacity: 0; }
 .pill.ico { width: calc(48 * var(--u)); padding: 0; }
 /* D16 a: a side that overflows keeps its icons; the word and the value stay in the name and the tooltip. */
 .osd:not([data-lw]) .bl .w, .osd:not([data-rw]) .br .pill .w { display: none; }
-.osd:not([data-lw]) .bl .pill, .osd:not([data-rw]) .br .pill { width: calc(48 * var(--u)); padding: 0; }
+.osd:not([data-lw]) .bl .pill:not(.spd), .osd:not([data-rw]) .br .pill { width: calc(48 * var(--u)); padding: 0; }
 /* Room kept for the shift and Next while hidden; the measure lays it out unseen, with the Subtitles value at its longest. */
 .rsv.off { display: none; }
 .osd[data-measure] .rsv.off { display: flex; visibility: hidden; }

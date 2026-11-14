@@ -1789,9 +1789,10 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               <AudioLines aria-hidden />
               <small class="w">{audioText()}</small>
             </button>
-            <button class="pill" data-f="player:speed" aria-label={`${barWords.names.speed}, ${rate()}x`} title={barWords.names.speed} onClick={cycleSpeed}>
+            <button class="pill spd" data-f="player:speed" aria-label={`${barWords.names.speed}, ${rate()}x`} title={barWords.names.speed} onClick={cycleSpeed}>
               <Gauge aria-hidden />
-              <small class="w num">{rate()}x</small>
+              {/* Never dropped with the other words: the speed is shown nowhere else (R5-19). */}
+              <small class="num">{rate()}x</small>
             </button>
             {/* Leaving for Versions or Episodes replaces this play in history:
                 Back from the next play goes to Versions, then the title, never to this one. */}

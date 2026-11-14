@@ -1,6 +1,7 @@
 package app.marquee.ui.phone
 
 import android.os.Looper
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
 import androidx.media3.common.TrackSelectionParameters
@@ -22,6 +23,7 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
     /** A source was set and prepared before the file opens: Media3 buffers it. */
     private var prepared = false
     private var cues = emptyList<Cue>()
+    private var rate = PlaybackParameters.DEFAULT
 
     /** The picture's size once the file is open; unknown unless a test sets it, as a fake with no frames has none. */
     var pictureSize: VideoSize = VideoSize.UNKNOWN
@@ -39,6 +41,7 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
                         .addAllCommands()
                         .build(),
                 ).setPlayWhenReady(wants, Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST)
+                .setPlaybackParameters(rate)
                 // Constant: the position moves only by a seek, so a test reads exact numbers.
                 .setContentPositionMs(PositionSupplier.getConstant(at))
                 .setNewlyRenderedFirstFrame(firstFrame)
@@ -124,6 +127,11 @@ internal class PlayingPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
 
     override fun handleSetTrackSelectionParameters(parameters: TrackSelectionParameters): ListenableFuture<*> {
         selection = parameters
+        return Futures.immediateVoidFuture()
+    }
+
+    override fun handleSetPlaybackParameters(playbackParameters: PlaybackParameters): ListenableFuture<*> {
+        rate = playbackParameters
         return Futures.immediateVoidFuture()
     }
 
