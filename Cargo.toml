@@ -58,6 +58,9 @@ opt-level = 2
 opt-level = 3
 [profile.dev.package.blake2]
 opt-level = 3
+# Device keys and pairing (X25519, Ed25519): a sync test makes thousands.
+[profile.dev.package.curve25519-dalek]
+opt-level = 3
 # Piece checks (SHA-1 on ring): a test seeder checks hundreds of MiB at start.
 [profile.dev.package.ring]
 opt-level = 3
