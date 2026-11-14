@@ -278,7 +278,7 @@ test("the recommendation that cannot play here moves on and says so", async ({ b
   await p.goto(`/title/movie/${BBB_ID}/versions/${BBB_ID}?form=desktop`);
   await expect(p.locator(".vrow").first()).toBeVisible({ timeout: 60_000 });
   for (const fold of await p.locator('.fold[aria-expanded="false"]').all()) await fold.click();
-  for (const file of BROKEN) await expect(p.locator(`[data-f="v:${keyOf(file)}"] .lt`)).toHaveText("Did not play on this device");
+  for (const file of BROKEN) await expect(p.locator(`[data-f="v:${keyOf(file)}"] .lt`)).toHaveText("Direct link, did not play on this device");
   await context.close();
 });
 

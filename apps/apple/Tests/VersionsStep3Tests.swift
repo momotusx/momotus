@@ -386,7 +386,7 @@ private func row(_ json: String) throws -> VersionRow {
     let other = try row(#", "group": "otherLanguages", "languages": ["tr"], "line": {"kind": "quick"}"#)
     #expect(VersionWords.languageTag(other) == "Turkish")
     #expect(VersionWords.languageTag(try row(#", "line": {"kind": "quick"}"#)) == nil)
-    #expect(VersionWords.rowSpoken(other) == "1080p, HDR, Dolby Atmos, Turkish, 12 GB, shared by 1,204 people")
+    #expect(VersionWords.rowSpoken(other) == "1080p, HDR, Dolby Atmos, Turkish, 12 GB, shared by 1,204 people, starts quickly")
     #expect(!VersionWords.rowSpoken(other).contains("Sample Source"))
 }
 
@@ -425,12 +425,12 @@ private func row(_ json: String) throws -> VersionRow {
     let sheet = try body(of: "private struct DetailsSheet", in: page)
     #expect(sheet.contains("Button(action: play)") && sheet.contains(".accessibilityAddTraits(.isModal)"))
     #expect(sheet.contains("VersionWords.detailLines(row, dimmed: dimmed?.text)"))
-    // Its top is what the row shows (badges, language tag, size and warning), then the seeders, the file, the language.
+    // Its top is what the row shows (badges, language tag, size, the people and the warning), then the file and the language.
     #expect(sheet.contains("RowFace(row: row, dimmed: dimmed, big: true)"))
     let face = try body(of: "private struct RowFace", in: page)
     #expect(face.contains("VersionWords.badges(row)") && face.contains("VersionWords.languageTag(row)") && face.contains("RowLine(row: row, dimmed: dimmed)"))
     let r = try JSONDecoder().decode(VersionRow.self, from: Data(#"{"key": "k", "quality": "720p", "features": [], "sizeBytes": 1, "status": {"kind": "torrent", "seeds": 5}, "via": "Sample Source", "releaseName": "Sintel.720p.mp4", "languages": ["en"], "reasons": [], "group": "best", "failoverCount": 0, "line": {"kind": "few", "seeders": 5}}"#.utf8))
-    #expect(VersionWords.detailLines(r) == ["Shared by 5 people", "Sintel.720p.mp4", "English"])
+    #expect(VersionWords.detailLines(r) == ["Sintel.720p.mp4", "English"])
 }
 
 @Test func anInertEpisodeOrHeroOpensNoBackOnlyPage() throws {
@@ -467,7 +467,7 @@ private func row(_ json: String) throws -> VersionRow {
     let controls = try String(contentsOf: app.appending(path: "Player/PlayerControls.swift"), encoding: .utf8)
     #expect(controls.contains("Choice(text: VersionWords.rowSpoken(row), selected: row.key == playingKey)"))
     let row = try JSONDecoder().decode(VersionRow.self, from: Data(#"{"key": "k", "quality": "720p", "features": [], "sizeBytes": 1610612736, "status": {"kind": "direct"}, "via": "Sample Source", "releaseName": "A.mp4", "languages": [], "reasons": [], "group": "best", "failoverCount": 0, "line": {"kind": "quick"}}"#.utf8))
-    #expect(VersionWords.rowSpoken(row) == "720p, 1.5 GB, direct link")
+    #expect(VersionWords.rowSpoken(row) == "720p, 1.5 GB, direct link, starts quickly")
 }
 
 @Test func voiceOverReadsARowsDetailsAndThePhoneRowHasADetailsAction() throws {

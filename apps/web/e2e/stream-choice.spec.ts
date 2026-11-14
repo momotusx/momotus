@@ -732,7 +732,7 @@ test.describe("Versions", () => {
     await page.goto(path("phone"));
     const row = await firstRow(page);
     const said = await row.locator(".lt").textContent();
-    expect(said).toBe("117 MB, may not start");
+    expect(said).toBe("117 MB, direct link, may not start");
     await page.locator(".vslot").first().locator(".vinfo").tap();
     const sheet = page.locator(".vsheet");
     await expect(sheet).toBeVisible();
