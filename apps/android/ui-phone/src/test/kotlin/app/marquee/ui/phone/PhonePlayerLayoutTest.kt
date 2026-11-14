@@ -6,6 +6,11 @@ import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -23,6 +28,7 @@ import app.marquee.core.model.SegmentKind
 import app.marquee.core.model.SubtitleSize
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
+import app.marquee.player.BADGE_TAG
 import app.marquee.player.CUE_FLOOR
 import app.marquee.player.CUE_LINE
 import app.marquee.player.CUE_LINES
@@ -177,6 +183,21 @@ class PhonePlayerLayoutTest {
             compose.onNodeWithContentDescription("Subtitles", substring = true).fetchSemanticsNode().boundsInRoot
         assertTrue(speed.right <= scrub.left && subtitles.left >= scrub.right, "$speed, $scrub, $subtitles")
         assertTrue(abs(speed.center.y - scrub.center.y) < 2f && abs(subtitles.center.y - scrub.center.y) < 2f)
+    }
+
+    @Test
+    fun `the Speed pill shows the current speed beside its icon and says it again when it changes`() {
+        playing()
+
+        fun badge() = compose.onNodeWithTag(BADGE_TAG, useUnmergedTree = true).assertIsDisplayed()
+        badge().assertTextEquals("1x")
+        compose.onNodeWithContentDescription("Speed, 1x").performClick()
+        compose.waitUntil(5_000) { controller.speed == 1.25f }
+        compose.waitForIdle()
+        badge().assertTextEquals("1.25x")
+        compose.onNodeWithContentDescription("Speed, 1.25x").assert(
+            SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion),
+        )
     }
 
     @Test

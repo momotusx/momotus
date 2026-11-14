@@ -764,7 +764,7 @@ private fun Controls(
         val series = onEpisodes != null
         // Left: Audio, Speed, Versions; right: Subtitles, then Episodes and Next for a series, the shift counted apart.
         val right = if (series) 3 else 1
-        val groups = widths.pill * (3 + right) + PILL_GAP * (2 + right) + ROW_GAP * 2
+        val groups = widths.pill * (2 + right) + widths.speedPill + PILL_GAP * (2 + right) + ROW_GAP * 2
         val clock = widths.text("-0:00:00")
         val fit = phoneBarFit(maxWidth, groups, clock * 2 + ROW_GAP * 2, widths.shiftWords, widths.shiftChevrons)
         val left: @Composable () -> Unit = { LeftPills(controller, strip, onStrip, onVersions, onTouch) }
@@ -814,7 +814,7 @@ private fun LeftPills(
         ActionButton(Icons.Gauge, names.SPEED, speedText(controller.speed), {
             onTouch()
             controller.changeSpeed(nextSpeed(controller.speed))
-        }, words = false)
+        }, words = false, badge = speedText(controller.speed))
         ActionButton(Icons.Layers, names.VERSIONS, controller.versionLabel, onVersions, words = false)
     }
 }

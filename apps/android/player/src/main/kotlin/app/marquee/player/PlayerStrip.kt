@@ -234,6 +234,10 @@ class BarWidths(
         detail: String?,
     ): Dp = pill(label, listOf(detail))
 
+    /** The icon-only Speed pill with its value beside the icon, as wide as the widest speed ([SPEEDS]). */
+    val speedPill: Dp
+        get() = maxOf(pill, pad * 2 + icon + gap + SPEEDS.maxOf { measure(speedText(it)) })
+
     /** The shift with Earlier and Later in words. */
     val shiftWords: Dp
         get() =
