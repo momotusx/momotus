@@ -1668,8 +1668,10 @@ async fn a_packs_played_episode_is_room_for_the_next_only_in_a_window() {
     assert!(s.leecher.stats(t).await.unwrap().window_bytes.is_some());
     let e02 = &s.others[0];
     assert!(read_range(&url, 0, 100 * MIB).await == e02[..(100 * MIB) as usize]);
-    // Piece 180 is episode 1's (the torrent lists episode 2 first).
-    let state = mq_engine::test_hooks::piece_state(&s.leecher, t, 180).await;
+    // A piece 20 MiB into episode 1, wherever the torrent lists it.
+    let start: u64 = files.iter().take(idx("e01.mkv")).map(|f| f.len).sum();
+    let piece = u32::try_from((start + 20 * MIB) / MIB).unwrap();
+    let state = mq_engine::test_hooks::piece_state(&s.leecher, t, piece).await;
     assert!(
         !state.contains("Some((true,"),
         "episode 1 went first: {state}"
