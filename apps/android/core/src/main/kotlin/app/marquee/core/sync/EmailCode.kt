@@ -226,9 +226,10 @@ class EmailCode(
         CoreLog.w("email sign-in: ${code ?: "no answer"}")
         val line = AccountRules.emailFieldError(code)
         if (line != null) {
+            // The field clears first: whoever sees the words sees them over an empty field, never the old code.
+            if (stage == Stage.Code) this.code = ""
             fieldError = line
             said++
-            if (stage == Stage.Code) this.code = ""
             return
         }
         failure = AccountRules.emailFailure(code)
