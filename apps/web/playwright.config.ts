@@ -3,6 +3,8 @@ import { BROWSER_ARGS, PORTS } from "./e2e/core";
 
 export default defineConfig({
   testDir: "e2e",
+  // ponytail: paint budgets are set on Apple Silicon; they run on the Mac gate.
+  testIgnore: process.env.CI ? [/home-perf\.spec/, /versions-perf\.spec/, /(^|\/)perf\.spec/] : [],
   timeout: 120_000,
   expect: { timeout: 20_000 },
   // One core is shared by every test, so they run in order.
