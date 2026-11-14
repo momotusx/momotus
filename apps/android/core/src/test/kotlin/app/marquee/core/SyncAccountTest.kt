@@ -718,9 +718,15 @@ class SyncAccountTest {
 
     @Test
     fun `a join from pairing says it is saving at once`() {
-        val sync = account(Store(null))
+        // The write's thread waits on the latch, so the check sees the moment before it ran.
+        val latch = java.util.concurrent.CountDownLatch(1)
+        val pool = java.util.concurrent.Executors.newSingleThreadExecutor()
+        pool.execute { latch.await() }
+        val sync = SyncAccount(CoreOps(client), Store(null), scope, io = pool.asCoroutineDispatcher())
         sync.didJoin(record(1))
         // Before any thread ran the write: Done waits, never shows and goes again.
         assertTrue(sync.joining)
+        latch.countDown()
+        pool.shutdown()
     }
 }
