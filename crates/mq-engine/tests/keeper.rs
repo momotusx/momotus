@@ -28,9 +28,13 @@ const PIECE: u32 = 1 << 20;
 /// 64 KiB/s: a 4 MiB critical window, a 1.9 MiB playback window.
 const RATE: u64 = 64 * 1024;
 
-/// The scheduler's budget in these tests: the plan's `W` less what APFS
-/// keeps of a file's head (on Apple targets), which the plan holds apart.
+/// The scheduler's budget in these tests: the plan's `W` less the head
+/// allowance, which the plan holds apart.
 const W: u64 = 24 * MIB;
+/// What the folder may hold: the plan's whole budget. The allowance over
+/// `W` takes the writes that land while a round waits on a data sync; with
+/// none, the folder goes past this on Linux.
+const FOLDER: u64 = W + HEAD_ALLOWANCE_BYTES;
 
 fn plan() -> WindowPlan {
     WindowPlan {
@@ -168,7 +172,7 @@ async fn a_window_never_holds_more_than_its_budget() {
     let got = w.read(0, len).await;
     assert!(got == w.s.movie, "bytes differ");
     let max = sampler.max();
-    assert!(max <= W, "allocated {max} over {}", W);
+    assert!(max <= FOLDER, "allocated {max} over {FOLDER}");
     let s = w.stats().await;
     assert!(s.held_bytes.unwrap() <= W);
     assert_eq!(
@@ -209,7 +213,7 @@ async fn a_window_without_punch_holds_its_budget_in_piece_files() {
     let got = w.read(0, len).await;
     assert!(got == w.s.movie, "bytes differ");
     let max = sampler.max();
-    assert!(max <= W, "allocated {max} over {W}");
+    assert!(max <= FOLDER, "allocated {max} over {FOLDER}");
     let movie = w.dir().join(&w.engine.files(w.t).unwrap()[w.movie].path);
     assert!(movie.is_dir(), "not piece files: {movie:?}");
     let pieces = std::fs::read_dir(&movie).unwrap().count() as u64;
