@@ -26,6 +26,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -719,8 +720,8 @@ class SyncAccountTest {
     @Test
     fun `a join from pairing says it is saving at once`() {
         // The write's thread waits on the latch, so the check sees the moment before it ran.
-        val latch = java.util.concurrent.CountDownLatch(1)
-        val pool = java.util.concurrent.Executors.newSingleThreadExecutor()
+        val latch = CountDownLatch(1)
+        val pool = Executors.newSingleThreadExecutor()
         pool.execute { latch.await() }
         val sync = SyncAccount(CoreOps(client), Store(null), scope, io = pool.asCoroutineDispatcher())
         sync.didJoin(record(1))
