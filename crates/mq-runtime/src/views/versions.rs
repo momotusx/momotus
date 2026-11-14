@@ -173,7 +173,7 @@ pub struct VersionsSnapshot {
     pub sharper: Option<VersionRow>,
     /// The quality sections of `rows`, in this order and only those with
     /// rows: 4K, 1080p (1080p and 1440p), 720p and below, other (quality
-    /// not stated); each lists its rows' keys in the core's order.
+    /// not stated); each lists its rows' keys, the most seeders first.
     pub sections: Vec<VersionSection>,
     /// Every listed version is a swarm the engine would fetch whose
     /// trackers count one seeder or none: almost nobody is sharing this
@@ -2803,12 +2803,16 @@ fn render(s: &State) -> VersionsSnapshot {
         SectionQuality::Other,
     ]
     .into_iter()
-    .map(|quality| VersionSection {
-        quality,
-        keys: (listed.iter())
-            .filter(|r| section(r) == quality)
-            .map(|r| r.stream.key.clone())
-            .collect(),
+    .map(|quality| {
+        // Inside a quality, the most peers first (the owner, 2026-11-14);
+        // rows with no seeder count (a ready file, a link) after the
+        // swarms, and ties in the core's order.
+        let mut rows: Vec<&&RankedRow> = listed.iter().filter(|r| section(r) == quality).collect();
+        rows.sort_by_key(|r| std::cmp::Reverse(r.stream.seeders));
+        VersionSection {
+            quality,
+            keys: rows.into_iter().map(|r| r.stream.key.clone()).collect(),
+        }
     })
     .filter(|section| !section.keys.is_empty())
     .collect();

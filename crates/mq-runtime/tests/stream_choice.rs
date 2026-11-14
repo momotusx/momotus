@@ -348,6 +348,43 @@ async fn settled_view(core: &Core) -> VersionsView {
     view
 }
 
+/// Inside a quality the most peers come first (the owner, 2026-11-14),
+/// whatever the core's order: three 1080p torrents within the size limit,
+/// the biggest the pick, then the core ranks the 3.0 GB file with 100
+/// seeders over the 2.0 GB one with 800 (the bigger file of a source wins
+/// past the wanted seeders); the 1080p section lists the 800 first.
+#[tokio::test]
+async fn a_quality_section_lists_the_most_peers_first() {
+    const HASH_C: &str = "cccccccccccccccccccccccccccccccccccccccc";
+    let streams = serde_json::json!({ "streams": [
+        { "name": "Torrentio\n1080p", "title": "Show.S01E01.1080p.WEB-DL.x264-BIG\n👤 300 💾 4.0 GB",
+          "infoHash": HASH_A, "fileIdx": 0 },
+        { "name": "Torrentio\n1080p", "title": "Show.S01E01.1080p.WEB-DL.x264-MID\n👤 100 💾 3.0 GB",
+          "infoHash": HASH_B, "fileIdx": 0 },
+        { "name": "Torrentio\n1080p", "title": "Show.S01E01.1080p.WEB-DL.x264-MANY\n👤 800 💾 2.0 GB",
+          "infoHash": HASH_C, "fileIdx": 0 },
+    ]})
+    .to_string();
+    let server = Server::start(vec![
+        route("GET", "/stream/series/tt1%3A1%3A1.json", 200, &streams),
+        route("GET", "/meta/series/tt1.json", 200, &meta()),
+    ])
+    .await;
+    let core = core_with(&server);
+    core.set_debrid_keys(&[(StoreId::RealDebrid, "rd".into())]);
+    let s = settled_view(&core).await.snapshot();
+    let (mid, many) = (format!("bt:{HASH_B}:0"), format!("bt:{HASH_C}:0"));
+    assert_eq!(s.recommended.map(|r| r.key), Some(format!("bt:{HASH_A}:0")));
+    let rows: Vec<String> = s.rows.iter().map(|r| r.key.clone()).collect();
+    assert_eq!(rows, [mid.clone(), many.clone()], "the core's order");
+    let fhd = s
+        .sections
+        .iter()
+        .find(|x| x.quality == SectionQuality::Fhd)
+        .unwrap();
+    assert_eq!(fhd.keys, [many, mid]);
+}
+
 /// One counter per pick, only from a frozen view, and only the first pick
 /// of a view; at 3 the note comes with the preferences now in effect, and
 /// the next view applies them.
