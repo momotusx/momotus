@@ -112,7 +112,10 @@ class EditProfileTest {
     ) {
         val deadline = System.currentTimeMillis() + 60_000
         while (!done()) {
-            check(System.currentTimeMillis() < deadline) { "never: $what" }
+            check(System.currentTimeMillis() < deadline) {
+                // Where it stopped: what reached the core, whether the core runs, whether the gate holds a snapshot.
+                "never: $what (sent $ops, health ${session.health}, gate snapshot ${gate.snapshot != null})"
+            }
             Snapshot.sendApplyNotifications()
             compose.waitForIdle()
             Thread.sleep(10)
