@@ -100,6 +100,8 @@ class ProfileMenuTest {
             compose.waitForIdle()
             Thread.sleep(10)
         }
+        // The snapshot was written after the loop's last notice: send one so the screen draws it.
+        Snapshot.sendApplyNotifications()
         compose.waitForIdle()
     }
 

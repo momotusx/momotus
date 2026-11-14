@@ -123,6 +123,8 @@ class IncognitoScreensTest {
         gate.start()
         compose.setContent { MarqueeTheme(form) { content() } }
         waitUntil("a profiles snapshot") { gate.snapshot != null }
+        // The snapshot was written after the wait's last notice: send one so the screen draws it.
+        Snapshot.sendApplyNotifications()
         compose.waitForIdle()
     }
 
