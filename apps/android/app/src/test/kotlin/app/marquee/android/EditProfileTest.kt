@@ -22,9 +22,11 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.text.AnnotatedString
 import androidx.core.graphics.Insets
@@ -115,8 +117,11 @@ class EditProfileTest {
         val deadline = System.currentTimeMillis() + 60_000
         while (!done()) {
             check(System.currentTimeMillis() < deadline) {
-                // Where it stopped: what reached the core, whether the core runs, whether the gate holds a snapshot.
-                "never: $what (sent $ops, health ${session.health}, gate snapshot ${gate.snapshot != null})"
+                // Where it stopped: what reached the core, whether the core runs, whether the gate holds a snapshot,
+                // and what the screen shows instead.
+                val screen = runCatching { compose.onRoot(useUnmergedTree = true).printToString() }.getOrElse { "$it" }
+                "never: $what (sent $ops, health ${session.health}, gate snapshot ${gate.snapshot != null}); " +
+                    "on screen: ${screen.take(1500)}"
             }
             Snapshot.sendApplyNotifications()
             compose.waitForIdle()
