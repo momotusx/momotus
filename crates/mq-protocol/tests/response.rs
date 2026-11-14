@@ -1,4 +1,4 @@
-use mq_protocol::{ResourceResponse, decode_catalog};
+use mq_protocol::{ResourceResponse, decode_catalog, decode_meta};
 
 fn ids(body: &[u8]) -> Vec<String> {
     match decode_catalog(body).expect("decodes") {
@@ -127,4 +127,55 @@ fn an_items_imdb_rating_reads_as_its_imdb_link() {
         }
         other => panic!("expected a meta, got {other:?}"),
     }
+}
+
+/// Cinemeta sends `Judith O&apos;Dea` in a cast link: every text an item shows reads as plain text, decoded
+/// once (`&amp;apos;` is the text `&apos;`), in a title page's meta and in a catalog's items alike.
+#[test]
+fn item_text_has_its_html_entities_decoded_once() {
+    let item = serde_json::json!({
+        "id": "tt0063350", "type": "movie", "name": "Tom &amp; Jerry",
+        "description": "It&apos;s &quot;dark&quot;. &amp;apos; stays &lt;b&gt; &nosuch; R&D",
+        "links": [
+            {"name": "Judith O&apos;Dea", "category": "Cast", "url": "stremio:///search?search=x"},
+            {"name": "Sci-Fi &amp; Horror", "category": "Genres", "url": "stremio:///discover"}
+        ],
+        "videos": [{"id": "a", "title": "Don&#39;t", "overview": "Rock &amp; roll", "released": "2020-01-01T00:00:00.000Z"}]
+    });
+    let ResourceResponse::Meta { meta } =
+        decode_meta(serde_json::json!({ "meta": item }).to_string().as_bytes()).unwrap()
+    else {
+        panic!("expected a meta");
+    };
+    let names: Vec<_> = meta.preview.links.iter().map(|l| l.name.as_str()).collect();
+    assert_eq!(names[..2], ["Judith O'Dea", "Sci-Fi & Horror"]);
+    assert_eq!(meta.preview.name, "Tom & Jerry");
+    assert_eq!(
+        meta.preview.description.as_deref(),
+        Some("It's \"dark\". &apos; stays <b> &nosuch; R&D")
+    );
+    assert_eq!(meta.videos[0].title, "Don't");
+    assert_eq!(meta.videos[0].overview.as_deref(), Some("Rock & roll"));
+
+    let ResourceResponse::Metas { metas } = decode_catalog(
+        serde_json::json!({ "metas": [item] })
+            .to_string()
+            .as_bytes(),
+    )
+    .unwrap() else {
+        panic!("expected metas");
+    };
+    assert_eq!(metas[0].name, "Tom & Jerry");
+    assert_eq!(metas[0].links[0].name, "Judith O'Dea");
+}
+
+/// The legacy `genres` string list (read as links when an item has none) decodes too.
+#[test]
+fn legacy_genres_are_decoded_too() {
+    let body = br#"{"meta": {"id": "tt1", "type": "movie", "name": "X", "genres": ["Sci-Fi &amp; Horror"]}}"#;
+    let ResourceResponse::Meta { meta } = decode_meta(body).unwrap() else {
+        panic!("expected a meta");
+    };
+    let names: Vec<_> = meta.preview.links.iter().map(|l| l.name.as_str()).collect();
+    assert!(names.contains(&"Sci-Fi & Horror"), "{names:?}");
 }
