@@ -238,17 +238,17 @@ class PhoneVersionsTest {
         compose.onAllNodesWithText("This phone", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("Torrentio", substring = true).assertCountEquals(0)
         // One tap plays: no open-first step.
-        compose.onNodeWithText("2 GB, shared by 1,204 people").assertIsDisplayed().performClick()
+        compose.onNodeWithText("2 GB, shared by 1,204 people, starts quickly").assertIsDisplayed().performClick()
         assertEquals(listOf("a"), played)
         // The info button, the row's sibling at its trailing edge, opens the sheet; the reader has the row's Details.
-        val rowNode = compose.onNodeWithContentDescription("1080p, HDR, 2 GB, shared by 1,204 people")
+        val rowNode = compose.onNodeWithContentDescription("1080p, HDR, 2 GB, shared by 1,204 people, starts quickly")
         val bounds = rowNode.fetchSemanticsNode().boundsInRoot
         compose.onRoot().performTouchInput { click(Offset(bounds.right + 24 * density, bounds.center.y)) }
         compose.onNodeWithTag(DETAILS_SHEET).assertIsDisplayed()
         // The sheet starts with the row's face; the core's details that say the same again are left out.
         compose
             .onNode(
-                hasText("2 GB, shared by 1,204 people") and hasAnyAncestor(hasTestTag(DETAILS_SHEET)),
+                hasText("2 GB, shared by 1,204 people, starts quickly") and hasAnyAncestor(hasTestTag(DETAILS_SHEET)),
             ).assertIsDisplayed()
         compose.onAllNodesWithText("Shared by 1,204 people", substring = true).assertCountEquals(0)
         compose.onNode(hasText("Play this version") and hasAnyAncestor(hasTestTag(DETAILS_SHEET))).performClick()
@@ -277,8 +277,8 @@ class PhoneVersionsTest {
                 languages = listOf("tr"),
             )
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(tr)))
-        // The row itself: its badges, its language, its size and its warning.
-        compose.onNodeWithText("117 MB, may not start", useUnmergedTree = true).assertExists()
+        // The row itself: its badges, its language, its size, the people sharing it and its warning.
+        compose.onNodeWithText("117 MB, shared by 1,204 people, may not start", useUnmergedTree = true).assertExists()
         compose.runOnIdle {
             compose
                 .onNodeWithContentDescription("1080p, HDR, Turkish", substring = true)
@@ -297,7 +297,8 @@ class PhoneVersionsTest {
                 .first()
                 .boundsInRoot.top
         // Nothing the row shows is dropped: the badge, the language, the size and the warning come first.
-        val tops = listOf(top("1080p"), top("117 MB, may not start"), top("Shared by 0 people"), top("a.2010"))
+        val line = "117 MB, shared by 1,204 people, may not start"
+        val tops = listOf(top("1080p"), top(line), top("Shared by 0 people"), top("a.2010"))
         assertEquals(tops.sorted(), tops, "badges, the row's line, the people sharing it, then the file")
         assertTrue(
             compose
@@ -312,7 +313,7 @@ class PhoneVersionsTest {
     @Test
     fun `an open sheet is modal, the page under it is out of the reader's reach and the focus is in the sheet`() {
         show(snapshot(row("best", ReasonLine.Ready("TorBox", gib)), listOf(row("a", ReasonLine.Quick(1204, 2 * gib)))))
-        val spoken = "1080p, HDR, 2 GB, shared by 1,204 people"
+        val spoken = "1080p, HDR, 2 GB, shared by 1,204 people, starts quickly"
         compose.runOnIdle {
             compose
                 .onNodeWithContentDescription(spoken)

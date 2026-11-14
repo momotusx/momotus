@@ -363,7 +363,7 @@ class VersionsCopyTest {
             PluginCopy.SECTION to listOf(found.key),
             withPlugins.last().title to withPlugins.last().rows.map(VersionRow::key),
         )
-        assertEquals("Direct link", VersionsCopy.quiet(found))
+        assertEquals("Direct link, starts quickly", VersionsCopy.quiet(found))
     }
 
     @Test
@@ -414,15 +414,16 @@ class VersionsCopyTest {
         val shared = { line: ReasonLine ->
             row(sizeBytes = 4 * gib).copy(status = VersionStatus.Torrent(89), line = line)
         }
-        // The face says "4 GB, shared by 89 people"; the account and the window are said only here.
+        // The face says "4 GB, shared by 89 people, should start quickly"; the account and the window are said
+        // only here.
         val should = shared(ReasonLine.Should(89, 4 * gib, "TorBox"))
-        assertEquals("4 GB, shared by 89 people", VersionsCopy.rowWords(should))
+        assertEquals("4 GB, shared by 89 people, should start quickly", VersionsCopy.rowWords(should))
         assertEquals("May be ready in your account", VersionsCopy.sheetDetails(should, null))
         val buffer = shared(ReasonLine.Buffer(89, 4 * gib, aheadMin = 7, budgetBytes = (2.5 * gib).toLong()))
         assertEquals("Room for about 7 min ahead in 2.5 GB", VersionsCopy.sheetDetails(buffer, null))
         // Nothing is left when the face said it all.
         assertEquals("", VersionsCopy.sheetDetails(shared(ReasonLine.Quick(89, 4 * gib)), null))
-        // A shared file whose count the status does not know: the face says only its size, so the people stay.
+        // A shared file whose count the status does not know: the face says no people, so they stay here.
         val unknown =
             row(sizeBytes = 4 * gib).copy(
                 status = VersionStatus.Torrent(null),
@@ -433,11 +434,11 @@ class VersionsCopyTest {
                         "TorBox",
                     ),
             )
-        assertEquals("4 GB", VersionsCopy.rowWords(unknown))
+        assertEquals("4 GB, should start quickly", VersionsCopy.rowWords(unknown))
         assertEquals("Shared by 89 people, may be ready in your account", VersionsCopy.sheetDetails(unknown, null))
         // A warning face keeps the details whole: they say what it does not.
         assertEquals("Shared by 3 people", VersionsCopy.sheetDetails(shared(ReasonLine.VeryFew(3)), null))
-        // A ready file: the face says "2 GB, ready now", so neither part is said again.
+        // A ready file: the face says "2 GB, ready now, starts right away", so neither part is said again.
         val ready =
             row(sizeBytes = 2 * gib).copy(
                 status = VersionStatus.Ready(null),
@@ -447,7 +448,7 @@ class VersionsCopyTest {
                         2 * gib,
                     ),
             )
-        assertEquals("2 GB, ready now", VersionsCopy.rowWords(ready))
+        assertEquals("2 GB, ready now, starts right away", VersionsCopy.rowWords(ready))
         assertEquals("", VersionsCopy.sheetDetails(ready, null))
         // On this device: the people and the size limit stay, as the face says neither.
         val kept = shared(ReasonLine.Quick(89, 4 * gib)).copy(onDevice = "On this device")
@@ -554,49 +555,55 @@ class VersionsCopyTest {
     }
 
     @Test
-    fun `a row's quiet line is its size and source in plain words, and a warning from the core replaces it`() {
+    fun `a row's line says its size, its source and how it should play, and a warning takes the tone`() {
         val gb = 2L * 1024 * 1024 * 1024
         val quick = ReasonLine.Quick(412, gb)
         assertEquals(
-            "2 GB, shared by 412 people",
+            "2 GB, shared by 412 people, starts quickly",
             VersionsCopy.quiet(row(sizeBytes = gb).copy(status = VersionStatus.Torrent(412), line = quick)),
         )
         assertEquals(
-            "2 GB, shared by 1 person",
+            "2 GB, shared by 1 person, starts quickly",
             VersionsCopy.quiet(row(sizeBytes = gb).copy(status = VersionStatus.Torrent(1), line = quick)),
         )
-        assertEquals("2 GB, ready now", VersionsCopy.quiet(row(sizeBytes = gb).copy(line = quick)))
+        assertEquals("2 GB, ready now, starts quickly", VersionsCopy.quiet(row(sizeBytes = gb).copy(line = quick)))
         assertEquals(
-            "2 GB, direct link",
+            "2 GB, direct link, starts quickly",
             VersionsCopy.quiet(row(sizeBytes = gb).copy(status = VersionStatus.Direct, line = quick)),
         )
         assertEquals(
-            "2 GB, downloads first",
+            "2 GB, downloads first, starts quickly",
             VersionsCopy.quiet(row(sizeBytes = gb).copy(status = VersionStatus.NeedsDownload(null), line = quick)),
         )
         assertEquals(
             "2 GB, on this device",
             VersionsCopy.quiet(row(sizeBytes = gb).copy(line = quick, onDevice = "On this device")),
         )
-        // The size always comes first, then the source, the core's warning or why the row is dimmed.
+        // The size always comes first, then the source and how it should play, or why the row is dimmed.
         assertEquals(
-            "2 GB, may start slowly",
+            "2 GB, ready now, may start slowly",
             VersionsCopy.rowWords(row(sizeBytes = gb).copy(line = ReasonLine.Few(31))),
         )
-        assertEquals("2 GB, ready now", VersionsCopy.rowWords(row(sizeBytes = gb).copy(line = quick)))
+        assertEquals("2 GB, ready now, starts quickly", VersionsCopy.rowWords(row(sizeBytes = gb).copy(line = quick)))
         assertEquals("2 GB, won't play here", VersionsCopy.rowWords(row(sizeBytes = gb), EmptyKind.NeedsAccount))
         // With no size first, the words start with a capital.
         assertEquals(
             "On this device",
             VersionsCopy.rowWords(row(sizeBytes = null).copy(line = quick, onDevice = "On this device")),
         )
-        assertEquals("Ready now", VersionsCopy.rowWords(row(sizeBytes = null).copy(line = quick)))
-        assertEquals("May start slowly", VersionsCopy.rowWords(row(sizeBytes = null).copy(line = ReasonLine.Few(31))))
+        assertEquals("Ready now, starts quickly", VersionsCopy.rowWords(row(sizeBytes = null).copy(line = quick)))
+        assertEquals(
+            "Ready now, may start slowly",
+            VersionsCopy.rowWords(row(sizeBytes = null).copy(line = ReasonLine.Few(31))),
+        )
         assertEquals("Won't play here", VersionsCopy.rowWords(row(sizeBytes = null), EmptyKind.NeedsAccount))
-        // A warning shows in its place.
+        // A warning row is not quiet: it shows with its tone.
         assertNull(VersionsCopy.quiet(row(sizeBytes = gb).copy(line = ReasonLine.Few(31))))
-        // Said as its badges, then the quiet line.
-        assertEquals("4K, HDR, 2 GB, ready now", VersionsCopy.rowSpoken(row(sizeBytes = gb).copy(line = quick)))
+        // Said as its badges, then its line.
+        assertEquals(
+            "4K, HDR, 2 GB, ready now, starts quickly",
+            VersionsCopy.rowSpoken(row(sizeBytes = gb).copy(line = quick)),
+        )
     }
 
     private fun kinds(

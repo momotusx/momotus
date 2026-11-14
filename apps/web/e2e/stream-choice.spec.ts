@@ -763,7 +763,7 @@ test.describe("Versions", () => {
       await firstRow(page);
       await page.locator(".vslot").first().locator(".vinfo").tap();
       const sheet = page.locator(".vsheet");
-      await expect(sheet.locator(".st.line .lt")).toHaveText("4 GB, shared by 89 people");
+      await expect(sheet.locator(".st.line .lt")).toHaveText(`4 GB, shared by 89 people, ${k === "should" ? "should start" : "starts"} quickly`);
       // The people and the size are the face's; only what it did not say follows.
       if (k === "should") await expect(sheet.locator(".detail")).toHaveText("May be ready in your account");
       else await expect(sheet.locator(".detail")).toHaveCount(0);

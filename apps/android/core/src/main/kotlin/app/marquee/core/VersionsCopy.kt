@@ -208,55 +208,41 @@ object VersionsCopy {
     }
 
     /**
-     * A row's one quiet line (plans/versions-android-spec.md, section 1): its size and its source in plain words
-     * ("2 GB, shared by 412 people", "4 GB, ready now"), or "On this device"; null when the core's line warns (it
-     * then shows instead: "May start slowly").
+     * A row's one quiet line (plans/versions-android-spec.md, section 1): [rowWords] when the core's line does not
+     * warn ("2 GB, shared by 412 people, starts quickly", "4 GB, ready now, starts right away"), or "On this device";
+     * null when it warns, and the row then shows its line with its tone ("12 GB, shared by 31 people, may start
+     * slowly").
      */
-    fun quiet(row: VersionRow): String? {
-        val line = StreamChoiceCopy.line(row.line)
-        val size = row.sizeBytes?.let(Format::bytes)
-        if (row.onDevice != null) return sized(size, row.onDevice)
-        if (line.tone != Tone.Ok) return null
-        val source =
-            when (val s = row.status) {
-                is VersionStatus.Ready -> {
-                    StreamChoiceCopy.SOURCE_READY
-                }
+    fun quiet(row: VersionRow): String? =
+        rowWords(row).takeIf { row.onDevice != null || StreamChoiceCopy.line(row.line).tone == Tone.Ok }
 
-                VersionStatus.Direct -> {
-                    StreamChoiceCopy.SOURCE_DIRECT
-                }
-
-                is VersionStatus.NeedsDownload -> {
-                    StreamChoiceCopy.SOURCE_DOWNLOAD
-                }
-
-                is VersionStatus.Torrent -> {
-                    sharedBy(s)
-                }
-            }
-        return source?.let { sized(size, it) } ?: size ?: line.text
-    }
+    /** Where a version comes from in plain words ("ready now", "shared by 412 people"); null while not known. */
+    private fun source(row: VersionRow): String? =
+        when (val s = row.status) {
+            is VersionStatus.Ready -> StreamChoiceCopy.SOURCE_READY
+            VersionStatus.Direct -> StreamChoiceCopy.SOURCE_DIRECT
+            is VersionStatus.NeedsDownload -> StreamChoiceCopy.SOURCE_DOWNLOAD
+            is VersionStatus.Torrent -> sharedBy(s)
+        }
 
     /** A shared file's source in plain words, "shared by 412 people"; null while the count is not known. */
     private fun sharedBy(status: VersionStatus.Torrent) =
         status.seeds?.let { StreamChoiceCopy.SOURCE_SHARED.replace("{people}", StreamChoiceCopy.counted("people", it)) }
 
     /**
-     * A row's one line as it shows: its size first, then its source in plain words, the core's warning, or why it is
-     * dimmed ([why]): "1.5 GB, shared by 1,204 people", "12 GB, may start slowly", "2 GB, won't play here".
+     * A row's one line, with the same three facts on every row (the owner, 2026-11-14): its size, where it comes
+     * from (how many people share it), and how we expect it to play: "1.5 GB, shared by 1,204 people, starts
+     * quickly", "12 GB, shared by 3 people, may start slowly". A dimmed row says why instead ([why]: "2 GB, won't
+     * play here"), and a kept one that it is on this device.
      */
     fun rowWords(
         row: VersionRow,
         why: EmptyKind? = null,
     ): String {
         val size = row.sizeBytes?.let(Format::bytes)
-        val said =
-            when {
-                why != null -> StreamChoiceCopy.emptyRowLine(why).text
-                else -> return quiet(row) ?: sized(size, StreamChoiceCopy.line(row.line).text)
-            }
-        return sized(size, said)
+        val said = why?.let { StreamChoiceCopy.emptyRowLine(it).text } ?: row.onDevice
+        val parts = if (said != null) listOf(said) else listOfNotNull(source(row), StreamChoiceCopy.line(row.line).text)
+        return sized(size, parts.joinToString(", ") { lowerFirst(it) })
     }
 
     /** [words] after the size ("12 GB, may start slowly"), or on their own with a capital ("Did not play on this device"). */

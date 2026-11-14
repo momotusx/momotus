@@ -741,15 +741,16 @@ function sourceWords(s: VersionStatus): string | null {
   return s.seeds === null ? null : choice.page.source.shared.replace("{people}", counted("people", s.seeds));
 }
 
-/** A row's one line: its size first, then where it comes from, the core's warning, or why it is dimmed
- * (`why`): "1.5 GB, shared by 1,204 people", "12 GB, may start slowly", "2 GB, won't play here". The
- * size is never dropped for a warning. */
+/** A row's one line, with the same three facts on every row (the owner, 2026-11-14): its size, where it
+ * comes from (how many people share it), and how we expect it to play: "1.5 GB, shared by 1,204 people,
+ * starts quickly", "12 GB, shared by 3 people, may start slowly". A dimmed row says why instead of how it
+ * plays ("2 GB, won't play here"), and a kept one that it is on this device. */
 export function rowWords(row: VersionRow, why: string | null = null): string {
   const size = row.sizeBytes ? bytes(row.sizeBytes) : null;
-  const line = lineWords(row.line);
-  const said = why ?? row.onDevice ?? (line.tone === "ok" ? sourceWords(row.status) : null) ?? line.text;
+  const said = why ?? row.onDevice;
+  const parts = said ? [size, said] : [size, sourceWords(row.status), lineWords(row.line).text];
   // With no size first, the line starts with a capital as any line does.
-  return capital([size, lowerFirst(said)].filter(Boolean).join(", "));
+  return capital(parts.filter((p): p is string => !!p).map(lowerFirst).join(", "));
 }
 
 /** The core's details under a row's one line in its sheet, with one rule on every platform (Android's

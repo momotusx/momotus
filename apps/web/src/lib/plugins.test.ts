@@ -22,7 +22,7 @@ test("a plugin row says what any direct link says, never the plugin's name or it
     sourceName: "Dizibox",
     host: "cdn.example.com",
   } as unknown as VersionRow;
-  expect(rowWords(row)).toBe("Direct link");
+  expect(rowWords(row)).toBe("Direct link, starts quickly");
 });
 
 test("a listed repository says its providers, kinds and languages, and is found by any of them", () => {

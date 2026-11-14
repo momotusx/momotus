@@ -251,14 +251,14 @@ test("raw reasons read as sentences, the raw text kept", () => {
   expect(listFailed("http status 500")).toBe("This list could not load. It had an error on its side.");
 });
 
-test("a row's one line starts with its size, then where it comes from, a warning or why it is dimmed", () => {
+test("a row's one line says its size, how many share it and how it should play, or why it is dimmed", () => {
   const row = (line: ReasonLine, status: VersionRow["status"], sizeBytes: number | null = 1.5 * GiB, onDevice: string | null = null) =>
     ({ line, status, sizeBytes, onDevice }) as VersionRow;
-  expect(rowWords(row({ kind: "quick", seeders: 1204, sizeBytes: GiB }, { kind: "torrent", seeds: 1204 }))).toBe("1.5 GB, shared by 1,204 people");
-  expect(rowWords(row({ kind: "ready", service: "TorBox", sizeBytes: GiB }, { kind: "ready", service: "TorBox" }))).toBe("1.5 GB, ready now");
-  expect(rowWords(row({ kind: "quick", seeders: 1, sizeBytes: GiB }, { kind: "torrent", seeds: 1 }))).toBe("1.5 GB, shared by 1 person");
-  // A warning never drops the size.
-  expect(rowWords(row({ kind: "few", seeders: 31 }, { kind: "torrent", seeds: 31 }, 12 * GiB))).toBe("12 GB, may start slowly");
+  expect(rowWords(row({ kind: "quick", seeders: 1204, sizeBytes: GiB }, { kind: "torrent", seeds: 1204 }))).toBe("1.5 GB, shared by 1,204 people, starts quickly");
+  expect(rowWords(row({ kind: "ready", service: "TorBox", sizeBytes: GiB }, { kind: "ready", service: "TorBox" }))).toBe("1.5 GB, ready now, starts right away");
+  expect(rowWords(row({ kind: "quick", seeders: 1, sizeBytes: GiB }, { kind: "torrent", seeds: 1 }))).toBe("1.5 GB, shared by 1 person, starts quickly");
+  // A warning never drops the size or the people sharing it.
+  expect(rowWords(row({ kind: "few", seeders: 31 }, { kind: "torrent", seeds: 31 }, 12 * GiB))).toBe("12 GB, shared by 31 people, may start slowly");
   expect(rowWords(row({ kind: "few", seeders: 31 }, { kind: "torrent", seeds: 31 }), "Won't play here")).toBe("1.5 GB, won't play here");
   expect(rowWords(row({ kind: "quick", seeders: null, sizeBytes: null }, { kind: "direct" }, null, "On this device"))).toBe("On this device");
   expect(rowWords(row({ kind: "quick", seeders: null, sizeBytes: null }, { kind: "torrent", seeds: null }, null))).toBe("Starts quickly");

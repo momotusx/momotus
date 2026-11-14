@@ -371,13 +371,13 @@ private func row(_ json: String) throws -> VersionRow {
 }
 
 @Test func aRowIsItsBadgesAndOneQuietLineWithItsSizeFirst() throws {
-    // A row that plays as it should: its size, then its source in plain words.
-    #expect(VersionWords.rowWords(try row(#", "line": {"kind": "quick", "seeders": 1204}"#)) == "12 GB, shared by 1,204 people")
-    #expect(VersionWords.rowWords(try row(#", "status": {"kind": "ready", "service": "TorBox"}, "line": {"kind": "ready", "service": "TorBox"}"#)) == "12 GB, ready now")
-    #expect(VersionWords.rowWords(try row(#", "status": {"kind": "direct"}, "line": {"kind": "quick"}"#)) == "12 GB, direct link")
-    // A warning takes the source's place, in lower case after the size, with a capital without one.
-    #expect(VersionWords.rowWords(try row(#", "line": {"kind": "few", "seeders": 5}"#)) == "12 GB, may start slowly")
-    #expect(VersionWords.rowWords(try row(#", "sizeBytes": null, "line": {"kind": "didNotPlay"}"#)) == "Did not play on this device")
+    // A row that plays as it should: its size, its source in plain words, then how it should play.
+    #expect(VersionWords.rowWords(try row(#", "line": {"kind": "quick", "seeders": 1204}"#)) == "12 GB, shared by 1,204 people, starts quickly")
+    #expect(VersionWords.rowWords(try row(#", "status": {"kind": "ready", "service": "TorBox"}, "line": {"kind": "ready", "service": "TorBox"}"#)) == "12 GB, ready now, starts right away")
+    #expect(VersionWords.rowWords(try row(#", "status": {"kind": "direct"}, "line": {"kind": "quick"}"#)) == "12 GB, direct link, starts quickly")
+    // A warning takes how it plays, after the people sharing it, in lower case; a capital opens the line.
+    #expect(VersionWords.rowWords(try row(#", "line": {"kind": "few", "seeders": 5}"#)) == "12 GB, shared by 1,204 people, may start slowly")
+    #expect(VersionWords.rowWords(try row(#", "sizeBytes": null, "line": {"kind": "didNotPlay"}"#)) == "Shared by 1,204 people, did not play on this device")
     // Dimmed: why it may not play.
     #expect(VersionWords.rowWords(try row(#", "line": {"kind": "quick"}"#), dimmed: "Needs an account") == "12 GB, needs an account")
     // The details, laid out always, shown on focus or hover: the release, the line's numbers, languages and sources.

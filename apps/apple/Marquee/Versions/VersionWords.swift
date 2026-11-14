@@ -291,18 +291,18 @@ enum VersionWords {
         return LineWords(tone: .ok, text: kept, details: line?.details ?? "")
     }
 
-    /// A row's one quiet line: its size first, then its source in plain words ("2 GB, shared by 412
-    /// people", "4 GB, ready now"), the core's warning ("12 GB, may start slowly"), or, dimmed, why it
-    /// may not play ("2 GB, needs an account"). Words after a size go on in lower case.
+    /// A row's one line, with the same three facts on every row (the owner, 2026-11-14): its size,
+    /// where it comes from (how many people share it), and how we expect it to play ("2 GB, shared by
+    /// 412 people, starts quickly", "12 GB, shared by 3 people, may start slowly"). A dimmed row says
+    /// why instead ("2 GB, needs an account"), a kept one that it is on this device. Words after the
+    /// first go on in lower case.
     static func rowWords(_ row: VersionRow, dimmed: String? = nil) -> String {
-        let line = rowLine(row)
-        let said: String? = if let dimmed { dimmed }
-            else if let kept = row.onDevice { kept }
-            else if line.map({ $0.tone != .ok }) == true { line?.text }
-            else { source(row.status) ?? line?.text }
+        let said = dimmed ?? row.onDevice
+        let parts: [String] = if let said { [bytes(row), said].compactMap { $0 } }
+            else { [bytes(row), source(row.status), row.line.flatMap { StreamChoice.lineWords($0) }?.text].compactMap { $0 } }
         // With no size first, the line starts with a capital, as on the web and Android.
-        guard let size = bytes(row) else { return said.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? "" }
-        return ([size] + [said.map(StreamChoice.lowerFirst)].compactMap { $0 }).joined(separator: ", ")
+        let line = parts.map(StreamChoice.lowerFirst).joined(separator: ", ")
+        return line.prefix(1).uppercased() + line.dropFirst()
     }
 
     private static func source(_ status: VersionStatus) -> String? {

@@ -291,8 +291,8 @@ class TvVersionsTest {
         compose.onAllNodesWithText("Via", substring = true, ignoreCase = true).assertCountEquals(0)
         // No column table.
         compose.onAllNodesWithText("Quality", ignoreCase = true).assertCountEquals(0)
-        compose.onNodeWithText("2 GB, shared by 1,204 people").assertExists()
-        val row = compose.onNodeWithContentDescription("1080p, HDR, 2 GB, shared by 1,204 people")
+        compose.onNodeWithText("2 GB, shared by 1,204 people, starts quickly").assertExists()
+        val row = compose.onNodeWithContentDescription("1080p, HDR, 2 GB, shared by 1,204 people, starts quickly")
         val before = row.fetchSemanticsNode().size
         // The details line is there before focus (unseen), so focus only fades it in: the row keeps its height.
         compose.onNodeWithText("Shared by 1,204 people, 2 GB", substring = true, useUnmergedTree = true).assertExists()
@@ -655,8 +655,8 @@ class TvVersionsTest {
         // The core's smaller and sharper, in its order, with their own facts.
         compose.onNodeWithText("Smaller file: 720p, 1.5 GB").assertExists()
         compose.onNodeWithText("Sharper: 4K, 12 GB").assertExists()
-        // A row's line has its size first, a warning after it.
-        compose.onNodeWithText("12 GB, may start slowly").assertExists()
+        // A row's line has its size first, then the people sharing it, then a warning.
+        compose.onNodeWithText("12 GB, shared by 1,204 people, may start slowly").assertExists()
         // The core's sections, in its order: 4K, 1080p, 720p and below.
         // Each heading is one heading node: "1080p, 1 version".
         val top = { t: String ->

@@ -146,6 +146,8 @@
 [data-form="phone"] .lnote .btn svg { width: 16px; height: 16px; }
 [data-form="phone"] .vrow .line .tone { width: 16px; height: 16px; margin-top: 1px; }
 [data-form="phone"] .vrow .st.line { gap: 6px; font-size: 13px; }
+/* The line says size, people and how it should play: on a phone it may take a second line rather than lose the last. */
+[data-form="phone"] .vrow .line .lt { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 /* A tapped row opens into one card with its details and Play. */
 /* Phone: one tap plays the row; the info button beside it (44 px) opens its sheet. */
 [data-form="phone"] .vslot { display: grid; grid-template-columns: minmax(0, 1fr) 44px; align-items: center; column-gap: 4px; }

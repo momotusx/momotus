@@ -536,9 +536,10 @@ private struct RowLine: View {
         if let dimmed {
             Label(text, glyph: dimmed.glyph).labelStyle(.titleAndIcon).lineLimit(1)
         } else if row.onDevice == nil, tone == .warn || tone == .bad {
-            Label { Text(text) } icon: { Glyph(tone.glyph).foregroundStyle(tone.color) }.lineLimit(1)
+            Label { Text(text) } icon: { Glyph(tone.glyph).foregroundStyle(tone.color) }.lineLimit(2)
         } else {
-            Text(text).foregroundStyle(Theme.Palette.muted).lineLimit(1)
+            // Size, people and how it should play: on an iPhone a second line rather than losing the last.
+            Text(text).foregroundStyle(Theme.Palette.muted).lineLimit(2)
         }
     }
 }
