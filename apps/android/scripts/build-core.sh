@@ -44,9 +44,11 @@ for env in "$ROOT/.env.trakt.local" "$ROOT/.env.tmdb.local"; do
 done
 TARGET=${CARGO_TARGET_DIR:-$HOME/.cargo-targets/marquee-android}
 NDK=${ANDROID_NDK_HOME:-/opt/homebrew/share/android-commandlinetools/ndk/27.1.12297006}
-STRIP=$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-strip
+# The NDK's host tools: darwin-x86_64 on any Mac (Apple Silicon too), linux-x86_64 on Linux.
+PREBUILT=$NDK/toolchains/llvm/prebuilt/$(uname -s | tr '[:upper:]' '[:lower:]')-x86_64/bin
+STRIP=$PREBUILT/llvm-strip
 # The engine check reads the libraries' dynamic symbols (scripts/core-engine.sh).
-NM=$NDK/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-nm
+NM=$PREBUILT/llvm-nm
 OUT=$ROOT/apps/android/core/src/main
 TRIPLES=(aarch64-linux-android:arm64-v8a armv7-linux-androideabi:armeabi-v7a)
 DEV_ASSERTIONS=false
