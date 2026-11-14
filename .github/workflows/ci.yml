@@ -134,7 +134,7 @@ jobs:
           bun-version: 1.3.13
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
-      - run: bun test src
+      - run: bun run test
 
   # The e2e's bridge, relay and mock provider, built once for the three shards. Dev profile, so the bridge's
   # MQ_DEV_ hooks are compiled in. One build per binary, as e2e/core.ts builds them (no feature unification).

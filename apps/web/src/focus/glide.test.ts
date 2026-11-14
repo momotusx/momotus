@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { spring } from "./dom";
+
+// dom.ts listens on window when it loads; a test run has none, so it gets a stub first.
+(globalThis as unknown as { window?: unknown }).window ??= { addEventListener: () => undefined };
+const { spring } = await import("./dom");
 
 const FRAME = 1 / 60;
 
