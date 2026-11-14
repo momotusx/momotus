@@ -532,7 +532,7 @@ test("phone: the iPhone's hero at every screen, the large title and the profile 
     const g = await page.evaluate(() => {
       const r = (s: string) => document.querySelector(s)?.getBoundingClientRect() as DOMRect;
       const tabs = r("nav.tabs");
-      return { hero: [r(".hero").left, r(".hero").top, r(".hero").width, r(".hero").height], foot: r(".hero").bottom, head: [r(".row .row-head").top, r(".row .row-head").bottom], tabs: tabs.top, lines: r(".hero-page.on .hero-lines").top, reason: r(".hero-page.on .reason").top, play: r('[data-f="hero:play"]').bottom, title: r(".ph-title").top };
+      return { hero: [r(".hero").left, r(".hero").top, r(".hero").width, r(".hero").height], foot: r(".hero").bottom, head: [r(".row .row-head").top, r(".row .row-head").bottom], tabs: tabs.top, lines: r(".hero-page.on .hero-lines").bottom, reason: r(".hero-page.on .reason").top, play: r('[data-f="hero:play"]').bottom, title: r(".ph-title").top };
     });
     const label = `${w}x${h}`;
     // 680 at 390 wide, never taller than the window less 164: the first shelf's header shows above the tab bar.
@@ -541,8 +541,9 @@ test("phone: the iPhone's hero at every screen, the large title and the profile 
     expect(Math.abs((g.hero[3] as number) - want), label).toBeLessThanOrEqual(1);
     expect(Math.abs(g.head[0]! - g.foot), label).toBeLessThanOrEqual(1);
     expect(g.head[1]!, label).toBeLessThanOrEqual(g.tabs);
-    // The column from the foot, as art.test.ts takes it: the lines 166, the reason 140, the buttons 56.
-    expect(Math.abs(g.foot - g.lines - 166), `${label} lines`).toBeLessThanOrEqual(3);
+    // The column from the foot, as art.test.ts takes it: the lines 166 (one 20 px line, so its bottom at 146), the reason
+    // 140, the buttons 56. A long genre line wraps upward (home.css), so the bottom is what stays put whatever the font.
+    expect(Math.abs(g.foot - g.lines - 146), `${label} lines`).toBeLessThanOrEqual(3);
     expect(Math.abs(g.foot - g.reason - 140), `${label} reason`).toBeLessThanOrEqual(3);
     expect(Math.abs(g.foot - g.play - 56), `${label} buttons`).toBeLessThanOrEqual(1.5);
     expect(g.title, label).toBeGreaterThanOrEqual(47);
