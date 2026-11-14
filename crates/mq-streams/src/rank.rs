@@ -737,6 +737,13 @@ fn weight(s: &ParsedStream, input: &RankInput<'_>) -> Weight {
     }
 }
 
+/// A torrent row whose swarm this device found too slow lately
+/// (`Conditions::slow_swarms`).
+fn slow_swarm(s: &ParsedStream, class: SourceClass, input: &RankInput<'_>) -> bool {
+    matches!(class, SourceClass::Swarm | SourceClass::Unknown)
+        && info_hash(s).is_some_and(|h| input.conditions.slow_swarms.contains(&h))
+}
+
 /// The least the small-swarm figure gives a swarm.
 const THIN_FLOOR_MBPS: f32 = 0.3;
 
@@ -996,13 +1003,17 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
     let speed = judged.map(|(sp, _)| sp);
     let safe = speed.map(|sp| sp.mbps * SAFE_SHARE);
     let download = input.conditions.download;
+    // A swarm too slow here last time does not keep up, whatever its
+    // seeders: below every version that does.
+    let slow = !download && slow_swarm(s, class, input);
     // A download is judged by what it keeps, not by a speed it never
     // streams at.
-    let sustains = download
-        || match (bitrate, safe) {
-            (Some(b), Some(safe)) => b <= safe,
-            _ => true,
-        };
+    let sustains = !slow
+        && (download
+            || match (bitrate, safe) {
+                (Some(b), Some(safe)) => b <= safe,
+                _ => true,
+            });
     // Seeders an addon lists are a hint; a swarm that stalled here is not
     // started first again.
     let dead = matches!(class, SourceClass::Swarm | SourceClass::Unknown)
@@ -1026,10 +1037,12 @@ fn score(stream: ParsedStream, class: SourceClass, input: &RankInput<'_>) -> Sco
         sustains,
         pace: if download {
             3
+        } else if slow {
+            0
         } else {
             pace(bitrate, speed.map(|sp| sp.mbps))
         },
-        covered: if download {
+        covered: if download || slow {
             0
         } else {
             covered(bitrate, speed.map(|sp| sp.mbps))
@@ -1119,6 +1132,9 @@ fn line(
         };
     }
     if torrent && key.start == 0 && s.seeders.is_none_or(|n| n >= FEW_SEEDERS) {
+        return ReasonLine::Stalled;
+    }
+    if !input.conditions.download && slow_swarm(s, class, input) {
         return ReasonLine::Stalled;
     }
     if let (true, Some(n)) = (torrent, s.seeders)

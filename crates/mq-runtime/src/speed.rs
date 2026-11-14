@@ -301,6 +301,33 @@ pub fn record_dead(lib: &Library, info_hash: &str, now_ms: u64) {
     stamp(lib, DEAD_KEY, hash, DEAD_FOR_MS, now_ms);
 }
 
+/// How long a swarm that was too slow here sorts below the versions that
+/// keep up (plans/swarm-speed.md v2): a later play past the start lifts it.
+const SLOW_FOR_MS: u64 = 3 * 86_400_000;
+const SLOW_KEY: &str = "slow_swarms";
+
+/// Info hashes (lowercase) whose swarm was too slow to start or keep up on
+/// this device in the last 3 days: the ranking judges them as not keeping
+/// up, whatever their seeders.
+pub fn slow_swarms(lib: &Library, now_ms: u64) -> Vec<String> {
+    stamped(lib, SLOW_KEY, SLOW_FOR_MS, now_ms)
+}
+
+/// The swarm of `info_hash` sent, but too slowly for the start.
+pub fn record_slow(lib: &Library, info_hash: &str, now_ms: u64) {
+    let hash = info_hash.to_ascii_lowercase();
+    stamp(lib, SLOW_KEY, hash, SLOW_FOR_MS, now_ms);
+}
+
+/// The swarm of `info_hash` played past the start: it keeps up again.
+pub fn forget_slow(lib: &Library, info_hash: &str) {
+    let mut map = stamped_map(lib, SLOW_KEY);
+    if map.remove(&info_hash.to_ascii_lowercase()).is_some() {
+        let value = serde_json::to_string(&map).unwrap_or_default();
+        let _ = lib.set_device_value(SLOW_KEY, &value);
+    }
+}
+
 /// Digests (`key_digest`) of the stream keys whose file showed no picture
 /// on this device.
 pub fn no_picture(lib: &Library) -> Vec<String> {
@@ -646,6 +673,21 @@ mod tests {
         record_wrong_file(&lib, "bt:cccc:auto", (Some(1), Some(5)), 1_000);
         assert_eq!(wrong_file(&lib, 2_000).len(), 1);
         assert!(wrong_file(&lib, 1_000 + DID_NOT_PLAY_FOR_MS).is_empty());
+    }
+
+    /// Plans/swarm-speed.md v2: a slow swarm is kept 3 days by its hash in
+    /// lowercase, a play past the start forgets it, and others stay.
+    #[test]
+    fn a_slow_swarm_is_kept_3_days_and_forgotten_once_it_plays() {
+        let lib = Library::temporary().unwrap();
+        record_slow(&lib, "B390AA", 1_000);
+        record_slow(&lib, "cccc", 2_000);
+        assert_eq!(slow_swarms(&lib, 3_000), ["b390aa", "cccc"]);
+        assert_eq!(slow_swarms(&lib, 1_000 + SLOW_FOR_MS), ["cccc"]);
+        forget_slow(&lib, "B390AA");
+        assert_eq!(slow_swarms(&lib, 3_000), ["cccc"]);
+        forget_slow(&lib, "dddd");
+        assert_eq!(slow_swarms(&lib, 3_000), ["cccc"]);
     }
 
     #[test]

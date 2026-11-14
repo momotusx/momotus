@@ -191,6 +191,10 @@ pub struct Conditions {
     /// device last tried them: they may not start, whatever the seeders an
     /// addon lists.
     pub dead_swarms: Vec<String>,
+    /// Info hashes (lowercase) whose swarm sent, but too slowly to start or
+    /// keep up, when this device last tried them (plans/swarm-speed.md v2):
+    /// judged as not keeping up, whatever their seeders.
+    pub slow_swarms: Vec<String>,
     /// The size limit is one the user set (or an older app's quality set),
     /// not the default: the line says "the size you chose".
     pub limit_chosen: bool,
@@ -244,6 +248,7 @@ impl Default for Conditions {
             engine: false,
             debrid: false,
             dead_swarms: Vec::new(),
+            slow_swarms: Vec::new(),
             limit_chosen: false,
             no_picture: Vec::new(),
             did_not_play: Vec::new(),

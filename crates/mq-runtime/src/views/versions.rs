@@ -1106,6 +1106,8 @@ impl VersionsView {
             debrid: core.debrid().is_some(),
             dead_swarms: core
                 .knowledge(|l| crate::speed::dead_swarms(l, mq_library::hlc::now_ms())),
+            slow_swarms: core
+                .knowledge(|l| crate::speed::slow_swarms(l, mq_library::hlc::now_ms())),
             limit_chosen: core.size_limit_chosen(),
             no_picture: core.knowledge(crate::speed::no_picture),
             did_not_play: core
@@ -2733,6 +2735,7 @@ fn holding(rows: &[RankedRow], is: impl Fn(&ParsedStream) -> bool) -> Option<Ran
 fn relearn(core: &Core, s: &mut State, failed: Option<&str>) {
     let now = mq_library::hlc::now_ms();
     s.rank.dead_swarms = core.knowledge(|l| crate::speed::dead_swarms(l, now));
+    s.rank.slow_swarms = core.knowledge(|l| crate::speed::slow_swarms(l, now));
     s.rank.no_picture = core.knowledge(crate::speed::no_picture);
     s.rank.did_not_play = core.knowledge(|l| crate::speed::did_not_play(l, now));
     s.rank.wrong_file = core.knowledge(|l| crate::speed::wrong_file(l, now));

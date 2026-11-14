@@ -1302,6 +1302,9 @@ impl PlaybackView {
         }
         .map(|(key, pick)| pick.online(&key))
         .unwrap_or_default();
+        // A torrent the player starved on, remembered as slow outside the lock.
+        #[cfg(feature = "torrent")]
+        let starved: Option<String>;
         let (failed, pick, kept, local) = {
             let mut s = lock(&self.state);
             let other = failed.is_some_and(|failed| failed != s.snapshot.attempt);
@@ -1315,7 +1318,9 @@ impl PlaybackView {
             let local = s.local_open;
             let progressed = s.progressed;
             #[cfg(feature = "torrent")]
-            swarm_starved(&mut s, fault);
+            {
+                starved = swarm_starved(&mut s, fault);
+            }
             release_all(&mut s);
             if local && s.next >= s.candidates.len() {
                 s.candidates.extend(online);
@@ -1422,6 +1427,10 @@ impl PlaybackView {
             );
         }
         // Written and reported outside the playback's lock.
+        #[cfg(feature = "torrent")]
+        if let Some(hash) = &starved {
+            crate::speed::record_slow(self.core.library(), hash, mq_library::hlc::now_ms());
+        }
         if let Some(stream) = &failed {
             let now = mq_library::hlc::now_ms();
             for key in &kept {
@@ -1686,6 +1695,9 @@ impl PlaybackView {
         if let Some(trakt) = self.trakt.as_ref().filter(|_| !off) {
             trakt.progress(position_ms, duration_ms, paused);
         }
+        // A torrent that plays past the start keeps up again: written outside
+        // the lock, once (plans/swarm-speed.md v2).
+        let mut kept_up: Option<String> = None;
         let due = {
             let mut s = lock(&self.state);
             let step = s
@@ -1731,6 +1743,9 @@ impl PlaybackView {
             }
             s.reported_ms = Some(position_ms);
             if s.played_ms >= PLAYED_PAST_START.as_millis() as u64 {
+                if !s.progressed {
+                    kept_up = s.network.clone().flatten();
+                }
                 s.progressed = true;
                 // A later move begins a start of its own.
                 s.start_at = None;
@@ -1770,6 +1785,9 @@ impl PlaybackView {
             let _ = changed;
             s.saved_at.is_none_or(|t| t.elapsed() >= SAVE_EVERY)
         };
+        if let Some(hash) = &kept_up {
+            crate::speed::forget_slow(self.core.library(), hash);
+        }
         if due {
             self.save();
         }
@@ -2083,15 +2101,18 @@ async fn reachable(
 /// `fail_over` reads as `timeout`) before it ever played: the swarm's, as one
 /// that did not start, so the start moves on and the same swarm is skipped
 /// (plans/pace-at-ready.md v2). After good playback it is the moment's.
+/// Its hash, to be remembered as slow outside the view's lock.
 #[cfg(feature = "torrent")]
-fn swarm_starved(s: &mut State, fault: Option<(&str, Option<u16>)>) {
+fn swarm_starved(s: &mut State, fault: Option<(&str, Option<u16>)>) -> Option<String> {
     if !s.progressed
         && fault == Some(("timeout", None))
         && let Some(Some(hash)) = s.network.clone()
     {
         failed_to_start(s);
         s.failed_hashes.push(torrent_id(&hash));
+        return Some(hash);
     }
+    None
 }
 
 /// The stalled version is left for the ranking's next one, at the stall's
@@ -2527,6 +2548,17 @@ fn remember_dead(core: &Core, hashes: Vec<String>) {
     let now = mq_library::hlc::now_ms();
     for hash in hashes {
         crate::speed::record_dead(core.library(), &hash, now);
+    }
+}
+
+/// A swarm that sent, too slowly, through a start of at least `LIVE` from
+/// its add (`added`): it ranks as not keeping up for a while
+/// (plans/swarm-speed.md v2). A start the budget cut sooner says nothing of
+/// the swarm.
+#[cfg(feature = "torrent")]
+fn remember_slow(core: &Core, info_hash: &str, added: tokio::time::Instant) {
+    if added.elapsed() >= LIVE {
+        crate::speed::record_slow(core.library(), info_hash, mq_library::hlc::now_ms());
     }
 }
 
@@ -3737,6 +3769,7 @@ async fn open_torrent(
             if unchoked {
                 let now = lock(state).dead.reached();
                 remember_dead(core, now);
+                remember_slow(core, info_hash, begun);
             }
             "the swarm did not send the start of the video in time".to_owned()
         }
@@ -3755,6 +3788,9 @@ async fn open_torrent(
                 }
             };
             remember_dead(core, now);
+            if !nothing {
+                remember_slow(core, info_hash, begun);
+            }
             "the swarm sent almost nothing".to_owned()
         }
         Ok((_, _, Started::Wrong(why))) => {
@@ -7265,12 +7301,29 @@ mod tests {
         swarm_starved(&mut s, Some(("network", None)));
         swarm_starved(&mut s, None);
         assert_eq!((s.version_failed, s.failed_hashes.len()), (None, 0));
-        swarm_starved(&mut s, Some(("timeout", None)));
+        let slow = swarm_starved(&mut s, Some(("timeout", None)));
+        assert_eq!(slow, Some(hash.clone()), "remembered as slow");
         assert_eq!(s.version_failed, Some(NOT_STARTED));
         assert_eq!(s.failed_hashes, [hash.to_ascii_lowercase()]);
         s.pick = Some(versions.pick(&first).handle);
         s.tried = vec![first];
         assert!(move_on(&mut s), "the next version follows");
+    }
+
+    /// Plans/swarm-speed.md v2: a start that ran `LIVE` from its add marks
+    /// its swarm slow; one the budget cut sooner says nothing of it.
+    #[cfg(feature = "torrent")]
+    #[tokio::test(start_paused = true)]
+    async fn only_a_start_that_ran_30s_marks_its_swarm_slow() {
+        let core = Core::temporary("default").unwrap();
+        let now = || mq_library::hlc::now_ms();
+        let added = tokio::time::Instant::now();
+        tokio::time::advance(LIVE - Duration::from_secs(1)).await;
+        remember_slow(&core, "AAAA", added);
+        assert!(crate::speed::slow_swarms(core.library(), now()).is_empty());
+        tokio::time::advance(Duration::from_secs(1)).await;
+        remember_slow(&core, "AAAA", added);
+        assert_eq!(crate::speed::slow_swarms(core.library(), now()), ["aaaa"]);
     }
 
     /// A swarm that did not start reads "did not start here", unless the

@@ -2628,6 +2628,58 @@ fn a_swarm_that_stalled_here_is_not_started_first() {
     assert_eq!(dead.line, ReasonLine::Stalled);
 }
 
+/// Plans/swarm-speed.md v2: a swarm too slow here lately ranks as one that
+/// does not keep up, whatever seeders its addon lists: below a 1080p and a
+/// 720p that keep up, below a 1080p too big for the speed (its pace is
+/// the slowest), above one that stalled (still startable, never hidden),
+/// and it says it did not start here last time. With no condition it
+/// ranks as before.
+#[test]
+fn a_swarm_too_slow_here_ranks_below_versions_that_keep_up() {
+    let rows = || {
+        vec![
+            seeded(1, "Movie.2020.1080p.BluRay.x264-SLOW", 900, 2.0),
+            seeded(2, "Movie.2020.1080p.WEB-DL.x264-KEEPS", 60, 2.0),
+            seeded(3, "Movie.2020.720p.WEB-DL.x264-SMALL", 60, 1.0),
+            seeded(4, "Movie.2020.1080p.HDTV.x264-DEAD", 900, 2.0),
+            seeded(5, "Movie.2020.1080p.REMUX.x264-HEAVY", 60, 15.0),
+        ]
+    };
+    let hash = |r: &serde_json::Value| r["infoHash"].as_str().unwrap().to_owned();
+    let (slow, dead) = (hash(&rows()[0]), hash(&rows()[3]));
+    let case = Case {
+        conditions: Conditions {
+            slow_swarms: vec![slow],
+            dead_swarms: vec![dead],
+            runtime_s: Some(120 * 60),
+            ..engine().clone()
+        },
+        ..Case::stick()
+    };
+    let ranked = case.rank(rows());
+    let order: Vec<_> = ranked.rows.iter().map(first_line).collect();
+    let at = |name: &str| order.iter().position(|l| l.contains(name)).unwrap();
+    assert!(at("KEEPS") < at("SLOW"), "{order:?}");
+    assert!(at("SMALL") < at("SLOW"), "{order:?}");
+    assert!(at("SLOW") < at("DEAD"), "{order:?}");
+    let heavy = row(&ranked, "Movie.2020.1080p.REMUX");
+    assert!(!heavy.key.sustains && heavy.key.pace > 0, "{:?}", heavy.key);
+    assert!(at("HEAVY") < at("SLOW"), "{order:?}");
+    let slow_row = row(&ranked, "Movie.2020.1080p.BluRay");
+    assert!(slow_row.key.viable && !slow_row.key.sustains);
+    assert_eq!(slow_row.line, ReasonLine::Stalled);
+
+    let plain = Case {
+        conditions: Conditions {
+            runtime_s: Some(120 * 60),
+            ..engine().clone()
+        },
+        ..Case::stick()
+    }
+    .rank(rows());
+    assert!(row(&plain, "Movie.2020.1080p.BluRay").key.sustains);
+}
+
 /// A file that showed no picture on an hvc1-only player (an hev1 entry
 /// without parameter sets) is not started first there and says why; a
 /// player that shows it ranks it as before.
