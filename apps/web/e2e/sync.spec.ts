@@ -44,11 +44,15 @@ const asked: { port: number; op?: string; view?: string }[] = [];
 const editOnce = new Map<number, { op: string; edit: (result: Record<string, unknown>) => void }>();
 /** Desk's fake camera films this file (Chromium reads it when the camera opens). */
 let camera = "";
+/** What the camera films now. Chromium on Linux has no BarcodeDetector (macOS, Android and ChromeOS do), so there
+ * a page's detector reads this instead of the frame, and the scan path still runs from camera to question. */
+let filmed = "";
 let scratch = "";
 let deskBrowser: Browser;
 
 /** A Y4M video of `text` as a QR code, black on white, for the fake camera. */
 function film(text: string) {
+  filmed = text;
   const [width, height] = [640, 480];
   const qr = encode(text, { ecc: "M", border: 4 });
   const px = Math.floor(440 / qr.size);
@@ -145,6 +149,16 @@ function slowVaultOnMark() {
 async function device(browser: Browser, port: number, form: keyof typeof FORMS, host = "127.0.0.1"): Promise<Page> {
   const context = await browser.newContext({ ...FORMS[form], colorScheme: "dark", baseURL: `http://${host}:${PORTS.vite}` });
   await context.grantPermissions(["clipboard-read", "clipboard-write", "camera"]);
+  await context.exposeFunction("mqFilmed", () => filmed);
+  await context.addInitScript(() => {
+    if ("BarcodeDetector" in window) return;
+    const w = window as unknown as { BarcodeDetector: unknown; mqFilmed: () => Promise<string> };
+    w.BarcodeDetector = class {
+      async detect(video: HTMLVideoElement) {
+        return video.readyState >= 2 ? [{ rawValue: await w.mqFilmed() }] : [];
+      }
+    };
+  });
   await context.addInitScript(slowVaultOnMark);
   await context.routeWebSocket(/\/ws$/, (ws) => {
     const core = new WebSocket(`ws://127.0.0.1:${port}/ws`);
