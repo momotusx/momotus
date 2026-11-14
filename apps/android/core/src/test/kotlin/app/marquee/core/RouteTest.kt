@@ -78,8 +78,17 @@ class RouteTest {
                 Route.Downloads,
                 Route.DownloadedSeries("tt2"),
                 Route.SettingsSection("Sources"),
+                Route.Sources,
+                Route.Addons,
+                Route.FindAddons,
+                Route.Plugins,
+                Route.PluginDirectory,
+                Route.Trakt,
+                Route.Debrid,
+                Route.HomeRows,
+                Route.StreamChoice,
             )
-        assertTrue(pushed.all { it.hasBackLink })
+        assertTrue(pushed.all { it.hasBackLink }, "${pushed.filterNot { it.hasBackLink }}")
         assertFalse(Route.SettingsSection("Sources").isTopLevel)
         assertFalse(listOf(Route.Home, Route.Settings, Route.Welcome, player, Route.Sync).any { it.hasBackLink })
     }

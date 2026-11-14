@@ -246,13 +246,29 @@ fun kidsStack(stack: List<Route>): List<Route> = stack.filter { it.openToKids }.
 /**
  * The pushed pages a phone gives the blue back link (design/DECISION.md, Navigation), Calendar among them: the phone
  * pushes it over Library (D6), and only TV has it as a tab, which draws no link. The Downloads pages have it too
- * (plans/offline-downloads.md 3.4). The player, the first run and the Settings sub-pages keep the way out they have.
+ * (plans/offline-downloads.md 3.4), and so does every page Settings opens (Sources, Addons, Find addons, Plugins, Nuvio
+ * plugins, Trakt, Debrid, Home rows, Version choice: they draw no way out of their own). The player, the first run
+ * and the Account pages (each ends in its own Done) keep the way out they have.
  */
 val Route.hasBackLink: Boolean
     get() =
         this is Route.Title || this is Route.Versions || this is Route.Profiles ||
             this is Route.ManageProfiles || this is Route.EditProfile || this is Route.Calendar ||
-            this == Route.Downloads || this is Route.DownloadedSeries || this is Route.SettingsSection
+            this == Route.Downloads || this is Route.DownloadedSeries || this is Route.SettingsSection ||
+            this in SETTINGS_PAGES
+
+private val SETTINGS_PAGES =
+    setOf(
+        Route.Sources,
+        Route.Addons,
+        Route.FindAddons,
+        Route.Plugins,
+        Route.PluginDirectory,
+        Route.Trakt,
+        Route.Debrid,
+        Route.HomeRows,
+        Route.StreamChoice,
+    )
 
 /**
  * The back stack after choosing a top-level destination: Home is the root, and the chosen place
