@@ -854,6 +854,13 @@ impl Core {
         {
             return Some(bytes);
         }
+        // The running engine reads the same volume (its data folder is
+        // `torrent_dir`); in tests its own free-space hooks answer, among
+        // them a base its folders count against, as on a disk.
+        #[cfg(feature = "torrent")]
+        if let Some(free) = self.running_engine().and_then(|e| e.free()) {
+            return Some(free);
+        }
         let mut dir = self.inner.torrent_dir.as_path();
         while !dir.exists() {
             dir = dir.parent()?;

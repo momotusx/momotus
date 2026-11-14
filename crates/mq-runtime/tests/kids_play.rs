@@ -1533,8 +1533,11 @@ async fn a_resume_counts_its_own_folder_in_the_room() {
     owner.set_torrent_engine(s.leecher.clone());
     let found = candidates(&owner, "movie", "tt1", "tt1").await;
     let len = s.movie.len() as u64;
-    // The first play: a window in 200 MiB of room, 16 MiB read 40% in.
-    owner.set_free_bytes(mq_engine::RESERVE_BYTES + 200 * MIB);
+    // The first play: a window in 200 MiB of room, 16 MiB read 40% in. The
+    // free space is a base the torrent's folder counts against, as on a
+    // disk: what the trim gives back is free again at once, whenever the
+    // window reads it.
+    mq_engine::test_hooks::set_free_base(&s.leecher, Some(mq_engine::RESERVE_BYTES + 200 * MIB));
     let view = PlaybackView::open(&owner, found.clone(), target("movie", "tt1", "tt1"));
     let url = ready(&view).await;
     assert!(s.leecher.stats(t).await.unwrap().window_bytes.is_some());
@@ -1559,12 +1562,11 @@ async fn a_resume_counts_its_own_folder_in_the_room() {
         s.leecher.stats(t).await.unwrap().window_bytes.is_none()
     })
     .await;
-    let own = folder_bytes(&s.leech_dir().join(&s.info_hash));
     assert!(!have(6).await, "the trim took piece 6");
     // A resume with room over both floors (the 1080p guess's and the
     // duration's): the window's rate is the file over the last session's
     // duration, not the guess (review P2-2).
-    owner.set_free_bytes(mq_engine::RESERVE_BYTES + 200 * MIB - own);
+    mq_engine::test_hooks::set_free_base(&s.leecher, Some(mq_engine::RESERVE_BYTES + 200 * MIB));
     let view = PlaybackView::open(&owner, found.clone(), target("movie", "tt1", "tt1"));
     ready(&view).await;
     let stats = s.leecher.stats(t).await.unwrap();
@@ -1592,7 +1594,12 @@ async fn a_resume_counts_its_own_folder_in_the_room() {
     )
     .floor;
     assert!(own > 8 * MIB, "the trim kept {own}");
-    owner.set_free_bytes(mq_engine::RESERVE_BYTES + floor + 68 * MIB - own);
+    mq_engine::test_hooks::set_free_base(
+        &s.leecher,
+        Some(mq_engine::RESERVE_BYTES + floor + 68 * MIB),
+    );
+    // The room is short of the floor plus 64 MiB but for the folder.
+    assert!(owner.free_bytes().unwrap() < mq_engine::RESERVE_BYTES + floor + 64 * MIB);
     let view = PlaybackView::open(&owner, found, target("movie", "tt1", "tt1"));
     let url = ready(&view).await;
     assert!(s.leecher.stats(t).await.unwrap().window_bytes.is_some());
