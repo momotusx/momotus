@@ -225,6 +225,8 @@ class IncognitoScreensTest {
     @Test
     fun `the chooser's Incognito tile sits after the profiles and before Add profile, and goes in from the chooser`() {
         open(snapshot(active = "ana")) { PickerScreen(gate, session, PickerMode.Start, onAdd = {}) }
+        // The chooser draws its tiles in the frame after the gate's snapshot.
+        waitUntil("the tiles") { tiles().isNotEmpty() }
         assertEquals(listOf("Ana, current profile, locked with a PIN", "Bo", "Incognito", "Add profile"), tiles())
         compose.onNodeWithContentDescription("Incognito").performClick()
         compose.waitForIdle()
