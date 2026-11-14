@@ -284,6 +284,10 @@ class PhoneHeroCarouselTest {
                 playPending = true,
             )
         show(listOf(reading))
+        // The buttons' row lands in the frame after the page's words.
+        waitFor("the buttons") {
+            compose.onAllNodesWithTag(PHONE_HERO_BUTTONS, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        }
         val buttons = {
             compose
                 .onNodeWithTag(

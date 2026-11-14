@@ -36,7 +36,7 @@ class SearchIdleTest {
     val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val session = CoreSession(RuntimeEnvironment.getApplication())
-    private val sent = mutableListOf<String>()
+    private val sent = java.util.concurrent.CopyOnWriteArrayList<String>()
 
     @After
     fun stop() = session.client.close()
@@ -81,7 +81,12 @@ class SearchIdleTest {
         // No addon's name reaches the page.
         assertEquals(0, compose.onAllNodesWithText("Cinemeta", substring = true).fetchSemanticsNodes().size)
         compose.onNodeWithText("Clear recent searches").performClick()
-        compose.waitForIdle()
+        // The command leaves on the session's own thread, after the click's frame.
+        val deadline = System.currentTimeMillis() + 10_000
+        while (sent.none { """"clearRecent"""" in it } && System.currentTimeMillis() < deadline) {
+            compose.waitForIdle()
+            Thread.sleep(10)
+        }
         assertTrue(sent.any { """"clearRecent"""" in it }, "Clear sent no command: $sent")
     }
 
