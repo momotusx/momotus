@@ -447,7 +447,13 @@ fn data_pieces(path: &Path, offset: u64, piece_len: u64) -> Vec<u32> {
     let Ok(f) = std::fs::File::open(path) else {
         return Vec::new();
     };
-    let len = f.metadata().map_or(0, |m| m.len());
+    // Only a regular file has data regions. A file kept as piece files is a
+    // directory, and Linux answers `SEEK_HOLE` on one with a far offset that
+    // would name billions of pieces.
+    let len = match f.metadata() {
+        Ok(m) if m.is_file() => m.len(),
+        _ => return Vec::new(),
+    };
     let (mut pieces, mut pos) = (Vec::new(), 0u64);
     while pos < len {
         let Ok(at) = i64::try_from(pos) else {
