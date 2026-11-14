@@ -9,7 +9,8 @@
 
 <p align="center">
   A media app for Stremio addons, on your phone, your TV and your computer.<br>
-  Your library and where you left off follow you, end-to-end encrypted.
+  Your library and where you left off follow you, end-to-end encrypted.<br>
+  Free and open source: no ads, no account, no paid tier.
 </p>
 
 <p align="center">
@@ -35,6 +36,7 @@
 
 ## Why Momotus
 
+- **Free, all of it.** No subscription, no ads, no in-app purchase and no donation ask. Profiles and offline downloads come free, not as a paid extra.
 - **A torrent plays in seconds.** On an iPhone 13 Pro, a public-domain film was ready in 5.8 s and showed its first frame at 6.2 s. [Measurement](bench/local-network/prompt.jsonl)
 - **Light on an old TV stick.** On a 2018 Fire TV Stick 4K, cold starts took 0.791 to 1.751 s, Home used 127 MB of memory and playback 160.6 MB (debug build). [Measurement](bench/m6/journey-android.jsonl)
 - **Smooth in a browser.** Home scrolls at 60 fps in Chromium, in the desktop and TV layouts: p99 frame time 16.8 ms. [Measurement](bench/web/scroll.jsonl)
@@ -43,6 +45,7 @@
 
 | | Momotus | Stremio | Nuvio |
 |---|---|---|---|
+| Price | **Free, nothing paid** | Free, with a paid Supporter plan | Free, with a paid Supporter plan (cosmetic extras) |
 | Stremio addons | Yes | Yes | Yes |
 | Installable plugins | Yes, Nuvio plugin repositories | No (addons run no local code) | Yes, sideloaded builds |
 | Android phone | Yes | Yes | Yes |
@@ -54,6 +57,7 @@
 | Web browser | From source | Yes | No |
 | End-to-end encrypted sync | **Yes** | No | No |
 | Torrent engine built in | Yes | Yes | Yes, off by default |
+| Profiles | Yes | Yes, with the paid Supporter plan | Yes |
 | Offline downloads | Yes, on phones and computers | Yes, with the paid Supporter plan | Yes, on mobile |
 | Dual subtitles | Yes | Not found | Not found |
 | TV sign-in by QR code | Yes | Yes | Yes |
@@ -70,6 +74,11 @@
 | **Sync** | Your library, progress and addons follow you to every device, end-to-end encrypted. Add a device by scanning the code it shows. |
 | **Player** | Picks a version that plays and moves on when one stalls. Subtitles with search, timing and the languages you use. |
 | **Torrents** | A built-in engine plays torrent sources inside the app, with no separate streaming server, on phones and on Fire TV alike. |
+| **Plugins** | Add Nuvio plugin repositories, or browse addons and plugins in one place. |
+| **Profiles** | A profile per person, with an optional PIN, kids profiles, and an Incognito profile that keeps nothing. |
+| **Downloads** | Save a film or a season to watch offline, subtitles included, on phones and computers. |
+| **Skip** | Skip intro, recap and credits. The next episode starts on its own, and you can cancel it. |
+| **Debrid** | Real-Debrid, AllDebrid, TorBox and Premiumize. |
 | **Trakt** | Sign in with a code, even on a TV. What you watch is scrobbled as you watch it. |
 | **Import** | Bring your library over from a Stremio account. |
 
@@ -95,6 +104,12 @@ MQ_STATIC=apps/web/dist cargo run --release -p mq-bridge --features torrent
 ```
 
 Then open http://127.0.0.1:7777.
+
+**A TMDB token for the app builds.** The Apple and Android builds need a free [TMDB](https://www.themoviedb.org/settings/api) API read access token. Put it in `.env.tmdb.local` at the repository root (the file is ignored by git):
+
+```sh
+echo 'MARQUEE_TMDB_READ_TOKEN=<your token>' > .env.tmdb.local
+```
 
 **iPhone, iPad, Apple TV and Mac.** Needs Xcode and [XcodeGen](https://github.com/yonaskolb/XcodeGen).
 
@@ -130,7 +145,9 @@ If you run a modified relay for other people, the licence requires you to offer 
 
 ## Licence
 
-AGPL-3.0-or-later, see [LICENSE](LICENSE). Momotus is not affiliated with Stremio.
+AGPL-3.0-or-later, see [LICENSE](LICENSE). Momotus is not affiliated with Stremio or Nuvio.
+
+Momotus hosts, provides and indexes no content. What it plays comes from the addons you choose to add; you are responsible for using them within the law where you live.
 
 Code under `vendor/` and `apps/apple/Vendor/` keeps its own licence (Apache-2.0, LGPL-3.0); see the LICENSE and NOTICE files there.
 
