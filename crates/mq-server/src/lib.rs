@@ -193,10 +193,13 @@ struct Waits {
     #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
     next: u64,
     pending: Vec<(u64, Instant)>,
-    last_long: Option<Instant>,
+    /// The reads that ended within `STARVED_FRESH`: when each ended, and
+    /// how long it waited.
+    ended: std::collections::VecDeque<(Instant, Duration)>,
 }
 
-/// A read of the player's this long waited on the swarm, not the player.
+/// The player's reads waiting this long in all within `STARVED_FRESH`
+/// waited on the swarm, not the player.
 const SLOW: Duration = Duration::from_secs(5);
 /// How long a slow read explains the player's failure: narrower than
 /// `FAULT_FRESH`, so an older wait never hides a real decode failure.
@@ -220,15 +223,19 @@ fn fault_of(
 }
 
 impl Waits {
-    /// A read pending `SLOW` or longer now, or one that ended within
-    /// `STARVED_FRESH` having waited that long.
+    /// The player's reads waited `SLOW` or longer in all within the last
+    /// `STARVED_FRESH`: those that ended in it and those pending now. A
+    /// swarm that trickles makes many short waits, never one long one
+    /// (the owner's South Park play, 2026-11-15: six waits in 31 s).
     fn starved(&self) -> bool {
-        self.pending
+        let ended: Duration = self
+            .ended
             .iter()
-            .any(|&(_, began)| began.elapsed() >= SLOW)
-            || self
-                .last_long
-                .is_some_and(|at| at.elapsed() < STARVED_FRESH)
+            .filter(|(at, _)| at.elapsed() < STARVED_FRESH)
+            .map(|&(_, waited)| waited)
+            .sum();
+        let pending: Duration = self.pending.iter().map(|&(_, began)| began.elapsed()).sum();
+        ended + pending >= SLOW
     }
 }
 
@@ -263,9 +270,15 @@ impl Drop for WaitMark {
     fn drop(&mut self) {
         let mut w = lock(&self.waits);
         w.pending.retain(|&(id, _)| id != self.id);
-        if self.began.elapsed() >= SLOW {
-            w.last_long = Some(Instant::now());
+        let now = Instant::now();
+        while w
+            .ended
+            .front()
+            .is_some_and(|(at, _)| now.duration_since(*at) >= STARVED_FRESH)
+        {
+            w.ended.pop_front();
         }
+        w.ended.push_back((now, self.began.elapsed()));
     }
 }
 
@@ -2504,8 +2517,22 @@ mod tests {
         drop(held);
         assert!(lock(&waits).pending.is_empty());
         assert!(lock(&waits).starved(), "ended after 5 s, dropped mid-wait");
-        lock(&waits).last_long = Some(Instant::now() - STARVED_FRESH);
-        assert!(!lock(&waits).starved(), "an old wait is let go");
+        lock(&waits).ended.clear();
+        // A trickle: three reads of 2 s each within the window.
+        for _ in 0..3 {
+            let mut short = WaitMark::new(&waits);
+            short.began -= Duration::from_secs(2);
+            drop(short);
+        }
+        assert!(lock(&waits).starved(), "6 s of short waits");
+        for (at, _) in lock(&waits).ended.iter_mut() {
+            *at -= STARVED_FRESH;
+        }
+        assert!(!lock(&waits).starved(), "old waits are let go");
+        let mut one = WaitMark::new(&waits);
+        one.began -= Duration::from_secs(2);
+        drop(one);
+        assert!(!lock(&waits).starved(), "one short wait");
     }
 
     /// A starved read answers `timeout`; the source's own fault, when fresh,
