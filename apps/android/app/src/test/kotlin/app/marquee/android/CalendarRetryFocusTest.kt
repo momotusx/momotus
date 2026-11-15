@@ -7,6 +7,8 @@ import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.requestFocus
 import app.marquee.core.client.CoreJson
 import app.marquee.core.session.CoreSession
@@ -53,7 +55,15 @@ class CalendarRetryFocusTest {
     ) {
         val deadline = System.currentTimeMillis() + 60_000
         while (!done()) {
-            check(System.currentTimeMillis() < deadline) { what }
+            // What the screen shows instead, so a hang says whether it is blank or on another state.
+            check(System.currentTimeMillis() < deadline) {
+                "$what; on screen: ${runCatching {
+                    compose
+                        .onRoot(
+                            useUnmergedTree = true,
+                        ).printToString()
+                }.getOrElse { "$it" }.take(1500)}"
+            }
             Snapshot.sendApplyNotifications()
             compose.waitForIdle()
             Thread.sleep(10)

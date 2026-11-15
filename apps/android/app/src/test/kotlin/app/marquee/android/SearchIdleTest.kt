@@ -7,7 +7,9 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.printToString
 import app.marquee.core.client.CoreJson
 import app.marquee.core.session.CoreSession
 import app.marquee.design.Form
@@ -64,7 +66,15 @@ class SearchIdleTest {
     private fun waitFor(text: String) {
         val deadline = System.currentTimeMillis() + 60_000
         while (compose.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
-            check(System.currentTimeMillis() < deadline) { "$text never drew" }
+            // What the screen shows instead, so a hang says whether it is blank or on another state.
+            check(System.currentTimeMillis() < deadline) {
+                "$text never drew; on screen: ${runCatching {
+                    compose
+                        .onRoot(
+                            useUnmergedTree = true,
+                        ).printToString()
+                }.getOrElse { "$it" }.take(1500)}"
+            }
             Snapshot.sendApplyNotifications()
             compose.waitForIdle()
             Thread.sleep(10)
