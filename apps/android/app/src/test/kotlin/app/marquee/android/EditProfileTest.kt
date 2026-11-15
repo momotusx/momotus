@@ -35,6 +35,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import app.marquee.core.ProfileCopy
 import app.marquee.core.client.CoreJson
+import app.marquee.core.client.threadReport
 import app.marquee.core.model.ProfileInfo
 import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.route.Route
@@ -121,7 +122,7 @@ class EditProfileTest {
                 // and what the screen shows instead.
                 val screen = runCatching { compose.onRoot(useUnmergedTree = true).printToString() }.getOrElse { "$it" }
                 "never: $what (sent $ops, health ${session.health}, gate snapshot ${gate.snapshot != null}); " +
-                    "on screen: ${screen.take(1500)}"
+                    "on screen: ${screen.take(1500)}; ${threadReport().take(3000)}"
             }
             Snapshot.sendApplyNotifications()
             compose.waitForIdle()

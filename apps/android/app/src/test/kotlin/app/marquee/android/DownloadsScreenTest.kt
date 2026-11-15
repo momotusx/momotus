@@ -28,6 +28,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.marquee.core.DownloadCopy
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreTransport
+import app.marquee.core.client.threadReport
 import app.marquee.core.model.DownloadActivity
 import app.marquee.core.model.DownloadRow
 import app.marquee.core.model.DownloadSettings
@@ -206,7 +207,11 @@ class DownloadsScreenTest {
     private fun answerNow(view: DownloadsView) {
         holdSubscribe = false
         val deadline = System.currentTimeMillis() + 10_000
-        while (held == null) check(System.currentTimeMillis() < deadline) { "no subscribe" }
+        while (held ==
+            null
+        ) {
+            check(System.currentTimeMillis() < deadline) { "no subscribe; ${threadReport().take(3000)}" }
+        }
         held?.invoke()
         while (view.latest.value == null) check(System.currentTimeMillis() < deadline) { "no snapshot" }
     }

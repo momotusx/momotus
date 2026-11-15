@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.requestFocus
 import app.marquee.core.client.CoreJson
+import app.marquee.core.client.threadReport
 import app.marquee.core.session.CoreSession
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
@@ -62,7 +63,7 @@ class CalendarRetryFocusTest {
                         .onRoot(
                             useUnmergedTree = true,
                         ).printToString()
-                }.getOrElse { "$it" }.take(1500)}"
+                }.getOrElse { "$it" }.take(1500)}; ${threadReport().take(3000)}"
             }
             Snapshot.sendApplyNotifications()
             compose.waitForIdle()
