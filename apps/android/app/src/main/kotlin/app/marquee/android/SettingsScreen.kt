@@ -254,7 +254,7 @@ fun SettingsScreen(
     val tv = Marquee.form == Form.Tv
     val downloads = !tv && downloadsView(session).current() != null
     val context = LocalContext.current
-    val snapshot = gate.snapshot
+    val snapshot = gate.current()
     val me = AccountRules.activeProfile(snapshot)
     // Incognito shows its header, Sources (Addons and Plugins), Home, Playback, Subtitles, This device (its trailer row
     // says it is off) and About; nothing of the profiles, the account or Downloads (plans/batch-10-incognito.md 6).

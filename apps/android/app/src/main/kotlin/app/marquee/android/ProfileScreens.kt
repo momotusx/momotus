@@ -436,7 +436,7 @@ fun PillProfile(
     onSettings: () -> Unit,
     onPin: (String) -> Unit,
 ) {
-    val me = AccountRules.activeProfile(gate.snapshot)
+    val me = AccountRules.activeProfile(gate.current())
     if (me == null) {
         // No profile known for a moment: while Settings shows the slot still holds the bar's entry, so Up and Back find
         // a target; otherwise it takes no focus.
@@ -484,7 +484,7 @@ fun ProfileMenu(
     onSettings: () -> Unit,
     onPin: (String) -> Unit,
 ) {
-    val s = gate.snapshot ?: return
+    val s = gate.current() ?: return
     val incognito = ProfileCopy.inIncognito(s)
     val asks = s.incognitoPin != null && !incognito
     val incognitoRows =
@@ -577,7 +577,7 @@ fun PickerScreen(
     val tv = Marquee.form == Form.Tv
     val colors = Marquee.colors
     val scope = rememberCoroutineScope()
-    val s = gate.snapshot ?: return
+    val s = gate.current() ?: return
     // A keypad or a wait inside the sheet when first run draws it, else as the page has it.
     val sheeted: @Composable (@Composable ColumnScope.() -> Unit) -> Unit = { c ->
         if (sheet) FirstSheet(null, width = 760.dp, body = c) else Column(content = c)
@@ -1186,7 +1186,7 @@ fun ManageProfilesScreen(
     onEdit: (String) -> Unit,
     onAdd: () -> Unit,
 ) {
-    val s = gate.snapshot
+    val s = gate.current()
     val owner = s?.profiles?.firstOrNull { it.id == s.active }?.isOwner == true
     LazyColumn(
         Modifier.fillMaxSize().focusRestorer(),
@@ -1286,7 +1286,7 @@ fun EditProfileScreen(
     id: String?,
     onDone: () -> Unit,
 ) {
-    val s = gate.snapshot ?: return
+    val s = gate.current() ?: return
     val isNew = id == null
     val p = s.profiles.firstOrNull { it.id == id }
     val mine = p != null && p.id == s.active

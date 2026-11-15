@@ -1,5 +1,6 @@
 package app.marquee.android
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +44,14 @@ class ProfileGate(
      * death until the next core's own snapshot (nothing profile-bound shows meanwhile).
      */
     val snapshot: ProfilesSnapshot? get() = view?.snapshot?.takeIf { current }
+
+    /**
+     * [snapshot] as a screen reads it in composition (as RecordView.current): the view's snapshot is written on the
+     * client's state thread, and one that landed while the screen first composed reached none of its readers, so
+     * the page stayed empty until something else changed. [snapshot] stays right outside composition.
+     */
+    @Composable
+    fun current(): ProfilesSnapshot? = view?.current()?.takeIf { current }
 
     /** Why the profiles could not be read, while the gate tries again. */
     var problem: String? by mutableStateOf(null)
