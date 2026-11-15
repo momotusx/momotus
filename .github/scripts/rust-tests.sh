@@ -16,6 +16,8 @@ case $shard in runtime | rest | hooks | all) ;; *) echo "usage: rust-tests.sh <r
 cd "$(dirname "$0")/../.." || exit 1
 T=${CARGO_TARGET_DIR:-target}
 export CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0
+# A panic in a test names its caller: a failed `within` or `until` says which wait ran out.
+export RUST_BACKTRACE=1
 # The relay tests open more files than a default shell allows.
 ulimit -n "$(ulimit -Hn)" 2>/dev/null || true
 TIMEOUT=$(command -v timeout || command -v gtimeout || true)
