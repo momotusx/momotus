@@ -3,6 +3,7 @@ package app.marquee.core.sync
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import app.marquee.core.AccountRules
 import app.marquee.core.AccountRules.Act
 import app.marquee.core.AccountRules.EMAIL
@@ -265,6 +266,18 @@ class AccountSignIn(
         }
     }
 
+    /**
+     * The found screen and what it says, in one snapshot: written off the main thread one after the other, a reader
+     * could see Found with nothing said yet.
+     */
+    private fun found(
+        account: String,
+        said: AccountRules.Failure?,
+    ) = Snapshot.withMutableSnapshot {
+        failure = said
+        step = Step.Found(account)
+    }
+
     private fun startStep(): Step = Step.Start(providers, emailOffered)
 
     private var providers: List<String> = emptyList()
@@ -273,8 +286,7 @@ class AccountSignIn(
     private suspend fun foundHere(h: Held) {
         val account = checkNotNull(h.account)
         if (platform.rpId.isEmpty()) {
-            step = Step.Found(account)
-            failure = AccountRules.signInFailure("kitUnknown")
+            found(account, AccountRules.signInFailure("kitUnknown"))
             return
         }
         step = Step.Working(h.provider)
@@ -284,13 +296,11 @@ class AccountSignIn(
             }
 
             PasskeyResult.Cancelled -> {
-                step = Step.Found(account)
-                failure = AccountRules.signInFailure("passkeyCancelled")
+                found(account, AccountRules.signInFailure("passkeyCancelled"))
             }
 
             else -> {
-                step = Step.Found(account)
-                failure = AccountRules.signInFailure("kitUnknown")
+                found(account, AccountRules.signInFailure("kitUnknown"))
             }
         }
     }
@@ -316,8 +326,7 @@ class AccountSignIn(
             }
         }
         if (account != null) {
-            step = Step.Found(account)
-            failure = AccountRules.signInFailure("kitUnknown")
+            found(account, AccountRules.signInFailure("kitUnknown"))
         } else {
             step = startStep()
             failure = unknownPasskey()
@@ -443,8 +452,7 @@ class AccountSignIn(
         } catch (e: CoreError) {
             // The sign-in has an account by now: the found screen, whose Start over warns first.
             if (e.code == "linkedElsewhere" && !move) {
-                step = Step.Found(h.account.orEmpty())
-                failure = AccountRules.signInFailure("kitUnknown")
+                found(h.account.orEmpty(), AccountRules.signInFailure("kitUnknown"))
                 return
             }
             throw e
@@ -552,8 +560,7 @@ class AccountSignIn(
             Act.Cancel -> {
                 val h = held
                 if (step == Step.StartOverAsk && h != null) {
-                    step = Step.Found(h.account.orEmpty())
-                    failure = AccountRules.signInFailure("kitUnknown")
+                    found(h.account.orEmpty(), AccountRules.signInFailure("kitUnknown"))
                 }
             }
 
