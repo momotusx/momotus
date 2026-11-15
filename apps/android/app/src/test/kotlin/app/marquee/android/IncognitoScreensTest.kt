@@ -17,6 +17,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -262,6 +263,10 @@ class IncognitoScreensTest {
     fun `the pushed picker in Incognito starts on the Incognito tile`() {
         open(snapshot(host = "bo")) { PickerScreen(gate, session, PickerMode.Switch) }
         compose.mainClock.advanceTimeBy(2_000)
+        // The tile draws once the picker has the gate's snapshot; its focus lands with it.
+        waitUntil("the Incognito tile") {
+            compose.onAllNodesWithContentDescription("Incognito, current profile").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithContentDescription("Incognito, current profile").assertIsFocused()
     }
 
