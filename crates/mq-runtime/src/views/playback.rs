@@ -2098,21 +2098,30 @@ async fn reachable(
 }
 
 /// A torrent whose player read waited on the swarm (`Lease::starved`, which
-/// `fail_over` reads as `timeout`) before it ever played: the swarm's, as one
-/// that did not start, so the start moves on and the same swarm is skipped
-/// (plans/pace-at-ready.md v2). After good playback it is the moment's.
-/// Its hash, to be remembered as slow outside the view's lock.
+/// `fail_over` reads as `timeout`): the swarm's, never the version's
+/// (plans/pace-at-ready.md v2). Before it played, as one that did not start;
+/// once it played, as a stall the player gave up on: the next version from
+/// where it stood, as `move_stalled` does. Either way the same swarm is
+/// skipped. Its hash, to be remembered as slow outside the view's lock.
 #[cfg(feature = "torrent")]
 fn swarm_starved(s: &mut State, fault: Option<(&str, Option<u16>)>) -> Option<String> {
-    if !s.progressed
-        && fault == Some(("timeout", None))
-        && let Some(Some(hash)) = s.network.clone()
-    {
-        failed_to_start(s);
-        s.failed_hashes.push(torrent_id(&hash));
-        return Some(hash);
+    if fault != Some(("timeout", None)) {
+        return None;
     }
-    None
+    let Some(Some(hash)) = s.network.clone() else {
+        return None;
+    };
+    if s.progressed {
+        s.version_failed = Some(STALLED);
+        s.next = s.candidates.len();
+        if let Some(at) = s.reported_ms {
+            s.snapshot.resume_ms = Some(at);
+        }
+    } else {
+        failed_to_start(s);
+    }
+    s.failed_hashes.push(torrent_id(&hash));
+    Some(hash)
 }
 
 /// The stalled version is left for the ranking's next one, at the stall's
@@ -7295,9 +7304,14 @@ mod tests {
         let mut s = State::new(Vec::new(), None);
         s.network = Some(Some(hash.clone()));
         s.progressed = true;
-        swarm_starved(&mut s, Some(("timeout", None)));
-        assert_eq!(s.version_failed, None, "after good playback: the moment's");
-        s.progressed = false;
+        s.reported_ms = Some(178_000);
+        let starved = swarm_starved(&mut s, Some(("timeout", None)));
+        assert_eq!(starved, Some(hash.clone()));
+        assert_eq!(s.version_failed, Some(STALLED), "after play: a stall");
+        assert_eq!(s.snapshot.resume_ms, Some(178_000), "from where it stood");
+        (s.version_failed, s.progressed, s.reported_ms) = (None, false, None);
+        s.failed_hashes.clear();
+        s.snapshot.resume_ms = None;
         swarm_starved(&mut s, Some(("network", None)));
         swarm_starved(&mut s, None);
         assert_eq!((s.version_failed, s.failed_hashes.len()), (None, 0));

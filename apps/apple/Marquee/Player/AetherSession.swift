@@ -151,13 +151,17 @@ final class AetherSession {
             }
             .store(in: &bag)
         // Software video only where the platform admits it (plans/iphone-mkv.md): a session the engine sent to its
-        // software host fails here, and the core moves to the next version.
+        // software host fails here, and the core moves to the next version. On every platform, a session it sent
+        // there because AVPlayer waited on bytes (`EngineChoice.waited`) fails too: the software host's clock runs
+        // on with no picture while the source starves, which hid the stall from the core (the owner's South Park
+        // play, 2026-11-15: subtitles ran, the video stood).
         Self.fresh(engine.$softwarePiPSource)
             .sink { [weak self] source in
                 MainActor.assumeIsolated {
-                    guard mine(), EngineChoice.refuses(softwareHost: source != nil, on: EngineChoice.platform) else { return }
-                    self?.stop()
                     let waited = rerouted.map { EngineChoice.waited(domain: $0.underlyingDomain, code: $0.underlyingCode) } ?? false
+                    guard mine(), source != nil,
+                          waited || EngineChoice.refuses(softwareHost: true, on: EngineChoice.platform) else { return }
+                    self?.stop()
                     events.refused(waited ? "AVPlayer did not get this source's first segment in time" : "this device does not decode this picture in software", waited)
                 }
             }
