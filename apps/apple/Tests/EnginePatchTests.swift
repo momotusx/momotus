@@ -132,6 +132,9 @@ extension AetherSession.Events {
     #expect(AetherSession.options(probeMiB: 2).probesize == 2 << 20)
     #expect(AetherSession.options(probeMiB: 1).probesize == 1 << 20)
     #expect(AetherSession.options(probeMiB: 8).maxAnalyzeDuration == nil)
+    // A paused mount is the engine's, not only the session's: no autostart under the Versions cover.
+    #expect(AetherSession.options(probeMiB: 2, autoplay: false).autoplay == false)
+    #expect(AetherSession.options(probeMiB: 2).autoplay)
     let mkv = try Data(contentsOf: fixtures.appending(path: "tiny.mkv"))
     let probe = try AetherEngine.probe(source: .custom(DataReader(mkv), formatHint: "matroska"))
     let size = CGSize(width: Int(probe.videoWidth), height: Int(probe.videoHeight))

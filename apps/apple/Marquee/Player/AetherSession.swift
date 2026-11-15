@@ -165,11 +165,11 @@ final class AetherSession {
         let engine = engine
         opening = Task { [weak self] in
             do {
-                var probe = try await engine.load(source: source, startPosition: start > 1 ? start : nil, options: Self.options(probeMiB: probeMiB))
+                var probe = try await engine.load(source: source, startPosition: start > 1 ? start : nil, options: Self.options(probeMiB: probeMiB, autoplay: autoplay))
                 guard self?.load == load else { return }
                 if probeMiB < 8, !Self.resolved(video: probe.map { CGSize(width: Int($0.videoWidth), height: Int($0.videoHeight)) }, audio: engine.audioTracks, active: engine.activeAudioTrackIndex) {
                     (probeMiB, passed) = (8, [:])
-                    probe = try await engine.load(source: source, startPosition: start > 1 ? start : nil, options: Self.options(probeMiB: probeMiB))
+                    probe = try await engine.load(source: source, startPosition: start > 1 ? start : nil, options: Self.options(probeMiB: probeMiB, autoplay: autoplay))
                 }
                 // A stop or another load while this one opened: it does not play.
                 guard self?.load == load else { return }
@@ -235,8 +235,11 @@ final class AetherSession {
     /// find_stream_info read to the budget, which on a torrent goes at the swarm's pace (20 s on a walk, cut by
     /// the open bound). A Matroska file (mkv, webm) carries its codec parameters in its Tracks header, so it starts
     /// at 1 MiB and 2 s of analysis; a track left without its parameters is placed when its first packet arrives.
-    static func options(probeMiB: Int64) -> LoadOptions {
+    /// `autoplay` false mounts the source paused: the engine's own default autostarts every mount, so a session that
+    /// only held back its own `play()` still started playing under the Versions cover once the engine was ready.
+    static func options(probeMiB: Int64, autoplay: Bool = true) -> LoadOptions {
         var options = LoadOptions()
+        options.autoplay = autoplay
         options.probesize = probeMiB << 20
         if probeMiB < 8 { options.maxAnalyzeDuration = 2_000_000 }
         return options
