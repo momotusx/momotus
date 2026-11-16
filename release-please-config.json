@@ -1,0 +1,18 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "simple",
+  "bump-minor-pre-major": true,
+  "prerelease": true,
+  "draft": true,
+  "force-tag-creation": true,
+  "include-component-in-tag": false,
+  "bootstrap-sha": "12079881f5461be1da407b021204b151e10b0dc8",
+  "packages": {
+    ".": {
+      "extra-files": [
+        { "type": "generic", "path": "apps/android/app/build.gradle.kts" },
+        { "type": "generic", "path": "apps/apple/project.yml" }
+      ]
+    }
+  }
+}
