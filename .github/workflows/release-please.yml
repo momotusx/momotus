@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and attach the APKs to (for example v0.2.0)
+        required: true
+
+permissions: {}
+
+env:
+  RUSTUP_TOOLCHAIN: 1.98.0
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release-please:
+    runs-on: ubuntu-24.04
+    # One at a time, never cancelled: two runs at once could both cut the same release.
+    concurrency:
+      group: release-please
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      # A release is made as a draft with its tag (release-please-config.json: draft, force-tag-creation); the apks
+      # job publishes it once the APKs are attached.
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # The signed APKs, built from the tag with no restored cache, checked against the release key, attached to the
+  # release. workflow_dispatch (from main) rebuilds them for an existing tag.
+  apks:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Android SDK packages
+        run: |
+          sdk=$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager
+          yes | "$sdk" --licenses >/dev/null || true
+          "$sdk" "platforms;android-37.0" "build-tools;36.0.0" "ndk;27.1.12297006"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.1.12297006" >>"$GITHUB_ENV"
+      - run: rustup toolchain install 1.98.0 --profile minimal -t aarch64-linux-android,armv7-linux-androideabi
+      - name: cargo-ndk and uniffi-bindgen
+        run: |
+          cargo install --locked cargo-ndk --version 4.1.2 --target-dir "$RUNNER_TEMP/install-target"
+          cargo install --locked --path apps/android/tools/uniffi-bindgen --target-dir "$RUNNER_TEMP/install-target"
+      - name: Release key
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for v in ANDROID_KEYSTORE_B64 ANDROID_STORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            [ -n "${!v}" ] || { echo "::error::secret $v is not set in the release environment"; exit 1; }
+          done
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d >"$RUNNER_TEMP/release.jks"
+          # Properties files read a backslash as an escape.
+          esc() { printf '%s' "${1//\\/\\\\}"; }
+          {
+            echo "storeFile=$RUNNER_TEMP/release.jks"
+            echo "storePassword=$(esc "$ANDROID_STORE_PASSWORD")"
+            echo "keyAlias=$(esc "$ANDROID_KEY_ALIAS")"
+            echo "keyPassword=$(esc "$ANDROID_KEY_PASSWORD")"
+          } >apps/android/keystore.local.properties
+      - name: Build and check the APKs
+        env:
+          # Read at compile time by the core (option_env!) and by build-core.sh.
+          MARQUEE_TMDB_READ_TOKEN: ${{ secrets.MARQUEE_TMDB_READ_TOKEN }}
+          MARQUEE_TRAKT_CLIENT_ID: ${{ secrets.MARQUEE_TRAKT_CLIENT_ID }}
+          MARQUEE_TRAKT_REDIRECT_URI: ${{ secrets.MARQUEE_TRAKT_REDIRECT_URI }}
+          # Public: Google's sheet sends it with every request.
+          GOOGLE_WEB_CLIENT_ID: ${{ vars.GOOGLE_WEB_CLIENT_ID }}
+          RELEASE_SHA1: 3b8f622fa41da5938dd1bbae18f15e6ed7233258
+        run: |
+          for v in MARQUEE_TMDB_READ_TOKEN MARQUEE_TRAKT_CLIENT_ID MARQUEE_TRAKT_REDIRECT_URI GOOGLE_WEB_CLIENT_ID; do
+            [ -n "${!v}" ] || { echo "::error::$v is not set"; exit 1; }
+          done
+          bash apps/android/scripts/release-apks.sh "$RUNNER_TEMP/apks"
+      - name: Remove the release key
+        if: ${{ always() }}
+        run: rm -f "$RUNNER_TEMP/release.jks" apps/android/keystore.local.properties
+      - name: Attach to the release and publish it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP/apks"
+          gh release upload "$TAG" momotus-android-*.apk SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"
+          gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
