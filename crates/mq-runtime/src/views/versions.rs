@@ -2523,13 +2523,16 @@ fn resumes(core: &Core, item_id: &str, video_id: &str) -> Option<String> {
 }
 
 /// The pick a Resume keeps first (2f): the release this video resumes,
-/// when it can start; else none, and the ranking's best is the pick. Up
+/// when it can start and did not fail to start here lately (a swarm too
+/// slow or stalled reads "Did not start here last time": the Resume moves
+/// on to the ranking's best, the owner's South Park, 2026-11-16); else
+/// none, and the ranking's best is the pick. Up
 /// Next keeps the title's release line through the ranking itself (its
 /// `binge` key, `last_binge_group`), which still puts a version that keeps
 /// up with the connection first.
 fn preferred(rows: &[RankedRow], ranking: &Ranking) -> Option<RankedRow> {
     let key = ranking.remembered.as_ref()?;
-    holding(rows, |st| &st.key == key).filter(|r| r.key.viable)
+    holding(rows, |st| &st.key == key).filter(|r| r.key.viable && r.line != ReasonLine::Stalled)
 }
 
 /// A row a shortcut may offer beside `pick`: another version (not a
@@ -3332,6 +3335,56 @@ mod tests {
     }
 
     /// A torrent's kind follows its cache answer (plans/plugins-and-marketplace.md
+    /// A Resume keeps the release it resumes first, unless its swarm was too
+    /// slow here lately: then the ranking's best leads.
+    #[tokio::test]
+    async fn a_resume_skips_a_release_that_did_not_start_here() {
+        let core = Core::temporary("p").unwrap();
+        let view = VersionsView::open(&core, film_params());
+        let torrent = |hash: char, seeds: u32, release: &str| {
+            let hash = hash.to_string().repeat(40);
+            wire(&format!(
+                r#"{{"title":"{release}\n👤 {seeds} 💾 2.0 GB","infoHash":"{hash}"}}"#
+            ))
+        };
+        let mut s = lock(&view.state);
+        s.rank.engine = true;
+        s.rank.free_bytes = Some(1 << 40);
+        s.streams = vec![
+            torrent('a', 900, "Movie.2020.1080p.BluRay.x264-ALPHA"),
+            torrent('b', 300, "Movie.2020.720p.WEBRip.x264-BETA"),
+        ];
+        let ranking = Arc::new(Ranking {
+            params: film_params(),
+            kids: None,
+            item_id: "tt1".into(),
+            remembered: None,
+        });
+        rerank(&mut s, &ranking);
+        let beta = s
+            .ranked
+            .rows
+            .iter()
+            .find(|r| r.stream.release.group.as_deref() == Some("BETA"))
+            .map(|r| r.stream.key.clone())
+            .unwrap();
+        let resumes = Arc::new(Ranking {
+            params: film_params(),
+            kids: None,
+            item_id: "tt1".into(),
+            remembered: Some(beta.clone()),
+        });
+        rerank(&mut s, &resumes);
+        assert_eq!(s.recommended.as_ref().map(|r| &r.stream.key), Some(&beta));
+        s.rank.slow_swarms = vec!["b".repeat(40)];
+        rerank(&mut s, &resumes);
+        let lead = s.recommended.as_ref().map(|r| r.stream.key.clone());
+        assert!(
+            lead.is_some_and(|k| k != beta),
+            "the slow release is not resumed"
+        );
+    }
+
     /// 4.1): under an account with the engine, uncached is the engine's. A
     /// selected kind follows: the counts move, the card falls to the kind's
     /// next row, and a kind with none left lists every kind again.
