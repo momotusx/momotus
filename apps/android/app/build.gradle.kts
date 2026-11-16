@@ -9,6 +9,9 @@ plugins {
     alias(libs.plugins.androidx.baselineprofile)
 }
 
+/** The app's version, bumped by release-please (release-please-config.json). */
+val appVersion = "0.1.0" // x-release-please-version
+
 /** The last digit of a split APK's versionCode, by its ABI. */
 val abiCodes = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2)
 
@@ -31,8 +34,13 @@ android {
         applicationId = "app.momotus.android"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        // MAJOR*1_000_000 + MINOR*1_000 + PATCH; the ABI loop below makes each APK's code *10 + digit, so 0.1.0
+        // ships 10002 (arm64-v8a) and 10001 (armeabi-v7a). Major stays under 210 (2_100_000_000 is the ceiling).
+        versionCode =
+            appVersion.split('.').map(String::toInt).let { (major, minor, patch) ->
+                major * 1_000_000 + minor * 1_000 + patch
+            }
+        versionName = appVersion
         // Accounts (plans/accounts.md 4.4, section 9): the hosted sync service, the link host (the passkeys' relying
         // party and the App Link host for /pair) and the Google web client id Credential Manager asks for. Each is
         // the owner's (gradle properties marquee.syncServer, marquee.linkHost, marquee.googleWebClientId); unset,
@@ -64,8 +72,8 @@ android {
         abi {
             // Off for a bundle build: AGP refuses several APK outputs there (issuetracker 402800800), and a
             // bundle splits by ABI itself. It is off for the whole invocation, so `assembleRelease bundleRelease`
-            // together make one APK with both ABIs: run them apart. The bundle keeps the base versionCode (1)
-            // while the APKs are 11 and 12; settle one scheme before a store upload.
+            // together make one APK with both ABIs: run them apart. The bundle keeps the base versionCode
+            // without the ABI digit the APKs add; settle one scheme before a store upload.
             isEnable = gradle.startParameter.taskNames.none { it.contains("bundle", ignoreCase = true) }
             reset()
             include("arm64-v8a", "armeabi-v7a")
