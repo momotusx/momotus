@@ -3723,6 +3723,7 @@ async fn open_torrent(
                 received: s.received_bytes,
                 unchoked: s.unchoked_ms.is_some(),
                 peer: s.peers > 0,
+                need: s.start_need.saturating_sub(s.start_have),
             })
         };
         let rule = start_rule(&lock(state));
@@ -4247,6 +4248,9 @@ struct Progress {
     unchoked: bool,
     /// A peer is connected.
     peer: bool,
+    /// The bytes the start still waits on (`start_need` less `start_have`);
+    /// 0 with no range open.
+    need: u64,
 }
 
 /// How a first play's attempt is judged (plans/play-every-version.md 2e),
@@ -4353,6 +4357,9 @@ where
     tokio::pin!(ready);
     let (mut unchoked, mut peer) = (false, false);
     let mut first = None;
+    // When a peer first unchoked, and what had been received by then.
+    let mut opened = None;
+    let mut need = 0;
     // What it had received each second, over the last `GROWING`.
     let mut seen = std::collections::VecDeque::new();
     let mut tick = tokio::time::interval(Duration::from_secs(1));
@@ -4367,7 +4374,11 @@ where
                 if let Some(x) = progress().await {
                     unchoked |= x.unchoked;
                     peer |= x.peer;
+                    need = x.need;
                     first.get_or_insert(x.received);
+                    if x.unchoked {
+                        opened.get_or_insert((now, x.received));
+                    }
                     seen.push_back((now, x.received));
                 }
                 while seen.front().is_some_and(|&(at, _)| now - at > GROWING) {
@@ -4391,9 +4402,29 @@ where
                     let received = seen.back().map(|&(_, r)| r);
                     return Started::Stalled { nothing: received == first };
                 }
+                // A live swarm too slow to bring what the start waits on before
+                // the budget's end, at the better of its mean rate since the
+                // first unchoke and its last `GROWING`: it holds the budget
+                // otherwise, sending a little each second (the owner's South
+                // Park S1:E1, 2026-11-16).
+                if let (true, Some(opened), Some(&from), Some(&to)) =
+                    (age >= LIVE && need > 0, opened, seen.front(), seen.back())
+                {
+                    let rate = per_second(opened, to).max(per_second(from, to));
+                    let left = p.until.saturating_duration_since(now).as_secs_f64();
+                    if rate * left < need as f64 {
+                        return Started::Late { unchoked: true };
+                    }
+                }
             }
         }
     }
+}
+
+/// Bytes received per second between two `(when, received)` readings.
+#[cfg(any(test, feature = "torrent"))]
+fn per_second(from: (tokio::time::Instant, u64), to: (tokio::time::Instant, u64)) -> f64 {
+    to.1.saturating_sub(from.1) as f64 / (to.0 - from.0).as_secs_f64().max(1.0)
 }
 
 /// Waits for `ready` while the swarm keeps sending: a window opens at its
@@ -6909,6 +6940,7 @@ mod tests {
                 received: bytes,
                 unchoked: peers > 0,
                 peer: peers > 0,
+                need: 0,
             }))
         }
     }
@@ -6959,6 +6991,60 @@ mod tests {
         let (started, took) = attempt_at(20, 2, true, secs(13), dead).await;
         assert!(matches!(started, Started::Late { unchoked: false }));
         assert_eq!(took.as_secs(), 12);
+    }
+
+    /// A swarm that unchoked but sends too slowly to bring what the start
+    /// waits on before the budget's end is cut at 30 s when another version
+    /// can play; the last attempt waits on, and one that picks up is kept.
+    #[tokio::test(start_paused = true)]
+    async fn a_trickling_swarm_is_cut_at_30s_when_another_can_play() {
+        const MIB: u64 = 1 << 20;
+        async fn run(
+            more: bool,
+            ready_s: u64,
+            at: impl Fn(u64) -> (u64, u64),
+        ) -> (Started<()>, u64) {
+            let added = tokio::time::Instant::now();
+            let policy = attempting(added, 1, added, more);
+            let mut t = 0;
+            let progress = move || {
+                let (received, need) = at(t);
+                t += 1;
+                std::future::ready(Some(Progress {
+                    received,
+                    unchoked: true,
+                    peer: true,
+                    need,
+                }))
+            };
+            let ready = tokio::time::sleep(Duration::from_secs(ready_s));
+            let started = watch_policy(ready, progress, policy, move || more).await;
+            (started, added.elapsed().as_secs())
+        }
+        // 20 KiB/s toward 16 MiB: 60 s left at 30 s brings 1.2 MiB.
+        let trickle = |t| (t * 20 * KIB, 16 * MIB - t * 20 * KIB);
+        let (started, took) = run(true, 999, trickle).await;
+        assert!(matches!(started, Started::Late { unchoked: true }));
+        assert_eq!(took, 30);
+        // The last attempt waits on to the budget's end.
+        let (started, took) = run(false, 999, trickle).await;
+        assert!(matches!(started, Started::Late { unchoked: true }));
+        assert_eq!(took, 90);
+        // Nothing known to wait on: never cut on pace.
+        let (_, took) = run(true, 999, |t| (t * 20 * KIB, 0)).await;
+        assert_eq!(took, 90);
+        // Picks up to 1 MiB/s at 25 s toward 24 MiB: its last 5 s carry it.
+        let ramp = |t: u64| {
+            let r = t.min(25) * 20 * KIB + t.saturating_sub(25) * MIB;
+            (r, (24 * MIB).saturating_sub(r))
+        };
+        let (started, took) = run(true, 50, ramp).await;
+        assert!(matches!(started, Started::Ready(())), "kept");
+        assert_eq!(took, 50);
+        // Flat: the stall rule answers first.
+        let (started, took) = run(true, 999, |_| (0, 16 * MIB)).await;
+        assert!(matches!(started, Started::Stalled { nothing: true }));
+        assert_eq!(took, 30);
     }
 
     /// 2e: a swarm that unchoked runs to 30 s, then on only while what it
@@ -7115,6 +7201,7 @@ mod tests {
                     received: 0,
                     unchoked: false,
                     peer,
+                    need: 0,
                 }))
             };
             let never = std::future::pending::<()>();
