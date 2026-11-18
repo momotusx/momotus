@@ -362,6 +362,7 @@ async fn live_zaps_on_the_default_addons() {
 }
 
 /// Reads `url` (the core's loopback stream) as a player would, until `stop`.
+#[cfg(feature = "torrent")]
 async fn read_stream(url: String, stop: tokio::sync::watch::Receiver<bool>) -> u64 {
     let rest = url.trim_start_matches("http://");
     let (host, path) = rest.split_once('/').unwrap();
