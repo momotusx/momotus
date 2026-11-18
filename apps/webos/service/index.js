@@ -7,7 +7,8 @@
 // plugins; plans/webos.md v5), else the wasm core in a forked child.
 // The MQ_* variables are for tests and simulators: MQ_DATA, MQ_CORE, MQ_UI,
 // MQ_PORT, MQ_GRACE_MS, MQ_LUNA (a stand-in for webos-service), MQ_SIM,
-// MQ_NATIVE (another native binary, or empty for none), MQ_NATIVE_READY_MS.
+// MQ_NATIVE (another native binary, or empty for none), MQ_NATIVE_QUIET_MS and
+// MQ_NATIVE_CAP_MS (its start's silence and total limits).
 const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
@@ -27,9 +28,10 @@ const MAX_QUEUE = 1000;
 const MAX_BUFFERED = 8 * 1024 * 1024;
 const CLOSE_BAD_TOKEN = 4401;
 const NATIVE_BIN = process.env.MQ_NATIVE !== undefined ? process.env.MQ_NATIVE : path.join(__dirname, 'bin', 'mq-bridge');
-const NATIVE_READY_MS = Number(process.env.MQ_NATIVE_READY_MS) || 20000;
-// The native core's own socket, on the next port (a walk build's too).
-const BRIDGE_PORT = PORT + 1;
+// The native core's start: dead after 20 s with no line, or 90 s in all (a slow
+// TV's first open sends its heartbeat every 2 s meanwhile).
+const NATIVE_QUIET_MS = Number(process.env.MQ_NATIVE_QUIET_MS) || 20000;
+const NATIVE_CAP_MS = Number(process.env.MQ_NATIVE_CAP_MS) || 90000;
 
 const Service = require(process.env.MQ_LUNA || 'webos-service');
 const service = new Service(APP + '.service');
@@ -217,6 +219,43 @@ function stop(why) {
 // The bridge gets the data dir as its argument only so a stale core.pid
 // can be told apart (isOurWorker); its own files sit in native/, never in
 // the wasm core's database (that one has no WAL).
+// An update from the wasm-only IPK (v0.3.0 and before): the native core's
+// first start takes the wasm core's library, once, so history, addons and
+// settings stay. Both cores are mq-library from the same IPK (one schema, its
+// migrations run forward on open). The wasm core is not running here (one
+// core at a time, core.pid), so the file is as SQLite left it: TRUNCATE mode,
+// no -wal or -shm. A journal of zero bytes is a finished commit and stays
+// behind; a non-empty one is a cut transaction, which goes along so the first
+// open rolls it back as it would have in place. The native core then turns
+// the file to WAL. The database is copied last: its presence marks the copy
+// done, and a copy cut short leaves only a .tmp, tried again next start.
+function adoptWasmLibrary(nativeDir) {
+  const from = path.join(dataDir, 'library.sqlite');
+  const to = path.join(nativeDir, 'library.sqlite');
+  if (fs.existsSync(to) || !fs.existsSync(from)) return;
+  try {
+    if (!fs.existsSync(nativeDir)) fs.mkdirSync(nativeDir);
+    let cut = false;
+    try {
+      cut = fs.statSync(from + '-journal').size > 0;
+    } catch (e) {}
+    if (cut) copyDurable(from + '-journal', to + '-journal');
+    copyDurable(from, to);
+    log({ adopted: { bytes: fs.statSync(to).size, journal: cut } });
+  } catch (e) {
+    log({ adoptFailed: String(e.code || e) });
+  }
+}
+
+function copyDurable(src, dst) {
+  const tmp = dst + '.tmp';
+  fs.writeFileSync(tmp, fs.readFileSync(src));
+  const fd = fs.openSync(tmp, 'r+');
+  fs.fsyncSync(fd);
+  fs.closeSync(fd);
+  fs.renameSync(tmp, dst);
+}
+
 function startNative() {
   try {
     fs.accessSync(NATIVE_BIN, fs.constants.X_OK);
@@ -227,17 +266,23 @@ function startNative() {
       log({ nativeChmod: String(e2.code || e2) });
     }
   }
+  const nativeDir = path.join(dataDir, 'native');
+  adoptWasmLibrary(nativeDir);
   const env = Object.assign({}, process.env, {
-    MQ_DATA: path.join(dataDir, 'native'),
-    MQ_BRIDGE_PORT: String(BRIDGE_PORT),
+    MQ_DATA: nativeDir,
+    // A free port, named in its ready line: a taken one never stops it.
+    MQ_BRIDGE_PORT: '0',
     MQ_BRIDGE_TOKEN: bridgeToken,
     MQ_BRIDGE_EXIT_ON_EOF: '1',
+    MQ_BRIDGE_HEARTBEAT_MS: '2000',
+    // The device id the wasm core uses (mq-wasm device_id), so both write as one device.
+    MQ_DEVICE_ID: deviceSeed().slice(0, 16),
   });
   // The TV's own CA store may be out of the app's reach: Node's roots,
   // shipped by package.sh, are the bridge's.
   const roots = path.join(__dirname, 'cacert.pem');
   if (!env.SSL_CERT_FILE && fs.existsSync(roots)) env.SSL_CERT_FILE = roots;
-  return native.start(NATIVE_BIN, [dataDir], env, NATIVE_READY_MS);
+  return native.start(NATIVE_BIN, [dataDir], env, NATIVE_QUIET_MS, NATIVE_CAP_MS);
 }
 
 function spawnChild() {
@@ -283,11 +328,13 @@ function spawnChild() {
   });
   c.on('error', (e) => {
     if (!c.pid) c.exited = true;
+    c.ended = 'error ' + String(e.code || e);
     retire(c, 'error: ' + e);
     if (c.exited) gone(c);
   });
   c.on('exit', (code) => {
     c.exited = true;
+    c.ended = 'exit ' + code;
     clearTimeout(c.killTimer);
     if (code === 0) removePid(c.pid);
     retire(c, 'exit ' + code);
@@ -328,7 +375,7 @@ function gone(c) {
   // at start) or keeps dying gives way to the wasm core: the page reloads
   // into its caps (direct sources only).
   if (c.native && (!c.wasReady || restarts.length >= MAX_RESTARTS)) {
-    log({ native: 'off', why: c.wasReady ? 'restart cap' : 'never ready' });
+    log({ native: 'off', why: c.wasReady ? 'restart cap' : 'never ready', detail: c.why || c.ended || null, stderr: c.stderr || [] });
     coreKind = 'wasm';
     restarts = [];
     return spawnChild();
