@@ -164,7 +164,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
         const error = video.error;
         // Before the metadata, the element cannot tell a failed fetch from a file it cannot read.
         if (video.readyState >= HTMLMediaElement.HAVE_METADATA || !video.currentSrc) events.onError(mediaFailure(error));
-        else void earlyFailure(video.currentSrc, error).then(events.onError);
+        else void earlyFailure(video.currentSrc, error, events.sourceGet).then(events.onError);
       }}
     >
       <Show when={subtitle()} keyed>

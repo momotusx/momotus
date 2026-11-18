@@ -24,7 +24,7 @@ import { played } from "../components/row";
 import { EmptyActs } from "../components/empty-acts";
 import { Why } from "../components/why";
 import { KeyedPage } from "../components/keyed-page";
-import { liveView, op, prefsView, rawOf, serverMoves } from "../core/client";
+import { liveView, op, prefsView, probeSource, rawOf, serverMoves } from "../core/client";
 import type { EmptyVersions } from "../core/generated/EmptyVersions";
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
 import type { Segment } from "../core/generated/Segment";
@@ -45,7 +45,7 @@ import { SubtitlePicker } from "../player/subtitle-picker";
 import { AudioStrip, inStrip, QuickShift, type ShiftAt, stripEntry, SubtitleStrip } from "../player/bar-strip";
 import { isHls } from "../player/hls";
 import { createVideoEngine } from "../player/video-engine";
-import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
+import { loadedSource, probeGet, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPath, playState, titlePath, versionsPath } from "../lib/format";
 import { DELAY_SETTLE_MS, nudge, QUICK_STEP } from "../lib/delay";
 import { barWords, chipCap, desktopFit, type Fit, nextShown, phoneFit, positionStep, positionText, shiftSaid, shiftShown, stripLanguages } from "../lib/bar";
@@ -399,6 +399,13 @@ function PlayerPage(props: {
     },
     onEnded: () => onEnded(),
     onError: (why) => void playback()?.command(loaded.failOver(why)),
+    // webOS: the element reads the CDN itself and the page cannot read its answer, so the core asks the source.
+    sourceGet: isWebOS()
+      ? probeGet(() => {
+          const sub = playback()?.sub();
+          return sub == null ? Promise.reject(new Error("no playback")) : probeSource(sub, loaded.attempt());
+        })
+      : undefined,
     onLoaded: () => {
       sendDuration();
       // Started over: from now on this entry resumes (a reload, Forward).

@@ -70,6 +70,28 @@ export async function earlyFailure(
   return mediaFailure(error);
 }
 
+/** The core's `probe` answer (plans/webos.md 3.4): how the playing source answered one byte, in `failOver`'s terms;
+ * `kind` null when it served it. */
+export type ProbeAnswer = { kind: FailureKind | null; status: number | null };
+
+/** `earlyFailure`'s `get` on webOS, where the element reads the CDN's URL itself and the page cannot read that answer
+ * (no CORS): the core asks the source for its first byte through the lease's own client and says how it answered,
+ * as a response or a thrown error that `earlyFailure` sorts as it sorts a fetch's. */
+export function probeGet(probe: () => Promise<ProbeAnswer>) {
+  return (_url: string, init: RequestInit): Promise<Response> =>
+    new Promise<Response>((ok, fail) => {
+      const timedOut = () => fail(new DOMException("the source did not answer in time", "TimeoutError"));
+      if (init.signal?.aborted) return timedOut();
+      init.signal?.addEventListener("abort", timedOut);
+      probe().then(({ kind, status }) => {
+        if (kind === null) ok(new Response(null, { status: 200 }));
+        else if (kind === "http" && status !== null && status >= 200 && status <= 599) ok(new Response(null, { status }));
+        else if (kind === "timeout") timedOut();
+        else fail(new TypeError(`the source failed: ${kind}`));
+      }, fail);
+    });
+}
+
 /** Remembers the core's attempt number of the source the engine loaded, so a
  * failover names that source even after the snapshot moved on: the core then
  * ignores a late error from a source it already gave up on. With no attempt
@@ -81,6 +103,8 @@ export function loadedSource(current: () => PlaybackSnapshot | null) {
     load() {
       attempt = current()?.attempt ?? null;
     },
+    /** The loaded source's attempt, or null when none was known. */
+    attempt: () => attempt,
     /** The failOver command for a failure of the loaded source. */
     failOver(failure: PlayerFailure): FailOverCommand {
       const command: FailOverCommand = { type: "failOver", error: failure.error, kind: failure.kind };
