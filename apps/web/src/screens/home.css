@@ -333,7 +333,7 @@
  * at the art's top left over a soft corner shade, the genre under the art. */
 .tile .rank { position: absolute; top: 4px; left: 9px; z-index: 1; font: 700 27px / 1 var(--font-display); color: #fff; letter-spacing: var(--tracking-display);
   text-shadow: 0 1px 8px rgba(0, 0, 0, .55); pointer-events: none; }
-.tile .pic:has(.rank)::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+.tile .pic.ranked::before { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
   background: radial-gradient(120% 60% at 0% 0%, rgba(0, 0, 0, .45), rgba(0, 0, 0, 0) 45%); }
 .tile .rank-genre { margin: 6px 0 0; font: 400 11px / 16px var(--font-text); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-form="tv"] .tile .rank { top: 10px; left: 16px; font-size: 57px; }

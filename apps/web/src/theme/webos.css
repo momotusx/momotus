@@ -1,0 +1,21 @@
+/* The LG webOS build only (scripts/webos-build.ts puts it right after app.css): what Chromium 79 (webOS 6) cannot
+ * read in app.css, written the way it can. Every other build leaves this file out. */
+
+/* `translate` and `transform` share one `transform` there (scripts/webos-build.ts, composeTransforms): each element
+ * starts with neither part, so a parent's never reaches a child. */
+*, ::before, ::after { --mq-tl: translate(0); --mq-t: translate(0); }
+
+/* app.css, TV focus: the white lift on a button, without the `:not()` of a complex selector Chromium 79 drops
+ * (with it, the whole focus rule). `.btn` four times keeps the original rule's weight, so it wins where it did. */
+[data-form="tv"] .btn.btn.btn.btn:focus {
+  --text: var(--on-primary); --muted: rgba(0, 0, 0, .64); --dim: rgba(0, 0, 0, .64); --line: rgba(0, 0, 0, .1);
+  --ok: var(--on-primary); --warn: rgba(0, 0, 0, .7); --bad: var(--on-primary); --rate: var(--on-primary);
+  background: var(--primary); color: var(--on-primary); translate: 0 calc(-1 * var(--focus-rise)); box-shadow: var(--lift-focus-edge); }
+/* The title's round actions never took the lift: only their circle turns white (app.css), their word stays on the page. */
+[data-form="tv"] .info .acts .btn.btn.btn:focus {
+  --text: inherit; --muted: inherit; --dim: inherit; --line: inherit; --ok: inherit; --warn: inherit; --bad: inherit; --rate: inherit;
+  background: none; color: var(--text); translate: none; box-shadow: none; }
+
+/* app.css, one white per screen: the title's Play yields its white while focus is anywhere else in the title's info
+ * (on a TV only its action rows take focus there). */
+[data-form="tv"] .info:focus-within .play .btn.primary:not(:focus) { background: var(--fill); color: #fff; }
