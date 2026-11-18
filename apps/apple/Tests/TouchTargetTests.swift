@@ -108,12 +108,12 @@ private func source(_ path: String) throws -> String {
     #expect(root[calendar...].prefix(300).contains(".frame(minWidth: Theme.minTarget, minHeight: Theme.minTarget)"), "Calendar's Back lost the minimum")
 }
 
-@Test func theMacToolbarHoldsSearchAloneAndTheOrnamentEndsWithTheProfile() throws {
+@Test func theMacToolbarHoldsZapAndSearchAndTheOrnamentEndsWithTheProfile() throws {
     // Read from the sources: a toolbar is not laid out in a hosted view. The profile took Settings' place in the
     // ornament (plans/nav-profile.md), so it shows once: at the ornament's end, never as a toolbar item of its own.
     let root = try source("App/RootView.swift")
     let tools = try body(of: "private struct TopTools<Places: View>: ToolbarContent", in: root)
-    #expect(tools.components(separatedBy: "ToolbarItem(placement: .primaryAction) { search }").count - 1 == 2, "Search keeps its item on both macOS paths")
+    #expect(tools.components(separatedBy: "ToolbarItem(placement: .primaryAction) { tools }").count - 1 == 2, "Zap and Search keep their item on both macOS paths")
     #expect(!tools.contains("Profile"), "the profile is back in the toolbar")
     let ornament = try #require(root.range(of: "PlaceOrnament(selection: tab, strong: ornamentStrong")).lowerBound
     #expect(root[ornament...].prefix(400).contains("ProfileMenu(onSettings: { select(.settings, link: true) }, onPin: pin, panel: $showPanel)"), "the ornament lost the profile's panel")

@@ -75,6 +75,7 @@ struct EndCard: View {
     let back: () -> Void
     let chooseVersion: () -> Void
     @FocusState private var focused: Bool
+    @Environment(\.zapHost) private var zapHost
 
     var body: some View {
         ZStack {
@@ -93,7 +94,16 @@ struct EndCard: View {
     private var title: String { model.route.target.title }
 
     @ViewBuilder private var content: some View {
-        if let next = model.next, let failure = model.nextFailure {
+        if model.zap, let zapHost {
+            // A zap (plans/zap.md 2.3): Zap again first, then Back; the name only once What is this? told it.
+            if model.nameShown { heading(title) }
+            actions {
+                Button { zapHost.again(.press) } label: { Label("Zap again", glyph: "zap") }
+                    .buttonStyle(PillButtonStyle(prominent: true))
+                    .focused($focused)
+                Button("Back", action: back).buttonStyle(PillButtonStyle())
+            }
+        } else if let next = model.next, let failure = model.nextFailure {
             Glyph("circle-alert", size: 34).accessibilityHidden(true)
             heading("S\(next.season):E\(next.episode) \(next.title)")
             Text(failure)

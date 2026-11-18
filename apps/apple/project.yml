@@ -284,6 +284,8 @@ targets:
       - path: Marquee/Player/AetherSession.swift
       - path: Marquee/Player/LegibleLog.swift
       - path: Marquee/Player/PlayerLayout.swift
+      # Zap's rules (Tests/ZapTests.swift).
+      - path: Marquee/Player/ZapRules.swift
       - path: Marquee/Player/SwipeRules.swift
       - path: Marquee/Player/PlayerVolume.swift
       # The second engine's switch and routing (Tests/EngineChoiceTests.swift).

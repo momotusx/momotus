@@ -42,7 +42,7 @@ private func source(_ path: String) throws -> String {
     #expect(select.contains("showPanel = false"), "a place leaves the panel open")
     let pin = try body(of: "private func pin(_ profile: ProfileInfo)", in: root)
     #expect(pin.contains("showPanel = false"), "the keypad's sheet opens under the panel")
-    #expect(root.contains("TopTools(find: find, shown: !immersion.active, covered: showPanel)"), "the toolbar stays in VoiceOver's reach under the panel")
+    #expect(root.contains("TopTools(find: find, zap: macZap, shown: !immersion.active, covered: showPanel)"), "the toolbar stays in VoiceOver's reach under the panel")
     // Escape closes it wherever focus is.
     let panel = try source("Profiles/ProfilePanel.swift")
     #expect(panel.contains(".keyboardShortcut(.cancelAction)"))

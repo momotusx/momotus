@@ -265,8 +265,8 @@ private let klingon = track(5, "tlh", "tlh", "Klingon")
     // The model is made on first use in the body and kept in state.
     let screen = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .appending(path: "../Marquee/Player/PlayerScreen.swift"), encoding: .utf8)
-    let initBody = try body(of: "init(route: PlayRoute, versions: VersionsModel?, core: CoreClient)", in: screen)
-    #expect(initBody.contains("make = { PlayerModel(route: route, versions: versions, core: core) }"))
+    let initBody = try body(of: "init(route: PlayRoute, versions: VersionsModel?, core: CoreClient, zap: ZapOrigin? = nil)", in: screen)
+    #expect(initBody.contains("make = { PlayerModel(route: route, versions: versions, core: core, zap: zap) }"))
     #expect(!screen.contains("State(initialValue: PlayerModel("))
     #expect(try body(of: "private var model: PlayerModel", in: screen).contains("if let model = made.model { return model }"))
 }

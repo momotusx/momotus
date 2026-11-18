@@ -15,6 +15,7 @@ struct DiscoverScreen: View {
     @State private var onboarding = false
     @Environment(\.linkRequests) private var links
     @Environment(\.openTitle) private var openTitle
+    @Environment(\.zap) private var zap
     /// The Mac's and iPad's selected poster, previewed beside the grid.
     @State private var selection = DiscoverSelection()
     @State private var width: CGFloat = 0
@@ -47,6 +48,8 @@ struct DiscoverScreen: View {
             .onChange(of: links?.discover, initial: true) { follow() }
             .onChange(of: discover.snapshot?.kinds.isEmpty == false && discover.sub != nil) { follow() }
             .onChange(of: discover.snapshot?.items, initial: true) { _, items in take(items ?? []) }
+            // The Mac toolbar's Zap sends the kind shown here (plans/zap.md 2.1).
+            .onChange(of: discover.snapshot?.kind, initial: true) { _, kind in zap?.kindShown(kind) }
             #if os(tvOS)
             .onChange(of: tvTile) { _, key in if key == nil, held { release() } }
             #endif
@@ -133,7 +136,16 @@ struct DiscoverScreen: View {
     ) -> some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: metrics.wide ? 24 : Theme.Space.m) {
+                #if os(iOS)
+                // Zap in the title row, with the kind selected here.
+                HStack {
+                    ScreenTitle(text: "Discover", desktop: true)
+                    Spacer(minLength: Theme.Space.s)
+                    ZapButton(kind: discover.snapshot?.kind)
+                }
+                #else
                 ScreenTitle(text: "Discover", desktop: true)
+                #endif
                 if let s = discover.snapshot {
                     // Without catalogs there is nothing to filter: only the way on shows.
                     if !s.kinds.isEmpty { filters(s) }

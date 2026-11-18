@@ -408,7 +408,7 @@ struct TrackPickerPanel: View {
                         }
                         ForEach(Array(l.tracks.enumerated()), id: \.element.url) { i, t in
                             optionRow(
-                                id: i, title: SubtitleMenu.title(t), detail: SubtitleMenu.detail(t, max: 40),
+                                id: i, title: SubtitleMenu.title(t), detail: SubtitleMenu.detail(t, max: 40, release: model.nameShown),
                                 selected: second ? model.secondSubtitle == t : model.subtitle == t)
                         }
                     }

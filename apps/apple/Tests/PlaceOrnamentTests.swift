@@ -37,7 +37,7 @@ private func source(_ path: String) throws -> String {
     #expect(tools.contains("if shown { places }"), "the centre does not hold the places")
     // The shell hands the ornament to the toolbar, hidden while the player covers the places.
     // The profile panel leaves them live for the pointer and hides them from VoiceOver (plans/profile-panel.md).
-    #expect(root.contains("TopTools(find: find, shown: !immersion.active, covered: showPanel) {\n                    // Settings' first page"))
+    #expect(root.contains("TopTools(find: find, zap: macZap, shown: !immersion.active, covered: showPanel) {\n                    // Settings' first page"))
     #expect(root.contains("PlaceOrnament(selection: tab, strong: ornamentStrong, select: { select($0) }, profile:"))
     // Nothing is left at the window's foot.
     #expect(!root.contains(".placeOrnament("), "the ornament is back at the window's foot")

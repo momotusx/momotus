@@ -43,6 +43,15 @@ struct HomeScreen: View {
                         // Over the top of the hero's art, so one that lands after Home opened moves nothing (QA r2,
                         // Q2 row 33); on the phone it lies over the large title.
                         .overlay(alignment: .topLeading) { alert }
+                        #if os(iOS)
+                        // Zap at the hero's top right, level with the large title (plans/zap.md 2.1); the Mac has
+                        // it in the toolbar beside Search.
+                        .overlay(alignment: .topTrailing) {
+                            ZapButton()
+                                .padding(.trailing, metrics.wide ? metrics.gutter : 12)
+                                .padding(.top, metrics.wide ? Theme.Space.s : 0)
+                        }
+                        #endif
                         #if !os(tvOS)
                         // The trailer's sound switch at the hero's bottom trailing corner, level with the dots, on
                         // every screen that plays trailers (the owner, 2026-10-26; plans/appletv-polish.md 18). From

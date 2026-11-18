@@ -127,8 +127,12 @@ final class PlayerModel {
     /// Where Skip credits was pressed: Up Next shows from there, and seeking
     /// back before it hides the card again.
     private(set) var skippedAt: Int64?
-    /// The file's audio tracks by name, and the index of the one playing.
-    private(set) var audioTracks: [String] = []
+    /// The file's audio tracks by name, and the index of the one playing. While a zap hides its title each shows by
+    /// its language only (`TrackPicker.shownNames`): a file's track title can carry the release name.
+    var audioTracks: [String] {
+        TrackPicker.shownNames(audioTitles, languages: audioTrackLanguages, audio: true, nameShown: nameShown)
+    }
+    private var audioTitles: [String] = []
     /// Each audio track's language tag as the file gives it, for the picker's flags; nil for none.
     private(set) var audioTrackLanguages: [String?] = []
     /// The file's own default audio track, marked in the picker.
@@ -139,8 +143,11 @@ final class PlayerModel {
     @ObservationIgnored private var audioGroup: AVMediaSelectionGroup?
     /// The file's own subtitles (a stream's WebVTT renditions, a file's text
     /// tracks) by name, and the index of the one on. AVKit draws them in the
-    /// viewer's caption style; an addon's subtitle is drawn by the app instead.
-    private(set) var textTracks: [String] = []
+    /// viewer's caption style; an addon's subtitle is drawn by the app instead. Hidden as `audioTracks` in a zap.
+    var textTracks: [String] {
+        TrackPicker.shownNames(textTitles, languages: textTrackLanguages, audio: false, nameShown: nameShown)
+    }
+    private var textTitles: [String] = []
     /// Each of the file's subtitle tracks' language tag, for the picker; nil for none.
     private(set) var textTrackLanguages: [String?] = []
     /// A track picker is open over the player: the Mac menu's bare keys (arrows, Space, Esc) are the picker's.
@@ -243,8 +250,9 @@ final class PlayerModel {
     @ObservationIgnored private var walkLog: WalkLog?
     #endif
 
-    init(route: PlayRoute, versions: VersionsModel?, core: CoreClient) {
+    init(route: PlayRoute, versions: VersionsModel?, core: CoreClient, zap: ZapOrigin? = nil) {
         self.route = route
+        zapOrigin = zap
         // Playing a title takes back a removal of it from Continue Watching still waiting for its Undo.
         ContinueRemoval.played(itemId: route.target.itemId)
         self.versions = versions
@@ -292,6 +300,56 @@ final class PlayerModel {
     /// Never a black screen: once the item ends, or the next episode has no
     /// version, a card offers the way on.
     var showEndCard: Bool { ended || nextFailure != nil }
+
+    /// A zap plays (plans/zap.md 2.3): the name stays hidden until What is this?, Versions and Episodes leave the bar.
+    /// Read from the play's own target, so a film brought back from Picture in Picture stays a zap.
+    var zap: Bool { route.target.zapAt != nil }
+    /// The zap screen's pick and asked kind; nil for an ordinary play.
+    let zapOrigin: ZapOrigin?
+    /// What is this?'s names: the zap screen's pick, else what the target knows.
+    var zapPick: ZapPick? { zap ? zapOrigin?.pick ?? ZapRules.pick(route.target) : nil }
+
+    /// Start from the beginning: this video, from the version playing, as a plain play at 0, so progress counts at
+    /// once. The view opens again without `zapAt`, here or in Picture in Picture alike.
+    func startOver() {
+        // Before the pick lands the versions' own target (a zap's) would replace the plain one: nothing to start yet.
+        guard ZapRules.startsOver(zap: zap, waitsForPick: route.waitsForPick) else { return }
+        choices.newPlay()
+        sendStall(stall.interrupted())
+        report()
+        route = PlayRoute(
+            versionsSub: route.versionsSub, key: playback?.key ?? route.key, target: ZapRules.plain(route.target),
+            tapped: .now, fromStart: true)
+        (loadedURL, rendered, firstFrameMs, playback, ended, noPick, openError) = (nil, false, nil, nil, false, false, nil)
+        (loadedAttempt, stoppedAt, pendingStart) = (nil, nil, nil)
+        selectSubtitle(nil)
+        selectSecondSubtitle(nil)
+        spokenPick = nil
+        // The same key: a new open count makes the page's task run the view again.
+        opens += 1
+        if floating { Task { await drive() } }
+    }
+    /// What is this? was pressed in this zap: the name shows from then on.
+    private(set) var revealed = false
+    func reveal() { revealed = true }
+    /// The one flag every drawn name follows; the route and the playback params keep the real name.
+    var nameShown: Bool { ZapRules.nameShown(zapAt: route.target.zapAt, revealed: revealed) }
+
+    /// This zap did not play: it counts as one try, and the zap screen zaps again in its place.
+    var zapFailed: Bool {
+        guard zap else { return false }
+        let status = PlayerLayout.status(
+            phase: playback?.phase, cannotOpen: openError != nil, firstFrameShown: firstFrameMs != nil, waiting: waiting,
+            noPick: noPick)
+        return ZapRules.failed(
+            firstFrame: firstFrameMs != nil, status: status, chooseAnother: PlayerLayout.offersAnother(playback, status: status))
+    }
+
+    /// The profile's zap dial, synced; an older core sends none (Near).
+    /// Nil until the prefs are there, so the dial never zaps from a value it has not read.
+    var zapDial: ZapDial? { prefs.snapshot.map { $0.zapDial ?? .near } }
+    /// A press on the dial saves the profile's value; true once the core has it, so the zap it starts asks the new pool.
+    func setZapDial(_ dial: ZapDial) async -> Bool { await prefs.perform("setPrefs", ["patch": ["zapDial": dial.rawValue]]) }
 
     /// The core's start audio (`audioLanguages`: the user's audio languages, else the title's original): the first of
     /// them the file has turns on; with none, the engine's own pick stays.
@@ -386,16 +444,16 @@ final class PlayerModel {
 
     /// Reads the audio and subtitle tracks once the file is open.
     private func loadTracks(_ item: AVPlayerItem, generation: Int) {
-        (audioTracks, audioTrackLanguages, audioDefault, audioTrack, audioGroup) = ([], [], nil, nil, nil)
+        (audioTitles, audioTrackLanguages, audioDefault, audioTrack, audioGroup) = ([], [], nil, nil, nil)
         viewerPickedAudio = false
-        (textTracks, textTrackLanguages, textTrack, textGroup, textOptions, textTimeable, textPictures) = ([], [], nil, nil, [], [], [])
+        (textTitles, textTrackLanguages, textTrack, textGroup, textOptions, textTimeable, textPictures) = ([], [], nil, nil, [], [], [])
 
         let asset = item.asset
         Task { [weak self] in
             guard let group = try? await asset.loadMediaSelectionGroup(for: .audible),
                   let self, generation == self.generation else { return }
             audioGroup = group
-            audioTracks = Self.names(group.options, audio: true)
+            audioTitles = Self.names(group.options, audio: true)
             audioTrackLanguages = group.options.map(Self.tag)
             audioDefault = group.defaultOption.flatMap { group.options.firstIndex(of: $0) }
             audioTrack = item.currentMediaSelection.selectedMediaOption(in: group).flatMap { group.options.firstIndex(of: $0) }
@@ -410,7 +468,7 @@ final class PlayerModel {
                 from: group.options, withoutMediaCharacteristics: [.containsOnlyForcedSubtitles])
             (textGroup, textOptions) = (group, options)
             textTimeable = options.map { PlayerLayout.fileTrackTimeable(mediaType: $0.mediaType.rawValue) }
-            textTracks = Self.names(options, audio: false)
+            textTitles = Self.names(options, audio: false)
             textTrackLanguages = options.map(Self.tag)
             startFile = nil
             textTrack = item.currentMediaSelection.selectedMediaOption(in: group).flatMap { options.firstIndex(of: $0) }
@@ -652,6 +710,8 @@ final class PlayerModel {
         if let poster = target.poster { params["poster"] = poster }
         if let season = target.season { params["season"] = season }
         if let episode = target.episode { params["episode"] = episode }
+        // A zap holds progress, Trakt and stream memory until it has played (plans/zap.md 1.2).
+        if let zapAt = target.zapAt { params["zapAt"] = zapAt }
         do {
             let view = try await core.open("playback", params: params, as: (PlaybackSnapshot.self, PlaybackSnapshot.self))
             sub = view.sub
@@ -1358,7 +1418,7 @@ final class PlayerModel {
             return
         }
         aether = session
-        (audioTracks, audioTrack, textTracks, textTrack, textTimeable, engineCues, engineImages, textPictures) = ([], nil, [], nil, [], [], [], [])
+        (audioTitles, audioTrack, textTitles, textTrack, textTimeable, engineCues, engineImages, textPictures) = ([], nil, [], nil, [], [], [], [])
         viewerPickedAudio = false
         let mine = { [weak self] in self.map { $0.generation == generation } ?? false }
         // As AVPlayer's load: a source opened under Versions, or again after the server moved, waits paused.
@@ -1429,13 +1489,13 @@ final class PlayerModel {
     private func engineTracks(_ tracks: AetherSession.Tracks) {
         let (audioArrived, textArrived) = (engineAudioIDs.isEmpty && !tracks.audio.isEmpty, engineTextIDs.isEmpty)
         engineAudioIDs = tracks.audio.map(\.id)
-        audioTracks = tracks.audio.enumerated().map { index, track in
+        audioTitles = tracks.audio.enumerated().map { index, track in
             Self.engineName(track, index: index, of: tracks.audio.count, audio: true)
         }
         audioTrack = tracks.activeAudio.flatMap { engineAudioIDs.firstIndex(of: $0) }
         let text = tracks.text.filter { !$0.isForced }
         engineTextIDs = text.map(\.id)
-        textTracks = text.enumerated().map { index, track in
+        textTitles = text.enumerated().map { index, track in
             Self.engineName(track, index: index, of: text.count, audio: false)
         }
         (audioTrackLanguages, audioDefault, textTrackLanguages) = AetherSession.pickerTags(audio: tracks.audio, text: text)
