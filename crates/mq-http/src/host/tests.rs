@@ -299,6 +299,37 @@ async fn a_hop_gets_the_time_left_and_a_timeout_is_a_timeout() {
     assert!(ms <= 300, "{ms}");
 }
 
+/// A request waiting for its host's slot fails at its own deadline, not
+/// when the slot frees.
+#[tokio::test]
+async fn the_wait_for_a_slot_ends_at_the_deadline() {
+    host(&[("a.example", &[PUBLIC_A])], |_| Value::Null);
+    let http = HttpClient::new(ClientConfig {
+        per_host_limit: 1,
+        ..ClientConfig::default()
+    })
+    .unwrap();
+    let hold = RequestOptions::default();
+    let holder = get(&http, "https://a.example/hold", &hold);
+    let opts = RequestOptions {
+        timeout: Duration::from_secs(1),
+        ..Default::default()
+    };
+    let started = std::time::Instant::now();
+    let (_, waiter) = tokio::join!(
+        tokio::time::timeout(Duration::from_secs(4), holder),
+        async {
+            tokio::task::yield_now().await;
+            let answer = get(&http, "https://a.example/next", &opts).await;
+            (answer, started.elapsed())
+        }
+    );
+    let (answer, waited) = waiter;
+    assert!(matches!(answer, Err(HttpError::Timeout(_))), "{answer:?}");
+    assert!(waited < Duration::from_millis(2_000), "{waited:?}");
+    assert_eq!(requests().len(), 1, "the waiter never sent");
+}
+
 #[tokio::test]
 async fn a_dropped_request_aborts_its_fetch() {
     host(&[("a.example", &[PUBLIC_A])], |_| Value::Null);

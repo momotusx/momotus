@@ -365,11 +365,11 @@ impl HttpClient {
         loop {
             self.check_hops(&req.url)?;
             let host = req.url.host_str().unwrap_or_default().to_owned();
-            // ponytail: the slot wait has no timer of its own here (the host
-            // has the only clock); a request that waited past its deadline
-            // fails below before it sends. `mq_rt::timeout_at` bounds it once
-            // mq-rt lands.
-            let permit = self.budget.acquire(&host, opts.priority).await;
+            // The slot wait is bounded by the time left, as natively.
+            let left = Duration::from_secs_f64((deadline - imports::now_ms()).max(0.0) / 1000.0);
+            let permit = mq_rt::timeout(left, self.budget.acquire(&host, opts.priority))
+                .await
+                .map_err(|_| HttpError::Timeout(opts.timeout))?;
             let addresses = self.approve(&req.url, &first, hops, opts).await?;
             let left = deadline - imports::now_ms();
             if left <= 0.0 {

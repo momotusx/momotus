@@ -10,6 +10,7 @@ publish.workspace = true
 test-dns = []
 
 [dependencies]
+mq-rt = { path = "../mq-rt" }
 futures-util = "0.3"
 bytes = "1"
 url.workspace = true
