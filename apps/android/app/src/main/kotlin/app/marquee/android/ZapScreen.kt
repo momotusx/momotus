@@ -1,5 +1,6 @@
 package app.marquee.android
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -78,6 +79,8 @@ fun ZapScreen(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                // The miss's cause, for a walk or an error report: the screen words every failure alike.
+                Log.w(MarqueeApp.TAG, "zap missed: ${(e as? CoreError)?.code} ${e.message}")
                 miss = if ((e as? CoreError)?.code == ZapCopy.NO_ADDONS) ZapMiss.NoAddons else ZapMiss.NothingCameUp
                 return@LaunchedEffect
             }
