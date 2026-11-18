@@ -13,8 +13,23 @@ glibc=2.17
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$HOME/.cargo-targets/marquee-$(basename "$root")-armv7}"
 out="$here/service/bin"
 
+# bindgen (rquickjs-sys on 32-bit ARM Linux) needs zig's C headers. cargo-zigbuild hands it the ones `zig cc -v` lists,
+# but zig 0.15 lists them relative to the working directory when zig sits inside it (.tools on CI), and the build
+# script runs elsewhere: "stdbool.h not found". So zig is asked from / and its dirs go first, as absolute paths.
+probe="$(mktemp -d)"
+: >"$probe/empty.c"
+inc="$(cd / && zig cc -target arm-linux-gnueabi -E "$probe/empty.c" -v 2>&1 |
+  sed -n '/^#include <...> search starts here:$/,/^End of search list\.$/p' | sed -n 's|^ \(/.*\)$|\1|p')"
+rm -rf "${probe:?}"
+[ -n "$inc" ] || { echo "build-native.sh: zig cc listed no include dirs for arm-linux-gnueabi" >&2; exit 1; }
+bindgen_args=""
+while IFS= read -r dir; do bindgen_args="$bindgen_args -isystem '$dir'"; done <<<"$inc"
+bindgen_args="${bindgen_args# }"
+
 cd "$root"
-CARGO_INCREMENTAL=0 cargo zigbuild --release -j 4 -p mq-bridge --bin mq-bridge --features torrent --target "$target.$glibc"
+# cargo-zigbuild adds its own to both spellings of the variable; bindgen reads the dashed one first.
+env "BINDGEN_EXTRA_CLANG_ARGS_${target}=$bindgen_args" "BINDGEN_EXTRA_CLANG_ARGS_${target//-/_}=$bindgen_args" \
+  CARGO_INCREMENTAL=0 cargo zigbuild --release -j 4 -p mq-bridge --bin mq-bridge --features torrent --target "$target.$glibc"
 mkdir -p "$out"
 cp "$CARGO_TARGET_DIR/$target/release/mq-bridge" "$out/mq-bridge"
 chmod 755 "$out/mq-bridge"
