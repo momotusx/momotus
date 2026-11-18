@@ -44,6 +44,8 @@ let keep = null;
 let keepCreating = false;
 let wantAlive = false;
 let graceTimer = null;
+// The write probe's result: a failed one runs the core's library in memory.
+let probed = { ok: true };
 
 const log = (entry) => console.log(JSON.stringify(entry));
 
@@ -200,7 +202,7 @@ function spawnChild() {
   } catch (e) {
     log({ pidWrite: String(e.code || e) });
   }
-  const config = { dataDir, deviceSeed: deviceSeed(), node: process.version, origin: ORIGIN };
+  const config = { dataDir, deviceSeed: deviceSeed(), node: process.version, origin: ORIGIN, memoryOnly: !probed.ok };
   if (process.env.MQ_DEV) config.dev = JSON.parse(process.env.MQ_DEV);
   c.send({ kind: 'open', config });
   // Handlers are per child: a late event from an old one never touches the
@@ -495,6 +497,7 @@ function serve() {
 
 function begin() {
   const wrote = probe();
+  probed = wrote;
   store = keystore.create(dataDir);
   return serve().then((r) => {
     log({ listen: r, probe: wrote, node: process.version });

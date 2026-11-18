@@ -222,6 +222,8 @@ impl Core {
 /// Removes every scope folder no live scope holds (launch recovery,
 /// plans/batch-10-incognito.md 2.3): one whose lock can be taken, or that
 /// has none. `incognito/` itself stays. True when any went.
+// mq-rt: native-only
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn recover(dir: &Path) -> bool {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return false;
@@ -337,6 +339,8 @@ pub(crate) fn delete_torrent_files(torrent_dir: &Path, hash: &str) {
 /// Launch recovery's torrent pass, before the engine starts: every line no
 /// live scope owns has its files deleted, unless a download names its
 /// torrent, and goes.
+// mq-rt: native-only
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn recover_torrents(dir: &Path, torrent_dir: &Path, device: &Library) {
     let ended = ended_lines(dir);
     for (_, hash) in &ended {

@@ -9,8 +9,9 @@ mod core;
 mod covers;
 mod debrid;
 pub mod defaults;
+// webOS has none (plans/webos.md 3.4): the same surface, empty.
 // mq-rt: native-only
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg_attr(target_arch = "wasm32", path = "downloads_off.rs")]
 pub mod downloads;
 pub mod incognito;
 pub mod languages;
@@ -68,8 +69,8 @@ pub use views::kids::{
 pub use views::library::{KindCount, LibrarySnapshot, LibrarySort, LibraryView};
 pub use views::pairing::{PairingSnapshot, PairingView};
 pub use views::playback::{
-    Attempt, NextEpisode, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, StartProgress,
-    StartStage, SubtitleNote, SubtitleProblem, SubtitleTrack,
+    Attempt, NextEpisode, PlayTarget, PlaybackPhase, PlaybackSnapshot, PlaybackView, Probe,
+    StartProgress, StartStage, SubtitleNote, SubtitleProblem, SubtitleTrack,
 };
 pub use views::profiles::{ProfileInfo, ProfilesSnapshot, ProfilesView, SessionState, WipePending};
 pub use views::search::{SearchSnapshot, SearchView};

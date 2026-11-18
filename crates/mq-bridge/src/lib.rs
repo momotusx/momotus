@@ -50,6 +50,8 @@ use tokio::sync::{broadcast, watch};
 
 mod dev;
 pub mod output;
+#[cfg(all(debug_assertions, target_arch = "wasm32"))]
+pub use dev::set_dev_env;
 pub use dev::{dev_replay, dev_segments, dev_tmdb, dev_trakt};
 use mq_rt::JoinHandle;
 pub use output::{Outgoing, Output, SendError};
@@ -1863,6 +1865,24 @@ impl Session {
                     },
                 );
             }
+            Request::Command { id, sub, command }
+                if command.get("type").and_then(Value::as_str) == Some("probe") =>
+            {
+                let attempt = command.get("attempt").and_then(Value::as_u64);
+                match self.probe(sub, attempt) {
+                    Some(probe) => self.spawn(id, async move {
+                        let fault = probe.await;
+                        Ok::<_, Failure>(json!({
+                            "kind": fault.map(|(kind, _)| kind),
+                            "status": fault.and_then(|(_, status)| status),
+                        }))
+                    }),
+                    None => self.reply(
+                        json!(id),
+                        Err(Failure::coded("switched", "another source plays now")),
+                    ),
+                }
+            }
             Request::Command { id, sub, command } => {
                 let result = self.command(sub, &command);
                 self.reply(json!(id), result);
@@ -3468,6 +3488,15 @@ impl Session {
         Ok(json!({ "sub": sub, "snapshot": snapshot }))
     }
 
+    /// The playback `sub`'s `probe` of `attempt`; `None` for another
+    /// source's attempt, or no playback there.
+    fn probe(&self, sub: u64, attempt: Option<u64>) -> Option<mq_runtime::Probe> {
+        match &lock(&self.shared).subs.get(&sub)?.view {
+            View::Playback(playback) => playback.probe(attempt),
+            _ => None,
+        }
+    }
+
     fn command(&mut self, sub: u64, command: &Value) -> Result<Value, String> {
         let mut shared = lock(&self.shared);
         let subscription = shared
@@ -4727,6 +4756,30 @@ mod catalog {
 
     fn key(entries: &Value) -> String {
         entries[0]["key"].as_str().unwrap().to_owned()
+    }
+
+    /// `probe` (plans/webos.md 3.4) asks the playing source only: on a view
+    /// that plays nothing it answers `switched`, as for another attempt.
+    #[tokio::test]
+    async fn a_probe_with_nothing_playing_is_switched() {
+        let core = Core::temporary("default").unwrap();
+        let (tx, mut rx) = Output::channel();
+        let mut session = Session::new(core, tx);
+        send(
+            &mut session,
+            json!({"id": 1, "op": "subscribe", "view": "home", "params": {}}),
+        )
+        .await;
+        let sub = reply(&mut rx, 1).await["result"]["sub"].as_u64().unwrap();
+        for (id, sub) in [(2, sub), (3, 999)] {
+            send(
+                &mut session,
+                json!({"id": id, "op": "command", "sub": sub, "command": {"type": "probe", "attempt": 1}}),
+            )
+            .await;
+            let answer = reply(&mut rx, id).await;
+            assert_eq!(answer["code"], "switched", "{answer}");
+        }
     }
 
     #[tokio::test]

@@ -891,7 +891,7 @@ impl State {
             first: candidates.clone(),
             start_at: None,
             tries: 0,
-            loading_since: tokio::time::Instant::now(),
+            loading_since: mq_rt::Instant::now(),
             failed_as: None,
             report_attempts: Vec::new(),
             candidates,
@@ -996,6 +996,9 @@ impl State {
         self.stutter.iter().map(|&(_, lasted)| lasted).sum()
     }
 }
+
+/// A playback's `probe`: the source's failure, or `None` when it served.
+pub type Probe = futures_util::future::BoxFuture<'static, Option<mq_server::Fault>>;
 
 impl PlaybackView {
     /// `open_for` a player that plays HLS.
@@ -1326,6 +1329,17 @@ impl PlaybackView {
     ///
     /// `kind`, `status` and `error` are what the player reports; the attempt
     /// list gets the core's words for them (`mq_server::failure_words`).
+    /// `probe` (plans/webos.md 3.4): how the playing source answers one
+    /// byte now, for a player that cannot say why it failed. `None` when
+    /// `attempt` is not the playing one (another source plays now).
+    pub fn probe(&self, attempt: Option<u64>) -> Option<Probe> {
+        let s = lock(&self.state);
+        if attempt.is_some_and(|a| a != s.snapshot.attempt) {
+            return None;
+        }
+        s.lease.as_ref().map(Lease::probe)
+    }
+
     pub fn fail_over(
         &self,
         failed: Option<u64>,

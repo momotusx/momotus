@@ -2836,6 +2836,7 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "libc",
+ "mq-rt",
  "rusqlite",
  "rusqlite_migration",
  "serde",
@@ -2985,6 +2986,7 @@ dependencies = [
  "flate2",
  "futures-util",
  "getrandom 0.3.4",
+ "http",
  "mq-engine",
  "mq-http",
  "mq-media",
@@ -3092,6 +3094,26 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "mq-wasm"
+version = "0.1.0"
+dependencies = [
+ "js-sys",
+ "mq-bridge",
+ "mq-http",
+ "mq-rt",
+ "mq-runtime",
+ "mq-server",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]

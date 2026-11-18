@@ -27,8 +27,9 @@ const SCANNED: &[&str] = &[
     "mq-server",
     "mq-runtime",
     "mq-bridge",
+    "mq-http",
+    "mq-library",
 ];
-// ponytail: mq-http (L2) and mq-library (L3) join SCANNED when they switch.
 
 /// Allowed until the named lane cuts it on wasm: (file, banned text, lane).
 /// An entry that no longer matches anything fails, so it gets removed.
@@ -172,9 +173,11 @@ fn bracket_end(code: &[u8], open: usize) -> usize {
     code.len()
 }
 
-/// From `at`: further attributes, then one item (to its closing brace, or
-/// its `;` when it has no body). Returns the item's end and the attributes'
-/// raw text.
+/// From `at`: further attributes, then what they apply to: an item (to its
+/// closing brace, or its `;`), or a field, variant, arm or statement (to its
+/// `,` or `;`, or the brace that closes the list it sits in). Returns its end
+/// and the attributes' raw text. Angle brackets are not counted, so a `,` in
+/// a generic type ends it early: that can only show more, never hide code.
 fn item_end(code: &[u8], raw: &[u8], mut at: usize) -> (usize, String) {
     let mut attrs = String::new();
     loop {
@@ -189,21 +192,55 @@ fn item_end(code: &[u8], raw: &[u8], mut at: usize) -> (usize, String) {
             break;
         }
     }
+    // An item's signature may hold a `,` (`Result<A, B>`); only a field,
+    // variant, arm or statement ends at one. The item's first word, after
+    // its visibility and qualifiers, says which it is.
+    let head = String::from_utf8_lossy(&code[at..code.len().min(at + 80)]).into_owned();
+    let item = head
+        .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .filter(|w| !w.is_empty())
+        .find(|w| {
+            !matches!(
+                *w,
+                "pub" | "crate" | "super" | "in" | "async" | "unsafe" | "extern"
+            )
+        })
+        .is_some_and(|w| {
+            matches!(
+                w,
+                "fn" | "struct"
+                    | "enum"
+                    | "impl"
+                    | "mod"
+                    | "trait"
+                    | "type"
+                    | "static"
+                    | "const"
+                    | "use"
+                    | "union"
+                    | "macro_rules"
+            )
+        });
     let mut depth = 0i32;
-    let mut braced = false;
     for (i, &b) in code.iter().enumerate().skip(at) {
         match b {
-            b'{' => {
-                depth += 1;
-                braced = true;
-            }
-            b'}' => {
+            b'{' | b'(' | b'[' => depth += 1,
+            b'}' | b')' | b']' => {
                 depth -= 1;
-                if braced && depth == 0 {
+                // The list it sits in closes: a last field or arm.
+                if depth < 0 {
+                    return (i, attrs);
+                }
+                // A body ends it, unless an arm's body or an `else` follows.
+                let next = code[i + 1..].iter().position(|c| !c.is_ascii_whitespace());
+                let next = next.map_or(&[][..], |n| &code[i + 1 + n..]);
+                if b == b'}' && depth == 0 && !next.starts_with(b"=>") && !next.starts_with(b"else")
+                {
                     return (i + 1, attrs);
                 }
             }
-            b';' if !braced && depth == 0 => return (i + 1, attrs),
+            b';' if depth == 0 => return (i + 1, attrs),
+            b',' if depth == 0 && !item => return (i + 1, attrs),
             _ => {}
         }
     }
@@ -289,6 +326,7 @@ fn scan(src: &str) -> Scanned {
     let kept = String::from_utf8_lossy(&code).into_owned();
     let mut hits = Vec::new();
     let mut mods = Vec::new();
+    let raw_lines: Vec<&str> = src.lines().collect();
     for (n, line) in kept.lines().enumerate() {
         for banned in BANNED_TEXT {
             // `std::thread::panicking()` reads a flag and works on wasm.
@@ -309,7 +347,16 @@ fn scan(src: &str) -> Scanned {
             .or_else(|| t.strip_prefix("pub "))
             .unwrap_or(t);
         if let Some(name) = decl.strip_prefix("mod ").and_then(|r| r.strip_suffix(';')) {
-            mods.push(name.trim().to_owned());
+            // `#[path = "x.rs"]` on the line before: that file, beside this one.
+            let path = n
+                .checked_sub(1)
+                .and_then(|p| raw_lines.get(p))
+                .and_then(|l| l.trim().strip_prefix("#[path = \""))
+                .and_then(|l| l.strip_suffix("\"]"));
+            mods.push(match path {
+                Some(path) => format!("path:{path}"),
+                None => name.trim().to_owned(),
+            });
         }
     }
     for (at, stmt) in uses(&kept) {
@@ -421,7 +468,11 @@ fn walk(file: &Path, workspace: &Path, report: &mut Vec<String>, seen: &mut Vec<
         file.parent().unwrap().join(stem)
     };
     for name in scanned.mods {
-        walk(&module_file(&dir, &name), workspace, report, seen);
+        let next = match name.strip_prefix("path:") {
+            Some(path) => file.parent().unwrap().join(path),
+            None => module_file(&dir, &name),
+        };
+        walk(&next, workspace, report, seen);
     }
 }
 
@@ -496,4 +547,37 @@ fn fine() { if std::thread::panicking() { std::thread::sleep(D); } }
     );
     assert_eq!(s.mods, ["kept"]);
     assert_eq!(s.bare_markers, [21]);
+}
+
+#[test]
+fn a_skipped_field_or_arm_hides_only_itself() {
+    let src = r#"
+struct S {
+    #[cfg(feature = "torrent")]
+    engine: HashMap<String, Engine>,
+    #[cfg(feature = "torrent")]
+    last: u8
+}
+impl S {
+    fn new() -> Self { tokio::time::sleep(D); S {} }
+}
+fn f(c: Content) -> Result<u8, E> {
+    match c {
+        #[cfg(feature = "torrent")]
+        Content::Torrent { claim, file } => { tokio::spawn(x); }
+        #[cfg(feature = "plugins")]
+        Content::Plugin => tokio::spawn(y),
+        _ => tokio::spawn(z),
+    }
+}
+#[cfg(test)]
+fn helper(a: Result<u8, E>) { std::fs::read("x"); }
+fn after() { std::fs::read("y"); }
+"#;
+    let hits: Vec<String> = scan(src)
+        .hits
+        .iter()
+        .map(|(l, w)| format!("{l} {w}"))
+        .collect();
+    assert_eq!(hits, ["9 tokio::time::", "17 tokio::spawn", "22 std::fs"]);
 }

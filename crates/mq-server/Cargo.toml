@@ -18,6 +18,7 @@ mq-media = { path = "../mq-media" }
 mq-engine = { path = "../mq-engine", optional = true }
 futures-util = "0.3"
 bytes = "1"
+http = "1"
 getrandom = "0.3"
 encoding_rs = "0.8"
 # DASH manifests (plans/c21-c23-loopback.md 3.3); already in Cargo.lock.

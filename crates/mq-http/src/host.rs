@@ -52,6 +52,7 @@ mod imports {
 /// A host the tests drive: names it resolves, an answer per request (JSON
 /// null never answers), and what it was asked. Answers come on a later turn
 /// (a spawned task), as host.d.ts requires of the real one.
+// mq-rt: native-only
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod imports {
     use std::cell::RefCell;

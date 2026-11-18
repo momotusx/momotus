@@ -206,6 +206,7 @@ impl Library {
     /// A throwaway database in the temp directory, removed on drop. Used by
     /// tests and the CLI; WAL needs a real file for concurrent readers. The
     /// first one in a process also clears what ended processes left behind.
+    // mq-rt: native-only
     #[cfg(not(target_arch = "wasm32"))]
     pub fn temporary() -> Result<Self, LibraryError> {
         static SWEPT: std::sync::Once = std::sync::Once::new();
@@ -1145,6 +1146,7 @@ fn install_hooks(conn: &Connection, touched: Arc<Mutex<Vec<Table>>>) -> rusqlite
 /// that was killed) keeps its files until the process ends; one day of test
 /// runs left 6,145 of them, 877 MB. Another live process's files stay.
 #[doc(hidden)]
+// mq-rt: native-only
 #[cfg(not(target_arch = "wasm32"))]
 pub fn sweep_temporaries(dir: &Path) {
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -1187,6 +1189,7 @@ fn alive(_pid: u32) -> bool {
 }
 
 /// The database at `path` and its `-wal` and `-shm`.
+// mq-rt: native-only
 #[cfg(not(target_arch = "wasm32"))]
 fn remove_database(path: &Path) {
     for suffix in ["", "-wal", "-shm"] {

@@ -10,6 +10,7 @@ publish.workspace = true
 selftest = []
 
 [dependencies]
+mq-rt = { path = "../mq-rt" }
 # Keeps its default features: `ffi-sqlite-wasm-rs` is the wasm32 SQLite
 # (plans/webos.md 3.3; pinned by `rusqlite_keeps_its_defaults`).
 rusqlite = { version = "0.40", features = ["bundled", "hooks"] }

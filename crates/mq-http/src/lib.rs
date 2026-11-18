@@ -35,6 +35,7 @@ use std::sync::Once;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 use std::time::Duration;
+// mq-rt: native-only
 #[cfg(not(target_arch = "wasm32"))]
 use tokio::time::Instant;
 
@@ -667,6 +668,7 @@ impl std::fmt::Display for Blocked {
 impl std::error::Error for Blocked {}
 
 /// The system resolver's answer, or the test table's.
+// mq-rt: native-only
 #[cfg(not(target_arch = "wasm32"))]
 async fn lookup(name: &str) -> std::io::Result<Vec<SocketAddr>> {
     #[cfg(any(test, feature = "test-dns"))]
@@ -682,6 +684,7 @@ async fn lookup(name: &str) -> std::io::Result<Vec<SocketAddr>> {
 /// Names the scoped resolver answers before the system resolver, so a test
 /// can point a name at a fixture and change its answer, and interface lists
 /// a client reads instead of the device's. Only dev-dependencies enable it.
+// mq-rt: native-only
 #[cfg(all(any(test, feature = "test-dns"), not(target_arch = "wasm32")))]
 pub mod test_dns {
     pub use crate::net::Interface;
@@ -1098,6 +1101,7 @@ pub fn device_roots() -> Option<Vec<reqwest::Certificate>> {
 /// certificate, Android's layout), less the ones a file of the same name in
 /// `removed` turns off; a file that is no certificate is passed over. None
 /// when no folder holds one.
+// mq-rt: native-only
 #[cfg(not(target_arch = "wasm32"))]
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 fn roots_in(
@@ -1430,6 +1434,7 @@ impl HttpClient {
     /// `fetch_hops`, timed: time to headers by host, logged at debug for the
     /// walks (debug builds log debug), every request and stream alike. The
     /// host is logged as its tag, never by name: logs never name an origin.
+    // mq-rt: native-only
     #[cfg(not(target_arch = "wasm32"))]
     async fn fetch(
         &self,
@@ -1490,6 +1495,7 @@ impl HttpClient {
     /// included. Release before acquire: a hop's answer and host slot are
     /// dropped before the next hop asks for a slot, since holding both
     /// deadlocks same-host redirects at the per-host limit.
+    // mq-rt: native-only
     #[cfg(not(target_arch = "wasm32"))]
     async fn follow(
         &self,
@@ -1601,6 +1607,7 @@ fn header_limit(req: &Request, opts: &RequestOptions) -> Duration {
 
 /// Sends one hop. Its wait for response headers is bounded by
 /// `header_limit`; when that passes, the hop's future is dropped.
+// mq-rt: native-only
 #[cfg(not(target_arch = "wasm32"))]
 async fn open(
     client: &reqwest::Client,
@@ -1722,6 +1729,7 @@ pub struct StreamingResponse {
     _permit: budget::Permit,
 }
 
+// mq-rt: native-only
 #[cfg(not(target_arch = "wasm32"))]
 impl StreamingResponse {
     /// Next chunk, or `Timeout` when the origin stalls past the idle limit.
