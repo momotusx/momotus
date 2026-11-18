@@ -161,7 +161,7 @@ export function TileCard(props: {
       onClick={() => props.onOpen?.()}
       {...tileMenu(() => props.tile)}
     >
-      <div class="pic" style={{ height: `${props.h}px` }}>
+      <div class="pic" classList={{ ranked: !!props.tile.rank }} style={{ height: `${props.h}px` }}>
         <Show
           when={props.wide}
           fallback={<Poster src={props.tile.poster} fallback={props.tile.posterFallback} name={props.tile.name} w={props.w} h={props.h} eager={props.eager} />}

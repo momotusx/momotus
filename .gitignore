@@ -29,6 +29,7 @@
 
 # A standalone build of a vendored crate (its own tests, the cast audit) writes its own lock file.
 /vendor/*/Cargo.lock
+/apps/web/dist-webos/
 
 # Prebuilt wasm tools for build-wasm.sh (plans/webos.md 2)
 /.tools/
