@@ -5,10 +5,18 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# Exports `selftest()` for the wasm run under the TV's Nodes (wasm-test.sh).
+selftest = []
+
 [dependencies]
+# Keeps its default features: `ffi-sqlite-wasm-rs` is the wasm32 SQLite
+# (plans/webos.md 3.3; pinned by `rusqlite_keeps_its_defaults`).
 rusqlite = { version = "0.40", features = ["bundled", "hooks"] }
 rusqlite_migration = "2.6"
-tokio = { workspace = true }
+# Only `sync::broadcast`; the workspace's runtime features do not build on
+# wasm32, and native builds unify them back in.
+tokio = { version = "1", features = ["sync"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
@@ -19,6 +27,10 @@ hex = "0.4"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+# The host file calls under the webOS VFS (src/vfs.rs).
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2.129"
 
 [dev-dependencies]
 tokio = { workspace = true }

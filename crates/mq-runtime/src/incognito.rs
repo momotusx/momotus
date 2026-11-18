@@ -25,10 +25,11 @@ pub(crate) struct Scope {
     pub(crate) addons: AddonClient,
     /// The profile it copied; device work runs as this one.
     pub(crate) host: String,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     dir: PathBuf,
     /// Held for the scope's life: a folder whose lock can be taken belongs
     /// to no live scope.
-    _lock: std::fs::File,
+    _lock: Lock,
     pub(crate) ended: AtomicBool,
     /// The device's count of live scopes (`liveScopes`).
     live: Arc<std::sync::atomic::AtomicUsize>,
@@ -37,6 +38,12 @@ pub(crate) struct Scope {
     pub(crate) record: std::sync::Mutex<()>,
 }
 
+/// webOS scopes live in memory (plans/webos.md 3.3): no folder, no lock.
+#[cfg(not(target_arch = "wasm32"))]
+type Lock = std::fs::File;
+#[cfg(target_arch = "wasm32")]
+type Lock = ();
+
 impl Drop for Scope {
     /// A backstop only: `end` removed the folder and counted down already.
     /// A scope dropped without its end does both here, so `liveScopes`
@@ -44,6 +51,7 @@ impl Drop for Scope {
     fn drop(&mut self) {
         if !self.ended.swap(true, Ordering::SeqCst) {
             self.live.fetch_sub(1, Ordering::SeqCst);
+            #[cfg(not(target_arch = "wasm32"))]
             let _ = std::fs::remove_dir_all(&self.dir);
         }
     }
@@ -123,12 +131,19 @@ impl Core {
         getrandom::fill(&mut bytes).expect("os randomness");
         let id: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
         let dir = self.incognito_dir().join(&id);
+        #[cfg(not(target_arch = "wasm32"))]
         std::fs::create_dir_all(&dir)?;
         let opened = (|| {
-            let lock = std::fs::File::create(dir.join("lock"))?;
-            lock.try_lock()
-                .map_err(|e| IncognitoError::Failed(e.to_string()))?;
-            let library = Library::temporary_at(dir.join("library.sqlite"))?;
+            #[cfg(not(target_arch = "wasm32"))]
+            let (lock, library) = {
+                let lock = std::fs::File::create(dir.join("lock"))?;
+                lock.try_lock()
+                    .map_err(|e| IncognitoError::Failed(e.to_string()))?;
+                (lock, Library::temporary_at(dir.join("library.sqlite"))?)
+            };
+            // webOS: the scope never touches a file (plans/webos.md 3.3).
+            #[cfg(target_arch = "wasm32")]
+            let (lock, library) = ((), Library::in_memory()?);
             // Before the first write: nothing here is ever queued (wall 2).
             library.drop_outbox()?;
             library.ensure_profile(INCOGNITO, "Incognito", &self.zero_hlc())?;
@@ -155,6 +170,7 @@ impl Core {
         let (lock, library) = match opened {
             Ok(opened) => opened,
             Err(e) => {
+                #[cfg(not(target_arch = "wasm32"))]
                 let _ = std::fs::remove_dir_all(&dir);
                 return Err(e);
             }
@@ -192,6 +208,7 @@ impl Core {
         }
         scope.library.close();
         self.live_scopes().fetch_sub(1, Ordering::SeqCst);
+        #[cfg(not(target_arch = "wasm32"))]
         if let Err(e) = std::fs::remove_dir_all(&scope.dir) {
             tracing::warn!("an Incognito folder stayed: {e}");
         }
