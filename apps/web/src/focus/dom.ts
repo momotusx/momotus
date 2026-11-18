@@ -607,12 +607,25 @@ export function installFocus(onBack: () => void) {
   window.addEventListener("keyup", (e) => {
     if (e.key === "Enter") okLanded = false;
   });
+  // Up and Down leave a text field from the capture phase: webOS hands a focused field's arrows to the field alone,
+  // and they never bubble up to the window (LG Simulators 6.0 and 26), where Back still arrives. Left and Right stay
+  // the caret's.
+  window.addEventListener(
+    "keydown",
+    (e) => {
+      const dir = DIRS[e.key];
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || !typing(e.target) || (dir !== "up" && dir !== "down")) return;
+      e.preventDefault();
+      move(dir);
+    },
+    { capture: true },
+  );
   window.addEventListener("keydown", (e) => {
     if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
     const dir = DIRS[e.key];
     const inField = typing(e.target);
     if (dir) {
-      if (inField && (dir === "left" || dir === "right")) return;
+      if (inField) return;
       e.preventDefault();
       move(dir);
       return;
