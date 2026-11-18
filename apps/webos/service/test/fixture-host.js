@@ -100,6 +100,8 @@ function answer(req, res) {
     if (url === '/repo/manifest.json') return ranged(req, res, fs.readFileSync(path.join(repo, 'manifest.json')), 'application/json');
     if (url === '/repo/test-film.js') return ranged(req, res, Buffer.from(script), 'text/javascript');
     if (url.indexOf('/lookup/') === 0) return json({ title: 'Fixture Film' });
+    // Cinemeta's answer for the film, when a replayed Mac run sends Cinemeta here (CI asks the real one).
+    if (url === '/meta/movie/tt0000417.json') return json({ meta: { id: 'tt0000417', type: 'movie', name: 'Fixture Film', year: '2009', releaseInfo: '2009', runtime: '14 min' } });
     if (url === '/media/film.mp4') return ranged(req, res, film, 'video/mp4');
     res.writeHead(404);
     res.end();

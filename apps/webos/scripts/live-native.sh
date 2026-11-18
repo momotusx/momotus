@@ -4,7 +4,8 @@
 # on 203.0.113.2, a documentation address the core counts as public, reached over a veth pair. The plugin repository
 # is https there, with a certificate from a CA made here, which the core trusts through SSL_CERT_FILE beside the
 # system roots. Then service/test/live-native.js runs once per Node in NODES against the ARM binary (binfmt and
-# qemu-arm with QEMU_LD_PREFIX on an x86 runner). Needs sudo, iproute2, openssl, aria2, fnm and WS_PATH.
+# qemu-arm with QEMU_LD_PREFIX on an x86 runner), with the phone's own plugin repositories too (MQ_REAL_PLUGINS) and,
+# when build-wasm.sh left the wasm core in service/core, an update from the wasm-only app first. Needs sudo, iproute2, openssl, aria2, fnm and WS_PATH.
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 tests="$here/service/test"
@@ -69,7 +70,7 @@ curl -fsS --cacert "$work/ca.pem" "https://$fx_ip:8001/repo/manifest.json" >/dev
 status=0
 for v in $NODES; do
   echo "== live-native.js on Node $v"
-  SSL_CERT_FILE="$work/roots.pem" MQ_FIXTURE="http://$fx_ip:8000" NODE_PATH="$WS_PATH" \
+  SSL_CERT_FILE="$work/roots.pem" MQ_FIXTURE="http://$fx_ip:8000" MQ_REAL_PLUGINS=1 NODE_PATH="$WS_PATH" \
     fnm exec --using="v$v" node "$tests/live-native.js" || status=1
 done
 [ "$status" = 0 ] || tail -20 "$work/seed.log"
