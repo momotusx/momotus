@@ -29,6 +29,10 @@ pub struct DeviceCaps {
     /// entry that carries its parameter sets (Apple's AVFoundation): an
     /// `hev1` entry without them plays as sound alone.
     pub hvc1_only: bool,
+    /// The player gets the source's own URL and no request headers
+    /// (webOS: no stream server in between; plans/webos.md 3.4), so a
+    /// stream that needs `proxyHeaders` cannot play.
+    pub direct_only: bool,
 }
 
 impl DeviceCaps {
@@ -56,6 +60,7 @@ impl DeviceCaps {
                 .to_vec(),
             has_fallback_engine: true,
             hvc1_only: false,
+            direct_only: false,
         }
     }
 

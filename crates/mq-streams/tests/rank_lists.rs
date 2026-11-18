@@ -116,6 +116,7 @@ fn saved_profiles() -> Vec<Profile> {
             .to_vec(),
         has_fallback_engine: false,
         hvc1_only: true,
+        direct_only: false,
     };
     let owner = StreamPrefs {
         languages: vec!["en".into()],
