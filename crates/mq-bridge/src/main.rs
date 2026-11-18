@@ -44,10 +44,32 @@ async fn main() {
             std::process::exit(0);
         });
     }
+    // Bound before the core opens: port 0 (the webOS service) takes a free
+    // one, and the ready line names the port it got.
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(listener) => listener,
+        Err(e) => {
+            eprintln!("bind {addr}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let addr = listener.local_addr().unwrap_or(addr);
+    // A parent that judges a slow first open (a TV's eMMC, a large library)
+    // by a heartbeat: `MQ_BRIDGE_HEARTBEAT_MS` prints an opening line that
+    // often until the ready line.
+    let opened = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    heartbeat(opened.clone());
     let core = Core::open(CoreConfig {
         data_dir: data,
         profile_id: std::env::var("MQ_PROFILE").unwrap_or_else(|_| "default".into()),
-        device_id: 0,
+        // The webOS service names the id its wasm core uses (16 hex digits,
+        // never 0, as mq-wasm reads its seed), so both cores write as one
+        // device; unset, 0 keeps the library's own.
+        device_id: std::env::var("MQ_DEVICE_ID")
+            .ok()
+            .and_then(|hex| u64::from_str_radix(&hex, 16).ok())
+            .map_or(0, |id| id.max(1)),
     })
     .expect("open core");
     core.set_debrid_keys(&StoreId::keys_from_env());
@@ -56,7 +78,7 @@ async fn main() {
     mq_bridge::dev_segments(&core);
     mq_bridge::dev_replay();
     let named = std::env::var("MQ_BRIDGE_ORIGINS").unwrap_or_default();
-    let (origins, ignored) = allowed_origins(port, &named);
+    let (origins, ignored) = allowed_origins(addr.port(), &named);
     for entry in ignored {
         eprintln!("MQ_BRIDGE_ORIGINS entry ignored: {entry} is not http(s)://host[:port]");
     }
@@ -67,11 +89,45 @@ async fn main() {
     if let Ok(dir) = std::env::var("MQ_STATIC") {
         app = with_static(app, PathBuf::from(dir));
     }
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let listener = tokio::net::TcpListener::bind(addr).await.expect("bind");
     let origins = serde_json::to_string(&origins).unwrap_or_default();
-    println!("{{\"event\":\"bridge_ready\",\"url\":\"ws://{addr}/ws\",\"origins\":{origins}}}");
+    {
+        use std::io::Write;
+        // Under the heartbeat's own lock: no opening line follows this one.
+        let mut out = std::io::stdout().lock();
+        opened.store(true, std::sync::atomic::Ordering::SeqCst);
+        let _ = writeln!(
+            out,
+            "{{\"event\":\"bridge_ready\",\"url\":\"ws://{addr}/ws\",\"origins\":{origins}}}"
+        );
+        let _ = out.flush();
+    }
     axum::serve(listener, app).await.expect("serve");
+}
+
+/// `{"event":"bridge_opening","ms":<since start>}` every
+/// `MQ_BRIDGE_HEARTBEAT_MS` until `opened`; nothing when it is unset.
+fn heartbeat(opened: std::sync::Arc<std::sync::atomic::AtomicBool>) {
+    let Some(every) = std::env::var("MQ_BRIDGE_HEARTBEAT_MS")
+        .ok()
+        .and_then(|ms| ms.parse::<u64>().ok())
+        .filter(|&ms| ms > 0)
+    else {
+        return;
+    };
+    let start = std::time::Instant::now();
+    std::thread::spawn(move || {
+        use std::io::Write;
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(every));
+            let mut out = std::io::stdout().lock();
+            if opened.load(std::sync::atomic::Ordering::SeqCst) {
+                return;
+            }
+            let ms = start.elapsed().as_millis();
+            let _ = writeln!(out, "{{\"event\":\"bridge_opening\",\"ms\":{ms}}}");
+            let _ = out.flush();
+        }
+    });
 }
 
 /// C23's minimumNumber and maximumNumber (a NaN gives the other operand; -0 is
