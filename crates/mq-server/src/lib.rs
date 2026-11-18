@@ -25,6 +25,8 @@ mod file;
 // webOS uses only its detection: the player fetches a playlist itself.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
 mod manifest;
+#[cfg(all(target_arch = "wasm32", feature = "selftest"))]
+mod selftest;
 mod subtitles;
 #[cfg(all(test, feature = "torrent"))]
 #[allow(dead_code)]

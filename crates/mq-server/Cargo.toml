@@ -10,6 +10,8 @@ publish.workspace = true
 torrent = ["dep:mq-engine"]
 # Tests of torrent setup cancelled halfway (the engine's range barrier).
 test-hooks = ["torrent", "mq-engine/test-hooks"]
+# Exports `open_lease()` for the wasm detect run under the TV's Nodes (wasm-test.sh).
+selftest = ["dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:serde_json"]
 
 [dependencies]
 mq-rt = { path = "../mq-rt" }
@@ -34,6 +36,9 @@ axum = "0.8"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { version = "1", default-features = false, features = ["sync", "macros"] }
+wasm-bindgen = { version = "=0.2.129", optional = true }
+wasm-bindgen-futures = { version = "0.4.79", optional = true }
+serde_json = { workspace = true, optional = true }
 
 [dev-dependencies]
 mq-http = { path = "../mq-http", features = ["test-dns"] }
