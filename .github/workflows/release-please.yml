@@ -92,6 +92,11 @@ jobs:
             echo "keyAlias=$(esc "$ANDROID_KEY_ALIAS")"
             echo "keyPassword=$(esc "$ANDROID_KEY_PASSWORD")"
           } >apps/android/keystore.local.properties
+      # Gradle as CI sets it up, with its cache: a cold runner once failed to resolve the Kotlin Compose plugin
+      # (v0.2.0, 2026-11-18), which CI's warm cache never asks the network for.
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-provider: basic
       - name: Build and check the APKs
         env:
           # Read at compile time by the core (option_env!) and by build-core.sh.
