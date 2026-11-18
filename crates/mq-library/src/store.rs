@@ -171,6 +171,7 @@ pub struct Library {
     /// Tables the open write transaction touched, announced once it has
     /// committed (a listener reading at once must see the change).
     touched: Arc<Mutex<Vec<Table>>>,
+    #[cfg(not(target_arch = "wasm32"))]
     temp_path: Option<PathBuf>,
     /// Bumped (under the writer) whenever a profile is removed. Cached addon
     /// answers carry the count they were fetched under, and only the
@@ -191,12 +192,21 @@ pub struct Library {
 
 impl Library {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, LibraryError> {
-        Self::open_with(path.as_ref().to_path_buf(), 3)
+        Self::open_with(path.as_ref().to_path_buf(), READERS)
+    }
+
+    /// A library that lives in memory and never touches a file, read
+    /// through its one connection. webOS opens it for an Incognito scope and
+    /// when the service's write probe failed (plans/webos.md 3.3); there the
+    /// account restores from the relay, as on a new device. Gone on drop.
+    pub fn in_memory() -> Result<Self, LibraryError> {
+        Self::open_with(PathBuf::from(MEMORY), 0)
     }
 
     /// A throwaway database in the temp directory, removed on drop. Used by
     /// tests and the CLI; WAL needs a real file for concurrent readers. The
     /// first one in a process also clears what ended processes left behind.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn temporary() -> Result<Self, LibraryError> {
         static SWEPT: std::sync::Once = std::sync::Once::new();
         SWEPT.call_once(|| sweep_temporaries(&std::env::temp_dir()));
@@ -211,6 +221,7 @@ impl Library {
     /// an ended process whose pid this one now has holds that run's rows
     /// (code review 2026-10-20 r3 P3-7).
     #[doc(hidden)]
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn temporary_at(path: PathBuf) -> Result<Self, LibraryError> {
         remove_database(&path);
         let mut lib = Self::open_with(path.clone(), 2)?;
@@ -234,6 +245,7 @@ impl Library {
             next_reader: AtomicUsize::new(0),
             changes,
             touched,
+            #[cfg(not(target_arch = "wasm32"))]
             temp_path: None,
             removals: AtomicU64::new(0),
             removing: AtomicBool::new(false),
@@ -427,10 +439,14 @@ impl Library {
         f: impl FnOnce(&Connection) -> rusqlite::Result<T>,
     ) -> Result<T, LibraryError> {
         let out = {
-            let index = self.next_reader.fetch_add(1, Ordering::Relaxed) % self.readers.len();
-            let conn = self.readers[index]
-                .lock()
-                .unwrap_or_else(|p| p.into_inner());
+            // No readers (webOS, memory): reads take the writer. Its lock is
+            // released before `scrub_if_pending` takes it again, since
+            // wasm's no-threads `Mutex` panics on a nested lock.
+            let conn = match self.readers.len() {
+                0 => &self.writer,
+                n => &self.readers[self.next_reader.fetch_add(1, Ordering::Relaxed) % n],
+            };
+            let conn = conn.lock().unwrap_or_else(|p| p.into_inner());
             f(&conn)?
         };
         self.scrub_if_pending();
@@ -974,14 +990,47 @@ impl Library {
     }
 }
 
+/// The name `Library::in_memory` opens: SQLite keeps it in memory.
+const MEMORY: &str = ":memory:";
+
+/// Reader connections beside the writer. webOS runs the core on one
+/// thread with one connection (the host-file VFS has no locking).
+#[cfg(not(target_arch = "wasm32"))]
+const READERS: usize = 3;
+#[cfg(target_arch = "wasm32")]
+const READERS: usize = 0;
+
+/// Under `store` so it can see the reader pool.
+#[cfg(all(target_arch = "wasm32", feature = "selftest"))]
+#[path = "selftest.rs"]
+mod selftest;
+
 fn open_connection(target: &str) -> Result<Connection, LibraryError> {
     let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
         | OpenFlags::SQLITE_OPEN_CREATE
         | OpenFlags::SQLITE_OPEN_URI
         | OpenFlags::SQLITE_OPEN_NO_MUTEX;
-    let conn = Connection::open_with_flags(target, flags)?;
-    conn.pragma_update(None, "journal_mode", "WAL")?;
-    conn.pragma_update(None, "synchronous", "NORMAL")?;
+    #[cfg(not(target_arch = "wasm32"))]
+    let conn = {
+        let conn = Connection::open_with_flags(target, flags)?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        conn
+    };
+    // webOS (plans/webos.md 3.3): files go through the host VFS, never in
+    // WAL (it needs shared memory and locks the VFS lacks). With a rollback
+    // journal only FULL survives a power cut, and TVs lose power at the
+    // wall. Memory stays on the default VFS.
+    #[cfg(target_arch = "wasm32")]
+    let conn = if target == MEMORY {
+        Connection::open_with_flags(target, flags)?
+    } else {
+        crate::vfs::install()?;
+        let conn = Connection::open_with_flags_and_vfs(target, flags, crate::vfs::NAME)?;
+        conn.pragma_update(None, "journal_mode", "TRUNCATE")?;
+        conn.pragma_update(None, "synchronous", "FULL")?;
+        conn
+    };
     conn.pragma_update(None, "foreign_keys", "ON")?;
     // Deleted rows (a removed profile's) are overwritten, not left in free
     // pages.
@@ -1096,6 +1145,7 @@ fn install_hooks(conn: &Connection, touched: Arc<Mutex<Vec<Table>>>) -> rusqlite
 /// that was killed) keeps its files until the process ends; one day of test
 /// runs left 6,145 of them, 877 MB. Another live process's files stay.
 #[doc(hidden)]
+#[cfg(not(target_arch = "wasm32"))]
 pub fn sweep_temporaries(dir: &Path) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -1131,12 +1181,13 @@ fn alive(pid: u32) -> bool {
 }
 
 /// Elsewhere nothing is swept.
-#[cfg(not(unix))]
+#[cfg(all(not(unix), not(target_arch = "wasm32")))]
 fn alive(_pid: u32) -> bool {
     true
 }
 
 /// The database at `path` and its `-wal` and `-shm`.
+#[cfg(not(target_arch = "wasm32"))]
 fn remove_database(path: &Path) {
     for suffix in ["", "-wal", "-shm"] {
         let mut p = path.to_path_buf().into_os_string();
@@ -1145,6 +1196,7 @@ fn remove_database(path: &Path) {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Drop for Library {
     fn drop(&mut self) {
         if let Some(path) = self.temp_path.take() {
@@ -1767,5 +1819,49 @@ mod continue_tests {
             .find(|l| l.starts_with("SEARCH p "))
             .unwrap_or_default();
         assert!(p.contains("(profile_id=? AND "), "{plan}");
+    }
+}
+
+#[cfg(test)]
+mod storage_tests {
+    use super::Library;
+
+    /// rusqlite's default `ffi-sqlite-wasm-rs` is the SQLite the webOS
+    /// core builds on (plans/webos.md 3.3).
+    #[test]
+    fn rusqlite_keeps_its_defaults() {
+        let manifest = include_str!("../Cargo.toml");
+        let line = manifest
+            .lines()
+            .find(|l| l.starts_with("rusqlite ="))
+            .expect("rusqlite in the manifest");
+        assert!(!line.contains("default-features"), "{line}");
+    }
+
+    /// One connection, as on webOS: reads take the writer, a write and a
+    /// read run back to back, and nothing is on disk.
+    #[test]
+    fn a_library_in_memory_reads_through_its_writer() {
+        let lib = Library::in_memory().unwrap();
+        assert!(lib.readers.is_empty());
+        lib.set_device_value("k", "v").unwrap();
+        assert_eq!(lib.device_value("k").unwrap().as_deref(), Some("v"));
+        lib.set_device_value("k", "w").unwrap();
+        assert_eq!(lib.device_value("k").unwrap().as_deref(), Some("w"));
+        let file: String = lib
+            .read(|c| c.query_row("PRAGMA database_list", [], |r| r.get(2)))
+            .unwrap();
+        assert_eq!(file, "", "a memory library has no file");
+    }
+
+    /// Native libraries keep WAL and their reader pool.
+    #[test]
+    fn a_native_library_stays_in_wal_with_readers() {
+        let lib = Library::temporary().unwrap();
+        assert!(!lib.readers.is_empty());
+        let mode: String = lib
+            .read(|c| c.query_row("PRAGMA journal_mode", [], |r| r.get(0)))
+            .unwrap();
+        assert_eq!(mode, "wal");
     }
 }

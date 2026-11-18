@@ -15,6 +15,8 @@ mod schema;
 mod store;
 mod sync;
 mod tracker;
+#[cfg(target_arch = "wasm32")]
+mod vfs;
 
 pub use archive::ArchiveFilm;
 pub use downloads::DownloadRecord;
@@ -23,9 +25,11 @@ pub use hlc::{Hlc, HlcClock};
 pub use plugins::{MAX_REPOS, PluginCode, PluginRepoRow};
 pub use policy::{AllowedList, AllowedRow, Authorization, MAX_ALLOWED, Policy};
 pub use profiles::{DEFAULTS_GIVEN, ProfileRow};
+#[cfg(not(target_arch = "wasm32"))]
+pub use store::sweep_temporaries;
 pub use store::{
     AddonRow, CachedResponse, ContinueItem, FINISHED_RATIO, IMDB_ID_ROWS, Library, LibraryEntry,
-    LibraryError, LibraryItemRow, ProgressRow, Table, sweep_temporaries,
+    LibraryError, LibraryItemRow, ProgressRow, Table,
 };
 pub use sync::{
     DEFAULTS_ERA, INCOGNITO, OWNER, OWNER_NAME, OutboxPage, SignedEntry, Stamp, SyncCursor,

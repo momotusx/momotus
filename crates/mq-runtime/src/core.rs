@@ -124,6 +124,11 @@ pub struct CoreConfig {
     /// phone does not share it; 0 means a random id stored in the data dir
     /// (the CLI and tests).
     pub device_id: u64,
+    /// webOS: the service's write probe failed, so the library lives in
+    /// memory and the account restores from the relay, as on a new device
+    /// (plans/webos.md 3.3).
+    #[cfg(target_arch = "wasm32")]
+    pub memory_only: bool,
 }
 
 /// A handle on the device's runtime for one profile. Cheap to clone; every
@@ -309,8 +314,12 @@ impl Device {
     }
 
     /// The device over `data_dir`, shared with every open handle on it.
-    fn open(data_dir: &Path, device_id: u64) -> Result<Arc<Self>, CoreError> {
-        let path = std::fs::canonicalize(data_dir)?;
+    fn open(config: &CoreConfig) -> Result<Arc<Self>, CoreError> {
+        #[cfg(not(target_arch = "wasm32"))]
+        let path = std::fs::canonicalize(&config.data_dir)?;
+        // webOS: the service hands an absolute dir it created.
+        #[cfg(target_arch = "wasm32")]
+        let path = config.data_dir.clone();
         let mut open = OPEN.lock().unwrap_or_else(|p| p.into_inner());
         open.retain(|(_, device)| device.strong_count() > 0);
         if let Some(device) = open
@@ -321,19 +330,26 @@ impl Device {
             return Ok(device);
         }
         let incognito = path.join("incognito");
-        let device = Self::new(
-            Library::open(path.join("library.sqlite"))?,
-            device_id,
-            incognito.clone(),
-        )?;
+        #[cfg(target_arch = "wasm32")]
+        let library = match config.memory_only {
+            true => Library::in_memory()?,
+            false => Library::open(path.join("library.sqlite"))?,
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        let library = Library::open(path.join("library.sqlite"))?;
+        let device = Self::new(library, config.device_id, incognito.clone())?;
         // What a killed run's Incognito left (plans/batch-10-incognito.md
-        // 2.3): the first session shows the ended line.
-        if crate::incognito::recover(&incognito) {
-            device.ended_unseen.send_replace(true);
+        // 2.3): the first session shows the ended line. webOS scopes never
+        // touch files, so nothing is left there.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if crate::incognito::recover(&incognito) {
+                device.ended_unseen.send_replace(true);
+            }
+            // Before any engine of this run starts.
+            let torrents = path.join("torrents");
+            crate::incognito::recover_torrents(&incognito, &torrents, &device.library);
         }
-        // Before any engine of this run starts.
-        let torrents = path.join("torrents");
-        crate::incognito::recover_torrents(&incognito, &torrents, &device.library);
         open.push((path, Arc::downgrade(&device)));
         Ok(device)
     }
@@ -343,10 +359,15 @@ impl Core {
     /// Opens the core over `config.data_dir`. A directory already open in
     /// this process shares its device state with the new handle.
     pub fn open(config: CoreConfig) -> Result<Self, CoreError> {
+        // webOS: the service made the dir (its write probe); no Walk there.
+        #[cfg(not(target_arch = "wasm32"))]
         std::fs::create_dir_all(&config.data_dir)?;
-        let device = Device::open(&config.data_dir, config.device_id)?;
+        let device = Device::open(&config)?;
         let torrents = config.data_dir.join("torrents");
+        #[cfg(not(target_arch = "wasm32"))]
         let walk = Walk::read(&config.data_dir);
+        #[cfg(target_arch = "wasm32")]
+        let walk = None;
         let downloads = config.data_dir.join("downloads");
         let core =
             Self::with_device(device, &config.profile_id, (torrents, downloads), walk)?.active();
