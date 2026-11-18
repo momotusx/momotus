@@ -183,7 +183,7 @@ pub struct VersionsSnapshot {
     pub nobody_sharing: bool,
     /// "From the Internet Archive" (plans/plugins-and-marketplace.md 4.4,
     /// 5): its own pass, after the addons' rows, never the pick, never a
-    /// failover; `done` never waits for it.
+    /// failover; neither `done` nor `empty` waits for it or yields to it.
     pub archive: SourceRows,
     /// "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the
     /// Nuvio providers' rows, a pass of their own like the Archive's, but
@@ -2959,13 +2959,11 @@ fn empty(s: &State) -> Option<EmptyVersions> {
     if s.kids && s.addons == 0 {
         return named(EmptyKind::KidsNothing, EmptyAction::None);
     }
-    // The Archive may still list it, a plugin within Play's wait for it, or
-    // either lists it (4.4).
-    if s.archive_pending
-        || !s.archive_ranked.rows.is_empty()
-        || (s.plugins_pending && !s.plugins_waited)
-        || !s.plugins_ranked.rows.is_empty()
-    {
+    // A plugin may still list it within Play's wait for it, or lists it
+    // (4.4). The Archive's pass is never waited for: no app lists its
+    // section yet, so a view with only Archive rows, or with its pass still
+    // reading, would never say why nothing plays (webOS F5).
+    if (s.plugins_pending && !s.plugins_waited) || !s.plugins_ranked.rows.is_empty() {
         return None;
     }
     if !s.done || !s.ranked.rows.is_empty() || s.download.is_some() {
@@ -3301,6 +3299,27 @@ mod tests {
         };
         assert_eq!(action(false), None);
         assert_eq!(action(true), Some(EmptyAction::TryAgain));
+    }
+
+    /// webOS F5: once the addons are done, Archive rows or a pass still
+    /// reading never hold back why nothing plays: no app lists them.
+    #[test]
+    fn the_archive_never_holds_back_why_nothing_plays() {
+        let core = Core::temporary("p").unwrap();
+        let view = VersionsView::denied_view(&core, &film_params());
+        let mut s = lock(&view.state);
+        (s.kids, s.addons, s.unreached, s.done) = (false, 1, 0, true);
+        s.archive_pending = true;
+        let kind = |s: &State| render(s).empty.map(|e| e.kind);
+        assert_eq!(kind(&s), Some(EmptyKind::NoResults));
+        s.archive_pending = false;
+        s.archive_ranked.rows = rank_for_tests(vec![wire(
+            r#"{"title":"Movie.2020.480p.WEB-DL.x264-AAA","url":"https://a.example/a.mp4"}"#,
+        )]);
+        assert_eq!(kind(&s), Some(EmptyKind::NoResults));
+        // A plugin row still holds it: the apps list that section.
+        s.plugins_ranked.rows = s.archive_ranked.rows.clone();
+        assert_eq!(kind(&s), None);
     }
 
     /// Review 2026-10-23 P3-8: a pick of no stated resolution offers no
