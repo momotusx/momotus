@@ -16,7 +16,7 @@ export const kidsSession = (s: ProfilesSnapshot | null | undefined) => !!s && (s
 /** Settings sections a kids profile does not have: Sources, Account, Home rows and Downloads. */
 export const KIDS_HIDDEN_SECTIONS: readonly SectionId[] = ["sources", "account", "home", "downloads"];
 
-const PAGES = ["/discover", "/calendar", "/welcome", "/addons", "/recommended-addons", "/find-addons", "/plugins", "/import", "/pair", "/sync", "/home-rows", "/debrid", "/trakt"];
+const PAGES = ["/discover", "/zap", "/calendar", "/welcome", "/addons", "/recommended-addons", "/find-addons", "/plugins", "/import", "/pair", "/sync", "/home-rows", "/debrid", "/trakt"];
 const UNDER = ["/sign-in", "/sync/", "/profiles/"];
 
 /** A page a kids session never opens (a typed address goes Home): Discover, Calendar, every source, account and

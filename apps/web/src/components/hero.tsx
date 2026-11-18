@@ -22,6 +22,7 @@ import { separators } from "./separators";
 import { muted, playTrailer, setMuted, stopTrailer, trailerPlaying } from "./yt-player";
 import { incognito } from "../core/profiles";
 import { RouteA } from "./route-link";
+import { ZapButton } from "./zap-button";
 
 // The owner's B2 (2026-10-24, design/tokens.json motion): a page stays 8 s, slides in 650 ms, its art moving at 0.85
 // of its words.
@@ -404,6 +405,7 @@ export function HeroCarousel(props: { heroes: Hero[]; waiting: boolean }) {
       <Show when={form() === "phone"}>
         <header class="ph-top">
           <h1 class="ph-title">Home</h1>
+          <ZapButton />
         </header>
       </Show>
       <TrailerMute />

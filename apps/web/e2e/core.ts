@@ -62,6 +62,8 @@ export const SIGN_IN_PORTS = { relay: 17833 + shift, mock: 17834 + shift, core: 
 export const KINDS_PORT = 17836 + shift;
 /** The player bar spec's own: a core with a local addon's series and film, each with subtitles in many languages. */
 export const BAR_PORT = 17840 + shift;
+/** The zap spec's own: a core whose one catalog lists a film that plays and whose other film has no source. */
+export const ZAP_PORT = 17841 + shift;
 /** The zoom spec's saved zooms, each on its own host in one Chrome profile (Chrome keeps a zoom per host and sends every
  * *.localhost to this machine): the core lets these pages open its socket too. */
 export const ZOOM_HOSTS = new Map([1, 1.25, 1.75, 2, 2.5].map((zoom) => [zoom, `z${zoom * 100}.localhost`]));
