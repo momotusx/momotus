@@ -175,10 +175,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" "$RUNNER_TEMP"/ipk/momotus-webos-*.ipk --clobber --repo "$GITHUB_REPOSITORY"
 
-  # Once both are attached: one SHA256SUMS over every APK and IPK of the release, then the draft goes public.
+  # Once both have run: one SHA256SUMS over every APK and IPK of the release, then the draft goes public. A failed
+  # IPK does not hold back the APKs: its job shows red and the release goes out without it.
   publish:
     needs: [release-please, apks, ipk]
-    if: ${{ needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ always() && needs.apks.result == 'success' && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
