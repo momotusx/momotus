@@ -1039,7 +1039,7 @@ private struct StatusOverlay: View {
         let status = PlayerLayout.status(
             phase: model.playback?.phase, cannotOpen: model.openError != nil,
             firstFrameShown: model.firstFrameMs != nil, waiting: model.waiting, noPick: model.noPick)
-        guard zapping, ZapRules.failed(firstFrame: model.firstFrameMs != nil, status: status, chooseAnother: false) else { return status }
+        guard zapping, ZapRules.failed(firstFrame: model.firstFrameMs != nil, status: status) else { return status }
         return .waiting(words: false)
     }
 

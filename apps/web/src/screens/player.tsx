@@ -1471,11 +1471,13 @@ function PlayerPage(props: {
   );
 
   // A zap never offers another version or Try again (plans/zap.md 2.3): anything that ends its start before the first
-  // frame (a failure, the 20 s offer) zaps on in place of this play, up to ZAP_TRIES in a row, then "Nothing played."
+  // frame (a failure) zaps on in place of this play, up to ZAP_TRIES in a row, then "Nothing played." The core's 20 s offer
+  // is no miss: a torrent's first frame often comes at 16 to 26 s (Pixel walk 2026-11-18), and the core moves between
+  // versions itself until its start budget ends in a failure.
   // After the first frame nothing zaps by itself.
   const zapOn = () => navigate(zapPath(props.zapKind, props.zapTries + 1), { replace: true, state: ownState(location.state) });
   const zapAgain = () => navigate(zapPath(props.zapKind), { replace: true, state: ownState(location.state) });
-  const nothingPlayed = () => zapping() && props.zapTries + 1 >= ZAP_TRIES && !started() && (another() || (!!status() && !status()?.busy));
+  const nothingPlayed = () => zapping() && props.zapTries + 1 >= ZAP_TRIES && !started() && !!status() && !status()?.busy;
   // Once: a snapshot that lands while the next zap opens never sends a second.
   let zappedOn = false;
   // The page left (Back while a dial turn saves): nothing navigates from it after.
@@ -1483,7 +1485,7 @@ function PlayerPage(props: {
   onCleanup(() => (gone = true));
   createEffect(() => {
     if (!zapping() || started() || nothingPlayed() || zappedOn) return;
-    if (another() || (status() && !status()?.busy)) {
+    if (status() && !status()?.busy) {
       zappedOn = true;
       zapOn();
     }

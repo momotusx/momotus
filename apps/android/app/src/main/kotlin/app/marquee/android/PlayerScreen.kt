@@ -455,7 +455,7 @@ fun PlayerScreen(
     if (route.zapAt != null) {
         LaunchedEffect(controller) {
             snapshotFlow {
-                zapMissed(controller.stage == Stage.Failed, controller.chooseAnother, controller.firstFrameMs != null)
+                zapMissed(controller.stage == Stage.Failed, controller.firstFrameMs != null)
             }.first { it }
             holder.shutdown()
             onReplace(ZapCopy.next(route, auto = true))

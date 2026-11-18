@@ -52,14 +52,16 @@ data class ZapControls(
 )
 
 /**
- * Whether a zap play did not play (plans/zap.md 2.3), which zaps on by itself: before its first frame it failed, or
- * the core offers Choose another version. After the first frame a stall shows the bar's Zap again, a failure its card.
+ * Whether a zap play did not play (plans/zap.md 2.3), which zaps on by itself: it failed before its first frame. The
+ * core's 20 s Choose another version is no miss: a torrent's first frame often comes at 16 to 26 s (Pixel walk
+ * 2026-11-18, where zapping on at the offer left three starts in a row for "Nothing played."), and the core moves
+ * between versions itself until its start budget ends in a failure. After the first frame a stall shows the bar's
+ * Zap again, a failure its card.
  */
 fun zapMissed(
     failed: Boolean,
-    chooseAnother: Boolean,
     firstFrame: Boolean,
-): Boolean = !firstFrame && (failed || chooseAnother)
+): Boolean = !firstFrame && failed
 
 /**
  * A dial press (plans/zap.md 2.3): cancels the press before it ([previous]), [write]s the step as the profile's

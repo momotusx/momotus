@@ -73,13 +73,12 @@ class ZapModeTest {
     }
 
     @Test
-    fun `a zap that failed, or waited for Choose another before its first frame, did not play`() {
-        assertTrue(zapMissed(failed = true, chooseAnother = false, firstFrame = false))
-        assertTrue(zapMissed(failed = false, chooseAnother = true, firstFrame = false))
+    fun `a zap that failed before its first frame did not play, one still starting at the offer did`() {
+        assertTrue(zapMissed(failed = true, firstFrame = false))
+        // Still starting when the core offers another version: it waits for the core (Pixel walk 2026-11-18).
+        assertFalse(zapMissed(failed = false, firstFrame = false))
         // After the first frame nothing zaps by itself: a stall offers the bar's Zap again, a failure its card.
-        assertFalse(zapMissed(failed = false, chooseAnother = true, firstFrame = true))
-        assertFalse(zapMissed(failed = true, chooseAnother = false, firstFrame = true))
-        assertFalse(zapMissed(failed = false, chooseAnother = false, firstFrame = false))
+        assertFalse(zapMissed(failed = true, firstFrame = true))
     }
 
     /** One track group of [format]. */
