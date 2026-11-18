@@ -269,6 +269,8 @@ async fn a_kids_session_is_refused_every_owner_op() {
     assert_eq!(c.code(json!({"op": "resetOwnerPin"})).await, "kids");
     // No other profile's history for a kid (plans/profile-panel.md 6).
     assert_eq!(c.code(json!({"op": "profilesLastWatched"})).await, "kids");
+    // Zap draws past the kid's list (plans/zap.md 1.3).
+    assert_eq!(c.code(json!({"op": "zap"})).await, "kids");
     // Locked, the kids session still enters no Incognito.
     c.ok(json!({"op": "lockSession"})).await;
     let incognito = json!({"op": "switchProfile", "profile": "incognito", "pin": PIN});

@@ -201,6 +201,8 @@ struct Inner {
     /// Each genre's art for the genre grids, by catalog and genre (core
     /// backlog C43), with when it was looked up.
     genre_art: std::sync::Mutex<HashMap<String, crate::views::genres::Looked>>,
+    /// The ids each profile zapped lately (plans/zap.md 1.1).
+    zapped: crate::zap::Zapped,
     /// Each profile's enabled addons as `installed_addons` read them, with
     /// the library versions of the addons and access tables they were read at.
     addon_lists: std::sync::Mutex<HashMap<String, KeptAddons>>,
@@ -417,6 +419,7 @@ impl Core {
                 archive: std::sync::OnceLock::new(),
                 plugins: std::sync::OnceLock::new(),
                 genre_art: std::sync::Mutex::default(),
+                zapped: std::sync::Mutex::default(),
                 addon_lists: std::sync::Mutex::default(),
                 plays: tokio::sync::watch::Sender::new(0),
                 downloads_dir,
@@ -569,6 +572,11 @@ impl Core {
     }
 
     /// The built-in TurkceAltyazi.org source.
+    /// The ids each profile zapped lately (`zap`).
+    pub(crate) fn zapped(&self) -> &crate::zap::Zapped {
+        &self.inner.zapped
+    }
+
     /// The genre grids' art, by catalog and genre (`views::genres`).
     pub(crate) fn genre_art(
         &self,

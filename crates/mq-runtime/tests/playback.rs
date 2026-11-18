@@ -3561,3 +3561,128 @@ async fn a_version_for_an_account_says_no_account_push() {
         "{line}"
     );
 }
+
+/// Plays `view` on from `from` for `ms` in 5 second reports.
+fn play_on(view: &PlaybackView, from: u64, ms: u64) -> u64 {
+    let mut at = from;
+    while at < from + ms {
+        at += 5_000;
+        view.report_progress(at, 3_600_000, false);
+    }
+    at
+}
+
+#[tokio::test]
+async fn a_zap_starts_where_dealt_and_writes_nothing_for_five_minutes() {
+    let base = origin().await;
+    let core = Core::temporary("p").unwrap();
+    let streams = format!(
+        r#"{{"streams":[{{"name":"Live","url":"{base}/ok.mkv","behaviorHints":{{"proxyHeaders":{{"request":{{"x-key":"1"}}}}}}}}]}}"#
+    );
+    let candidates = setup(&core, &streams);
+    // Saved progress elsewhere in the film: the zap ignores it.
+    let view = PlaybackView::open(&core, candidates.clone(), target());
+    view.report_progress(60_000, 3_600_000, false);
+    drop(view);
+
+    let view = PlaybackView::open_zap_at(&core, candidates, target(), 1_200_000);
+    assert_eq!(view.snapshot().resume_ms, Some(1_200_000));
+    let s = until(&view, "ready", |s| s.phase != PlaybackPhase::Resolving).await;
+    assert_eq!(s.phase, PlaybackPhase::Ready, "{s:?}");
+    view.report_progress(1_200_000, 3_600_000, false);
+    // Four minutes and a half: nothing saved, no stream remembered.
+    let at = play_on(&view, 1_200_000, 270_000);
+    assert_eq!(
+        core.library().progress("p", "tt1727587").unwrap(),
+        Some((60_000, 3_600_000))
+    );
+    assert_eq!(
+        core.library().stream_memory("p", "tt1727587").unwrap(),
+        None
+    );
+    // Past five minutes it is an ordinary play.
+    play_on(&view, at, 40_000);
+    let (saved, _) = core.library().progress("p", "tt1727587").unwrap().unwrap();
+    assert!(saved > 1_200_000, "saved {saved} after the hold");
+    assert!(
+        core.library()
+            .stream_memory("p", "tt1727587")
+            .unwrap()
+            .is_some()
+    );
+}
+
+#[tokio::test]
+async fn a_zap_closed_inside_its_hold_leaves_no_trace() {
+    let base = origin().await;
+    let core = Core::temporary("p").unwrap();
+    let streams = format!(
+        r#"{{"streams":[{{"name":"Live","url":"{base}/ok.mkv","behaviorHints":{{"proxyHeaders":{{"request":{{"x-key":"1"}}}}}}}}]}}"#
+    );
+    let view = PlaybackView::open_zap_at(&core, setup(&core, &streams), target(), 600_000);
+    until(&view, "ready", |s| s.phase == PlaybackPhase::Ready).await;
+    view.report_progress(600_000, 3_600_000, false);
+    play_on(&view, 600_000, 120_000);
+    // A subtitle chosen while held holds for this play only.
+    view.subtitle_chosen(None, None);
+    drop(view);
+    assert_eq!(core.library().progress("p", "tt1727587").unwrap(), None);
+    assert!(
+        core.library()
+            .continue_watching("p", 10)
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(
+        core.library().stream_memory("p", "tt1727587").unwrap(),
+        None
+    );
+}
+
+#[tokio::test]
+async fn a_zap_past_a_short_files_three_quarters_starts_it_from_zero() {
+    let base = origin().await;
+    let core = Core::temporary("p").unwrap();
+    let streams = format!(
+        r#"{{"streams":[{{"name":"Live","url":"{base}/ok.mkv","behaviorHints":{{"proxyHeaders":{{"request":{{"x-key":"1"}}}}}}}}]}}"#
+    );
+    // A 12 minute guess's point in a 9 minute cartoon.
+    let view = PlaybackView::open_zap_at(&core, setup(&core, &streams), target(), 500_000);
+    until(&view, "ready", |s| s.phase == PlaybackPhase::Ready).await;
+    view.report_progress(0, 540_000, false);
+    assert_eq!(view.snapshot().resume_ms, None);
+}
+
+#[tokio::test]
+async fn a_zaps_hold_counts_across_a_fail_over() {
+    let base = origin().await;
+    let core = Core::temporary("p").unwrap();
+    let live = format!(
+        r#"{{"name":"Live","url":"{base}/ok.mkv","behaviorHints":{{"proxyHeaders":{{"request":{{"x-key":"1"}}}}}}}}"#
+    );
+    let streams = format!(r#"{{"streams":[{live},{live}]}}"#);
+    let view = PlaybackView::open_zap_at(&core, setup(&core, &streams), target(), 900_000);
+    let first = settled(&view).await;
+    view.report_progress(900_000, 3_600_000, false);
+    let at = play_on(&view, 900_000, 240_000);
+    assert_eq!(core.library().progress("p", "tt1727587").unwrap(), None);
+    // Four minutes in, the source fails and the next one takes over.
+    view.fail_over(Some(first.attempt), Some("http"), Some(404), "gone");
+    let second = settled(&view).await;
+    assert_eq!(second.phase, PlaybackPhase::Ready, "{second:?}");
+    view.report_progress(at, 3_600_000, false);
+    // Another minute and a half: five and a half in all, so the play counts.
+    // Still held a moment after the move: the new source's stream is kept, not written.
+    assert_eq!(
+        core.library().stream_memory("p", "tt1727587").unwrap(),
+        None
+    );
+    play_on(&view, at, 90_000);
+    assert!(core.library().progress("p", "tt1727587").unwrap().is_some());
+    assert!(
+        core.library()
+            .stream_memory("p", "tt1727587")
+            .unwrap()
+            .is_some()
+    );
+}

@@ -1938,6 +1938,17 @@ async fn play(core: &Core, item_id: &str, video_id: &str) -> PlaybackView {
 /// [`play`], with every addon answered first when `settled`: the pick then
 /// carries the version's online sources after the kept file.
 async fn play_when(core: &Core, item_id: &str, video_id: &str, settled: bool) -> PlaybackView {
+    play_with(core, item_id, video_id, settled, None).await
+}
+
+/// [`play_when`], as a zap starting at `zap_at` when set.
+async fn play_with(
+    core: &Core,
+    item_id: &str,
+    video_id: &str,
+    settled: bool,
+    zap_at: Option<u64>,
+) -> PlaybackView {
     let episode: Option<u32> = video_id.rsplit(':').next().and_then(|e| e.parse().ok());
     let series = item_id != ITEM;
     let target = PlayTarget {
@@ -1976,7 +1987,8 @@ async fn play_when(core: &Core, item_id: &str, video_id: &str, settled: bool) ->
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     };
-    let playback = PlaybackView::open_picked(core, view.pick(&pick.key), target, &view.plays());
+    let playback =
+        PlaybackView::open_zap(core, view.pick(&pick.key), target, &view.plays(), zap_at);
     while playback.snapshot().phase != PlaybackPhase::Ready {
         assert!(
             std::time::Instant::now() < deadline,
@@ -2099,6 +2111,12 @@ async fn offline_the_next_episode_is_the_next_downloaded_one() {
     let last = play(&core, "tt9", "tt9:2:2").await;
     tokio::time::sleep(Duration::from_millis(800)).await;
     assert!(last.snapshot().next.is_none());
+    drop(last);
+    // A zap of the same episode offers none (plans/zap.md 1.2): the ordinary
+    // play above got its next one well within this wait.
+    let zap = play_with(&core, "tt9", "tt9:2:1", false, Some(60_000)).await;
+    tokio::time::sleep(Duration::from_millis(1500)).await;
+    assert!(zap.snapshot().next.is_none(), "{:?}", zap.snapshot().next);
 }
 
 /// Offline with the title's meta still in the addon cache, the next episode

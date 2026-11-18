@@ -262,7 +262,7 @@ pub(crate) struct Catalog {
     pub(crate) shelf: String,
     pub(crate) id: String,
     pub(crate) genres: Vec<String>,
-    genre_required: bool,
+    pub(crate) genre_required: bool,
     pages: bool,
     /// The streaming service its name names.
     service: Option<&'static Service>,
@@ -1787,7 +1787,7 @@ fn compose(
 
 /// One page of a catalog, `skip` items in; a failed page is asked once
 /// more.
-async fn fetch_page(
+pub(crate) async fn fetch_page(
     core: &Core,
     catalog: &Catalog,
     genre: Option<&str>,

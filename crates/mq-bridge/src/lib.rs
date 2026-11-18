@@ -35,7 +35,7 @@ use mq_runtime::{
     KidsKeysView, KidsTitlesView, LibrarySort, LibraryView, ListedError, ListedFailure,
     PairingView, PlayTarget, PlaybackView, ProfileError, ProfilesView, SearchView, SessionState,
     SettingsView, SignInSnapshot, SignInView, StoreId, TitleView, TraktLoginView, TraktRecord,
-    TraktView, VersionsParams, VersionsView,
+    TraktView, VersionsParams, VersionsView, ZapMiss,
 };
 use mq_streams::StreamPrefs;
 use mq_sync::SyncConfig;
@@ -79,6 +79,15 @@ enum Request {
         id: u64,
         sub: u64,
         command: Value,
+    },
+    /// A random title and a point in its middle to start at, from where the
+    /// profile's `zapDial` points (plans/zap.md 1.3). Replies a `ZapPick`,
+    /// or the codes `noAddons` and `nothingCameUp`.
+    Zap {
+        id: u64,
+        /// Discover's kind when pressed there; none mixes films and series.
+        #[serde(default)]
+        kind: Option<String>,
     },
     /// What a pasted link would install, for the install sheet; writes nothing.
     PreviewAddon {
@@ -902,7 +911,9 @@ impl Request {
             | Request::Lifecycle { .. }
             | Request::SetDebridKeys { .. }
             | Request::RestoreDebrid { .. }
-            | Request::AckDebrid { .. } => true,
+            | Request::AckDebrid { .. }
+            // A zap there saves nothing until it plays on (plans/zap.md 1.3).
+            | Request::Zap { .. } => true,
             Request::DefaultAddons { .. }
             | Request::FirstRunWall { .. }
             | Request::FinishProfileStep { .. }
@@ -1005,6 +1016,8 @@ impl Request {
             | Request::LanguagePicker { .. }
             | Request::RemoveFromContinue { .. } => true,
             Request::PreviewAddon { .. }
+            // Zap draws past a kid's list (plans/zap.md 1.3).
+            | Request::Zap { .. }
             | Request::InstallAddon { .. }
             | Request::DefaultAddons { .. }
             | Request::FirstRunWall { .. }
@@ -1103,6 +1116,7 @@ impl Request {
             | Request::Lifecycle { .. } => false,
             Request::Subscribe { .. }
             | Request::PreviewAddon { .. }
+            | Request::Zap { .. }
             | Request::InstallAddon { .. }
             | Request::DefaultAddons { .. }
             | Request::FirstRunWall { .. }
@@ -2774,6 +2788,21 @@ impl Session {
                 });
                 self.reply(json!(id), result);
             }
+            Request::Zap { id, kind } => {
+                self.spawn(id, async move {
+                    core.zap(kind.as_deref())
+                        .await
+                        .map(|p| json!(p))
+                        .map_err(|miss| match miss {
+                            ZapMiss::NoAddons => {
+                                Failure::coded("noAddons", "no catalog to zap from")
+                            }
+                            ZapMiss::NothingCameUp => {
+                                Failure::coded("nothingCameUp", "nothing came up")
+                            }
+                        })
+                });
+            }
             Request::PreviewAddon {
                 id,
                 url,
@@ -3685,7 +3714,9 @@ impl Session {
             season: num("season"),
             episode: num("episode"),
         };
-        Ok(PlaybackView::open_picked(core, pick, target, &plays))
+        // A zap's start (plans/zap.md 1.2): it holds progress until it has played.
+        let zap_at = params.get("zapAt").and_then(Value::as_u64);
+        Ok(PlaybackView::open_zap(core, pick, target, &plays, zap_at))
     }
 }
 
