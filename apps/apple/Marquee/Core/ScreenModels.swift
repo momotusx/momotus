@@ -635,6 +635,13 @@ struct Prefs: Decodable, Hashable, Sendable {
     let learned: LearnedByClass
     /// Counters stamped below it read as zero: "Forget what was learned".
     let learnedEpoch: Int
+    /// Where Zap picks from (plans/zap.md 1.1); nil from an older core (read it as `.near`).
+    let zapDial: ZapDial?
+}
+
+/// Zap's dial: what the profile already watches, titles related to it, or catalogs it never opens.
+enum ZapDial: String, Codable, Hashable, Sendable, CaseIterable {
+    case same, near, far
 }
 
 enum SubtitleSize: String, Codable, Hashable, Sendable, CaseIterable {

@@ -9,6 +9,6 @@ import Testing
     let app = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee")
     let root = try String(contentsOf: app.appending(path: "App/RootView.swift"), encoding: .utf8)
     #expect(root.contains("static var edge: CGFloat { Metrics.regular.gutter - 4.5 }"))
-    #expect(root.contains(".help(\"Search\")\n            .padding(.trailing, Self.edge)"))
+    #expect(root.contains("            search\n        }\n        .padding(.trailing, Self.edge)"), "Search, the last button, lost the gutter")
     #expect(Metrics.regular.gutter == 40)
 }

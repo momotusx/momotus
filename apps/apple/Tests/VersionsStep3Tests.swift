@@ -318,7 +318,7 @@ private func literals(_ source: String) -> [String] {
     #expect(screen.contains(".navigationBarBackButtonHidden()"))
     #expect(try body(of: "private func another(", in: screen).contains(".allowsHitTesting(shown)"))
     // Versions opens over the player, never as a pushed page that would close it.
-    #expect(screen.contains("chooseVersion: model.versions == nil ? nil : { openVersions() }"))
+    #expect(screen.contains("chooseVersion: zapping || model.versions == nil ? nil : { openVersions() }"))
     #expect(try body(of: "private func openVersions()", in: screen).contains("model.cover()"))
     #expect(try body(of: "private func closeVersions()", in: screen).contains("model.uncover()"))
     #expect(!screen.contains("navigationDestination(isPresented: $showVersions)"))

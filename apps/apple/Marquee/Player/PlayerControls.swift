@@ -45,6 +45,11 @@ struct PlayerControls: View {
     @State private var lastSeek: (direction: Int, at: ContinuousClock.Instant)?
     @Environment(\.metrics) private var metrics
     @State private var scrub: Double?
+    /// A zap holds the player (plans/zap.md 2.3): "Zap" and What is this? on top, Zap again and the dial in the bar.
+    @Environment(\.zapHost) private var zapHost
+    private var zapping: Bool { zapHost != nil && model.zap }
+    /// What is this?'s panel is open.
+    @State private var aboutOpen = false
     /// Which control has focus: TV enters on Play/Pause, and every move keeps the controls up.
     @FocusState private var focus: Control?
     /// The bar's text sizes, following Dynamic Type as the text does.
@@ -224,14 +229,15 @@ struct PlayerControls: View {
             .focused($focus, equals: .back)
             .accessibilityLabel("Back")
             VStack(alignment: .leading, spacing: 2) {
-                Text(target.title)
+                Text(model.nameShown ? target.title : "Zap")
                     .display(metrics.wide ? Theme.type.title1 : Theme.type.title2)
-                if let season = target.season, let episode = target.episode {
+                if model.nameShown, let season = target.season, let episode = target.episode {
                     Text("S\(season):E\(episode)")
                         .textFont(Theme.type.callout, relativeTo: .callout)
                         .foregroundStyle(.white.opacity(0.75))
                         .accessibilityLabel(spokenEpisode(season: season, episode: episode))
                 }
+                if zapping, let zapHost { about(zapHost) }
             }
             Spacer()
             // Right: Picture in Picture, AirPlay when the stream allows it, then the end time.
@@ -270,6 +276,67 @@ struct PlayerControls: View {
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { measuredTop($0) }
+    }
+
+    /// What is this? under "Zap": a press opens a small glass panel with the name and, for an episode, "S2:E5 ·
+    /// Episode name", then Start from the beginning and Open title. The name shows everywhere from the first press.
+    @ViewBuilder private func about(_ host: ZapHost) -> some View {
+        Button {
+            withAnimation(Theme.Motion.panel) { aboutOpen.toggle() }
+            if aboutOpen { model.reveal() }
+            hold(aboutOpen)
+        } label: {
+            Text("What is this?")
+                .textFont(Theme.type.callout, weight: .semibold, relativeTo: .callout)
+                .padding(.horizontal, 14)
+                .frame(minHeight: Theme.minTarget)
+                .background(Capsule().fill(.white.opacity(0.16)))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(FocusPlainStyle(shape: Capsule()))
+        .accessibilityAddTraits(aboutOpen ? .isSelected : [])
+        .padding(.top, Theme.Space.xs)
+        // A panel left open keeps the controls up only while they show.
+        .onDisappear { if aboutOpen { hold(false) } }
+        if aboutOpen {
+            VStack(alignment: .leading, spacing: Theme.Space.xs) {
+                Text(host.pick.name)
+                    .textFont(Theme.type.headline, weight: .semibold, relativeTo: .headline)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let line = ZapRules.episodeLine(season: host.pick.season, episode: host.pick.episode, name: host.pick.episodeName) {
+                    Text(line)
+                        .textFont(Theme.type.callout, relativeTo: .callout)
+                        .foregroundStyle(.white.opacity(0.75))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: Theme.Space.xs) { aboutActions(host) }
+                    VStack(alignment: .leading, spacing: Theme.Space.xs) { aboutActions(host) }
+                }
+                .padding(.top, Theme.Space.xs)
+            }
+            .padding(Theme.Space.s)
+            .glass(RoundedRectangle(cornerRadius: Theme.Radius.l, style: .continuous), strong: true)
+            .frame(maxWidth: 440, alignment: .leading)
+            .padding(.top, Theme.Space.xs)
+            .transition(.opacity)
+        }
+    }
+
+    @ViewBuilder private func aboutActions(_ host: ZapHost) -> some View {
+        Button("Start from the beginning") {
+            hold(false)
+            host.fromStart()
+        }
+        .buttonStyle(PillButtonStyle(prominent: true))
+        .disabled(!ZapRules.startsOver(zap: model.zap, waitsForPick: model.route.waitsForPick))
+        .fixedSize()
+        Button("Open title") {
+            hold(false)
+            host.openTitle()
+        }
+        .buttonStyle(PillButtonStyle())
+        .fixedSize()
     }
 
     /// The film is starting or buffering (the status overlay's waiting).
@@ -440,7 +507,7 @@ struct PlayerControls: View {
                 }
             } else {
                 let plan = BarFit.phone(
-                    width: barWidth, left: 3, right: target.season == nil ? 1 : 3,
+                    width: barWidth, left: 3, right: zapping ? 5 : target.season == nil ? 1 : 3,
                     times: BarFit.phoneTimes(type: phoneType) + 2 * PhoneFrame.barInset + 16, type: phoneType)
                 if plan.twoRows {
                     VStack(spacing: 6) {
@@ -552,7 +619,9 @@ struct PlayerControls: View {
     /// are known, and Subtitles' value with its subtitle off too, so the layout never jumps (D16).
     private var leftPills: [BarFit.Pill] {
         [BarFit.Pill(word: names.audio, value: audioValue), BarFit.Pill(word: names.speed, value: speedText(model.rate)),
-         BarFit.Pill(word: names.versions, value: versions?.snapshot.map(currentQuality) ?? "Picked")]
+         zapping
+            ? BarFit.Pill(word: "Zap again")
+            : BarFit.Pill(word: names.versions, value: versions?.snapshot.map(currentQuality) ?? "Picked")]
     }
 
     private var rightPills: [BarFit.Pill] {
@@ -563,7 +632,10 @@ struct PlayerControls: View {
         let reserve = BarFit.subtitleReserve(
             off: off, languages: listed, fileTracks: model.textTracks, second: model.secondSubtitle.map(SubtitleMenu.heading))
         var pills = [BarFit.Pill(word: names.subtitles, value: subtitleValue.text, reserve: reserve, mark: true)]
-        if target.season != nil { pills += [BarFit.Pill(word: names.episodes), BarFit.Pill(word: bar.next)] }
+        if zapping {
+            // The dial's three words, measured as word pills (a little wide: they carry no icon).
+            pills += ZapDial.allCases.map { BarFit.Pill(word: ZapRules.word($0)) }
+        } else if target.season != nil { pills += [BarFit.Pill(word: names.episodes), BarFit.Pill(word: bar.next)] }
         #if os(macOS)
         pills.append(BarFit.Pill(word: nil))
         #endif
@@ -584,7 +656,11 @@ struct PlayerControls: View {
                 }
             }
             .focused($focus, equals: .speed)
-            if let versions, let snapshot = versions.snapshot {
+            if zapping, let zapHost {
+                // Versions' slot: release names carry the title, so a zap offers the next zap there instead.
+                Button { zapHost.again(.press) } label: { action("Zap again", "zap", nil, words: words) }
+                    .focused($focus, equals: .versions)
+            } else if let versions, let snapshot = versions.snapshot {
                 menu(names.versions, "layers", currentQuality(snapshot), words: words) {
                     ForEach([snapshot.recommended].compactMap { $0 } + snapshot.rows.prefix(12)) { row in
                         Button { model.switchVersion(row.key); hold(false) } label: {
@@ -651,17 +727,25 @@ struct PlayerControls: View {
 
     /// Episodes for a series, Next while the core names a next episode (D14).
     @ViewBuilder private func episodesAndNext(words: Bool) -> some View {
-        let shows = BarRules.shows(season: target.season, next: model.next)
-        if shows.episodes, let episodes {
-            Button(action: episodes) { action(names.episodes, "list-video", nil, words: words) }
-                .focused($focus, equals: .episodes)
-                .buttonStyle(FocusPlainStyle(shape: Capsule()))
-        }
-        if shows.next, let next = model.next {
-            Button { Task { await model.playNext() } } label: { action(bar.next, "skip-forward", nil, words: words) }
-                .focused($focus, equals: .next)
-                .buttonStyle(FocusPlainStyle(shape: Capsule()))
-                .accessibilityLabel(BarRules.nextName(next))
+        if zapping, let zapHost {
+            // The slots of Episodes and Next hold the dial: a press saves it, then zaps again from the new pool; a
+            // save that failed keeps the old dial and this play.
+            ZapDialControl(selected: model.zapDial, words: words) { dial in
+                if await model.setZapDial(dial) { zapHost.again(.press) }
+            }
+        } else {
+            let shows = BarRules.shows(season: target.season, next: model.next)
+            if shows.episodes, let episodes {
+                Button(action: episodes) { action(names.episodes, "list-video", nil, words: words) }
+                    .focused($focus, equals: .episodes)
+                    .buttonStyle(FocusPlainStyle(shape: Capsule()))
+            }
+            if shows.next, let next = model.next {
+                Button { Task { await model.playNext() } } label: { action(bar.next, "skip-forward", nil, words: words) }
+                    .focused($focus, equals: .next)
+                    .buttonStyle(FocusPlainStyle(shape: Capsule()))
+                    .accessibilityLabel(BarRules.nextName(next))
+            }
         }
     }
 

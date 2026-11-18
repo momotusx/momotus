@@ -75,10 +75,17 @@ struct PlayerScreen: View {
     @State private var seekForward: Bool?
     @State private var seekTaps = 0
     #endif
+    /// A zap holds this player (plans/zap.md 2.3): Versions and Episodes leave, and a play that does not start zaps on.
+    /// The zap screen's next zap, which takes this player's place; none over a film brought back from Picture in Picture.
+    @Environment(\.zapAgain) private var zapAgain
+    /// A new zap on the place in front, for a film brought back from Picture in Picture.
+    @Environment(\.zap) private var zap
+    /// Zap mode is the play's own (its target's `zapAt`), so it outlives the zap screen.
+    private var zapping: Bool { model.zap }
     let core: CoreClient
 
-    init(route: PlayRoute, versions: VersionsModel?, core: CoreClient) {
-        make = { PlayerModel(route: route, versions: versions, core: core) }
+    init(route: PlayRoute, versions: VersionsModel?, core: CoreClient, zap: ZapOrigin? = nil) {
+        make = { PlayerModel(route: route, versions: versions, core: core, zap: zap) }
         self.core = core
     }
 
@@ -173,21 +180,23 @@ struct PlayerScreen: View {
                 }
                 #endif
                 StatusOverlay(
-                    model: model, back: close, chooseVersion: model.versions == nil ? nil : { openVersions() },
+                    model: model, back: close, chooseVersion: zapping || model.versions == nil ? nil : { openVersions() },
                 settings: { settingsPlace = $0 },
                     overControls: phoneControls
                         ? PlayerLayout.statusOverTransport(windowHeight: windowHeight, safeBottom: safeBottom)
                         : PlayerLayout.statusOverControls(controlsShown: controlsShown, windowHeight: windowHeight, controlsHeight: controlsHeight),
-                    spinnerInPlay: phoneControls
+                    spinnerInPlay: phoneControls,
+                    zapping: zapping,
+                    zapAgain: { zapHost?.again(.press) }
                 )
                 if controlsShown {
-                    PlayerControls(model: model, versions: model.versions, back: close, hold: { open in
+                    PlayerControls(model: model, versions: zapping ? nil : model.versions, back: close, hold: { open in
                         menuOpenedAt = open ? .now : nil
                         lastTouch = .now
                     }, activity: { lastTouch = .now }, pip: pipControl, windowHeight: windowHeight, measured: { controlsHeight = $0 },
                     measuredTop: { topBarFoot = $0 },
-                    chooseVersion: model.versions == nil ? nil : { model.strip = nil; openVersions() },
-                    episodes: model.route.target.season == nil ? nil : { openEpisodes() }, windowWidth: windowWidth)
+                    chooseVersion: zapping || model.versions == nil ? nil : { model.strip = nil; openVersions() },
+                    episodes: zapping || model.route.target.season == nil ? nil : { openEpisodes() }, windowWidth: windowWidth)
                         .transition(.opacity)
                 }
                 // The subtitles, the status line, Skip and Up Next follow the playhead: built in their own view, so a
@@ -353,6 +362,7 @@ struct PlayerScreen: View {
 
     var body: some View {
         stage
+        .environment(\.zapHost, zapHost)
         // Back from the card's Settings: the versions are asked again, so a source added there plays.
         .onChange(of: settingsPlace) { old, new in
             if old != nil, new == nil, model.noPick { model.retryPick() }
@@ -371,6 +381,8 @@ struct PlayerScreen: View {
         .onContinuousHover { _ in touched(toggle: false) }
         #endif
         .task(id: model.taskId) { await model.drive() }
+        // A zap that did not start counts as one try: the next zap takes this player's place, never a failure card.
+        .onChange(of: zapping && model.zapFailed) { _, failed in if failed { zapHost?.again(.auto) } }
         // Back from the background on a new port: the source opens again where it was.
         .onChange(of: core.serverMoves) { model.serverMoved() }
         // The size reaches the file's own tracks as soon as it changes.
@@ -490,6 +502,31 @@ struct PlayerScreen: View {
             touched(toggle: false)
         }
         #endif
+    }
+
+    /// The controls' and end card's ways on in a zap: Zap again in place on the zap screen, else (a film brought back
+    /// from Picture in Picture) this player closes and a new zap opens on the place in front. Either way this player
+    /// ends first, so a zap past its hold reports and syncs before the next one replaces it.
+    private var zapHost: ZapHost? {
+        guard let pick = model.zapPick else { return nil }
+        let (model, zapAgain, zap, openTitle) = (model, zapAgain, zap, openTitle)
+        return ZapHost(pick: pick, again: { ask in
+            if let zapAgain {
+                end()
+                zapAgain(ask)
+            } else {
+                close()
+                zap?(kind: model.zapOrigin?.kind)
+            }
+        }, fromStart: { model.startOver() }, openTitle: {
+            let route = TitleRoute(
+                kind: pick.kind, id: pick.itemId, name: pick.name, season: pick.season,
+                videoId: pick.season == nil ? nil : pick.videoId)
+            // On the zap screen the shell takes the zap off its place and pushes the title in one update (its `push`),
+            // so Back and the stack stay right with a title page under the zap; a brought-back film leaves its cover.
+            if zapAgain != nil { end() } else { close() }
+            openTitle(route)
+        })
     }
 
     /// iOS: Picture in Picture on the video layer; elsewhere nothing.
@@ -684,13 +721,18 @@ struct PlayerScreen: View {
     }
 
     private func close() {
+        end()
+        dismiss()
+    }
+
+    /// The player's close path without leaving the page: the zap screen or the shell removes it.
+    private func end() {
         #if os(iOS) && DEBUG
         // While the volume view is still in the window.
         WalkLevels.end(volume)
         #endif
         model.close()
         sync.schedule()
-        dismiss()
     }
 
     #if os(macOS)
@@ -920,6 +962,10 @@ private struct StatusOverlay: View {
     var overControls: CGFloat?
     /// The iPhone's controls are up: their Play circle shows the spinner, so only the words show here.
     var spinnerInPlay = false
+    /// A zap plays: a failure before the first frame shows no card, the next zap takes the player's place.
+    var zapping = false
+    /// A zap's card after its first frame: Zap again first.
+    var zapAgain: () -> Void = {}
     /// The way on takes focus when the failure shows, so a remote is on it;
     /// after a Try again, Try again keeps it.
     @FocusState private var focus: FailureAction?
@@ -945,6 +991,7 @@ private struct StatusOverlay: View {
         case .choose, .versions: Button(label) { chooseVersion?() }
         case .settingsAddons: Button(label) { settings(.addons) }
         case .back: Button(label, action: back)
+        case .zapAgain: Button(label, action: zapAgain)
         }
     }
 
@@ -953,7 +1000,9 @@ private struct StatusOverlay: View {
 
     /// A headline, one line per reason, and the actions.
     private func card(_ headline: String, lines: [String], order: [FailureAction], cannotOpen: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Space.s) {
+        // A zap offers no other version or offer: release names carry the title.
+        let order = zapping ? ZapRules.failureActions : order
+        return VStack(alignment: .leading, spacing: Theme.Space.s) {
             Text(headline)
                 .display(Theme.type.title1)
             // A Try again that failed again at once: the card stays and says it tried.
@@ -984,9 +1033,20 @@ private struct StatusOverlay: View {
         .onAppear { focus = PlayerLayout.failureFocus(order) }
     }
 
+    /// The model's status, except that a zap failing before its first frame keeps the spinner while the next zap
+    /// takes its place.
+    private var shownStatus: PlayerStatus {
+        let status = PlayerLayout.status(
+            phase: model.playback?.phase, cannotOpen: model.openError != nil,
+            firstFrameShown: model.firstFrameMs != nil, waiting: model.waiting, noPick: model.noPick)
+        guard zapping, ZapRules.failed(firstFrame: model.firstFrameMs != nil, status: status, chooseAnother: false) else { return status }
+        return .waiting(words: false)
+    }
+
     private var waitingWords: some View {
         Text(PlayerLayout.waitingWords(
-            model.playback, notice: model.notice, tryingAgain: model.tryingAgain, findingPick: model.route.waitsForPick))
+            model.playback, notice: model.notice, tryingAgain: model.tryingAgain, findingPick: model.route.waitsForPick,
+            nameShown: model.nameShown))
             .textFont(Theme.type.callout, relativeTo: .callout)
             .foregroundStyle(.white.opacity(0.8))
     }
@@ -1008,9 +1068,7 @@ private struct StatusOverlay: View {
     }
 
     var body: some View {
-        let status = PlayerLayout.status(
-            phase: model.playback?.phase, cannotOpen: model.openError != nil,
-            firstFrameShown: model.firstFrameMs != nil, waiting: model.waiting, noPick: model.noPick)
+        let status = shownStatus
         let canChoose = chooseVersion != nil
         switch status {
         case .failed:

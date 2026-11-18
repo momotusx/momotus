@@ -188,6 +188,10 @@ struct MainShell: View {
     @State private var opened: Set<AppTab> = [.home]
     /// The one search query, shared by the Mac header's field and Search's page.
     @State private var searchInput = SearchInput()
+    /// The zap pressed on each place, pushed on that place's stack (plans/zap.md 2.2).
+    @State private var zaps: [AppTab: ZapRoute] = [:]
+    /// Discover's selected kind: the Mac toolbar's Zap sends it while Discover is the place shown.
+    @State private var discoverKind: String?
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var typing = false
@@ -296,6 +300,8 @@ struct MainShell: View {
                 // Its Episodes (plans/player-bar.md section 5): the cover goes with the player, then the title opens
                 // in the place in front.
                 .environment(\.openTitle, OpenTitleAction { route in push(route, on: tab) })
+                // A zap brought back from Picture in Picture zaps again on the place in front (plans/zap.md 2.3).
+                .environment(\.zap, zapAction(tab))
         }
         .overlay(alignment: .top) {
             if let note = floating.note {
@@ -361,7 +367,7 @@ struct MainShell: View {
             // 2026-11-04: the places at the top on desktop).
             .toolbar {
                 // The panel leaves the capsule and Search live (a place or Search closes it) but out of VoiceOver's reach.
-                TopTools(find: find, shown: !immersion.active, covered: showPanel) {
+                TopTools(find: find, zap: macZap, shown: !immersion.active, covered: showPanel) {
                     // Settings' first page, from any of its pages too (a link opens a place at its root).
                     PlaceOrnament(selection: tab, strong: ornamentStrong, select: { select($0) }, profile:
                         ProfileMenu(onSettings: { select(.settings, link: true) }, onPin: pin, panel: $showPanel) { me in
@@ -471,6 +477,12 @@ struct MainShell: View {
     }
 
     #if os(macOS)
+    /// The toolbar's Zap: on the place shown, with Discover's kind only while Discover is that place.
+    private var macZap: (() -> Void)? {
+        guard let zap = zapAction(tab) else { return nil }
+        return { zap(kind: tab == .discover ? discoverKind : nil) }
+    }
+
     /// The ornament's glass darkens once anything but Home's art at rest lies behind it.
     private var ornamentStrong: Bool { tab != .home || homeScrolled || !homePath.isEmpty }
 
@@ -491,14 +503,28 @@ struct MainShell: View {
         }
     }
 
-    /// A title pushed on a place's stack; Settings keeps no titles, so one opened there goes on Home.
+    /// A title pushed on a place's stack; Settings keeps no titles, so one opened there goes on Home. A zap's Open
+    /// title lands here: the zap leaves the stack in the same update, so Back from the title never finds it.
     private func push(_ route: TitleRoute, on item: AppTab) {
+        zaps[item] = nil
         if item == .settings { select(.home) }
         if item == .home || item == .settings { homePath.append(route) } else { titlePaths[item, default: []].append(route) }
     }
 
     private func titlePath(_ item: AppTab) -> Binding<[TitleRoute]> {
         Binding { titlePaths[item] ?? [] } set: { titlePaths[item] = $0 }
+    }
+
+    private func zapBinding(_ item: AppTab) -> Binding<ZapRoute?> {
+        Binding { zaps[item] } set: { zaps[item] = $0 }
+    }
+
+    /// Zap on a place: none on a kids profile, so every Zap button hides there (plans/zap.md 2.1).
+    private func zapAction(_ item: AppTab) -> ZapAction? {
+        guard profiles.snapshot?.current?.kids != true else { return nil }
+        return ZapAction(open: { kind in zaps[item] = ZapRoute(kind: kind) }, kindShown: { kind in
+            if item == .discover { discoverKind = kind }
+        })
     }
 
     /// Every opened place, the current one shown. The others stay alive but
@@ -510,6 +536,7 @@ struct MainShell: View {
                 screen(item)
                     .environment(\.tabShown, item == tab)
                     .environment(\.openTitle, OpenTitleAction { route in push(route, on: item) })
+                    .environment(\.zap, zapAction(item))
                     .opacity(item == tab ? 1 : 0)
                     .allowsHitTesting(item == tab)
                     .accessibilityHidden(item != tab)
@@ -534,13 +561,14 @@ struct MainShell: View {
                 HomeScreen(model: home, topRequest: homeTop, scrolled: $homeScrolled)
                     .environment(\.heroCovered, immersion.active || !homePath.isEmpty || showProfiles || showPanel)
                     .root(of: .home, covered: coveredBinding)
+                    .zapRoutes(zapBinding(.home), core: core)
                     .withTitleRoutes(core: core)
                     #if os(iOS)
                     .toolbar(.hidden, for: .navigationBar)
                     #endif
             }
         case .search:
-            NavigationStack(path: titlePath(.search)) { SearchScreen(core: core).root(of: .search, covered: coveredBinding).withTitleRoutes(core: core) }
+            NavigationStack(path: titlePath(.search)) { SearchScreen(core: core).root(of: .search, covered: coveredBinding).zapRoutes(zapBinding(.search), core: core).withTitleRoutes(core: core) }
                 #if os(tvOS)
                 // The system's search keyboard lays itself out from the top of the
                 // screen, past the inset: it starts below the pill.
@@ -548,12 +576,12 @@ struct MainShell: View {
                 .background(Theme.Palette.bg.ignoresSafeArea())
                 #endif
         case .discover:
-            NavigationStack(path: titlePath(.discover)) { DiscoverScreen(core: core).root(of: .discover, covered: coveredBinding).withTitleRoutes(core: core) }
+            NavigationStack(path: titlePath(.discover)) { DiscoverScreen(core: core).root(of: .discover, covered: coveredBinding).zapRoutes(zapBinding(.discover), core: core).withTitleRoutes(core: core) }
         case .library:
-            NavigationStack(path: titlePath(.library)) { LibraryScreen(core: core).root(of: .library, covered: coveredBinding).withTitleRoutes(core: core) }
+            NavigationStack(path: titlePath(.library)) { LibraryScreen(core: core).root(of: .library, covered: coveredBinding).zapRoutes(zapBinding(.library), core: core).withTitleRoutes(core: core) }
         case .calendar:
             NavigationStack(path: titlePath(.calendar)) {
-                CalendarScreen(core: core).root(of: .calendar, covered: coveredBinding).withTitleRoutes(core: core)
+                CalendarScreen(core: core).root(of: .calendar, covered: coveredBinding).zapRoutes(zapBinding(.calendar), core: core).withTitleRoutes(core: core)
                     #if os(iOS)
                     // Reached from Library's Calendar row: the way back to it.
                     .toolbar {
@@ -573,7 +601,7 @@ struct MainShell: View {
                     #endif
             }
         case .settings:
-            NavigationStack(path: $settingsPath) { SettingsScreen(core: core, home: home).root(of: .settings, covered: coveredBinding) }
+            NavigationStack(path: $settingsPath) { SettingsScreen(core: core, home: home).root(of: .settings, covered: coveredBinding).zapRoutes(zapBinding(.settings), core: core) }
         }
     }
 
@@ -803,6 +831,8 @@ private struct TabBar: View {
 /// Settings' old place (plans/nav-profile.md). `shown` false (the player) leaves the centre empty.
 private struct TopTools<Places: View>: ToolbarContent {
     let find: () -> Void
+    /// Zap beside Search (plans/zap.md 2.1); nil on a kids profile.
+    let zap: (() -> Void)?
     let shown: Bool
     /// The profile panel is open: Search stays for the pointer, hidden from VoiceOver (the panel is modal); the shell
     /// hides the places the same way.
@@ -813,10 +843,10 @@ private struct TopTools<Places: View>: ToolbarContent {
         // The centre is never left out: without it the toolbar packs its actions at the left, beside the traffic lights.
         if #available(macOS 26, *) {
             ToolbarItem(placement: .principal) { centre }.sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .primaryAction) { search }.sharedBackgroundVisibility(.hidden)
+            ToolbarItem(placement: .primaryAction) { tools }.sharedBackgroundVisibility(.hidden)
         } else {
             ToolbarItem(placement: .principal) { centre }
-            ToolbarItem(placement: .primaryAction) { search }
+            ToolbarItem(placement: .primaryAction) { tools }
         }
     }
 
@@ -829,12 +859,24 @@ private struct TopTools<Places: View>: ToolbarContent {
     /// corner). The toolbar's own margin makes up the last 4.5 pt (measured in the window on macOS 27).
     static var edge: CGFloat { Metrics.regular.gutter - 4.5 }
 
+    /// Zap, then Search at the top right; Zap leaves while the player covers the places.
+    private var tools: some View {
+        HStack(spacing: 10) {
+            if shown, let zap {
+                Button(action: zap) { Label("Zap", glyph: "zap", size: 17) }
+                    .buttonStyle(GlassCircleStyle())
+                    .help("Zap")
+            }
+            search
+        }
+        .padding(.trailing, Self.edge)
+        .accessibilityHidden(covered)
+    }
+
     private var search: some View {
         Button(action: find) { Label("Search", glyph: "search", size: 17) }
             .buttonStyle(GlassCircleStyle())
             .help("Search")
-            .padding(.trailing, Self.edge)
-            .accessibilityHidden(covered)
     }
 }
 #endif

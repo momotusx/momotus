@@ -11,7 +11,7 @@ import UIKit
 /// review rounds (plans/android-design-v2.md, slices 14 to 16). Heights are
 /// the real window's, bars included, since the player hides them.
 /// The failure card's actions (plans/play-every-version.md, the shared table): never an account step.
-enum FailureAction: Hashable { case offer, playFromDevice, retry, choose, versions, settingsAddons, back }
+enum FailureAction: Hashable { case offer, playFromDevice, retry, choose, versions, settingsAddons, back, zapAgain }
 
 /// What the player shows over the picture, first match.
 enum PlayerStatus: Equatable {
@@ -346,6 +346,7 @@ enum PlayerLayout {
         case .versions: empty["nothingPlaysHere"]?.action ?? "Choose a version"
         case .settingsAddons: empty["noSource"]?.action ?? "Settings"
         case .back: StreamChoice.words.page.back
+        case .zapAgain: "Zap again"
         }
     }
 
@@ -444,12 +445,14 @@ enum PlayerLayout {
 
     /// Under the spinner: "Finding the best version" while Play waits for the pick, the version the
     /// core moves on to while it resolves, else the player's own word on a failed source, else the
-    /// core's stage caption, else the plain wait. Never an addon's name.
-    static func waitingWords(_ playback: PlaybackSnapshot?, notice: String?, tryingAgain: Bool = false, findingPick: Bool = false) -> String {
+    /// core's stage caption, else the plain wait. Never an addon's name, nor a release name while a zap hides the title.
+    static func waitingWords(
+        _ playback: PlaybackSnapshot?, notice: String?, tryingAgain: Bool = false, findingPick: Bool = false, nameShown: Bool = true
+    ) -> String {
         if findingPick { return StreamChoice.words.player.finding }
         // A Try again that moves on at once names the version it moved to.
         if playback?.phase == "resolving", let label = playback?.trying?.label {
-            return "Trying the next version: \(label)"
+            return nameShown ? "Trying the next version: \(label)" : "Trying the next version"
         }
         if tryingAgain { return "Trying again" }
         return notice ?? playback?.start?.caption ?? "Getting the stream ready"

@@ -556,8 +556,9 @@ enum SubtitleMenu {
 
     /// Beneath the line, as the web and Android say it: the source unless the line starts with it,
     /// Forced, SDH, the core's match ("Matches this file", else "Same release group"), "Made for 25
-    /// fps", then the release text cut in the middle to the line's `max` characters.
-    static func detail(_ track: SubtitleTrack, max: Int = 46) -> String? {
+    /// fps", then the release text cut in the middle to the line's `max` characters. `release` false leaves the
+    /// release text out: a zap whose name is still hidden (release names carry the title).
+    static func detail(_ track: SubtitleTrack, max: Int = 46, release showsRelease: Bool = true) -> String? {
         // Never the source: no addon is named where a viewer reads it.
         var parts = [
             track.forced ? "Forced" : nil,
@@ -565,7 +566,7 @@ enum SubtitleMenu {
             track.hashMatch == true ? "Matches this file" : track.fits == true ? "Same release group" : nil,
             track.madeForFps.map(madeFor),
         ].compactMap { $0 }
-        if let release = nonEmpty(track.release), release != title(track) {
+        if showsRelease, let release = nonEmpty(track.release), release != title(track) {
             let room = max - parts.joined(separator: ", ").count - 2
             parts.append(middle(release, max: room >= 24 ? room : max))
         }
@@ -774,6 +775,11 @@ struct PlayTargetInfo: Hashable, Sendable {
     let season: Int?
     let episode: Int?
     let resumeMs: Int64?
+    /// A zap's start in the file (plans/zap.md 2.2): the playback view's `zapAt`, which holds progress until it has
+    /// played; nil for an ordinary play. Kept here so every copy of the route (another version, a late pick) keeps it.
+    var zapAt: Int64?
+    /// Zaps in a row that did not play before this one; 0 after every press, one more for each auto zap.
+    var zapTries = 0
     /// What the title page knows, sent so the ranking need not wait for the meta.
     var runtime: String?
     var releaseInfo: String?
@@ -1036,6 +1042,16 @@ enum TrackPicker {
             return count == 1 ? words.audio : words.audioNumbered.replacingOccurrences(of: "{n}", with: "\(index + 1)")
         }
         return count == 1 ? "Subtitles" : "Subtitles \(index + 1)"
+    }
+
+    /// The file's track names as drawn. While a zap hides its title a track shows its language only, else its place
+    /// ("Audio 2", "Subtitles"): a file's own track title can carry the release ("Movie.Name.2019.eng").
+    static func shownNames(_ names: [String], languages: [String?], audio: Bool, nameShown: Bool) -> [String] {
+        guard !nameShown else { return names }
+        return names.indices.map { i in
+            tag(languages.indices.contains(i) ? languages[i] : nil).map { englishName(fileTag($0)) }
+                ?? placeName(index: i, count: names.count, audio: audio)
+        }
     }
 
     /// The audio list has a flag column only when a track names its language; an untagged track then keeps the

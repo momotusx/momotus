@@ -130,7 +130,7 @@ private final class ManualTime: @unchecked Sendable {
     #expect(screen.contains("NSApplication.didResignActiveNotification)) { _ in shiftKeys?.cancel() }"))
     #expect(screen.contains("menuOpenedAt = held ? .now : nil"), "the controls stay up while G or H is held")
     // Choose a version closes the audio strip, so Escape under Versions closes Versions (review P2-3).
-    #expect(screen.contains("chooseVersion: model.versions == nil ? nil : { model.strip = nil; openVersions() }"))
+    #expect(screen.contains("chooseVersion: zapping || model.versions == nil ? nil : { model.strip = nil; openVersions() }"))
 }
 
 @Test func episodesFromAPlayerBroughtBackFromPictureInPictureOpensTheTitle() throws {

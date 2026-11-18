@@ -211,5 +211,5 @@ private struct Refused: LocalizedError { var errorDescription: String? { "timed 
     #expect(sent.ids.isEmpty, "a played title was removed when the time ended")
     // Every play starts through PlayerModel's init, which says so first.
     let model = try String(contentsOf: URL(fileURLWithPath: #filePath).deletingLastPathComponent().appending(path: "../Marquee/Player/PlayerModel.swift"), encoding: .utf8)
-    #expect(try body(of: "init(route: PlayRoute, versions: VersionsModel?, core: CoreClient)", in: model).contains("ContinueRemoval.played(itemId: route.target.itemId)"))
+    #expect(try body(of: "init(route: PlayRoute, versions: VersionsModel?, core: CoreClient, zap: ZapOrigin? = nil)", in: model).contains("ContinueRemoval.played(itemId: route.target.itemId)"))
 }
