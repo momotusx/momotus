@@ -10,7 +10,14 @@
 //   the end (a seek) match the film, and the position played comes back as
 //   the next playback's resume point;
 // - the plugin e2e's repository added as a user adds one, its provider's row
-//   in Versions, and that row's lease serving the same film.
+//   in Versions, and that row's lease serving the same film;
+// - a download of the torrent kept under <data>/native/downloads, which then
+//   plays from the bridge's loopback server.
+// MQ_REAL_PLUGINS=1 adds the phone's own default repositories (Manitux, then
+// NiakVIO): one of their providers must list a row for a known film, and its
+// lease must answer. With the wasm core at service/core (build-wasm.sh), the
+// run starts with an update from the wasm-only app: the wasm core installs
+// an addon in the data dir, then the native core must find it there.
 // Without MQ_FIXTURE the torrent is a public domain film from the public
 // swarm (Blender's open films), the check for a Mac with no namespace.
 // Not a *.test.js: it needs the network and a built core.
@@ -43,6 +50,17 @@ const CAPS = {
   hasFallbackEngine: false,
 };
 const CHUNK = 65536;
+const WASM_CORE = path.join(__dirname, '..', 'core', 'mq_wasm.js');
+// The phone's default repositories (crates/mq-runtime/src/plugins.rs defaults) and films any of them lists.
+const REAL_REPOS = [
+  'https://raw.githubusercontent.com/manitux-app/nuvio-test-plugins/refs/heads/main/manifest.json',
+  'https://raw.githubusercontent.com/niakw/NiakVIO/main/manifest.json',
+];
+const REAL_FILMS = [
+  { id: 'tt0111161', title: 'The Shawshank Redemption', year: '1994' },
+  { id: 'tt0468569', title: 'The Dark Knight', year: '2008' },
+  { id: 'tt1375666', title: 'Inception', year: '2010' },
+];
 // How long a lease may take (a torrent under qemu-user is slow to start).
 const LEASE_MS = Number(process.env.MQ_LEASE_MS) || 240000;
 
@@ -77,8 +95,8 @@ function client(c) {
 const tiles = (value) => (JSON.stringify(value || null).match(/https:\/\/[^"]*metahub[^"]*/g) || []).length;
 
 // A Stremio addon on loopback with one torrent stream per film.
-function addon(films) {
-  const manifest = { id: 'live.native', version: '1.0.0', name: 'Live check', resources: ['stream'], types: ['movie'], idPrefixes: ['tt'], catalogs: [] };
+function addon(films, name) {
+  const manifest = { id: name ? 'live.update' : 'live.native', version: '1.0.0', name: name || 'Live check', resources: ['stream'], types: ['movie'], idPrefixes: ['tt'], catalogs: [] };
   const server = http.createServer((req, res) => {
     const film = films.filter((f) => req.url === '/stream/movie/' + f.id + '.json')[0];
     const stream = film && { name: 'Live check', title: film.release, infoHash: film.hash, sources: film.trackers.map((t) => 'tracker:' + t).concat('dht:' + film.hash) };
@@ -113,13 +131,19 @@ const rowsOf = (v) => [v.recommended].concat(v.rows || [], (v.plugins && v.plugi
 // One playback of `row` from `versions`; returns its subscription and first snapshot with a lease.
 async function play(c, versions, row, film) {
   const playback = await c.subscribe('playback', { versionsSub: versions.sub, key: row.key, kind: 'movie', itemId: film.id, videoId: film.id, name: film.title });
-  const snap = await h.until('a lease for ' + row.key, () => playback.now().url && playback.now(), LEASE_MS);
-  log('lease', { key: row.key, phase: snap.phase, resumeMs: snap.resumeMs, start: snap.start, url: hidden(snap.url) });
+  // A lease, or the view giving up on this version (a provider's dead link): then no url, and the caller moves on.
+  const snap = await h.until('a lease for ' + row.key, () => (playback.now().url || playback.now().phase === 'failed') && playback.now(), LEASE_MS);
+  if (!snap.url) {
+    log('lease failed', { key: row.key, attempts: snap.attempts });
+    await c.req('unsubscribe', { sub: playback.sub });
+    throw new Error('no lease for ' + row.key);
+  }
+  log('lease', { key: row.key, leased: snap.key, attempts: (snap.attempts || []).length, phase: snap.phase, resumeMs: snap.resumeMs, start: snap.start, url: hidden(snap.url) });
   return { playback, snap };
 }
 
 // The public swarm: the first film whose torrent serves bytes passes.
-async function publicTorrent(c) {
+async function publicTorrent(c, data) {
   const films = PUBLIC.map((f) => Object.assign({ trackers: TRACKERS }, f));
   const server = await addon(films);
   await c.req('installAddon', { url: 'http://127.0.0.1:' + server.address().port + '/manifest.json' });
@@ -132,8 +156,13 @@ async function publicTorrent(c) {
       const got = await fetchRange(snap.url, 'bytes=0-' + (CHUNK - 1));
       log('bytes', { status: got.status, bytes: got.bytes, type: got.type });
       await c.req('unsubscribe', { sub: playback.sub });
+      result = { torrentLeaseIsTheTorrent: snap.key === row.key, torrentLeaseOnLoopback: /^http:\/\/127\.0\.0\.1:\d+\//.test(snap.url), torrentServesBytes: got.status === 206 && got.bytes === CHUNK };
+      // MQ_PUBLIC_DOWNLOAD=1: the whole film kept and played from the copy (a Mac check; hundreds of MB).
+      if (process.env.MQ_PUBLIC_DOWNLOAD === '1') {
+        const params = Object.assign({ kind: 'movie', videoId: film.id, itemId: film.id, title: film.title, releaseInfo: film.year }, CAPS);
+        Object.assign(result, await downloadAndPlay(c, data, film, params, versions, row, 'bytes=1000000-' + (1000000 + CHUNK - 1), (r) => r.bytes === CHUNK));
+      }
       await c.req('unsubscribe', { sub: versions.sub });
-      result = { torrentLeaseOnLoopback: /^http:\/\/127\.0\.0\.1:\d+\//.test(snap.url), torrentServesBytes: got.status === 206 && got.bytes === CHUNK };
       if (result.torrentServesBytes) break;
     } catch (e) {
       log('torrent failed', { film: film.title, error: String(e.message || e) });
@@ -144,7 +173,7 @@ async function publicTorrent(c) {
 }
 
 // The fixture host's torrent, seek and resume, then its plugin repository.
-async function fixtureRun(c) {
+async function fixtureRun(c, data) {
   const info = await getJson(DIRECT + '/info');
   const film = { id: 'tt0000417', title: 'Fixture Film', year: '2009', hash: info.infoHash, release: info.name, trackers: [FIXTURE + '/announce'] };
   const media = DIRECT + '/media/film.mp4';
@@ -152,7 +181,11 @@ async function fixtureRun(c) {
   const tailStart = info.size - CHUNK - 4321;
   const tailRange = 'bytes=' + tailStart + '-' + (tailStart + CHUNK - 1);
   const tail = await fetchRange(media, tailRange);
-  log('fixture', { infoHash: info.infoHash, size: info.size, head: head.sha1, tail: tail.sha1 });
+  // A seek into the middle, after the head was read.
+  const midStart = Math.floor(info.size / 2) + 777;
+  const midRange = 'bytes=' + midStart + '-' + (midStart + CHUNK - 1);
+  const mid = await fetchRange(media, midRange);
+  log('fixture', { infoHash: info.infoHash, size: info.size, head: head.sha1, mid: mid.sha1, tail: tail.sha1 });
 
   const server = await addon([film]);
   await c.req('installAddon', { url: 'http://127.0.0.1:' + server.address().port + '/manifest.json' });
@@ -172,18 +205,26 @@ async function fixtureRun(c) {
   const torrent = await (async () => {
     const first = await play(c, versions, torrentRow, film);
     const tStart = await fetchRange(first.snap.url, 'bytes=0-' + (CHUNK - 1));
+    const tMid = await fetchRange(first.snap.url, midRange);
     const tSeek = await fetchRange(first.snap.url, tailRange);
-    log('torrent bytes', { start: [tStart.status, tStart.bytes, tStart.sha1 === head.sha1], seek: [tSeek.status, tSeek.bytes, tSeek.sha1 === tail.sha1] });
-    await c.req('command', { sub: first.playback.sub, command: { type: 'progress', positionMs: 120000, durationMs: 600000, paused: false } });
+    log('torrent bytes', {
+      start: [tStart.status, tStart.bytes, tStart.sha1 === head.sha1],
+      middle: [tMid.status, tMid.bytes, tMid.sha1 === mid.sha1],
+      end: [tSeek.status, tSeek.bytes, tSeek.sha1 === tail.sha1],
+    });
+    await c.req('command', { sub: first.playback.sub, command: { type: 'progress', positionMs: 120000, durationMs: 840000, paused: false } });
     await h.sleep(1500);
     await c.req('unsubscribe', { sub: first.playback.sub });
     const again = await play(c, versions, torrentRow, film);
     log('resume', { resumeMs: again.snap.resumeMs });
     await c.req('unsubscribe', { sub: again.playback.sub });
     return {
+      // The lease is the torrent itself, not another version the view moved on to.
+      torrentLeaseIsTheTorrent: first.snap.key === torrentRow.key && again.snap.key === torrentRow.key,
       torrentLeaseOnLoopback: onLoopback(first.snap.url),
       torrentServesTheFilm: tStart.status === 206 && tStart.sha1 === head.sha1,
-      torrentSeekServesTheFilm: tSeek.status === 206 && tSeek.sha1 === tail.sha1,
+      torrentSeekToTheMiddle: tMid.status === 206 && tMid.sha1 === mid.sha1,
+      torrentSeekToTheEnd: tSeek.status === 206 && tSeek.sha1 === tail.sha1,
       torrentResumes: again.snap.resumeMs === 120000,
     };
   })().catch((e) => {
@@ -199,27 +240,119 @@ async function fixtureRun(c) {
     versions = await c.subscribe('versions', params);
     await h.until('the plugin row again', () => rowsOf(versions.now()).filter((r) => r.key === pluginRow.key)[0], 120000);
     const p = await play(c, versions, pluginRow, film);
-    pUrl = p.snap.url;
+    pUrl = p.snap.key === pluginRow.key ? p.snap.url : '';
     pBytes = await fetchRange(pUrl, 'bytes=0-' + (CHUNK - 1));
     log('plugin bytes', { status: pBytes.status, bytes: pBytes.bytes, same: pBytes.sha1 === head.sha1 });
     await c.req('unsubscribe', { sub: p.playback.sub });
   }
+  // Download: the torrent kept on the TV, then played from the copy.
+  const download = await downloadAndPlay(c, data, film, params, versions, torrentRow, midRange, (got) => got.sha1 === mid.sha1, info.size).catch((e) => {
+    log('download failed', String(e.message || e));
+    return { downloadPlayed: false };
+  });
+
   const counts = (await getJson(DIRECT + '/info')).counts;
   log('fixture asked', counts);
   server.close();
-  return Object.assign(torrent, {
+  return Object.assign(torrent, download, {
     pluginsAvailable: plugins.available === true,
     pluginRowListed: !!pluginRow,
     pluginRanItsFetch: Object.keys(counts).some((k) => k.indexOf('/lookup/') === 0),
     pluginLeaseServesTheFilm: !!pBytes && onLoopback(pUrl) && pBytes.status === 206 && pBytes.sha1 === head.sha1,
+    // The swarm was asked: the fixture tracker heard the core.
+    trackerAnnounced: (counts['/announce'] || 0) > 0,
   });
+}
+
+// `row` of `versions` downloaded as the title page does, kept under <data>/native (a torrent stays in its torrents dir,
+// kept from the cache sweep; `size` bytes when known, else over 1 MB), then played from the copy: its row on the device, its lease on loopback, `range` passing `same`.
+async function downloadAndPlay(c, data, film, params, versions, row, range, same, size) {
+  // The network as the page reports it at load (core/client.ts networkChanged): no download runs before it.
+  await c.req('lifecycle', { event: 'networkChanged', network: 'ethernet', metered: false, lowData: false });
+  await c.req('setDownloadSettings', { wifiOnly: false });
+  const added = await c.req('downloadAdd', { kind: 'movie', itemId: film.id, scope: 'video', videoId: film.id, params, pick: { versionsSub: versions.sub, key: row.key } });
+  const board = await c.subscribe('downloads', {});
+  await h.until('the download done', () => JSON.stringify(board.now()).indexOf('"state":"done"') >= 0, LEASE_MS).catch((e) => {
+    const b = board.now() || {};
+    log('download board', { active: b.active, storage: b.storage, rows: (b.downloading || []).map((r) => [r.state, r.reason, r.bytesDone, r.bytesTotal]) });
+    throw e;
+  });
+  const files = walk(path.join(data, 'native')).filter((f) => fs.statSync(f).size > 1024 * 1024);
+  log('download', { ids: added.ids, files: files.map((f) => [path.relative(data, f), fs.statSync(f).size]) });
+  await c.req('unsubscribe', { sub: board.sub });
+  const again = await c.subscribe('versions', params);
+  const kept = await h.until('the downloaded row', () => rowsOf(again.now()).filter((r) => r.onDevice)[0], 120000);
+  const p = await play(c, again, kept, film);
+  const got = await fetchRange(p.snap.url, range);
+  log('download plays', { key: kept.key, onDevice: kept.onDevice, status: got.status, bytes: got.bytes, same: same(got) });
+  await c.req('unsubscribe', { sub: p.playback.sub });
+  await c.req('unsubscribe', { sub: again.sub });
+  return {
+    downloadKeptUnderTheDataDir: files.some((f) => !size || fs.statSync(f).size === size),
+    downloadPlaysFromLoopback: p.snap.key === kept.key && /^http:\/\/127\.0\.0\.1:\d+\//.test(p.snap.url) && got.status === 206 && same(got),
+  };
+}
+
+function walk(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).reduce((all, name) => {
+    const p = path.join(dir, name);
+    return all.concat(fs.statSync(p).isDirectory() ? walk(p) : [p]);
+  }, []);
+}
+
+// The phone's default repositories, as a user adds them: the first provider row for a known film, and its lease.
+async function realPlugins(c) {
+  for (const repo of REAL_REPOS) {
+    const added = await c.req('addPluginRepo', { url: repo }).catch((e) => ({ error: String(e.message || e) }));
+    const info = (added.repos || []).filter((r) => r.url === repo)[0];
+    log('real repo', { repo, error: added.error || (info && info.problem) || null, providers: info ? info.providers.length : 0 });
+    if (!info) continue;
+    for (const film of REAL_FILMS) {
+      const versions = await c.subscribe('versions', Object.assign({ kind: 'movie', videoId: film.id, itemId: film.id, title: film.title, releaseInfo: film.year }, CAPS));
+      await h.until('the plugin pass', () => versions.now().done && !(versions.now().plugins || {}).pending, 120000).catch(() => null);
+      const row = rowsOf(versions.now()).filter((r) => r.origin === 'plugin')[0];
+      log('real plugin rows', { repo, film: film.title, rows: ((versions.now().plugins || {}).rows || []).length, pick: row ? [row.sourceName, row.quality, row.host] : null });
+      if (row) {
+        const p = await play(c, versions, row, film).catch(() => null);
+        const got = p && (await fetchRange(p.snap.url, 'bytes=0-' + (CHUNK - 1)).catch((e) => ({ status: 0, bytes: 0, error: String(e.message) })));
+        log('real plugin lease', { manifest: p && p.snap.manifest, status: got && got.status, bytes: got && got.bytes, type: got && got.type });
+        if (p) await c.req('unsubscribe', { sub: p.playback.sub });
+        await c.req('unsubscribe', { sub: versions.sub });
+        if (p && p.snap.key === row.key && /^http:\/\/127\.0\.0\.1:\d+\//.test(p.snap.url) && got && got.bytes > 0 && got.status < 400) {
+          return { realPluginRow: true, realPluginLeaseAnswers: true };
+        }
+        continue;
+      }
+      await c.req('unsubscribe', { sub: versions.sub });
+    }
+    await c.req('removePluginRepo', { url: repo }).catch(() => null);
+  }
+  return { realPluginRow: false };
+}
+
+// An update from the wasm-only app: the wasm core installs the addon at `addonUrl` into `dir`'s data.
+async function wasmSession(dir, addonUrl) {
+  const svc = await h.startService({ dir, env: { MQ_NATIVE: '', MQ_CORE: WASM_CORE } });
+  await svc.waitFor('ready');
+  const c = client(await h.authed(svc));
+  await c.req('installAddon', { url: addonUrl });
+  const addons = await c.subscribe('addons', {});
+  const listed = JSON.stringify(addons.now()).indexOf('Update check') >= 0;
+  log('wasm session', { core: svc.find('ready')[0].core, addonListed: listed });
+  await svc.kill();
+  return listed;
 }
 
 async function main() {
   if (!fs.existsSync(BIN)) throw new Error('no native core at ' + BIN + ': run apps/webos/scripts/build-native.sh');
   const started = Date.now();
+  const dir = h.tmpDir();
+  const marker = await addon([], 'Update check');
+  const markerUrl = 'http://127.0.0.1:' + marker.address().port + '/manifest.json';
+  const updated = fs.existsSync(WASM_CORE) ? await wasmSession(dir, markerUrl) : null;
   // qemu-user runs an ARM binary several times slower than the TV.
-  const svc = await h.startService({ env: { MQ_NATIVE: BIN, MQ_NATIVE_READY_MS: '120000' } });
+  const svc = await h.startService({ dir, env: { MQ_NATIVE: BIN, MQ_NATIVE_CAP_MS: '600000', MQ_NATIVE_QUIET_MS: '120000' } });
   svc.proc.stdout.on('data', (d) =>
     String(d)
       .split('\n')
@@ -232,6 +365,13 @@ async function main() {
   const page = await h.get(svc, '/');
   const ws = await h.authed(svc, { query: '?core=native' });
   const c = client(ws);
+  let update = {};
+  if (updated !== null) {
+    const addons = await c.subscribe('addons', {});
+    update = { wasmLibraryWritten: updated, nativeFindsTheWasmLibrary: JSON.stringify(addons.now()).indexOf('Update check') >= 0, adoptedOnce: svc.find('adopted').length === 1 };
+    log('update from wasm', Object.assign({ adopted: svc.find('adopted')[0] || null }, update));
+    await c.req('unsubscribe', { sub: addons.sub });
+  }
   await c.req('installDefaults', { choices: [{ key: 'cinemeta', on: true }] });
   const home = await c.subscribe('home', {});
   const pushes = [];
@@ -242,7 +382,9 @@ async function main() {
   const found = await h.until('Home catalogs from Cinemeta', () => tiles(pushes) + tiles(home.now()) >= 10, 120000).catch(() => false);
   log('home', { tilesWithCinemetaPosters: tiles(pushes) + tiles(home.now()), ok: !!found });
 
-  const media = FIXTURE ? await fixtureRun(c) : await publicTorrent(c);
+  const media = FIXTURE ? await fixtureRun(c, svc.data) : await publicTorrent(c, svc.data);
+  const real = process.env.MQ_REAL_PLUGINS === '1' ? await realPlugins(c) : {};
+  marker.close();
   const checks = Object.assign(
     {
       nativeCore: ready.core === 'native',
@@ -250,7 +392,9 @@ async function main() {
       homeFromCinemeta: !!found,
       stayedNative: svc.find('ready').length === 1 && svc.find('native').length === 0,
     },
+    update,
     media,
+    real,
   );
   log('checks', checks);
   await svc.kill();
