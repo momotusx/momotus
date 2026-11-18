@@ -128,11 +128,21 @@ test("scrollend is left alone where the engine has it", () => {
   expect(added).toBe(0);
 });
 
-test("inert below Chrome 102: the property sets the attribute, hides from readers, and keeps focus out", async () => {
+/** An engine with no `inert` property: elements in a tree, a document that tracks focus, its listeners. */
+function inertEngine() {
+  const document = {
+    activeElement: null as El | null,
+    head: { appendChild: (s: { textContent: string }) => styles.push(s) },
+    createElement: () => ({ textContent: "" }),
+    querySelectorAll: () => tabbables,
+    addEventListener: (type: string, fn: never) => (type === "focusin" ? focusin.push(fn) : type === "keydown" ? keydown.push(fn) : 0),
+  };
   class El {
     attrs = new Map<string, string>();
     parent: El | null = null;
     isConnected = true;
+    /** Hidden or disabled: focus() does nothing. */
+    unfocusable = false;
     focused = 0;
     blurred = 0;
     hasAttribute = (n: string) => this.attrs.has(n);
@@ -144,8 +154,13 @@ test("inert below Chrome 102: the property sets the attribute, hides from reader
       for (let e: El | null = this; e; e = e.parent) if (e.hasAttribute("inert")) return e;
       return null;
     }
+    contains(other: El) {
+      for (let e: El | null = other; e; e = e.parent) if (e === this) return true;
+      return false;
+    }
     focus() {
       this.focused++;
+      if (!this.unfocusable) land(this);
     }
     order = 0;
     tabIndex = 0;
@@ -154,22 +169,27 @@ test("inert below Chrome 102: the property sets the attribute, hides from reader
     }
     blur() {
       this.blurred++;
+      if (document.activeElement === this) document.activeElement = null;
     }
   }
   const styles: { textContent: string }[] = [];
   const focusin: ((e: { target: El }) => void)[] = [];
   const keydown: ((e: { key: string; shiftKey: boolean }) => void)[] = [];
   const tabbables: El[] = [];
-  const document = {
-    head: { appendChild: (s: { textContent: string }) => styles.push(s) },
-    createElement: () => ({ textContent: "" }),
-    querySelectorAll: () => tabbables,
-    addEventListener: (type: string, fn: never) => (type === "focusin" ? focusin.push(fn) : type === "keydown" ? keydown.push(fn) : 0),
+  /** Focus arrives on `el`, as the engine moves it, then focusin. */
+  const land = (el: El) => {
+    document.activeElement = el;
+    focusin[0]!({ target: el });
   };
   installCompat({ HTMLElement: El, document } as unknown as typeof globalThis);
-  const region = new El() as unknown as HTMLElement & El;
+  const region = new El() as unknown as HTMLElement & InstanceType<typeof El>;
   const inside = new El();
   inside.parent = region;
+  return { El, document, styles, keydown, tabbables, land, region, inside };
+}
+
+test("inert below Chrome 102: the property sets the attribute, hides from readers, and keeps focus out", async () => {
+  const { El, styles, keydown, tabbables, land, region, inside } = inertEngine();
   const outside = new El();
 
   region.inert = true;
@@ -178,8 +198,8 @@ test("inert below Chrome 102: the property sets the attribute, hides from reader
   expect(region.getAttribute("aria-hidden")).toBe("true");
   expect(styles[0]?.textContent).toContain("[inert]");
   // Tab or a script's focus() into the region: focus goes back to where it was.
-  focusin[0]!({ target: outside });
-  focusin[0]!({ target: inside });
+  land(outside);
+  land(inside);
   expect(outside.focused).toBe(1);
   // Tab steps over the region to the next live control that way, Shift+Tab to the one before it.
   const before = new El();
@@ -187,19 +207,59 @@ test("inert below Chrome 102: the property sets the attribute, hides from reader
   [before, region, inside, after].forEach((e, i) => (e.order = i));
   tabbables.push(before, inside, after);
   keydown[0]!({ key: "Tab", shiftKey: false });
-  focusin[0]!({ target: inside });
+  land(inside);
   expect(after.focused).toBe(1);
   keydown[0]!({ key: "Tab", shiftKey: true });
-  focusin[0]!({ target: inside });
+  land(inside);
   expect(before.focused).toBe(1);
   await new Promise((r) => setTimeout(r));
   region.inert = false;
   expect(region.inert).toBe(false);
   expect(region.hasAttribute("aria-hidden")).toBe(false);
   // An element hidden from readers on its own stays hidden.
-  const own = new El() as unknown as HTMLElement & El;
+  const own = new El() as unknown as HTMLElement & InstanceType<typeof El>;
   own.setAttribute("aria-hidden", "true");
   own.inert = true;
   own.inert = false;
   expect(own.getAttribute("aria-hidden")).toBe("true");
+});
+
+test("inert below Chrome 102: focus never stays in a region when nothing outside takes it", async () => {
+  const { El, document, keydown, tabbables, land, region, inside } = inertEngine();
+  const outside = new El();
+  region.inert = true;
+  // Where it was cannot take focus (hidden since): off the region, onto the body.
+  land(outside);
+  outside.unfocusable = true;
+  land(inside);
+  expect(outside.focused).toBe(1);
+  expect(inside.blurred).toBe(1);
+  expect(document.activeElement).toBe(null);
+  // Tab's next control cannot take it: where it was does.
+  outside.unfocusable = false;
+  land(outside);
+  const after = new El();
+  after.unfocusable = true;
+  [outside, region, inside, after].forEach((e, i) => (e.order = i));
+  tabbables.push(inside, after);
+  keydown[0]!({ key: "Tab", shiftKey: false });
+  land(inside);
+  expect(after.focused).toBe(1);
+  expect(document.activeElement).toBe(outside);
+  await new Promise((r) => setTimeout(r));
+});
+
+test("inert below Chrome 102: a region turned inert with focus inside lets it go", () => {
+  const { El, document, land, region, inside } = inertEngine();
+  land(inside);
+  region.inert = true;
+  expect(inside.blurred).toBe(1);
+  expect(document.activeElement).toBe(null);
+  // Focus elsewhere stays where it is.
+  const outside = new El();
+  const other = new El() as unknown as HTMLElement & InstanceType<typeof El>;
+  land(outside);
+  other.inert = true;
+  expect(outside.blurred).toBe(0);
+  expect(document.activeElement).toBe(outside);
 });
