@@ -60,7 +60,7 @@ export function Session(props: { server: string; name: string; onJoined: (by: st
   createEffect(
     on(
       () => [p()?.phase ?? view?.state.status.state, late()],
-      () => autoFocusSoon(() => document.querySelector<HTMLElement>("main :is(.summary, .problem) [data-autofocus]")),
+      () => autoFocusSoon(() => document.querySelector<HTMLElement>("main .summary [data-autofocus], main .problem [data-autofocus]")),
     ),
   );
   return (
