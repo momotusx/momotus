@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0](https://github.com/momotusx/momotus/compare/v0.3.0...v0.4.0) (2026-11-18)
+
+
+### Features
+
+* **bridge:** a free port, a start heartbeat and a set device id ([88eef50](https://github.com/momotusx/momotus/commit/88eef503bc175a4e03ff12f45a12dbc962f7014e))
+* **bridge:** a token, parent exit and an armv7 build for the TV ([338521d](https://github.com/momotusx/momotus/commit/338521deae3b4e65c63d17499d7a99464d5c0637))
+* **engine:** bound peer dials in flight and per minute ([0368a62](https://github.com/momotusx/momotus/commit/0368a62d610a001e850f285a1610b9e5e54d306e))
+* **web:** downloads on webOS with the native core ([fcb9dc9](https://github.com/momotusx/momotus/commit/fcb9dc9ac80f6b760f5560ec38298464613c6c51))
+* **web:** error reports on webOS with the native core ([bd52287](https://github.com/momotusx/momotus/commit/bd522878011ee604592f14005d7137b9ca8b91dc))
+* **webos:** keep the wasm library on update, start on a free port ([af3357b](https://github.com/momotusx/momotus/commit/af3357b8e8024cb1f44b3673011cce2eac16bf1a))
+* **webos:** the service runs the native core, the wasm one as fallback ([b7731af](https://github.com/momotusx/momotus/commit/b7731af7d70291b2e7be6599964c852789d24b08))
+* **web:** webOS lists torrents and header streams with the native core ([9267db7](https://github.com/momotusx/momotus/commit/9267db760139cd28270b37e65363592aef602f84))
+
+
+### Bug Fixes
+
+* **engine:** 32-bit Linux writes and punches past 2 GiB ([4055884](https://github.com/momotusx/momotus/commit/40558842354740ee935c3ebb2bc32452ef1a2a99))
+* **webos:** bindgen gets zig's C headers as absolute paths ([53f8be9](https://github.com/momotusx/momotus/commit/53f8be942335b36d9d7ced42e0bd4b4d32a881e2))
+
 ## [0.3.0](https://github.com/momotusx/momotus/compare/v0.2.0...v0.3.0) (2026-11-18)
 
 
