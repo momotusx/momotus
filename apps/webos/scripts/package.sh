@@ -15,6 +15,9 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 web="$here/../web"
 OUT="${OUT:-$here/out}"
+# Absolute, so a relative OUT holds where later steps cd elsewhere.
+mkdir -p "$OUT"
+OUT="$(cd "$OUT" && pwd)"
 CORE_DIR="${CORE_DIR:-$here/service/core}"
 CLI_VERSION=3.2.6
 WEBOS_CLI_DIR="${WEBOS_CLI_DIR:-$HOME/.cache/momotus/webos-cli-$CLI_VERSION}"
@@ -76,13 +79,16 @@ rm -f "$OUT"/*.ipk
 "${node_run[@]}" "$WEBOS_CLI_DIR/node_modules/.bin/ares-package" "$stage/app" "$stage/service" -o "$OUT" --no-minify
 ipk="$(ls "$OUT"/*.ipk)"
 
-# 6. Old tools wrote zero timestamps into the archives, which TVs refuse.
+# 6. Old tools wrote zero timestamps into the archives, which TVs refuse. The listing is taken whole first: a failed or
+# empty one stops here, and grep never closes tar's pipe early.
 check="$OUT/ipk-check"
 rm -rf "${check:?}"
 mkdir -p "$check"
 (cd "$check" && ar x "$ipk")
 for part in control data; do
-  if tar -tvzf "$check/$part.tar.gz" | grep -qE ' 1970 |1970-01-01'; then
+  listing="$(tar -tvzf "$check/$part.tar.gz")"
+  [ -n "$listing" ] || { echo "package.sh: $part.tar.gz in $ipk lists nothing" >&2; exit 1; }
+  if grep -qE ' 1970 |1970-01-01' <<<"$listing"; then
     echo "package.sh: $ipk holds zero timestamps in $part.tar.gz" >&2
     exit 1
   fi
