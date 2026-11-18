@@ -385,4 +385,25 @@ test('device-seed: a bad file is replaced by 64 hex chars, a good one is kept', 
   assert.strictEqual(JSON.parse(await d.next()).deviceSeed, seed);
 });
 
+test('each socket has its own session: replies go to it alone, and a closed one leaves no subscription', async () => {
+  const svc = await h.startService();
+  const a = await h.authed(svc);
+  a.send('sub');
+  assert.strictEqual(await a.next(), 'subbed');
+  // A reload: the new page's socket opens while the old one is still up.
+  const b = await h.authed(svc);
+  b.send('subs');
+  assert.strictEqual(await b.next(), 'subs:1');
+  assert.deepStrictEqual(a.messages, []);
+  a.ws.close();
+  await h.until('the old session gone', async () => {
+    b.send('subs');
+    return (await b.next()) === 'subs:0';
+  });
+  // A session past its output budget closes only its own socket.
+  b.send('overflow');
+  await h.until('b closed', () => b.closed);
+  assert.strictEqual(b.closed.code, 1013);
+});
+
 h.run();

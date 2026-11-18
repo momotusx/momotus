@@ -1,6 +1,6 @@
 //! The webOS core (plans/webos.md 3.5): today's `Session` over the core, as a
 //! wasm module the service's core child loads on the TV's Node (8 to 20).
-//! The contract is apps/webos/service/host.d.ts: `open`, `send`,
+//! The contract is apps/webos/service/host.d.ts: `open`, `send`, `close`,
 //! `onMessage`, `serve` and `ping` are here; `fire`, `fetched` and
 //! `resolved` are mq-rt's and mq-http's exports. Every host import lives in
 //! the `mqHost` the child installs before it loads this module.
@@ -19,7 +19,9 @@ use tokio::sync::mpsc;
 use wasm_bindgen::prelude::*;
 
 thread_local! {
-    static INBOX: RefCell<Option<mpsc::UnboundedSender<String>>> = const { RefCell::new(None) };
+    /// A Session per page socket, by the service's socket id, as the
+    /// native bridge opens one per socket.
+    static SESSIONS: RefCell<HashMap<u32, mpsc::UnboundedSender<String>>> = RefCell::new(HashMap::new());
     static LISTENER: RefCell<Option<js_sys::Function>> = const { RefCell::new(None) };
     static CORE: RefCell<Option<Core>> = const { RefCell::new(None) };
 }
@@ -87,34 +89,6 @@ pub fn open(config: &str) -> Result<String, JsError> {
     mq_bridge::dev_tmdb(&core);
     mq_bridge::dev_segments(&core);
     mq_bridge::dev_replay();
-
-    let (out, mut outgoing) = Output::channel();
-    let (inbox, mut incoming) = mpsc::unbounded_channel::<String>();
-    mq_rt::spawn(async move {
-        while let Some(message) = outgoing.recv().await {
-            match message {
-                Outgoing::Message { text, held } => {
-                    deliver(&text);
-                    // Handed over: its share of the budget goes back.
-                    drop(held);
-                }
-                // The page stopped taking messages past the budget: the
-                // service replaces this core, as after a death.
-                Outgoing::Overflow => {
-                    deliver(r#"{"core":"overflow"}"#);
-                    return;
-                }
-            }
-        }
-    });
-    let session_core = core.clone();
-    mq_rt::spawn(async move {
-        let mut session = Session::new(session_core, out);
-        while let Some(text) = incoming.recv().await {
-            session.handle_text(&text).await;
-        }
-    });
-    INBOX.with(|i| *i.borrow_mut() = Some(inbox));
     CORE.with(|c| *c.borrow_mut() = Some(core));
     Ok(serde_json::json!({
         "ok": true,
@@ -125,28 +99,71 @@ pub fn open(config: &str) -> Result<String, JsError> {
     .to_string())
 }
 
-/// Where replies and pushes go, one JSON text each.
+/// Where replies and pushes go: `(socket, text)`, one JSON text each, or
+/// `(socket, null)` when that socket's session stopped past its output
+/// budget (the service closes it, and the page opens a new one).
 #[wasm_bindgen(js_name = onMessage)]
 pub fn on_message(callback: js_sys::Function) {
     LISTENER.with(|l| *l.borrow_mut() = Some(callback));
 }
 
-fn deliver(text: &str) {
+fn deliver(socket: u32, text: Option<&str>) {
     LISTENER.with(|l| {
         if let Some(callback) = l.borrow().as_ref() {
-            let _ = callback.call1(&JsValue::NULL, &JsValue::from_str(text));
+            let text = text.map_or(JsValue::NULL, JsValue::from_str);
+            let _ = callback.call2(&JsValue::NULL, &socket.into(), &text);
         }
     });
 }
 
-/// One protocol request (JSON text), handled on a later turn.
+/// One protocol request (JSON text) of page socket `socket`, handled on a
+/// later turn; its first one opens the socket's Session.
 #[wasm_bindgen]
-pub fn send(json: String) {
-    INBOX.with(|i| {
-        if let Some(inbox) = i.borrow().as_ref() {
-            let _ = inbox.send(json);
+pub fn send(socket: u32, json: String) {
+    let inbox = SESSIONS.with(|s| s.borrow().get(&socket).cloned());
+    let inbox = inbox.or_else(|| open_session(socket));
+    if let Some(inbox) = inbox {
+        let _ = inbox.send(json);
+    }
+}
+
+/// Page socket `socket` closed: its Session ends, with its subscriptions,
+/// as a closed socket's does on the native bridge.
+#[wasm_bindgen]
+pub fn close(socket: u32) {
+    SESSIONS.with(|s| s.borrow_mut().remove(&socket));
+}
+
+fn open_session(socket: u32) -> Option<mpsc::UnboundedSender<String>> {
+    let core = CORE.with(|c| c.borrow().clone())?;
+    let (out, mut outgoing) = Output::channel();
+    let (inbox, mut incoming) = mpsc::unbounded_channel::<String>();
+    let writer = mq_rt::spawn(async move {
+        while let Some(message) = outgoing.recv().await {
+            match message {
+                Outgoing::Message { text, held } => {
+                    deliver(socket, Some(&text));
+                    // Handed over: its share of the budget goes back.
+                    drop(held);
+                }
+                // The page stopped taking messages past the budget.
+                Outgoing::Overflow => {
+                    deliver(socket, None);
+                    return;
+                }
+            }
         }
     });
+    mq_rt::spawn(async move {
+        let mut session = Session::new(core, out);
+        while let Some(text) = incoming.recv().await {
+            session.handle_text(&text).await;
+        }
+        drop(session);
+        writer.abort();
+    });
+    SESSIONS.with(|s| s.borrow_mut().insert(socket, inbox.clone()));
+    Some(inbox)
 }
 
 /// The service's `/sub/` and `/logo/` routes: `{ status, headers, body }`,

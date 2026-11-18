@@ -17,7 +17,7 @@ const send = (m) => process.send(m);
 
 function open(config) {
   core = require(process.env.MQ_CORE || path.join(__dirname, 'core', 'mq_wasm.js'));
-  core.onMessage((text) => send({ kind: 'socket', text }));
+  core.onMessage((socket, text) => send({ kind: 'socket', socket, text }));
   send({ kind: 'ready', open: core.open(JSON.stringify(config)) });
 }
 
@@ -32,6 +32,7 @@ function serve(id, requestPath) {
 
 process.on('message', (m) => {
   if (m.kind === 'open') open(m.config);
-  else if (m.kind === 'socket') core.send(m.text);
+  else if (m.kind === 'socket') core.send(m.socket, m.text);
+  else if (m.kind === 'close') core.close(m.socket);
   else if (m.kind === 'serve') serve(m.id, m.path);
 });
