@@ -67,8 +67,12 @@ export interface HostResponse {
 /** Exports of the core module (`mq_wasm`, 3.5). */
 export interface CoreModule {
   open(configJson: string): string;
-  send(json: string): void;
-  onMessage(cb: (json: string) => void): void;
+  /** Text of page socket `socket`; its first text opens the socket's Session. */
+  send(socket: number, json: string): void;
+  /** The socket closed: its Session ends, with its subscriptions. */
+  close(socket: number): void;
+  /** `json: null`: that socket's Session stopped past its output budget. */
+  onMessage(cb: (socket: number, json: string | null) => void): void;
   serve(path: string): Promise<ServeAnswer | null>;
   fire(id: number): void;
   fetched(id: number, responseJson: string): void;
@@ -115,16 +119,21 @@ export interface CoreConfig {
 /** Parent to child over the fork IPC channel (section 1). */
 export type ToChild =
   | { kind: 'open'; config: CoreConfig }
-  | { kind: 'socket'; text: string }
+  | { kind: 'socket'; socket: number; text: string }
+  | { kind: 'close'; socket: number }
   | { kind: 'serve'; id: number; path: string };
 
 /** Child to parent. */
 export type ToParent =
   | { kind: 'ready'; open: string }
-  | { kind: 'socket'; text: string }
+  /** `text: null`: close that socket with 1013 (its Session overflowed). */
+  | { kind: 'socket'; socket: number; text: string | null }
   | { kind: 'served'; id: number; answer: { status: number; headers: [string, string][]; body: string } | null }
   | { kind: 'died'; message: string };
 
+// Each authenticated page socket gets an id from the parent and a Session of
+// its own in the core, as a socket to the native bridge does; its close ends
+// that Session, so a reloaded page leaves no subscription behind.
 // Page and parent over the websocket (plans/webos.md 1 and 4). The first
 // message on a socket is the token as plain text; a bad token closes the
 // socket with `CLOSE_BAD_TOKEN` and the page calls `relaunch()`. Text that

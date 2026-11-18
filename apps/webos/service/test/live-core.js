@@ -91,6 +91,20 @@ async function main() {
   const found = await h.until('Home catalogs from Cinemeta', () => tiles(pushes) + tiles(home.now()) >= 10, 90000);
   log('home', { tilesWithCinemetaPosters: tiles(pushes) + tiles(home.now()), pushes: pushes.length, ok: !!found });
 
+  // A second page socket has a Session of its own: its numbering starts
+  // over, and the first socket hears none of its replies.
+  const ws2 = await h.authed(svc);
+  const before = ws.messages.length;
+  const home2 = await client(ws2).subscribe('home', {});
+  // The second client's first request is id 1: the first socket must not get its reply.
+  const crossed = ws.messages.slice(before).filter((m) => {
+    const r = JSON.parse(m);
+    return r.id === 1 && 'ok' in r;
+  });
+  const ownSession = home2.sub === home.sub && crossed.length === 0;
+  log('second socket', { sub: home2.sub, firstSub: home.sub, ownSession: ownSession });
+  ws2.ws.close();
+
   // The Archive's pass waits for its first list 10 s at most (archive.rs
   // FIRST_LIST); a slower list shows on the next open, as in the app.
   const params = Object.assign(
@@ -132,6 +146,7 @@ async function main() {
 
   const checks = {
     homeFromCinemeta: !!found,
+    sessionPerSocket: ownSession,
     leaseIsDirect: /^https:\/\//.test(url) && url.indexOf('127.0.0.1') < 0,
     leaseIsFinal: host !== 'archive.org' && /archive\.org$/.test(host),
     probeServed: probe.kind === null,

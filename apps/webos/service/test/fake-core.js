@@ -1,10 +1,17 @@
 'use strict';
 // A stand-in core module (MQ_CORE): echoes socket text and dies on request.
+// Like the real one it keeps a session per socket: `sub` opens a
+// subscription in it, `subs` counts the live ones of every session, and
+// `close` ends a socket's session with its subscriptions.
 // FAKE_SLOW_MS delays `open` on every start after the first.
 const fs = require('fs');
 const path = require('path');
 
-let cb = null;
+let out = null;
+let socket = 0;
+const subs = new Map(); // socket -> live subscriptions
+// Replies go to the socket whose text is being handled.
+const cb = (text) => out(socket, text);
 let lastConfig = null;
 
 exports.open = (configJson) => {
@@ -21,10 +28,25 @@ exports.open = (configJson) => {
 };
 
 exports.onMessage = (f) => {
-  cb = f;
+  out = f;
 };
 
-exports.send = (text) => {
+exports.close = (s) => {
+  subs.delete(s);
+};
+
+exports.send = (s, text) => {
+  socket = s;
+  if (text === 'sub') {
+    subs.set(s, (subs.get(s) || 0) + 1);
+    return cb('subbed');
+  }
+  if (text === 'subs') {
+    let n = 0;
+    subs.forEach((count) => (n += count));
+    return cb('subs:' + n);
+  }
+  if (text === 'overflow') return out(s, null);
   if (text.length > 1000) return cb('big:' + text.length);
   // Blocks the child's loop, so the parent's IPC channel backs up.
   if (text === 'busy') {

@@ -31,6 +31,10 @@ const uiDir = process.env.MQ_UI || path.join(__dirname, 'ui');
 const pidFile = path.join(dataDir, 'core.pid');
 
 const sockets = new Set(); // authenticated
+// Each authenticated socket has its own Session in the core, as a socket to
+// the native bridge does: its id goes with its text, and its close ends it.
+const byId = new Map(); // socket id -> ws
+let socketId = 0;
 const pending = new Map(); // serve id -> http response
 let store = null;
 let listening = null;
@@ -212,15 +216,16 @@ function spawnChild() {
     if (m.kind === 'ready') {
       ready = true;
       log({ ready: true, open: m.open });
-      queue.forEach((text) => sendToChild(c, text));
+      queue.forEach((q) => sendToChild(c, q.socket, q.text));
       queue = [];
       queueBytes = 0;
     } else if (m.kind === 'socket') {
-      sockets.forEach((ws) => {
-        if (ws.readyState !== WebSocket.OPEN) return;
-        if (ws.bufferedAmount > MAX_BUFFERED) ws.close(1013, 'slow reader');
-        else ws.send(m.text);
-      });
+      const ws = byId.get(m.socket);
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      // `text: null`: the session stopped past its output budget.
+      if (m.text === null) ws.close(1013, 'overflow');
+      else if (ws.bufferedAmount > MAX_BUFFERED) ws.close(1013, 'slow reader');
+      else ws.send(m.text);
     } else if (m.kind === 'served') {
       answerServe(m);
     } else if (m.kind === 'died') {
@@ -282,24 +287,24 @@ function startCore() {
 // `send` returning false is backpressure, not refusal: Node queues the message.
 // A wedged child would let that queue grow without end, so the bytes handed
 // over and not yet written are counted and bounded.
-function sendToChild(c, text) {
+function sendToChild(c, socket, text) {
   const n = Buffer.byteLength(text);
   c.inflight += n;
-  c.send({ kind: 'socket', text }, () => {
+  c.send({ kind: 'socket', socket, text }, () => {
     c.inflight -= n;
   });
 }
 
 // False when the text is refused: the caller closes the socket with 1013.
-function toCore(text) {
+function toCore(socket, text) {
   const n = Buffer.byteLength(text);
   if (ready) {
     if (child.inflight + n > MAX_BUFFERED) return false;
-    sendToChild(child, text);
+    sendToChild(child, socket, text);
     return true;
   }
   if (queue.length >= MAX_QUEUE || queueBytes + n > MAX_BUFFERED) return false;
-  queue.push(text);
+  queue.push({ socket, text });
   queueBytes += n;
   return true;
 }
@@ -436,7 +441,7 @@ function onSocketText(ws, text) {
       if (ws.readyState === WebSocket.OPEN) ws.send(reply);
     });
   }
-  if (!toCore(text)) ws.close(1013, 'busy');
+  if (!toCore(ws.coreId, text)) ws.close(1013, 'busy');
 }
 
 // Before the token a socket may send only the token (64 chars; a longer text
@@ -456,6 +461,8 @@ function onSocket(ws) {
       if (data.length > TOKEN_LEN || !sameToken(data)) return ws.close(CLOSE_BAD_TOKEN, 'token');
       authed = true;
       ws._receiver._maxPayload = MAX_BUFFERED;
+      ws.coreId = socketId += 1;
+      byId.set(ws.coreId, ws);
       sockets.add(ws);
       holdAlive();
       return;
@@ -465,6 +472,13 @@ function onSocket(ws) {
   ws.on('close', () => {
     clearTimeout(lateTimer);
     if (!sockets.delete(ws)) return;
+    byId.delete(ws.coreId);
+    // Its session ends with it; text it left in the queue goes too.
+    if (ready) child.send({ kind: 'close', socket: ws.coreId });
+    else {
+      queue = queue.filter((q) => q.socket !== ws.coreId);
+      queueBytes = queue.reduce((n, q) => n + Buffer.byteLength(q.text), 0);
+    }
     if (sockets.size === 0) releaseLater();
   });
   ws.on('error', () => ws.terminate());
