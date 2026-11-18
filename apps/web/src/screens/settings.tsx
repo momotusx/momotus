@@ -43,7 +43,7 @@ import type { SubtitleSize } from "../core/generated/SubtitleSize";
 import { chooseForm, type Form, form, pinned } from "../form";
 import { headerOnTvNow, previewsOn, setPreviewsOn } from "../lib/trailers";
 import { defaultsWords } from "../lib/defaults";
-import { isWebOS } from "../lib/webos";
+import { audioTrackList, isWebOS } from "../lib/webos";
 import reportWords from "../../../shared/report-words.json";
 import { addonsSummary, choiceSummary, choiceWords, findAddons, languageName, syncSummary, syncWords, tmdbCredit } from "../lib/words";
 import * as sync from "../core/sync";
@@ -749,7 +749,9 @@ export default function SettingsScreen() {
                       <LanguagePicker
                         audio
                         label={choiceWords.settings.audio.label}
-                        help={choiceWords.settings.audio.help}
+                        // A TV whose engine lists no audio tracks plays each file's own default (plans/webos.md section 4); the
+                        // languages stay, for this profile's other devices.
+                        help={isWebOS() && !audioTrackList() ? `${choiceWords.settings.audio.help} This TV plays each file's default audio track.` : choiceWords.settings.audio.help}
                         group="choice-audio"
                         chosen={x().streams.languages}
                         onChange={(next) => patch({ streams: { languages: next } })}

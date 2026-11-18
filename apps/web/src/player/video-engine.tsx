@@ -1,16 +1,21 @@
 /** The browser's engine: one `<video>` element. The core serves every source
  * and subtitle on loopback URLs any origin may read, and the element is
  * crossorigin, so both load directly. An HLS source in a browser without HLS
- * of its own plays through hls.js (./hls.ts). */
+ * of its own plays through hls.js (./hls.ts).
+ *
+ * On LG webOS the element gets the CDN's own URL (no `crossorigin`: a CDN sends
+ * no CORS headers) and plays HLS itself; that build leaves hls.js out. */
 
 import type Hls from "hls.js";
 import { createSignal, onCleanup, Show } from "solid-js";
 import { earlyFailure, hlsFailure, mediaFailure, pendingStart } from "../lib/failover";
+import { isWebOS } from "../lib/webos";
 import { startAudio } from "../lib/words";
 import type { Engine, EngineEvents, Track } from "./engine";
 import { needsHlsJs } from "./hls";
 
 export function createVideoEngine(events: EngineEvents): Engine {
+  const webos = isWebOS();
   let video!: HTMLVideoElement;
   // The loaded source plays through hls.js: its errors are hls.js's to
   // report, never the element's (a `blob:` source says nothing true).
@@ -128,7 +133,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
       classList={{ on: started() }}
       playsinline
       preload="auto"
-      crossorigin="anonymous"
+      crossorigin={webos ? undefined : "anonymous"}
       onPlay={() => {
         setPaused(false);
         events.onPlay();
@@ -170,6 +175,11 @@ export function createVideoEngine(events: EngineEvents): Engine {
       </Show>
     </video>
   ) as HTMLVideoElement;
+  // webOS lists a file's audio tracks as they arrive, some after the metadata: each one read again as it comes.
+  if (webos) (video as unknown as { audioTracks?: EventTarget }).audioTracks?.addEventListener?.("addtrack", () => {
+    applyStartAudio();
+    readTracks();
+  });
 
   return {
     kind: "video",
@@ -189,8 +199,9 @@ export function createVideoEngine(events: EngineEvents): Engine {
       start.set(startSec);
       const load = ++loads;
       dropHls();
-      viaHls = needsHlsJs(url);
-      if (viaHls) {
+      // The webOS build has no hls.js at all: its engine plays HLS itself (`import.meta.env.MODE` is fixed at build).
+      viaHls = import.meta.env.MODE !== "webos" && needsHlsJs(url);
+      if (import.meta.env.MODE !== "webos" && viaHls) {
         video.removeAttribute("src");
         void import("hls.js").then(({ default: Hls }) => {
           if (load !== loads) return;

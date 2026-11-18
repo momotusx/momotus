@@ -43,6 +43,7 @@ import type { Dial } from "../core/generated/Dial";
 import { ZAP_TRIES, zapPath, zapWords } from "./zap";
 import { SubtitlePicker } from "../player/subtitle-picker";
 import { AudioStrip, inStrip, QuickShift, type ShiftAt, stripEntry, SubtitleStrip } from "../player/bar-strip";
+import { isHls } from "../player/hls";
 import { createVideoEngine } from "../player/video-engine";
 import { loadedSource, type Retry, sourceStart, TRYING_AGAIN_MS, tryingAgain } from "../lib/failover";
 import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPath, playState, titlePath, versionsPath } from "../lib/format";
@@ -1948,11 +1949,14 @@ function PlayerPage(props: {
               <AudioLines aria-hidden />
               <small class="w">{audioText()}</small>
             </button>
-            <button class="pill spd" data-f="player:speed" aria-label={`${barWords.names.speed}, ${rate()}x`} title={barWords.names.speed} onClick={cycleSpeed}>
-              <Gauge aria-hidden />
-              {/* Never dropped with the other words: the speed is shown nowhere else (R5-19). */}
-              <small class="num">{rate()}x</small>
-            </button>
+            {/* webOS plays HLS itself at 1x only (plans/webos.md section 4): no speed there. */}
+            <Show when={!(isWebOS() && isHls(url() ?? ""))}>
+              <button class="pill spd" data-f="player:speed" aria-label={`${barWords.names.speed}, ${rate()}x`} title={barWords.names.speed} onClick={cycleSpeed}>
+                <Gauge aria-hidden />
+                {/* Never dropped with the other words: the speed is shown nowhere else (R5-19). */}
+                <small class="num">{rate()}x</small>
+              </button>
+            </Show>
             {/* Leaving for Versions or Episodes replaces this play in history:
                 Back from the next play goes to Versions, then the title, never to this one. */}
             {/* A zap: Zap again in Versions' place; release names carry the title (plans/zap.md 2.3). */}
