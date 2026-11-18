@@ -121,6 +121,10 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
   nix's `pwritev` refused every offset past 2 GiB and the torrent stopped
   on the first chunk written there. That path is a function of its own,
   which the tests run on every target with a sparse write at 5 GiB.
+  32-bit Linux (the webOS TV core) takes the same path, for the same
+  reason.
+- src/storage/filesystem/punch.rs: 32-bit Linux punches with `fallocate64`,
+  as Android does: 32-bit glibc's `fallocate` takes a 32-bit offset.
 - src/dht_utils.rs, src/session.rs: a resolved magnet lists the peer that
   sent its metadata first among the peers it met (upstream kept them in
   hash order), so the torrent's own add dials the one known to answer

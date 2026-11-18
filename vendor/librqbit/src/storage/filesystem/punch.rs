@@ -105,9 +105,13 @@ fn punch_once(file: &File, offset: u64, len: u64) -> io::Result<()> {
     use std::os::fd::AsRawFd;
     let mode = libc::FALLOC_FL_PUNCH_HOLE | libc::FALLOC_FL_KEEP_SIZE;
     // SAFETY: fallocate takes plain values.
-    #[cfg(target_os = "android")]
+    // Marquee fork: 32-bit glibc's `fallocate` takes a 32-bit offset (the webOS TV core).
+    #[cfg(any(
+        target_os = "android",
+        all(target_os = "linux", target_pointer_width = "32")
+    ))]
     let r = unsafe { libc::fallocate64(file.as_raw_fd(), mode, off(offset)?, off(len)?) };
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
     let r = unsafe { libc::fallocate(file.as_raw_fd(), mode, off(offset)?, off(len)?) };
     if r == -1 {
         return Err(io::Error::last_os_error());

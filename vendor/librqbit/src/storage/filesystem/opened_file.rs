@@ -19,14 +19,27 @@ pub trait OurFileExt {
 }
 
 impl OurFileExt for File {
-    // Marquee fork: 32-bit Android takes the portable path. Its off_t is 32 bits, so nix's
-    // pwritev refuses any offset past 2 GiB; pwrite_all is std's pwrite64 there.
-    #[cfg(all(unix, not(all(target_os = "android", target_pointer_width = "32"))))]
+    // Marquee fork: 32-bit Android and Linux (the webOS TV core) take the portable path. Their
+    // off_t is 32 bits, so nix's pwritev refuses any offset past 2 GiB; pwrite_all is std's
+    // pwrite64 there.
+    #[cfg(all(
+        unix,
+        not(all(
+            any(target_os = "android", target_os = "linux"),
+            target_pointer_width = "32"
+        ))
+    ))]
     fn pwrite_all_vectored(&self, offset: u64, bufs: [IoSlice<'_>; 2]) -> anyhow::Result<usize> {
         nix::sys::uio::pwritev(self, &bufs, offset.try_into()?).context("error calling pwritev")
     }
 
-    #[cfg(not(all(unix, not(all(target_os = "android", target_pointer_width = "32")))))]
+    #[cfg(not(all(
+        unix,
+        not(all(
+            any(target_os = "android", target_os = "linux"),
+            target_pointer_width = "32"
+        ))
+    )))]
     fn pwrite_all_vectored(&self, offset: u64, bufs: [IoSlice<'_>; 2]) -> anyhow::Result<usize> {
         portable_pwrite_all_vectored(self, offset, bufs)
     }
@@ -86,11 +99,17 @@ impl OurFileExt for File {
 }
 
 /// The write without pwritev: through `pwrite_all` (std's pwrite64 on unix), one call for both
-/// buffers. Marquee fork: 32-bit Android and the platforms without unix take it; tests run it on
-/// every target, so the 32-bit path is checked on a 64-bit host too.
+/// buffers. Marquee fork: 32-bit Android and Linux and the platforms without unix take it;
+/// tests run it on every target, so the 32-bit path is checked on a 64-bit host too.
 #[cfg(any(
     test,
-    not(all(unix, not(all(target_os = "android", target_pointer_width = "32"))))
+    not(all(
+        unix,
+        not(all(
+            any(target_os = "android", target_os = "linux"),
+            target_pointer_width = "32"
+        ))
+    ))
 ))]
 fn portable_pwrite_all_vectored(
     file: &File,
