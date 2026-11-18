@@ -1,5 +1,6 @@
 package app.marquee.android
 
+import android.os.SystemClock
 import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -73,9 +74,15 @@ fun ZapScreen(
     LaunchedEffect(route, deal) {
         if (ZapCopy.spent(tries)) return@LaunchedEffect
         miss = null
+        // The deal's time on its own, apart from the player's start (Pixel walk 2026-11-18: a Zap again
+        // took 40 to 50 s before its player while the core's deal took under 1 s).
+        val asked = SystemClock.elapsedRealtime()
+        Log.d(MarqueeApp.TAG, "zap deal asked at $asked")
         val pick: ZapPick =
             try {
-                session.ops.zap(route.kind)
+                session.ops.zap(route.kind).also {
+                    Log.d(MarqueeApp.TAG, "zap dealt in ${SystemClock.elapsedRealtime() - asked} ms")
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
