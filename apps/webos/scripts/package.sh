@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Packages the webOS app (plans/webos.md section 4) into one IPK: the stub, the service, the UI built in webos mode
-# (apps/web, `bun run build:webos`, which also runs the Chromium 79 bundle check) and the wasm core, with the webOS CLI
-# (@webos-tools/cli 3.2.6, installed by bun into its own dir). Runs on macOS and on Linux CI.
+# (apps/web, `bun run build:webos`, which also runs the Chromium 79 bundle check), the wasm core and the native core
+# (plans/webos.md v5), with the webOS CLI (@webos-tools/cli 3.2.6, installed by bun into its own dir). Runs on macOS and
+# on Linux CI.
 #   CORE_DIR       dir holding mq_wasm.js and mq_wasm_bg.wasm (default apps/webos/service/core, where the wasm build writes)
+#   NATIVE_BIN     the native core (default apps/webos/service/bin/mq-bridge, where build-native.sh writes); NO_NATIVE=1
+#                  packages without it, so every TV runs the wasm core
 #   OUT            output dir (default apps/webos/out, gitignored)
 #   NODE           the Node that runs the CLI; else Node 20.12.2 through fnm when fnm is there; else `node` on PATH
 #   WEBOS_CLI_DIR  where the CLI is installed (default ~/.cache/momotus/webos-cli-3.2.6)
@@ -10,7 +13,7 @@
 #                  first "com": com.momotus.webos.sim). It also moves the service's port to WALK_PORT (default
 #                  47811), so a walk build never shares 127.0.0.1:47801 with the owner's app. The UI takes its
 #                  origin from the page, so it needs no rewrite.
-#   CA_BUNDLE      optional Mozilla cacert.pem, shipped beside host.js
+#   CA_BUNDLE      optional Mozilla cacert.pem, shipped beside host.js; without it the packaging Node's own roots
 set -euo pipefail
 here="$(cd "$(dirname "$0")/.." && pwd)"
 web="$here/../web"
@@ -19,6 +22,7 @@ OUT="${OUT:-$here/out}"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 CORE_DIR="${CORE_DIR:-$here/service/core}"
+NATIVE_BIN="${NATIVE_BIN:-$here/service/bin/mq-bridge}"
 CLI_VERSION=3.2.6
 WEBOS_CLI_DIR="${WEBOS_CLI_DIR:-$HOME/.cache/momotus/webos-cli-$CLI_VERSION}"
 
@@ -33,6 +37,10 @@ for f in mq_wasm.js mq_wasm_bg.wasm; do
     exit 1
   fi
 done
+if [ "${NO_NATIVE:-}" != 1 ] && [ ! -x "$NATIVE_BIN" ]; then
+  echo "package.sh: $NATIVE_BIN is missing. Build the native core first (apps/webos/scripts/build-native.sh), or set NO_NATIVE=1 for an IPK with the wasm core alone." >&2
+  exit 1
+fi
 
 # 3. The webOS CLI and the Node that runs it.
 if [ ! -x "$WEBOS_CLI_DIR/node_modules/.bin/ares-package" ]; then
@@ -61,10 +69,21 @@ stage="$OUT/stage"
 rm -rf "${stage:?}"
 mkdir -p "$stage/app" "$stage/service/core"
 cp "$here"/app/{appinfo.json,index.html,icon.png,largeIcon.png,splash.png} "$stage/app/"
-cp "$here"/service/{index.js,core-worker.js,host.js,keystore.js,services.json,package.json} "$stage/service/"
+cp "$here"/service/{index.js,core-worker.js,host.js,keystore.js,native.js,services.json,package.json} "$stage/service/"
 cp -R "$ui" "$stage/service/ui"
 cp "$CORE_DIR/mq_wasm.js" "$CORE_DIR/mq_wasm_bg.wasm" "$stage/service/core/"
-[ -z "${CA_BUNDLE:-}" ] || cp "$CA_BUNDLE" "$stage/service/cacert.pem"
+if [ "${NO_NATIVE:-}" != 1 ]; then
+  mkdir -p "$stage/service/bin"
+  cp "$NATIVE_BIN" "$stage/service/bin/mq-bridge"
+  chmod 755 "$stage/service/bin/mq-bridge"
+fi
+# The roots both cores verify HTTPS against beside the TV's (the native core reads only these: SSL_CERT_FILE).
+if [ -n "${CA_BUNDLE:-}" ]; then
+  cp "$CA_BUNDLE" "$stage/service/cacert.pem"
+else
+  "${node_run[@]}" -e 'process.stdout.write(require("tls").rootCertificates.join("\n") + "\n")' >"$stage/service/cacert.pem"
+  [ "$(grep -c 'BEGIN CERTIFICATE' "$stage/service/cacert.pem")" -gt 100 ] || { echo "package.sh: the packaging Node gave too few roots" >&2; exit 1; }
+fi
 if [ -n "${APP_ID:-}" ]; then
   walk_port="${WALK_PORT:-47811}"
   # Only the named text files: the core and the CA bundle stay byte for byte.
@@ -90,6 +109,11 @@ for part in control data; do
   [ -n "$listing" ] || { echo "package.sh: $part.tar.gz in $ipk lists nothing" >&2; exit 1; }
   if grep -qE ' 1970 |1970-01-01' <<<"$listing"; then
     echo "package.sh: $ipk holds zero timestamps in $part.tar.gz" >&2
+    exit 1
+  fi
+  # The TV runs the native core from where it unpacks it: it must keep its exec bit.
+  if [ "$part" = data ] && [ "${NO_NATIVE:-}" != 1 ] && ! grep -qE '^-rwxr-xr-x .*/bin/mq-bridge$' <<<"$listing"; then
+    echo "package.sh: $ipk holds no executable bin/mq-bridge" >&2
     exit 1
   fi
 done
