@@ -13,14 +13,18 @@ const WebSocket = require('ws');
 
 const TOKEN_HEADER = 'x-mq-token';
 
-// `bin` with `args`, its env holding MQ_BRIDGE_PORT and MQ_BRIDGE_TOKEN; it
-// is ready once it prints its `bridge_ready` line, and is killed if that
-// takes over `readyMs`.
-function start(bin, args, env, readyMs) {
+// `bin` with `args`, its env holding MQ_BRIDGE_TOKEN and, with
+// MQ_BRIDGE_PORT 0, binding a free port it names in its `bridge_ready` line.
+// It is ready once it prints that line. Its `bridge_opening` heartbeat
+// (MQ_BRIDGE_HEARTBEAT_MS) keeps a slow first open alive: it is killed after
+// `quietMs` with no line at all, or `capMs` in all. `c.why` says which, and
+// `c.stderr` holds its last lines (a panic's message).
+function start(bin, args, env, quietMs, capMs) {
   const c = new EventEmitter();
-  const url = 'ws://127.0.0.1:' + env.MQ_BRIDGE_PORT + '/ws';
+  let url = null;
   const upstreams = new Map(); // page socket id -> { ws, queue }
   let ready = false;
+  c.stderr = [];
   let proc;
   try {
     proc = spawn(bin, args, { env, stdio: ['pipe', 'pipe', 'pipe'] });
@@ -33,16 +37,28 @@ function start(bin, args, env, readyMs) {
   }
   c.pid = proc.pid;
   c.kill = (signal) => proc.kill(signal);
-  const timer = setTimeout(() => ready || proc.kill('SIGKILL'), readyMs);
+  const giveUp = (why) => {
+    if (ready) return;
+    c.why = why;
+    proc.kill('SIGKILL');
+  };
+  let quiet = null;
+  const heard = () => {
+    clearTimeout(quiet);
+    quiet = setTimeout(() => giveUp('no line in ' + quietMs + ' ms'), quietMs);
+  };
+  heard();
+  const cap = setTimeout(() => giveUp('not ready in ' + capMs + ' ms'), capMs);
+  const timer = { clear: () => (clearTimeout(quiet), clearTimeout(cap)) };
   // The bridge exits when this pipe closes (MQ_BRIDGE_EXIT_ON_EOF); a write
   // to a gone process must not throw here.
   proc.stdin.on('error', () => {});
   proc.on('error', (e) => {
-    clearTimeout(timer);
+    timer.clear();
     c.emit('error', e);
   });
   proc.on('exit', (code, signal) => {
-    clearTimeout(timer);
+    timer.clear();
     upstreams.forEach((u) => u.ws.terminate());
     upstreams.clear();
     c.emit('exit', code === null ? signal : code);
@@ -52,13 +68,19 @@ function start(bin, args, env, readyMs) {
     try {
       m = JSON.parse(line);
     } catch (e) {}
-    if (!ready && m && m.event === 'bridge_ready') {
-      ready = true;
-      clearTimeout(timer);
-      c.emit('message', { kind: 'ready', open: { native: true } });
-    }
+    if (ready || !m) return;
+    if (m.event === 'bridge_opening') return heard();
+    const port = m.event === 'bridge_ready' && /^ws:\/\/127\.0\.0\.1:(\d+)\/ws$/.exec(m.url || '');
+    if (!port) return;
+    ready = true;
+    timer.clear();
+    url = m.url;
+    c.emit('message', { kind: 'ready', open: { native: true, port: Number(port[1]) } });
   });
-  lines(proc.stderr, (line) => console.log(JSON.stringify({ nativeLog: line.slice(0, 500) })));
+  lines(proc.stderr, (line) => {
+    c.stderr = c.stderr.concat(line.slice(0, 300)).slice(-3);
+    console.log(JSON.stringify({ nativeLog: line.slice(0, 500) }));
+  });
 
   function upstream(socket) {
     const old = upstreams.get(socket);
