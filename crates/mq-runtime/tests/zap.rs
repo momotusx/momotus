@@ -316,3 +316,47 @@ async fn a_dead_title_on_same_moves_the_zap_to_the_next_pool() {
     assert_ne!(p.item_id, "tt404");
     assert_eq!(p.from, Dial::Far);
 }
+
+/// Zaps on a fresh core with the default addons, live (Pixel walk 2026-11-18:
+/// a second zap said "Nothing came up."). One JSON line per zap, and the
+/// zap's debug lines for every candidate that dealt nothing.
+///
+/// `cargo test -p mq-runtime --test zap live -- --ignored --nocapture`
+#[tokio::test]
+#[ignore = "network: the default addons"]
+async fn live_zaps_on_the_default_addons() {
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_ansi(false)
+        .with_test_writer()
+        .try_init();
+    let core = Core::temporary(mq_library::OWNER).unwrap();
+    let all_on: Vec<mq_runtime::defaults::DefaultChoice> = mq_runtime::defaults::list()
+        .iter()
+        .map(|d| serde_json::from_value(serde_json::json!({ "key": d.key, "on": true })).unwrap())
+        .collect();
+    core.install_defaults(&all_on).unwrap();
+    let mut dealt = 0;
+    for (i, dial) in [
+        "near", "far", "far", "near", "far", "far", "near", "far", "far", "far",
+    ]
+    .iter()
+    .enumerate()
+    {
+        core.set_prefs(&serde_json::json!({ "zapDial": dial }))
+            .unwrap();
+        let started = std::time::Instant::now();
+        let got = core.zap(None).await;
+        dealt += got.is_ok() as usize;
+        println!(
+            "{}",
+            serde_json::json!({
+                "zap": i, "dial": dial, "ok": got.is_ok(), "ms": started.elapsed().as_millis(),
+                "from": got.as_ref().ok().map(|p| format!("{:?}", p.from)),
+                "kind": got.as_ref().ok().map(|p| p.kind.clone()),
+                "miss": got.as_ref().err().map(|m| format!("{m:?}")),
+            })
+        );
+    }
+    assert!(dealt >= 9, "only {dealt} of 10 zaps dealt a title");
+}

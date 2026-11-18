@@ -92,6 +92,7 @@ impl Core {
             let kind = kind.map_or_else(|| ["movie", "series"][roll(2)].to_owned(), str::to_owned);
             let Some((candidate, from)) = self.candidate(dial, &kind, &same, &catalogs).await
             else {
+                tracing::debug!(?dial, %kind, "zap: no candidate");
                 continue;
             };
             dealt = true;
@@ -205,9 +206,13 @@ impl Core {
             .genres
             .get(roll(catalog.genres.len()))
             .map(String::as_str);
-        let Ok(ResourceResponse::Metas { metas }) = fetch_page(self, catalog, genre, 0).await
-        else {
-            return None;
+        let metas = match fetch_page(self, catalog, genre, 0).await {
+            Ok(ResourceResponse::Metas { metas }) => metas,
+            other => {
+                let why = other.err().unwrap_or_else(|| "not a list".into());
+                tracing::debug!(catalog = %catalog.id, ?genre, %why, "zap: far list missing");
+                return None;
+            }
         };
         let policy = self.policy();
         let items = metas
@@ -220,7 +225,10 @@ impl Core {
                 kind: m.r#type,
                 id: m.id,
             })
-            .collect();
+            .collect::<Vec<_>>();
+        if items.is_empty() {
+            tracing::debug!(catalog = %catalog.id, ?genre, %kind, "zap: far list holds nothing to deal");
+        }
         self.fresh(items)
     }
 
@@ -238,7 +246,13 @@ impl Core {
     /// by now, or the title itself when it has no videos. `None` when its
     /// meta does not load, or it has videos but none to play.
     async fn ready(&self, c: Candidate, from: Dial) -> Option<ZapPick> {
-        let (meta, _) = self.fetch_meta(&c.kind, &c.id).await.ok()?;
+        let (meta, _) = match self.fetch_meta(&c.kind, &c.id).await {
+            Ok(found) => found,
+            Err(why) => {
+                tracing::debug!(kind = %c.kind, id = %c.id, %why, "zap: no meta");
+                return None;
+            }
+        };
         let now = mq_library::hlc::now_ms() as i64;
         let episodes: Vec<_> = meta
             .videos
@@ -248,13 +262,20 @@ impl Core {
             .collect();
         let video = match (c.kind.as_str(), meta.videos.is_empty()) {
             ("movie", _) | (_, true) => None,
-            _ => Some(*episodes.get(roll(episodes.len()))?),
+            _ => match episodes.get(roll(episodes.len())) {
+                Some(v) => Some(*v),
+                None => {
+                    tracing::debug!(kind = %c.kind, id = %c.id, videos = meta.videos.len(), "zap: no episode out");
+                    return None;
+                }
+            },
         };
         let runtime_ms = TitleFacts::read(meta.preview.runtime.as_deref(), None, None, None)
             .runtime_s
             .map(|s| u64::from(s) * 1000);
         // Too short for the hold to end before Trakt's 80 percent: not zapped.
         if runtime_ms.is_some_and(|r| r > 0 && (r as f64) < SHORTEST_MS) {
+            tracing::debug!(id = %c.id, ?runtime_ms, "zap: too short");
             return None;
         }
         let guess = if video.is_some() {
@@ -294,13 +315,21 @@ impl Core {
     }
 }
 
-/// A start in the middle of a `runtime_ms` file: from 15 percent to 75, and
-/// never so late that the 5 minute hold ends past 80 percent.
+/// How much shorter than its runtime a file may be and still keep the dealt
+/// point: a PAL speed-up runs 4 percent short, and cuts and credits differ
+/// (Pixel walk 2026-11-18: a 115 minute meta, a 110 minute file, and a point
+/// at 83 minutes that `too_late` sent back to 0).
+const SHORTER: f64 = 0.90;
+
+/// A start in the middle of a `runtime_ms` file: from 15 percent, and never so
+/// late, even in a file `SHORTER` than its runtime, that it passes three
+/// quarters or that the 5 minute hold ends past 80 percent.
 pub(crate) fn start_within(runtime_ms: u64, random: u64) -> u64 {
     let r = runtime_ms as f64;
+    let short = r * SHORTER;
     let lo = (r * EARLIEST) as u64;
-    let hi = (r * LATEST)
-        .min(r * HOLD_ENDS_BY - HOLD_MS as f64)
+    let hi = (short * LATEST)
+        .min(short * HOLD_ENDS_BY - HOLD_MS as f64)
         .max(lo as f64) as u64;
     lo + random % (hi - lo + 1)
 }
@@ -313,9 +342,9 @@ pub(crate) fn too_late(zap_at: u64, duration_ms: u64) -> bool {
     duration_ms > 0 && (at > d * LATEST || at + HOLD_MS as f64 > d * HOLD_ENDS_BY)
 }
 
-/// The shortest file a zap starts in: one where 5 minutes of play from 15
-/// percent still end by 80 percent (about 7.7 minutes).
-const SHORTEST_MS: f64 = HOLD_MS as f64 / (HOLD_ENDS_BY - EARLIEST);
+/// The shortest runtime a zap starts in: one where 5 minutes of play from 15
+/// percent still end by 80 percent of a `SHORTER` file (about 8.8 minutes).
+const SHORTEST_MS: f64 = HOLD_MS as f64 / (HOLD_ENDS_BY * SHORTER - EARLIEST);
 
 /// A random index below `n` (0 when `n` is 0: callers `get` with it).
 fn roll(n: usize) -> usize {
@@ -367,7 +396,8 @@ mod tests {
     #[test]
     fn a_22_minute_episode_tops_out_at_80_percent_less_the_hold() {
         let runtime: u64 = 22 * 60_000;
-        let (lo, hi) = (198_000, 756_000); // 15 percent; 80 percent less 5 minutes
+        // 15 percent; 80 percent of a file 10 percent shorter, less 5 minutes.
+        let (lo, hi) = (198_000, 650_400);
         assert_eq!(start_within(runtime, 0), lo);
         assert_eq!(start_within(runtime, hi - lo), hi);
         assert_eq!(
@@ -375,6 +405,30 @@ mod tests {
             lo,
             "wraps, never past hi"
         );
+    }
+
+    #[test]
+    fn a_file_up_to_10_percent_short_keeps_every_dealt_point() {
+        // Submarino: Cinemeta's 115 minutes, a 110 minute file (Pixel walk 2026-11-18).
+        for runtime in [22 * 60_000, 45 * 60_000, 115 * 60_000, 142 * 60_000] {
+            let file = (runtime as f64 * 0.9) as u64;
+            for random in [0, u64::MAX / 3, u64::MAX / 2, u64::MAX] {
+                let at = start_within(runtime, random);
+                assert!(
+                    !too_late(at, file),
+                    "{at} dealt in {runtime} is too late for {file}"
+                );
+            }
+            // The point at the very top of the range too.
+            let top = (0..2_000_000u64)
+                .map(|r| start_within(runtime, r))
+                .max()
+                .unwrap();
+            assert!(
+                !too_late(top, file),
+                "{top} dealt in {runtime} is too late for {file}"
+            );
+        }
     }
 
     #[test]
