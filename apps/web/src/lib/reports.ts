@@ -42,7 +42,7 @@ export function browserWords(ua: string): { os: string; model: string } {
 }
 
 /** On by default; development builds only with `VITE_MARQUEE_REPORTS=1` (a live check); never on
- * webOS until its wasm core lands (step W). */
+ * a TV running the wasm core (`webos`: lib/webos.ts wasmCore), whose core keeps no report queue. */
 export function reportsWanted(env: { DEV?: boolean; VITE_MARQUEE_REPORTS?: string }, webos: boolean): boolean {
   return !webos && (!env.DEV || env.VITE_MARQUEE_REPORTS === "1");
 }
