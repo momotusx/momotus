@@ -901,6 +901,9 @@ impl VersionsParams {
         if let Some(hvc1_only) = field(params, "hvc1Only")? {
             caps.hvc1_only = hvc1_only;
         }
+        if let Some(direct_only) = field(params, "directOnly")? {
+            caps.direct_only = direct_only;
+        }
         if let Some(audio) = field(params, "audioDecoders")? {
             caps.audio_decoders = audio;
         }

@@ -617,6 +617,9 @@ pub fn title_similarity(a: &str, b: &str) -> f32 {
 
 fn playability(s: &ParsedStream, input: &RankInput<'_>) -> Option<Playability> {
     let (r, caps) = (&s.release, input.caps);
+    if caps.direct_only && !s.headers.is_empty() {
+        return None;
+    }
     let codec_ok = match r.codec {
         VideoCodec::Unknown => true,
         VideoCodec::H265 if r.bit_depth == Some(10) => {
