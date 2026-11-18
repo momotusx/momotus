@@ -63,6 +63,31 @@ test('each page socket has a session of its own in the bridge', async () => {
   assert.strictEqual(a.messages.length, 0);
 });
 
+test('a closed page socket ends its session in the bridge', async () => {
+  const svc = await start();
+  const a = await h.authed(svc, NATIVE);
+  a.send('n');
+  await a.next();
+  const b = await h.authed(svc, NATIVE);
+  b.send('open');
+  assert.strictEqual(await b.next(), 'open:2');
+  a.ws.close();
+  await until('the bridge session closed', async () => {
+    b.send('open');
+    return (await b.next()) === 'open:1';
+  });
+});
+
+test('texts of several MB go through the bridge whole, both ways', async () => {
+  const svc = await start();
+  const c = await h.authed(svc, NATIVE);
+  c.send('y'.repeat(3 * 1024 * 1024));
+  assert.strictEqual(await c.next(), 'got:' + 3 * 1024 * 1024);
+  c.send('big:' + 5 * 1024 * 1024);
+  assert.strictEqual((await c.next()).length, 5 * 1024 * 1024);
+  assert.strictEqual(c.closed, null);
+});
+
 test('/sub/ is no route with the native core: its stream server serves subtitles', async () => {
   const svc = await start();
   await svc.waitFor('ready');
