@@ -2992,12 +2992,15 @@ dependencies = [
  "mq-media",
  "mq-rt",
  "quick-xml",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
