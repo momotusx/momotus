@@ -2584,11 +2584,11 @@ data class VersionsSnapshot(
     val smaller: VersionRow? = null,
     /** The "Sharper" shortcut: the first row in the core's order sharper than the pick, up to this screen's class, that can start and is in the viewer's language. Frozen with the pick. */
     val sharper: VersionRow? = null,
-    /** The quality sections of `rows`, in this order and only those with rows: 4K, 1080p (1080p and 1440p), 720p and below, other (quality not stated); each lists its rows' keys in the core's order. */
+    /** The quality sections of `rows`, in this order and only those with rows: 4K, 1080p (1080p and 1440p), 720p and below, other (quality not stated); each lists its rows' keys, the most seeders first. */
     val sections: List<VersionSection> = emptyList(),
     /** Every listed version is a swarm the engine would fetch whose trackers count one seeder or none: almost nobody is sharing this title right now, so say so before Play. Its attempt keeps the stall windows and the full deadline, but a swarm where no peer unchoked by the end of the first window (30 s) is let go then. */
     val nobodySharing: Boolean,
-    /** "From the Internet Archive" (plans/plugins-and-marketplace.md 4.4, 5): its own pass, after the addons' rows, never the pick, never a failover; `done` never waits for it. */
+    /** "From the Internet Archive" (plans/plugins-and-marketplace.md 4.4, 5): its own pass, after the addons' rows, never the pick, never a failover; neither `done` nor `empty` waits for it or yields to it. */
     val archive: SourceRows = SourceRows(pending = false),
     /** "From plugins" (plans/plugins-and-marketplace.md 4.4, 7.8): the Nuvio providers' rows, a pass of their own like the Archive's, but the pick and the failover when no addon row is left (12), shown once, as the pick; while no addon lists a row `done` waits for it, for 20 s at most from the view's open. */
     val plugins: SourceRows = SourceRows(pending = false),

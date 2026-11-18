@@ -312,8 +312,8 @@ fn writes_the_list_of_a_live_answer() {
 /// A matched film lists its tallest three MP4s as Archive rows: URLs built
 /// here, keys of their own, the resolution from the height, "Internet
 /// Archive" and archive.org named; never the pick, never among the addons'
-/// rows, and with nothing else to play no pick, nothing empty, the rows
-/// startable from their own pass.
+/// rows, and with nothing else to play no pick and the reason said (no app
+/// lists the section yet), the rows startable from their own pass.
 #[tokio::test]
 async fn a_matched_film_lists_its_files_in_a_section_of_their_own() {
     let fixture = Fixture::start();
@@ -347,9 +347,12 @@ async fn a_matched_film_lists_its_files_in_a_section_of_their_own() {
     assert_eq!(first.source_name.as_deref(), Some("Internet Archive"));
     assert_eq!(first.via, "Internet Archive");
     assert_eq!(first.release_name, "nosferatu.HD.mp4");
-    // Only Archive rows: no pick, nothing said to be empty.
+    // Only Archive rows: no pick, and the reason is said all the same.
     assert!(s.recommended.is_none() && s.rows.is_empty(), "{s:?}");
-    assert!(s.empty.is_none(), "{:?}", s.empty);
+    assert_eq!(
+        s.empty.as_ref().map(|e| e.kind),
+        Some(mq_runtime::EmptyKind::NoSource)
+    );
     let played = view.candidates(&first.key);
     assert_eq!(played.len(), 1);
     let mq_protocol::Source::Http { url } = &played[0].source else {
@@ -730,8 +733,8 @@ async fn the_kind_chips_count_and_filter_the_archive_rows() {
     assert!(view.snapshot().recommended.is_some());
 }
 
-/// `done` and the pick never wait for the Archive pass; `empty` waits while
-/// it reads an item; an addon change keeps its rows and asks nothing again.
+/// `done`, the pick and `empty` never wait for the Archive pass; an addon
+/// change keeps its rows and asks nothing again.
 #[tokio::test]
 async fn the_pass_is_pending_apart_and_survives_an_addon_change() {
     let fixture = Fixture::start();
@@ -743,7 +746,10 @@ async fn the_pass_is_pending_apart_and_survives_an_addon_change() {
     until("done", || view.snapshot().done).await;
     let s = view.snapshot();
     assert!(s.archive.pending, "the item is still being read");
-    assert!(s.empty.is_none(), "{:?}", s.empty);
+    assert_eq!(
+        s.empty.as_ref().map(|e| e.kind),
+        Some(mq_runtime::EmptyKind::NoSource)
+    );
     until("the pass", || !view.snapshot().archive.pending).await;
     assert_eq!(archive_keys(&view).len(), 3);
     let items = fixture.items();
@@ -754,7 +760,7 @@ async fn the_pass_is_pending_apart_and_survives_an_addon_change() {
         .unwrap();
     until("the addon's answer", || {
         let s = view.snapshot();
-        *hits.lock().unwrap() > 0 && s.done && s.empty.is_none() && s.pending_addons.is_empty()
+        *hits.lock().unwrap() > 0 && s.done && s.empty.is_some() && s.pending_addons.is_empty()
     })
     .await;
     tokio::time::sleep(Duration::from_millis(200)).await;

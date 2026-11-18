@@ -46,7 +46,7 @@ sharper: VersionRow | null,
 /**
  * The quality sections of `rows`, in this order and only those with
  * rows: 4K, 1080p (1080p and 1440p), 720p and below, other (quality
- * not stated); each lists its rows' keys in the core's order.
+ * not stated); each lists its rows' keys, the most seeders first.
  */
 sections: Array<VersionSection>, 
 /**
@@ -60,7 +60,7 @@ nobodySharing: boolean,
 /**
  * "From the Internet Archive" (plans/plugins-and-marketplace.md 4.4,
  * 5): its own pass, after the addons' rows, never the pick, never a
- * failover; `done` never waits for it.
+ * failover; neither `done` nor `empty` waits for it or yields to it.
  */
 archive: SourceRows, 
 /**
