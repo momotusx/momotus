@@ -16,6 +16,9 @@
 #              (default .tools/bin)
 #   NODES      fnm versions for gate (d) (default 8.12.0 12.21.0 16.19.1 20.12.2)
 #   ESBUILD    an esbuild command (default bunx esbuild@0.24.0)
+#   LLVM       dir with clang and llvm-ar for SQLite's C half (default
+#              /opt/homebrew/opt/llvm@20/bin; Linux CI: /usr/lib/llvm-18/bin)
+#   MIN_FREE_GB  free disk the build needs (default 5)
 #   CARGO_TARGET_DIR  default ~/.cargo-targets/marquee-<checkout>-wasm
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
@@ -23,7 +26,7 @@ root=$(pwd)
 profile=wasm
 features=()
 if [ "${1:-}" = "--e2e" ]; then
-  profile=wasm-e2e
+  profile="wasm-e2e"
   features=(--features dev-hooks)
 fi
 OUT="${OUT:-apps/webos/service/core}"
@@ -34,10 +37,16 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$HOME/.cargo-targets/marquee-$(base
 for tool in wasm-bindgen wasm-opt wasm-tools; do
   [ -x "$TOOLS/$tool" ] || { echo "no $tool in $TOOLS" >&2; exit 1; }
 done
-free_gb=$(df -g / | awk 'NR==2 {print $4}')
-if [ "$free_gb" -lt 5 ]; then echo "free disk ${free_gb} GB, need 5" >&2; exit 1; fi
+free_gb=$(df -Pk / | awk 'NR==2 {print int($4 / 1048576)}')
+if [ "$free_gb" -lt "${MIN_FREE_GB:-5}" ]; then
+  echo "free disk ${free_gb} GB, need ${MIN_FREE_GB:-5}" >&2
+  exit 1
+fi
+sha256() {
+  if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1
+}
 
-LLVM=/opt/homebrew/opt/llvm@20/bin
+LLVM="${LLVM:-/opt/homebrew/opt/llvm@20/bin}"
 RUSTC_BOOTSTRAP=1 CARGO_INCREMENTAL=0 \
   CC_wasm32_unknown_unknown="$LLVM/clang" AR_wasm32_unknown_unknown="$LLVM/llvm-ar" \
   CFLAGS_wasm32_unknown_unknown="-mcpu=mvp" \
@@ -82,5 +91,5 @@ for v in $NODES; do
   fi
 done
 wasm="$OUT/mq_wasm_bg.wasm"
-echo "core $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- crates Cargo.toml Cargo.lock || echo '+dirty') profile $profile size $(stat -f %z "$wasm") sha256 $(shasum -a 256 "$wasm" | cut -d' ' -f1)"
+echo "core $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- crates Cargo.toml Cargo.lock || echo '+dirty') profile $profile size $(wc -c <"$wasm" | tr -d ' ') sha256 $(sha256 "$wasm")"
 exit "$gate"
