@@ -121,7 +121,7 @@ const JS_BANS: [RegExp, string][] = [
   [/\bhls\.js\b|\bHls\.Events\b|MANIFEST_PARSED/, "hls.js (never loaded on webOS)"],
 ];
 /** APIs newer than Chromium 79 the app uses, each installed by lib/compat.ts: the installer's name must be there. */
-const COMPAT = ["replaceAll", "at", "hasOwn", "timeout", "randomUUID", "replaceChildren", "DisplayNames", "Segmenter", "onscrollend"];
+const COMPAT = ["replaceAll", "at", "hasOwn", "timeout", "randomUUID", "replaceChildren", "DisplayNames", "Segmenter", "onscrollend", "data-mq-inert-hid"];
 
 /** Every way the scripts fail Chromium 79, empty when they pass. */
 export function checkJs(files: Record<string, string>): string[] {

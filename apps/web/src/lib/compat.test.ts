@@ -127,3 +127,79 @@ test("scrollend is left alone where the engine has it", () => {
   installCompat({ document: doc, onscrollend: null } as unknown as typeof globalThis);
   expect(added).toBe(0);
 });
+
+test("inert below Chrome 102: the property sets the attribute, hides from readers, and keeps focus out", async () => {
+  class El {
+    attrs = new Map<string, string>();
+    parent: El | null = null;
+    isConnected = true;
+    focused = 0;
+    blurred = 0;
+    hasAttribute = (n: string) => this.attrs.has(n);
+    getAttribute = (n: string) => this.attrs.get(n) ?? null;
+    setAttribute = (n: string, v: string) => void this.attrs.set(n, v);
+    removeAttribute = (n: string) => void this.attrs.delete(n);
+    closest(sel: string): El | null {
+      if (sel !== "[inert]") throw new Error(sel);
+      for (let e: El | null = this; e; e = e.parent) if (e.hasAttribute("inert")) return e;
+      return null;
+    }
+    focus() {
+      this.focused++;
+    }
+    order = 0;
+    tabIndex = 0;
+    compareDocumentPosition(other: El) {
+      return other.order > this.order ? 4 : 2;
+    }
+    blur() {
+      this.blurred++;
+    }
+  }
+  const styles: { textContent: string }[] = [];
+  const focusin: ((e: { target: El }) => void)[] = [];
+  const keydown: ((e: { key: string; shiftKey: boolean }) => void)[] = [];
+  const tabbables: El[] = [];
+  const document = {
+    head: { appendChild: (s: { textContent: string }) => styles.push(s) },
+    createElement: () => ({ textContent: "" }),
+    querySelectorAll: () => tabbables,
+    addEventListener: (type: string, fn: never) => (type === "focusin" ? focusin.push(fn) : type === "keydown" ? keydown.push(fn) : 0),
+  };
+  installCompat({ HTMLElement: El, document } as unknown as typeof globalThis);
+  const region = new El() as unknown as HTMLElement & El;
+  const inside = new El();
+  inside.parent = region;
+  const outside = new El();
+
+  region.inert = true;
+  expect(region.inert).toBe(true);
+  expect(region.getAttribute("inert")).toBe("");
+  expect(region.getAttribute("aria-hidden")).toBe("true");
+  expect(styles[0]?.textContent).toContain("[inert]");
+  // Tab or a script's focus() into the region: focus goes back to where it was.
+  focusin[0]!({ target: outside });
+  focusin[0]!({ target: inside });
+  expect(outside.focused).toBe(1);
+  // Tab steps over the region to the next live control that way, Shift+Tab to the one before it.
+  const before = new El();
+  const after = new El();
+  [before, region, inside, after].forEach((e, i) => (e.order = i));
+  tabbables.push(before, inside, after);
+  keydown[0]!({ key: "Tab", shiftKey: false });
+  focusin[0]!({ target: inside });
+  expect(after.focused).toBe(1);
+  keydown[0]!({ key: "Tab", shiftKey: true });
+  focusin[0]!({ target: inside });
+  expect(before.focused).toBe(1);
+  await new Promise((r) => setTimeout(r));
+  region.inert = false;
+  expect(region.inert).toBe(false);
+  expect(region.hasAttribute("aria-hidden")).toBe(false);
+  // An element hidden from readers on its own stays hidden.
+  const own = new El() as unknown as HTMLElement & El;
+  own.setAttribute("aria-hidden", "true");
+  own.inert = true;
+  own.inert = false;
+  expect(own.getAttribute("aria-hidden")).toBe("true");
+});

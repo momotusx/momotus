@@ -89,6 +89,68 @@ function scrollEndFallback(doc: Document) {
   );
 }
 
+const TABBABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]';
+
+/** `inert` (Chrome 102) where the engine only has the attribute's name (LG webOS 6 and 22): the property sets the
+ * attribute, which the D-pad engine already skips (focus/dom.ts), and hides the element from screen readers; one rule
+ * takes the pointer off every `[inert]` region and one focus guard keeps focus out of them. So every `inert` in the
+ * app (Solid writes the JSX one as the property, language-picker.tsx the attribute) works there as it does natively. */
+function inertFallback(g: typeof globalThis) {
+  const proto = g.HTMLElement?.prototype;
+  const doc = g.document;
+  if (!proto || !doc || "inert" in proto) return;
+  const HIDDEN = "data-mq-inert-hid";
+  Object.defineProperty(proto, "inert", {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.hasAttribute("inert");
+    },
+    set(this: HTMLElement, on: unknown) {
+      if (on) {
+        this.setAttribute("inert", "");
+        if (!this.hasAttribute("aria-hidden")) this.setAttribute(HIDDEN, "");
+        this.setAttribute("aria-hidden", "true");
+      } else {
+        this.removeAttribute("inert");
+        if (this.hasAttribute(HIDDEN)) this.removeAttribute("aria-hidden");
+        this.removeAttribute(HIDDEN);
+      }
+    },
+  });
+  const style = doc.createElement("style");
+  style.textContent = "[inert],[inert] *{pointer-events:none!important;user-select:none!important}";
+  doc.head.appendChild(style);
+  // Tab steps over an inert region to the next live control that way, as native inert does; any other focus that lands
+  // in one (a script's focus(), a click) goes back where it was.
+  let last: HTMLElement | null = null;
+  let tabbing = 0;
+  doc.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.key !== "Tab") return;
+      tabbing = e.shiftKey ? -1 : 1;
+      setTimeout(() => (tabbing = 0));
+    },
+    true,
+  );
+  doc.addEventListener(
+    "focusin",
+    (e) => {
+      const to = e.target as HTMLElement;
+      if (!to.closest?.("[inert]")) return void (last = to);
+      if (tabbing) {
+        const live = [...doc.querySelectorAll<HTMLElement>(TABBABLE)].filter((el) => el.tabIndex >= 0 && !el.closest("[inert]"));
+        const way = tabbing > 0 ? 4 : 2; // Node.DOCUMENT_POSITION_FOLLOWING, Node.DOCUMENT_POSITION_PRECEDING
+        const next = (tabbing > 0 ? live : live.reverse()).find((el) => to.compareDocumentPosition(el) & way);
+        if (next) return void next.focus();
+      }
+      if (last?.isConnected && !last.closest("[inert]")) last.focus();
+      else to.blur();
+    },
+    true,
+  );
+}
+
 /** Installs every missing fallback on `g`; the tests pass a stand-in global where the engine is not a browser. */
 export function installCompat(g: typeof globalThis = globalThis) {
   install(g.String?.prototype, "replaceAll", replaceAllFallback);
@@ -104,6 +166,7 @@ export function installCompat(g: typeof globalThis = globalThis) {
   install(g.Intl, "DisplayNames", DisplayNamesFallback);
   install(g.Intl, "Segmenter", SegmenterFallback);
   if (g.document && !("onscrollend" in (g as object))) scrollEndFallback(g.document);
+  inertFallback(g);
 }
 
 installCompat();
