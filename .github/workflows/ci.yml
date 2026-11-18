@@ -287,8 +287,9 @@ jobs:
           xcodebuild build -project Marquee.xcodeproj -scheme Marquee-tvOS -destination 'generic/platform=tvOS' \
             -clonedSourcePackagesDirPath "$HOME/spm-packages" CODE_SIGNING_ALLOWED=NO
 
-  # The LG webOS app (plans/webos.md): the wasm core built and gated as pure MVP, the service and the wasm selftests
-  # on webOS 6's Node 8.12 and on Node 20, then the IPK, kept as an artifact.
+  # The LG webOS app (plans/webos.md): the wasm core built and gated as pure MVP, the native core (v5) built for the
+  # TV's 32-bit ARM and run under qemu-user for a live session, the service and the wasm selftests on webOS 6's
+  # Node 8.12 and on Node 20, then the IPK, kept as an artifact.
   webos:
     runs-on: ubuntu-24.04
     env:
@@ -297,6 +298,8 @@ jobs:
       LLVM: /usr/lib/llvm-18/bin
       CC_wasm32_unknown_unknown: /usr/lib/llvm-18/bin/clang
       AR_wasm32_unknown_unknown: /usr/lib/llvm-18/bin/llvm-ar
+      # rquickjs's bindings for the native core (bindgen).
+      LIBCLANG_PATH: /usr/lib/llvm-18/lib
       NODES: 8.12.0 20.12.2
     steps:
       - name: Free disk
@@ -307,11 +310,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: rustup toolchain install 1.98.0 --profile minimal -c rust-src -t wasm32-unknown-unknown
+      - run: rustup toolchain install 1.98.0 --profile minimal -c rust-src -t wasm32-unknown-unknown -t armv7-unknown-linux-gnueabi
+      - name: qemu-user and the TV's ABI (armel glibc), libclang
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq --no-install-recommends qemu-user-static libc6-armel-cross libclang-18-dev
+          test -e /proc/sys/fs/binfmt_misc/qemu-arm
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: webos
-          workspaces: ". -> target-wasm"
+          workspaces: |
+            . -> target-wasm
+            . -> target-armv7
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -323,6 +333,10 @@ jobs:
           for v in $NODES; do .tools/bin/fnm install "$v"; done
       - name: Wasm core and its gate
         run: bash apps/webos/scripts/build-wasm.sh
+      - name: Native core (armv7, glibc 2.17)
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/target-armv7
+        run: bash apps/webos/scripts/build-native.sh
       - name: Service tests
         run: |
           mkdir -p "$RUNNER_TEMP/ws" && cd "$RUNNER_TEMP/ws"
@@ -330,6 +344,15 @@ jobs:
           bun add --exact ws@7.5.10 >/dev/null
           cd "$GITHUB_WORKSPACE"
           WS_PATH="$RUNNER_TEMP/ws/node_modules" bash apps/webos/service/test/run.sh
+      - name: Native core live under qemu-user (Cinemeta Home, a torrent on loopback)
+        env:
+          # The TV's loader and glibc for qemu-arm, which binfmt runs the ARM binary with.
+          QEMU_LD_PREFIX: /usr/arm-linux-gnueabi
+        run: |
+          cd apps/webos/service/test
+          for v in $NODES; do
+            NODE_PATH="$RUNNER_TEMP/ws/node_modules" fnm exec --using="v$v" node live-native.js
+          done
       - name: Wasm selftests (runtime shim, storage, stream server)
         env:
           TOOLS: ${{ github.workspace }}/.tools/bin
