@@ -184,14 +184,14 @@ const decoy = (args, ignoreTerm) => {
 };
 
 // A service dir with a decoy recorded in core.pid; `args(data)` is the decoy's command line tail.
-async function withStale(args, ignoreTerm, env, preload) {
+async function withStale(args, ignoreTerm, env, preload, pidVar) {
   const dir = h.tmpDir();
   const data = path.join(dir, 'data');
   fs.mkdirSync(data);
   const stale = decoy(args(data), ignoreTerm);
   await sleep(300);
   fs.writeFileSync(path.join(data, 'core.pid'), String(stale.pid));
-  const svc = await h.startService({ dir, env: Object.assign({ EPERM_PID: String(stale.pid) }, env), preload });
+  const svc = await h.startService({ dir, env: Object.assign({ [pidVar || 'EPERM_PID']: String(stale.pid) }, env), preload });
   return { svc, stale, data };
 }
 
@@ -208,6 +208,15 @@ test('a stale core.pid that ignores SIGTERM is killed after 2 s', async () => {
   const { svc, stale } = await withStale((d) => [WORKER, d], true);
   await svc.waitFor('ready');
   assert.ok(!alive(stale.pid));
+});
+
+test('a stale core that outlives SIGKILL stops the start: no second core over the same database', async () => {
+  const { svc, stale } = await withStale((d) => [WORKER, d], true, {}, 'preload-unkillable.js', 'UNKILLABLE_PID');
+  await until('service exit', () => svc.exit, 12000);
+  assert.strictEqual(svc.find('ready').length, 0, 'a core started beside the stale one');
+  assert.ok(svc.find('stop').some((e) => e.stop === 'stale core alive'));
+  assert.ok(alive(stale.pid));
+  stale.kill('SIGKILL');
 });
 
 test('a core.pid that does not hold core-worker is left alone', async () => {
