@@ -158,12 +158,26 @@ function specificity(sel: Sel): [number, number, number] {
 }
 const maxSpec = (a: [number, number, number], b: [number, number, number]) => (a[0] !== b[0] ? (a[0] > b[0] ? a : b) : a[1] !== b[1] ? (a[1] > b[1] ? a : b) : a[2] >= b[2] ? a : b);
 
-/** `:not(...)` arguments that never match, to raise an expanded alternative to its `:is()`'s specificity. */
-function padding(have: [number, number, number], want: [number, number, number]): Sel {
+/** Rules the TV form reaches with an `:is()` alternative heavier in one part than the `:is()` as a whole (`:is(.own, small)`: [0,0,1]
+ * against [0,1,0]). Padding only adds, so it comes out one part heavier there than on a newer engine; each is decided
+ * here, with why that changes nothing, and any other fails the build. */
+export const OVERWEIGHT: Record<string, string> = {
+  '[data-form="tv"] .subp .opt.on :is(.own, .ct, small, .sep)': "its small at 0,5,1 for 0,5,0: the only color rules on it at 0,5,x are this and the :focus one, both padded alike",
+  '[data-form="tv"] .subp .opt:focus :is(.own, .ct, small, .ck, .sep)': "as the .on one above, which it still follows",
+  '[data-form="tv"] .first .ptile:focus :is(.pname, small)': "its small at 0,5,1 for 0,5,0: no other color rule on a .ptile small is above 0,2,1",
+  ".fr-chips .chip :is(.flag, svg)": "its svg at 0,3,1 for 0,3,0: the only other size rule on it is .chip svg, 0,1,1",
+  '[data-form="tv"] .first :is(.btn, .flink, .fr-opt, .seg button, .fr-chips .chip, .ptile, .wall-pause, .swx button, .fr-field input):focus':
+    "its .seg button, .swx button and .fr-field input at 0,5,1 for 0,5,0: the rules on them stop at 0,4,1 (the field's own :focus), which it beats either way",
+};
+
+/** `:not(...)` arguments that never match, to raise an expanded alternative to its `:is()`'s specificity (`rule`, the
+ * selector it came from, names a mixed case: see OVERWEIGHT). */
+function padding(alt: Sel, want: [number, number, number], rule: Sel): Sel {
+  const have = specificity(alt);
+  if (have.some((n, i) => n > want[i]!) && !(printSel(rule) in OVERWEIGHT))
+    throw new Error(`${printSel(rule)}: the :is() alternative ${printSel(alt)} (specificity ${have}) cannot be padded to ${want} on Chromium 79. Rewrite it, or list it in OVERWEIGHT (scripts/webos-build.ts) with why the extra weight changes nothing.`);
   const pad: Sel = [];
   const not = (c: SelectorComponent) => pad.push({ type: "pseudo-class", kind: "not", selectors: [[c]] } as SelectorComponent);
-  // ponytail: pads up to the wanted triple only where every part is at least as large; mixed cases fail the build.
-  if (have[0] > want[0] || (have[0] === want[0] && have[1] > want[1])) return pad;
   for (let i = have[0]; i < want[0]; i++) not({ type: "id", name: "mq-pad" });
   for (let i = have[1]; i < want[1]; i++) not({ type: "class", name: "mq-pad" });
   for (let i = have[2]; i < want[2]; i++) not({ type: "type", name: "mq-pad" } as SelectorComponent);
@@ -193,14 +207,14 @@ const RTL = ["ae", "ar", "arc", "bcc", "bqi", "ckb", "dv", "fa", "glk", "he", "k
 /** Every `:is()` and `:where()` written out as a list of plain selectors (Chromium 79 reads neither). An `:is()`
  * keeps its specificity: a lower alternative is padded with `:not()`s that never match. Null when one cannot be
  * written out (a complex alternative inside a compound). */
-function expand(sel: Sel): Sel[] | null {
+function expand(sel: Sel, rule: Sel = sel): Sel[] | null {
   const dir = sel.findIndex((c) => pseudo(c, "dir"));
   if (dir >= 0) {
     // `:dir()` (Chrome 120) as the right-to-left languages, the list Lightning CSS lowers it to.
     const lang = RTL.map((l) => [{ type: "pseudo-class", kind: "lang", languages: [l] }] as Sel);
     const rtl = (sel[dir] as { direction?: string }).direction === "rtl";
     const swap: Sel = rtl ? [{ type: "pseudo-class", kind: "is", selectors: lang } as SelectorComponent] : lang.map((l) => ({ type: "pseudo-class", kind: "not", selectors: [l] }) as SelectorComponent);
-    return expand([...sel.slice(0, dir), ...swap, ...sel.slice(dir + 1)]);
+    return expand([...sel.slice(0, dir), ...swap, ...sel.slice(dir + 1)], rule);
   }
   const i = sel.findIndex((c) => pseudo(c, "is") || pseudo(c, "where"));
   if (i < 0) return [sel];
@@ -212,8 +226,8 @@ function expand(sel: Sel): Sel[] | null {
   const want = c.selectors.map(specificity).reduce(maxSpec, [0, 0, 0]);
   const out: Sel[] = [];
   for (const alt of c.selectors) {
-    const pad = c.kind === "is" ? padding(specificity(alt), want) : [];
-    const more = expand(tidyCompounds([...sel.slice(0, start), ...alt, ...sel.slice(start, i), ...pad, ...sel.slice(i + 1)]));
+    const pad = c.kind === "is" ? padding(alt, want, rule) : [];
+    const more = expand(tidyCompounds([...sel.slice(0, start), ...alt, ...sel.slice(start, i), ...pad, ...sel.slice(i + 1)]), rule);
     if (!more) return null;
     out.push(...more);
   }
@@ -574,9 +588,14 @@ export function chromium79Visitor() {
         const kept: Sel[] = [];
         let changed = false;
         for (const sel of value.selectors) {
+          // A phone or desktop rule goes before it is written out: its `:is()` never has to keep its weight here.
+          if (otherForm(sel)) {
+            changed = true;
+            continue;
+          }
           const written = expand(sel);
           if (!written) {
-            if (!otherForm(sel)) lost.push(printSel(sel));
+            lost.push(printSel(sel));
             changed = true;
             continue;
           }
