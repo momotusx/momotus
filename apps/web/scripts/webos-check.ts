@@ -117,7 +117,7 @@ const JS_BANS: [RegExp, string][] = [
   [/\bAbortSignal\.any\b/, "AbortSignal.any"],
   [/\bnew WeakRef\(|\bFinalizationRegistry\b/, "WeakRef/FinalizationRegistry"],
   [/\bArray\.fromAsync\b/, "Array.fromAsync"],
-  [/["'`][^"'`\n]*:(focus-visible|has\()/, "a :focus-visible or :has( selector in script"],
+  [/["'`][^"'`\n]*:(focus-visible|has\(|(is|where)\(\s*[.#[:*])/, "a :focus-visible, :has(, :is( or :where( selector in script (Chrome 88 and later)"],
   [/\bhls\.js\b|\bHls\.Events\b|MANIFEST_PARSED/, "hls.js (never loaded on webOS)"],
 ];
 /** APIs newer than Chromium 79 the app uses, each installed by lib/compat.ts: the installer's name must be there. */
@@ -154,6 +154,7 @@ const CSS_MUTATIONS: { name: string; add: string; fails: boolean }[] = [
 const JS_MUTATIONS: { name: string; change: (f: Record<string, string>) => Record<string, string> }[] = [
   { name: "structuredClone", change: (f) => ({ ...f, "planted.js": "const a=structuredClone(b);" }) },
   { name: "a querySelector(':focus-visible')", change: (f) => ({ ...f, "planted.js": 'document.querySelector(".a:focus-visible")' }) },
+  { name: "a querySelector(':is()')", change: (f) => ({ ...f, "planted.js": 'document.querySelector("main :is(.a, .b) .c")' }) },
   { name: "hls.js loaded", change: (f) => ({ ...f, "planted.js": 'import("./hls-x.js").then(m=>m.default.Events.MANIFEST_PARSED)' }) },
   {
     name: "a compat fallback removed",
