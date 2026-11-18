@@ -100,7 +100,8 @@ test("TV: Back on the bar goes Home from under a pushed Settings page, past it",
   // it back), lit as Settings on the profile: onto Discover, which shows after the settle in the pushed page's place.
   for (let i = 0; i < 12 && !(await focused(page))?.startsWith("nav:"); i++) await page.keyboard.press("ArrowUp");
   expect(await focused(page)).toBe("nav:/profiles");
-  for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowLeft");
+  // Past Zap, Search, Calendar and Library (Zap sits between Search and the profile).
+  for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft");
   expect(await focused(page)).toBe("nav:/discover");
   await expect(page).toHaveURL(/\/discover/, { timeout: 2_000 });
   await page.keyboard.press("ArrowDown");

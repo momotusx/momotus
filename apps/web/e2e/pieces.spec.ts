@@ -213,7 +213,8 @@ test("TV: the solid tab bar, 68 tall at 46, every tab with its word, the active 
   expect((await style(page, ".topnav .tabbar")).background).toBe("rgb(44, 44, 46)");
   const tabs = bar.locator(".nav:not(.pavatar)");
   // Settings has no tab: the profile at the bar's end opens it (plans/nav-profile.md).
-  await expect(tabs).toHaveText(["Home", "Discover", "Library", "Calendar", "Search"]);
+  // Zap is an action at the bar's end, after the tabs and before the profile (plans/zap.md 2.1).
+  await expect(tabs).toHaveText(["Home", "Discover", "Library", "Calendar", "Search", "Zap"]);
   await expect(bar.locator(".nav").last()).toHaveAttribute("data-f", "nav:/profiles");
   // Off the active tab (focus moves to the content on load).
   await page.locator(".row .tile").first().focus();
