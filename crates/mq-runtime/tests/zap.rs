@@ -360,3 +360,140 @@ async fn live_zaps_on_the_default_addons() {
     }
     assert!(dealt >= 9, "only {dealt} of 10 zaps dealt a title");
 }
+
+/// Reads `url` (the core's loopback stream) as a player would, until `stop`.
+async fn read_stream(url: String, stop: tokio::sync::watch::Receiver<bool>) -> u64 {
+    let rest = url.trim_start_matches("http://");
+    let (host, path) = rest.split_once('/').unwrap();
+    let mut socket = tokio::net::TcpStream::connect(host).await.unwrap();
+    let ask = format!("GET /{path} HTTP/1.1\r\nHost: {host}\r\nRange: bytes=0-\r\n\r\n");
+    socket.write_all(ask.as_bytes()).await.unwrap();
+    let mut buf = vec![0u8; 1 << 16];
+    let mut read = 0u64;
+    while !*stop.borrow() {
+        match tokio::time::timeout(std::time::Duration::from_millis(500), socket.read(&mut buf))
+            .await
+        {
+            Ok(Ok(0)) | Ok(Err(_)) => break,
+            Ok(Ok(n)) => read += n as u64,
+            Err(_) => {}
+        }
+    }
+    read
+}
+
+/// The Pixel walk's slow Zap again (2026-11-18), measured here: three zaps
+/// with nothing playing, then a torrent zap played for 30 s and closed, then
+/// three zaps at once. One JSON line per step.
+///
+/// `cargo test -p mq-runtime --features torrent --test zap live_zap_after -- --ignored --nocapture`
+#[cfg(feature = "torrent")]
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "network: the default addons and a torrent"]
+async fn live_zap_after_a_torrent_play() {
+    use mq_runtime::{PlayTarget, PlaybackPhase, PlaybackView, VersionsParams, VersionsView};
+    use mq_streams::{DeviceCaps, StreamPrefs, Target};
+    let core = Core::temporary(mq_library::OWNER).unwrap();
+    let all_on: Vec<mq_runtime::defaults::DefaultChoice> = mq_runtime::defaults::list()
+        .iter()
+        .map(|d| serde_json::from_value(serde_json::json!({ "key": d.key, "on": true })).unwrap())
+        .collect();
+    core.install_defaults(&all_on).unwrap();
+    core.set_prefs(&serde_json::json!({ "zapDial": "far" }))
+        .unwrap();
+    let timed = |label: &'static str| {
+        let core = core.clone();
+        async move {
+            let at = std::time::Instant::now();
+            let got = core.zap(Some("movie")).await;
+            println!(
+                "{}",
+                serde_json::json!({"step": label, "ok": got.is_ok(), "ms": at.elapsed().as_millis()})
+            );
+            got
+        }
+    };
+    for _ in 0..3 {
+        timed("idle").await.ok();
+    }
+    // A torrent zap that plays: the first pick whose recommendation reaches ready.
+    let mut played = None;
+    for _ in 0..5 {
+        let Ok(pick) = timed("pick to play").await else {
+            continue;
+        };
+        let versions = VersionsView::open(
+            &core,
+            VersionsParams {
+                kind: pick.kind.clone(),
+                video_id: pick.video_id.clone(),
+                target: Target {
+                    title: pick.name.clone(),
+                    year: None,
+                    season: None,
+                    episode: None,
+                },
+                caps: DeviceCaps::basic_1080p(),
+                prefs: StreamPrefs::default(),
+                last_binge_group: None,
+                facts: Default::default(),
+                device_language: None,
+            },
+        );
+        let mut key = None;
+        for _ in 0..60 {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            let s = versions.snapshot();
+            if let Some(r) = s.recommended.as_ref().filter(|_| s.done) {
+                key = Some(r.key.clone());
+                break;
+            }
+        }
+        let Some(key) = key else { continue };
+        let target = PlayTarget {
+            kind: pick.kind.clone(),
+            item_id: pick.item_id.clone(),
+            video_id: pick.video_id.clone(),
+            name: Some(pick.name.clone()),
+            ..PlayTarget::default()
+        };
+        let playback = PlaybackView::open_zap(
+            &core,
+            versions.pick(&key),
+            target,
+            &versions.plays(),
+            Some(pick.start_ms),
+        );
+        let started = std::time::Instant::now();
+        while playback.snapshot().phase == PlaybackPhase::Resolving
+            && started.elapsed().as_secs() < 90
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+        if let Some(url) = playback
+            .snapshot()
+            .url
+            .filter(|_| playback.snapshot().phase == PlaybackPhase::Ready)
+        {
+            played = Some((versions, playback, url));
+            break;
+        }
+    }
+    let (versions, playback, url) = played.expect("no torrent zap reached ready");
+    let (stop, stopped) = tokio::sync::watch::channel(false);
+    let reader = tokio::spawn(read_stream(url, stopped));
+    tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+    // As Android asks: the next zap while the playing one is still open and read.
+    for _ in 0..3 {
+        timed("during a play").await.ok();
+    }
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    stop.send(true).unwrap();
+    let bytes = reader.await.unwrap();
+    println!("{}", serde_json::json!({"step": "played", "bytes": bytes}));
+    drop(playback);
+    drop(versions);
+    for _ in 0..3 {
+        timed("after a play").await.ok();
+    }
+}
