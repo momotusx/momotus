@@ -10,6 +10,12 @@ export const isWebOSAgent = (ua: string): boolean => /Web0S/.test(ua);
 
 export const isWebOS = (): boolean => typeof navigator !== "undefined" && isWebOSAgent(navigator.userAgent);
 
+/** The service runs the native core on this TV (plans/webos.md v5): torrents and plugins play, and every source and
+ * subtitle comes from its loopback stream server, as in a browser. The service marks index.html with it; without the
+ * mark the TV runs the wasm core, which leases only direct sources. */
+export const nativeCore = (): boolean =>
+  typeof document !== "undefined" && document.querySelector('meta[name="mq-core"]')?.getAttribute("content") === "native";
+
 /** The engine lists a file's audio tracks (`HTMLMediaElement.audioTracks`); without the list each file plays its default one. */
 export const audioTrackList = (): boolean => typeof HTMLMediaElement !== "undefined" && "audioTracks" in HTMLMediaElement.prototype;
 
