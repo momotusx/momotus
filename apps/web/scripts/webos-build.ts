@@ -269,6 +269,17 @@ export const KNOWN_LOSSES: Record<string, string> = {
   ".prefs > .chips-row:has( + .learned)": "the Learned list's top rule stays on Chromium 79",
 };
 
+/** Every `aspect-ratio` (Chrome 88) the TV form reaches, by selector, with what stands in for it on Chromium 79. The
+ * build drops the line and fails on one not listed, so a new one is decided, not lost. */
+export const ASPECT_RATIO_STANDINS: Record<string, string> = {
+  ".wall-tile": "theme/webos.css: a ::before as tall as 3:2 of the tile's width",
+  ".trailer-frame": "theme/webos.css: a ::before as tall as 9:16 of the frame's width",
+  ".logo-slot .title-logo.logo": "the logo's own shape: --r is the trimmed image's ratio, set with its source (art.tsx)",
+  ".sync-scan video": "never shown: Chromium 79 has no BarcodeDetector, so canScan() is false (sync.tsx)",
+};
+
+const isAspectRatio = (d: Declaration) => d.property === "aspect-ratio" || (d.property === "unparsed" && d.value.propertyId.property === "aspect-ratio");
+
 // ---- Declarations -------------------------------------------------------------------------------------------------
 
 type Rgba = [number, number, number, number];
@@ -331,6 +342,8 @@ export function lowerDeclText(text: string, tokens: Map<string, string>): string
   let out = text;
   // subgrid (Chrome 117): Chromium 79 drops the line, and so does this build.
   if (/^grid-template-(columns|rows):\s*subgrid/.test(out)) return "";
+  // aspect-ratio (Chrome 88): dropped, each one stood in for by ASPECT_RATIO_STANDINS.
+  if (/^aspect-ratio:/.test(out)) return "";
   // `color-mix()` (Chrome 111) over the page's own colors: the color it gives on the page, as plain rgba. A plain
   // fallback before it would not do: a declaration with var() is valid until computed, so it always wins over one.
   out = out.replace(/color-mix\(((?:[^()]|\([^()]*\))*)\)/g, (_, args: string) => mixColor(args, tokens));
@@ -539,17 +552,20 @@ export function chromium79Visitor() {
   let active = true;
   const lost: string[] = [];
   const loose: string[] = [];
+  const unstood: string[] = [];
   return {
     StyleSheet(sheet: { sources: string[] }) {
       active = sheet.sources.some((s) => s.endsWith(".css") && s.includes("/"));
       lost.length = 0;
       loose.length = 0;
+      unstood.length = 0;
     },
     StyleSheetExit(sheet: { sources: string[] }) {
       if (!active) return;
       const unknown = lost.filter((s) => !(s in KNOWN_LOSSES));
       if (unknown.length) throw new Error(`${sheet.sources.join(", ")}: Chromium 79 cannot read these TV selectors:\n  ${unknown.join("\n  ")}\nRewrite them, or list them in KNOWN_LOSSES (scripts/webos-build.ts) with what stands in.`);
       if (loose.length) throw new Error(`${sheet.sources.join(", ")}: these set a gap and no display Chromium 79 can be told about:\n  ${loose.join("\n  ")}\nAdd the class they sit beside to SITS_WITH (scripts/webos-build.ts).`);
+      if (unstood.length) throw new Error(`${sheet.sources.join(", ")}: aspect-ratio (Chromium 79 reads none) with nothing in its place:\n  ${unstood.join("\n  ")}\nStand in for it in theme/webos.css and list it in ASPECT_RATIO_STANDINS (scripts/webos-build.ts).`);
     },
     Rule: {
       style(rule: { type: "style"; value: StyleRule }): Rule[] | void {
@@ -592,6 +608,7 @@ export function chromium79Visitor() {
         const block = value.declarations as Decls | undefined;
         const normal = block?.declarations ?? [];
         const important = block?.importantDeclarations ?? [];
+        if ([...normal, ...important].some(isAspectRatio)) unstood.push(...unique.map(printSel).filter((s) => !(s in ASPECT_RATIO_STANDINS)));
         const lowNormal = lowerDecls(normal, tokens);
         const lowImportant = lowerDecls(important, tokens);
         if (lowNormal || lowImportant) {
