@@ -3134,21 +3134,25 @@ fn each_source_groups_by_how_it_plays() {
 }
 
 /// A player that gets the source's own URL (webOS, plans/webos.md 3.4)
-/// cannot send `proxyHeaders`: such a stream is hidden as unplayable there
+/// cannot send `proxyHeaders` or a URL's user and password: such a
+/// stream is hidden as unplayable there
 /// and ranks as before everywhere else.
 #[test]
-fn a_direct_only_player_hides_streams_that_need_headers() {
+fn a_direct_only_player_hides_streams_that_need_headers_or_a_login() {
     let rows = || {
         vec![
             json!({ "name": "Debrid", "title": "Movie.2020.1080p.WEB-DL.x264-HEADERS",
                     "url": "https://cdn.example/a.mkv",
                     "behaviorHints": { "cached": true, "videoSize": (4.0 * GIB) as u64,
                                        "proxyHeaders": { "request": { "Referer": "https://site.example/" } } } }),
+            json!({ "name": "Debrid", "title": "Movie.2020.1080p.WEB-DL.x264-LOGIN",
+                    "url": "https://user:secret@cdn.example/b.mkv",
+                    "behaviorHints": { "cached": true, "videoSize": (3.0 * GIB) as u64 } }),
             ready(2, "Movie.2020.1080p.WEB-DL.x264-PLAIN", 2.0),
         ]
     };
     let mut case = Case::stick();
-    assert_eq!(case.rank(rows()).rows.len(), 2);
+    assert_eq!(case.rank(rows()).rows.len(), 3);
     case.caps.direct_only = true;
     let ranked = case.rank(rows());
     assert_eq!(ranked.rows.len(), 1);
@@ -3156,5 +3160,5 @@ fn a_direct_only_player_hides_streams_that_need_headers() {
         first_line(ranked.best().unwrap()),
         "Movie.2020.1080p.WEB-DL.x264-PLAIN"
     );
-    assert_eq!(hidden(&ranked, HideReason::Unplayable), 1);
+    assert_eq!(hidden(&ranked, HideReason::Unplayable), 2);
 }

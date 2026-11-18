@@ -617,7 +617,14 @@ pub fn title_similarity(a: &str, b: &str) -> f32 {
 
 fn playability(s: &ParsedStream, input: &RankInput<'_>) -> Option<Playability> {
     let (r, caps) = (&s.release, input.caps);
-    if caps.direct_only && !s.headers.is_empty() {
+    // A direct-only player gets the source's URL as the core reached it:
+    // no request headers, and no user and password (a URL's credentials
+    // never leave the core).
+    let credentials = matches!(
+        &s.source,
+        Source::Http { url } if !url.username().is_empty() || url.password().is_some()
+    );
+    if caps.direct_only && (!s.headers.is_empty() || credentials) {
         return None;
     }
     let codec_ok = match r.codec {

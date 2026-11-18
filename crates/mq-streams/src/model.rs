@@ -31,7 +31,8 @@ pub struct DeviceCaps {
     pub hvc1_only: bool,
     /// The player gets the source's own URL and no request headers
     /// (webOS: no stream server in between; plans/webos.md 3.4), so a
-    /// stream that needs `proxyHeaders` cannot play.
+    /// stream that needs `proxyHeaders` or a URL's user and password
+    /// cannot play.
     pub direct_only: bool,
 }
 
