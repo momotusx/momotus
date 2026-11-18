@@ -2,6 +2,7 @@ package app.marquee.android
 
 import android.content.Context
 import android.os.SystemClock
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -514,7 +515,10 @@ private fun zapControls(
         holder.shutdown()
         onReplace(to)
     }
-    val again = { go(ZapCopy.next(route, auto = false)) }
+    val again = {
+        Log.d(MarqueeApp.TAG, "zap again pressed at ${SystemClock.elapsedRealtime()}")
+        go(ZapCopy.next(route, auto = false))
+    }
     val ref = Format.parseVideo(route.videoId)
     return ZapControls(
         name = route.title,
