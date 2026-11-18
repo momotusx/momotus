@@ -26,6 +26,7 @@ import { current } from "../lib/profiles";
 import { pushBack } from "../focus/back";
 import { focusEl } from "../focus/dom";
 import { form } from "../form";
+import { isWebOS, nativeCore } from "../lib/webos";
 import { controlName, type DownloadControl, type DownloadGlyph, type DownloadItem, downloadWords, ITEM_LABEL, itemOp, kidsOf, offlineBanner, shownDownloads } from "../lib/download";
 import { downloadProblem, downloadWordsFailed, reported } from "../lib/download-status";
 import "./download.css";
@@ -58,13 +59,14 @@ export const ITEM_ICON: Record<DownloadItem, Icon> = {
   mobileData: Smartphone,
 };
 
-/** Downloads show on the phone and desktop forms, never on TV, and a kids profile gets only Play. */
-export const downloadsHere = () => form() !== "tv";
-/** Downloads' own pages are not for TV, even by address: they give way to Home. */
+/** Downloads show on the phone and desktop forms, and on TV only on an LG TV running the native core, which keeps
+ * them under its data dir and plays them from its loopback server (plans/webos.md v5.2); a kids profile gets only Play. */
+export const downloadsHere = () => form() !== "tv" || (isWebOS() && nativeCore());
+/** Downloads' own pages are not for a TV without them, even by address: they give way to Home. */
 export function awayFromTv() {
   const navigate = useNavigate();
   createEffect(() => {
-    if (form() === "tv") navigate("/", { replace: true });
+    if (!downloadsHere()) navigate("/", { replace: true });
   });
 }
 
