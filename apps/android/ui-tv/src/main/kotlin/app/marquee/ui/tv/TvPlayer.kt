@@ -553,7 +553,7 @@ fun TvPlayer(
         val status = controller.status.takeUnless { opening || stalled }
         // A zap that failed before its first frame zaps on at once: no card. One that played, then failed, offers Zap
         // again, Try again and Back (PlayerStatus).
-        val zapGone = zap != null && zapMissed(stage == Stage.Failed, false, controller.firstFrameMs != null)
+        val zapGone = zap != null && zapMissed(stage == Stage.Failed, controller.firstFrameMs != null)
         if (!zapGone && (stage == Stage.Failed || status != null || controller.notice != null)) {
             PlayerStatus(
                 stage = stage,

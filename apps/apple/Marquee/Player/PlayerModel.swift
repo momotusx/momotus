@@ -341,8 +341,7 @@ final class PlayerModel {
         let status = PlayerLayout.status(
             phase: playback?.phase, cannotOpen: openError != nil, firstFrameShown: firstFrameMs != nil, waiting: waiting,
             noPick: noPick)
-        return ZapRules.failed(
-            firstFrame: firstFrameMs != nil, status: status, chooseAnother: PlayerLayout.offersAnother(playback, status: status))
+        return ZapRules.failed(firstFrame: firstFrameMs != nil, status: status)
     }
 
     /// The profile's zap dial, synced; an older core sends none (Near).

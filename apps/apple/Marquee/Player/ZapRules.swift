@@ -67,14 +67,16 @@ enum ZapRules {
     /// The title's name shows: an ordinary play, or a zap after What is this?.
     static func nameShown(zapAt: Int64?, revealed: Bool) -> Bool { zapAt == nil || revealed }
 
-    /// A zap play that counts as one failed try: before the first frame, a failure, no pick, a view that did not
-    /// open, or the core's wait that would offer another version. After the first frame nothing zaps by itself.
-    static func failed(firstFrame: Bool, status: PlayerStatus, chooseAnother: Bool) -> Bool {
+    /// A zap play that counts as one failed try: before the first frame, a failure, no pick or a view that did not
+    /// open. The core's 20 s offer of another version is no try: a torrent's first frame often comes at 16 to 26 s
+    /// (Pixel walk 2026-11-18, where zapping on at the offer left three starts in a row for "Nothing played."), and
+    /// the core moves between versions itself until its start budget ends in a failure. After the first frame
+    /// nothing zaps by itself.
+    static func failed(firstFrame: Bool, status: PlayerStatus) -> Bool {
         guard !firstFrame else { return false }
         switch status {
         case .failed, .noPick, .cannotOpen: return true
-        case .waiting: return chooseAnother
-        case .none: return false
+        case .waiting, .none: return false
         }
     }
 

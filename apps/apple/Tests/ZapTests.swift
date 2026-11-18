@@ -62,17 +62,16 @@ private func pick(_ json: String = episodePick) throws -> ZapPick {
     #expect(plain.videoId == target.videoId && plain.title == target.title && plain.runtime == "47 min")
 }
 
-/// Before the first frame a failure, no pick, a view that did not open or the core's wait for another version is
-/// one try; after it nothing zaps by itself.
+/// Before the first frame a failure, no pick or a view that did not open is one try; a start still waiting (the
+/// core's offer of another version included) is none, and after the first frame nothing zaps by itself.
 @Test func onlyAPlayThatNeverStartedZapsOn() {
     for status in [PlayerStatus.failed, .noPick, .cannotOpen] {
-        #expect(ZapRules.failed(firstFrame: false, status: status, chooseAnother: false))
-        #expect(!ZapRules.failed(firstFrame: true, status: status, chooseAnother: false))
+        #expect(ZapRules.failed(firstFrame: false, status: status))
+        #expect(!ZapRules.failed(firstFrame: true, status: status))
     }
-    #expect(ZapRules.failed(firstFrame: false, status: .waiting(words: true), chooseAnother: true))
-    #expect(!ZapRules.failed(firstFrame: false, status: .waiting(words: true), chooseAnother: false))
-    #expect(!ZapRules.failed(firstFrame: true, status: .waiting(words: false), chooseAnother: true))
-    #expect(!ZapRules.failed(firstFrame: false, status: .none, chooseAnother: false))
+    #expect(!ZapRules.failed(firstFrame: false, status: .waiting(words: true)))
+    #expect(!ZapRules.failed(firstFrame: true, status: .waiting(words: false)))
+    #expect(!ZapRules.failed(firstFrame: false, status: .none))
 }
 
 @Test func zapsWordsAreTheSpecs() {
