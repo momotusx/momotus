@@ -26,6 +26,7 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlaybackException
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.TraktCopy
+import app.marquee.core.ZapCopy
 import app.marquee.core.client.CoreLog
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.EmptyKind
@@ -74,19 +75,36 @@ import kotlinx.coroutines.withContext
 class PlaybackController(
     val player: Player,
     private val scope: CoroutineScope,
-    val title: String,
+    title: String,
     /** "S1:E2", or null for a movie. */
-    val episode: String?,
+    episode: String?,
     private val artwork: String?,
     private val openedAtMs: Long,
     /** The delay the file's own tracks draw with ([PlayerHost.subtitleDelay]). */
     private val subtitleDelay: SubtitleDelay = SubtitleDelay(),
     /** Start over: the first source starts at the beginning, not at the core's resume point. */
     private val startOver: Boolean = false,
-    /** An addon subtitle file from its loopback address ([fetchSubtitle]). */
+    /** A zap (plans/zap.md 2.3): the name stays hidden until What is this? ([revealed]). */
+    revealed: Boolean = true,
+    /** An addon subtitle file from its loopback address ([fetchSubtitle]); last, so tests pass it as a trailing lambda. */
     private val fetch: suspend (String) -> ByteArray = ::fetchSubtitle,
 ) {
     enum class Stage { Opening, Buffering, Playing, Paused, Ended, Failed }
+
+    private val name = title
+    private val episodeLabel = episode
+
+    /**
+     * Whether the title may be named. A zap starts with it false (plans/zap.md 2.3): [title] reads "Zap", and the
+     * episode, backdrop and logo are none, on the loading screen, the bars, the end card and the media session alike.
+     */
+    var revealed by mutableStateOf(revealed)
+
+    /** The movie or series name, or "Zap" until [revealed]. */
+    val title: String get() = if (revealed) name else ZapCopy.ZAP
+
+    /** "S1:E2", or null for a movie and until [revealed]. */
+    val episode: String? get() = episodeLabel.takeIf { revealed }
 
     var stage by mutableStateOf(Stage.Opening)
         private set
@@ -168,11 +186,24 @@ class PlaybackController(
     var speed by mutableFloatStateOf(1f)
         private set
 
-    var audio: List<TrackChoice> by mutableStateOf(emptyList())
-        private set
+    private var audioRows: List<TrackChoice> by mutableStateOf(emptyList())
 
-    var text: List<TrackChoice> by mutableStateOf(listOf(TrackChoice(TRACK_OFF, "Off", selected = true)))
-        private set
+    /** The same rows without the file's labels, for a zap not yet [revealed]. */
+    private var audioUnlabeled: List<TrackChoice> by mutableStateOf(emptyList())
+
+    /** The audio rows; until [revealed] without the file's labels, often the release name (plans/zap.md 2.3). */
+    val audio: List<TrackChoice>
+        get() = if (revealed) audioRows else audioUnlabeled
+
+    private var textRows: List<TrackChoice> by mutableStateOf(listOf(TrackChoice(TRACK_OFF, "Off", selected = true)))
+    private var textUnlabeled: List<TrackChoice> by mutableStateOf(textRows)
+
+    /**
+     * The subtitle rows; until [revealed] without their release text or the file's labels, which carry the title
+     * (plans/zap.md 2.3).
+     */
+    val text: List<TrackChoice>
+        get() = if (revealed) textRows else shownRows(textUnlabeled, revealed = false)
 
     var subtitlesPending by mutableStateOf(false)
         private set
@@ -233,9 +264,19 @@ class PlaybackController(
     /** The app went away while the start ran: it went on paused, and plays once the viewer is back ([onStart]). */
     private var playOnReturn = false
 
-    /** The title's backdrop and logo for the loading screen; the screen sets them, as it knows the title. */
-    var backdrop: String? by mutableStateOf(null)
-    var logo: String? by mutableStateOf(null)
+    /** The title's backdrop and logo for the loading screen; the screen sets them, as it knows the title. None until [revealed]. */
+    private var backdropUrl: String? by mutableStateOf(null)
+    private var logoUrl: String? by mutableStateOf(null)
+    var backdrop: String?
+        get() = backdropUrl.takeIf { revealed }
+        set(value) {
+            backdropUrl = value
+        }
+    var logo: String?
+        get() = logoUrl.takeIf { revealed }
+        set(value) {
+            logoUrl = value
+        }
 
     /** Where the fill stood when the player got the URL: the buffer fills the rest. */
     private var fillBase = 0f
@@ -304,8 +345,11 @@ class PlaybackController(
         private set
 
     /** The Second line tab's rows: Off, then the core's tracks, the second line's selected (no tracks in the file). */
-    var secondText: List<TrackChoice> by mutableStateOf(listOf(TrackChoice(TRACK_OFF, "Off", selected = true)))
-        private set
+    private var secondRows: List<TrackChoice> by mutableStateOf(listOf(TrackChoice(TRACK_OFF, "Off", selected = true)))
+
+    /** The same without release text until [revealed], as [text]. */
+    val secondText: List<TrackChoice>
+        get() = shownRows(secondRows, revealed)
 
     private var view: PlaybackView? = null
     private var loadedUrl: String? = null
@@ -1203,7 +1247,7 @@ class PlaybackController(
     /** The Second line tab's rows, the second line's track selected. */
     private fun refreshSecond() {
         val on = second.url?.let { mapOf(it to TrackChoice("$LATE$it", "", selected = true)) } ?: emptyMap()
-        secondText = subtitleRows(snapshotSubs, on, dead, emptyList(), LATE)
+        secondRows = subtitleRows(snapshotSubs, on, dead, emptyList(), LATE)
     }
 
     /** The second line's Timing row: its track shows [ms] later (earlier when negative), within [SUBTITLE_MAX_MS]. */
@@ -1392,6 +1436,7 @@ class PlaybackController(
     private fun refreshTracks(tracks: Tracks = player.currentTracks) {
         val audioFormats = ArrayList<Triple<String, Format, Boolean>>()
         val fileRows = ArrayList<TrackChoice>()
+        val fileUnlabeled = ArrayList<TrackChoice>()
         tracks.groups.forEachIndexed { gi, group ->
             for (ti in 0 until group.length) {
                 if (!group.isTrackSupported(ti)) continue
@@ -1405,6 +1450,7 @@ class PlaybackController(
 
                     C.TRACK_TYPE_TEXT -> {
                         fileRows += textChoice(id, format, selected)
+                        fileUnlabeled += textChoice(id, format, selected, labeled = false)
                     }
                 }
             }
@@ -1412,15 +1458,16 @@ class PlaybackController(
         // The addon pick is on from the moment it is picked, while its file comes in.
         val on = pick?.takeIf { it.external }?.url
         val loaded = on?.let { mapOf(it to TrackChoice("$LATE$it", "", selected = true)) } ?: emptyMap()
+
         // An audio track that names no language is named by its place among them all ("Audio 2").
-        audio =
-            audioFormats.mapIndexed {
-                i,
-                (id, format, selected),
-                ->
-                audioChoice(id, format, selected, i, audioFormats.size)
+        fun audioList(labeled: Boolean) =
+            audioFormats.mapIndexed { i, (id, format, selected) ->
+                audioChoice(id, format, selected, i, audioFormats.size, labeled)
             }
-        text = subtitleRows(snapshotSubs, loaded, dead, fileRows, LATE)
+        audioRows = audioList(labeled = true)
+        audioUnlabeled = audioList(labeled = false)
+        textRows = subtitleRows(snapshotSubs, loaded, dead, fileRows, LATE)
+        textUnlabeled = subtitleRows(snapshotSubs, loaded, dead, fileUnlabeled, LATE)
         refreshSecond()
         applyPick(tracks)
         fileTakesOverStart()

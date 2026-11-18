@@ -95,6 +95,7 @@ export const ICONS = [
   "search",
   "settings",
   "shield-alert",
+  "shuffle",
   "skip-back",
   "skip-forward",
   "sliders-horizontal",

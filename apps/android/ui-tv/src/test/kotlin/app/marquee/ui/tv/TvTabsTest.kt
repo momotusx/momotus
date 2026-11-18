@@ -21,6 +21,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.pressKey
@@ -52,7 +53,12 @@ class TvTabsTest {
 
     private var focusManager: FocusManager? = null
 
-    private fun show(onHome: Boolean = true) {
+    private var zaps = 0
+
+    private fun show(
+        onHome: Boolean = true,
+        zap: Boolean = false,
+    ) {
         compose.setContent {
             focusManager = LocalFocusManager.current
             MarqueeTheme(Form.Tv) {
@@ -77,6 +83,7 @@ class TvTabsTest {
                                 .focusable(),
                         )
                     },
+                    onZap = if (zap) ({ zaps++ }) else null,
                 ) {
                     // Each place: one focusable item named after it.
                     Box(Modifier.size(200.dp).semantics { contentDescription = "page $selected" }.focusable())
@@ -122,6 +129,20 @@ class TvTabsTest {
         tab("Discover").assertIsFocused()
         press(Key.DirectionDown)
         page(Route.Discover).assertIsFocused()
+    }
+
+    @Test
+    fun `Zap fires on OK only, a sweep onto it opens no place and focus resting there zaps nothing`() {
+        show(zap = true)
+        repeat(5) { press(Key.DirectionRight) }
+        compose.onNodeWithText("Zap").assertIsFocused()
+        compose.mainClock.advanceTimeBy(TAB_SETTLE_MS * 4)
+        assertEquals(emptyList(), opened)
+        assertEquals(0, zaps)
+        press(Key.DirectionCenter)
+        compose.waitForIdle()
+        assertEquals(1, zaps)
+        assertEquals(emptyList(), opened)
     }
 
     @Test

@@ -72,6 +72,7 @@ import app.marquee.core.KidsCopy
 import app.marquee.core.ProfileCopy
 import app.marquee.core.SearchCopy
 import app.marquee.core.TileCopy
+import app.marquee.core.ZapCopy
 import app.marquee.core.model.DiscoverSnapshot
 import app.marquee.core.model.DiscoverState
 import app.marquee.core.model.HomeRow
@@ -102,6 +103,7 @@ import app.marquee.design.MqText
 import app.marquee.design.ON_ARRIVAL_MS
 import app.marquee.design.PosterTile
 import app.marquee.design.PullDown
+import app.marquee.design.RoundButton
 import app.marquee.design.RowHeader
 import app.marquee.design.SecondaryButton
 import app.marquee.design.SegmentTrack
@@ -575,6 +577,10 @@ fun DiscoverScreen(
     onRequestSent: () -> Unit = {},
     /** Where focus was on Discover (TV): each control row and the grid remember their last focused item. */
     focus: FocusMemory = remember { FocusMemory() },
+    /** Discover's selected kind whenever it changes, for Zap (plans/zap.md 2.1). */
+    onKind: (String?) -> Unit = {},
+    /** Zap in the title row (phone; TV has it in the bar); null leaves it out. */
+    onZap: (() -> Unit)? = null,
 ) {
     val holder =
         viewModel<DiscoverHolder>(
@@ -583,6 +589,8 @@ fun DiscoverScreen(
         )
     val view = holder.view
     val snapshot = view.current()
+    val kind = snapshot?.kind
+    LaunchedEffect(kind) { onKind(kind) }
     // One select of the kind and the genre, after the first snapshot: the core reads it as a link (C40).
     val activity = LocalActivity.current
     GenreAskEffect(
@@ -610,6 +618,7 @@ fun DiscoverScreen(
         onSetup = onSetup,
         onAddons = onAddons,
         focus = focus,
+        onZap = onZap,
     )
 }
 
@@ -634,6 +643,7 @@ internal fun DiscoverContent(
     onSetup: () -> Unit,
     onAddons: () -> Unit,
     focus: FocusMemory,
+    onZap: (() -> Unit)? = null,
 ) {
     val metrics = Marquee.tiles
     val side = Marquee.safe.side
@@ -698,7 +708,16 @@ internal fun DiscoverContent(
         horizontalArrangement = Arrangement.spacedBy(metrics.gap),
         verticalArrangement = Arrangement.spacedBy(Marquee.space.s),
     ) {
-        full("head") { BrowseHeader("Discover", side = 0.dp) }
+        full("head") {
+            if (onZap == null || tv) {
+                BrowseHeader("Discover", side = 0.dp)
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.weight(1f)) { BrowseHeader("Discover", side = 0.dp) }
+                    RoundButton(Icons.Shuffle, ZapCopy.ZAP, onZap)
+                }
+            }
+        }
         when {
             failed -> {
                 // The core's reason can name a host or an addon: the shared line instead.

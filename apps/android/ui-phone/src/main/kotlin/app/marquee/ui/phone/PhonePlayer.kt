@@ -62,6 +62,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.marquee.core.StreamChoiceCopy
+import app.marquee.core.ZapCopy
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.SubtitleBackground
@@ -74,6 +75,7 @@ import app.marquee.design.MqText
 import app.marquee.design.PauseFilled
 import app.marquee.design.PlayFilled
 import app.marquee.design.RoundButton
+import app.marquee.design.SecondaryButton
 import app.marquee.design.TextRole
 import app.marquee.player.ActionButton
 import app.marquee.player.AudioStrip
@@ -92,6 +94,9 @@ import app.marquee.player.SkipButton
 import app.marquee.player.Strip
 import app.marquee.player.SubtitleStrip
 import app.marquee.player.UpNextCard
+import app.marquee.player.ZapControls
+import app.marquee.player.ZapDial
+import app.marquee.player.ZapPanel
 import app.marquee.player.activeSegment
 import app.marquee.player.audioDetail
 import app.marquee.player.clockText
@@ -110,6 +115,7 @@ import app.marquee.player.stripLift
 import app.marquee.player.subtitlesDetail
 import app.marquee.player.subtitlesStillListing
 import app.marquee.player.upNextDue
+import app.marquee.player.zapMissed
 import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.ceil
 
@@ -158,8 +164,12 @@ fun PhonePlayer(
     /** The strip's Style: the profile's subtitle position and background, as Size. */
     onSubtitlePosition: (Int) -> Unit = {},
     onSubtitleBackground: (SubtitleBackground) -> Unit = {},
+    /** A zap (plans/zap.md 2.3): What is this?, Zap again and the dial; no Versions, Episodes or Choose another. */
+    zap: ZapControls? = null,
 ) {
     val stage = controller.stage
+    // What is this?'s panel.
+    var panel by remember { mutableStateOf(false) }
     // Back from Settings opened on the failure card: the start runs again when the player resumes, so what was added
     // plays without a press. The navigation resumes the entry on top, whether it stayed composed or not.
     LifecycleResumeEffect(controller) {
@@ -249,8 +259,8 @@ fun PhonePlayer(
     // read here and not in composition, so a touch recomposes nothing.
     val exploring = rememberTouchExploration()
     // An open strip keeps them up; each shift tick wakes them, so a held shift never loses them.
-    LaunchedEffect(osd, stage, picker, strip, showNext, exploring) {
-        if (osd && stage == Stage.Playing && !picker && strip == null && !exploring) {
+    LaunchedEffect(osd, stage, picker, strip, showNext, exploring, panel) {
+        if (osd && stage == Stage.Playing && !picker && strip == null && !exploring && !panel) {
             snapshotFlow { wake }.collectLatest {
                 kotlinx.coroutines.delay(HIDE_MS)
                 osd = false
@@ -305,6 +315,7 @@ fun PhonePlayer(
     // Back: the picker's language, the picker, the Style row, the strip, then the player (section 6).
     BackHandler {
         when {
+            panel -> panel = false
             picker && opened != null -> opened = null
             picker -> picker = false
             style -> style = false
@@ -422,9 +433,10 @@ fun PhonePlayer(
                 lines = loadingLines(controller.status, controller.start?.caption),
                 opening = opening,
                 // Choose another version, 20 s after the loading screen showed (plans/versions-android-spec.md, 6).
-                choose = onVersions.takeIf { opening || stalled },
-                // When the core offers it: 20 s into the start, 30 s into a stall (one clock, the core's).
-                chooseShown = controller.chooseAnother,
+                choose = onVersions.takeIf { (opening || stalled) && zap == null },
+                // When the core offers it: 20 s into the start, 30 s into a stall (one clock, the core's). A zap zaps on
+                // instead.
+                chooseShown = controller.chooseAnother && zap == null,
             )
         }
 
@@ -453,6 +465,17 @@ fun PhonePlayer(
                                 MqText(it, role = TextRole.Callout, maxLines = 1)
                             }
                         }
+                    }
+                    if (zap != null && !opening) {
+                        SecondaryButton(
+                            ZapCopy.WHAT,
+                            {
+                                controller.revealed = true
+                                panel = !panel
+                                wake++
+                            },
+                            icon = Icons.CircleQuestionMark,
+                        )
                     }
                     if (live) RoundButton(Icons.PictureInPicture2, "Picture in picture", onPictureInPicture)
                 }
@@ -483,7 +506,10 @@ fun PhonePlayer(
             }
             // While the loading screen shows, it says the status under the mark.
             val status = controller.status.takeUnless { opening || stalled }
-            if (stage == Stage.Failed || status != null || controller.notice != null) {
+            // A zap that failed before its first frame zaps on at once: no card. One that played, then failed, offers Zap
+            // again, Try again and Back (PlayerStatus).
+            val zapGone = zap != null && zapMissed(stage == Stage.Failed, false, controller.firstFrameMs != null)
+            if (!zapGone && (stage == Stage.Failed || status != null || controller.notice != null)) {
                 PlayerStatus(
                     stage = stage,
                     status = status,
@@ -513,11 +539,23 @@ fun PhonePlayer(
                         },
                     onBack = onBack,
                     focus = remember { FocusRequester() },
+                    zapAgain = zap?.onAgain,
                     modifier =
                         Modifier
                             .align(Alignment.TopStart)
                             .windowInsetsPadding(WindowInsets.displayCutout)
                             .padding(start = 24.dp, end = 24.dp, top = 88.dp),
+                )
+            }
+            if (panel && zap != null) {
+                ZapPanel(
+                    zap,
+                    onClose = { panel = false },
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .windowInsetsPadding(WindowInsets.displayCutout)
+                            .padding(start = 16.dp, end = 16.dp, top = titleFoot + 8.dp),
                 )
             }
         }
@@ -549,6 +587,7 @@ fun PhonePlayer(
                     onEpisodes = onEpisodes,
                     onNext = next?.let { { onNext(it, controller.bingeGroup) } },
                     onTouch = { wake++ },
+                    zap = zap,
                     // The last height they had: the strips, the skip button and Up Next sit just above it.
                     modifier =
                         Modifier.onSizeChanged {
@@ -594,7 +633,7 @@ fun PhonePlayer(
                 Strip.Audio -> {
                     AudioStrip(
                         controller,
-                        onVersions = onVersions,
+                        onVersions = onVersions.takeIf { zap == null },
                         onClose = closeStrip,
                         modifier = Modifier.align(Alignment.BottomStart).then(placed),
                     )
@@ -706,6 +745,7 @@ fun PhonePlayer(
                     onBack = onBack,
                     focus = remember { FocusRequester() },
                     modifier = Modifier.fillMaxSize(),
+                    zapAgain = zap?.onAgain,
                 )
             }
         }
@@ -749,6 +789,7 @@ private fun Controls(
     onNext: (() -> Unit)?,
     onTouch: () -> Unit,
     modifier: Modifier = Modifier,
+    zap: ZapControls? = null,
 ) {
     val widths = rememberBarWidths()
     BoxWithConstraints(
@@ -764,12 +805,15 @@ private fun Controls(
         val series = onEpisodes != null
         // Left: Audio, Speed, Versions; right: Subtitles, then Episodes and Next for a series, the shift counted apart.
         val right = if (series) 3 else 1
-        val groups = widths.pill * (2 + right) + widths.speedPill + PILL_GAP * (2 + right) + ROW_GAP * 2
+        // A zap's dial takes the slots of Episodes and Next: its three chips, each its word and padding, on the track.
+        val dial =
+            if (zap != null) ZapCopy.DIALS.fold(DIAL_TRACK) { w, d -> w + widths.text(d.second) + DIAL_CHIP } else 0.dp
+        val groups = widths.pill * (2 + right) + widths.speedPill + PILL_GAP * (2 + right) + ROW_GAP * 2 + dial
         val clock = widths.text("-0:00:00")
         val fit = phoneBarFit(maxWidth, groups, clock * 2 + ROW_GAP * 2, widths.shiftWords, widths.shiftChevrons)
-        val left: @Composable () -> Unit = { LeftPills(controller, strip, onStrip, onVersions, onTouch) }
+        val left: @Composable () -> Unit = { LeftPills(controller, strip, onStrip, onVersions, onTouch, zap) }
         val pills: @Composable () -> Unit = {
-            RightPills(controller, strip, onStrip, onEpisodes, onNext, fit.shiftWords, onTouch)
+            RightPills(controller, strip, onStrip, onEpisodes, onNext, fit.shiftWords, onTouch, zap)
         }
         if (fit.rows == 1) {
             Row(horizontalArrangement = Arrangement.spacedBy(ROW_GAP), verticalAlignment = Alignment.CenterVertically) {
@@ -797,6 +841,7 @@ private fun LeftPills(
     onStrip: (Strip) -> Unit,
     onVersions: () -> Unit,
     onTouch: () -> Unit,
+    zap: ZapControls?,
 ) {
     val names = StreamChoiceCopy.Bar.Names
     Row(horizontalArrangement = Arrangement.spacedBy(PILL_GAP), verticalAlignment = Alignment.CenterVertically) {
@@ -815,7 +860,12 @@ private fun LeftPills(
             onTouch()
             controller.changeSpeed(nextSpeed(controller.speed))
         }, words = false, badge = speedText(controller.speed))
-        ActionButton(Icons.Layers, names.VERSIONS, controller.versionLabel, onVersions, words = false)
+        // A zap has no Versions (release names carry the title): Zap again in its slot.
+        if (zap != null) {
+            ActionButton(Icons.Shuffle, ZapCopy.AGAIN, null, zap.onAgain, words = false)
+        } else {
+            ActionButton(Icons.Layers, names.VERSIONS, controller.versionLabel, onVersions, words = false)
+        }
     }
 }
 
@@ -828,6 +878,7 @@ private fun RightPills(
     onNext: (() -> Unit)?,
     shiftWords: Boolean,
     onTouch: () -> Unit,
+    zap: ZapControls?,
 ) {
     val names = StreamChoiceCopy.Bar.Names
     Row(horizontalArrangement = Arrangement.spacedBy(PILL_GAP), verticalAlignment = Alignment.CenterVertically) {
@@ -859,6 +910,8 @@ private fun RightPills(
                 spoken = nextName(next),
             )
         }
+        // A zap's dial in the slots of Episodes and Next.
+        zap?.let { ZapDial(it.dial, it.onDial) }
     }
 }
 
@@ -955,6 +1008,10 @@ private val PILL_GAP = 6.dp
 
 /** Between the groups, the clocks and the position bar of the row. */
 private val ROW_GAP = 8.dp
+
+/** The zap dial's track padding (both ends) and a chip's padding (its 14 dp on each side). */
+private val DIAL_TRACK = 8.dp
+private val DIAL_CHIP = 28.dp
 
 /** The least height of the foot scrim (the pick's phone frame: 120 px over a bar it now outgrows). */
 private val SCRIM_LEAST = 160.dp

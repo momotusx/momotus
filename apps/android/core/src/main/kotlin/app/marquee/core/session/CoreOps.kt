@@ -37,6 +37,7 @@ import app.marquee.core.model.StreamConditions
 import app.marquee.core.model.SyncRecord
 import app.marquee.core.model.SyncReport
 import app.marquee.core.model.TraktReport
+import app.marquee.core.model.ZapPick
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -256,6 +257,13 @@ class CoreOps(
             },
             AddonInfo.serializer(),
         )
+
+    /**
+     * A random title and where to start in it (plans/zap.md 1.3); [kind] is Discover's, null mixes films and series.
+     * Codes `noAddons` and `nothingCameUp`.
+     */
+    suspend fun zap(kind: String?): ZapPick =
+        call("zap", buildMap { kind?.let { put("kind", text(it)) } }, ZapPick.serializer())
 
     /**
      * A link whose settings carry a sign-in is refused with code `tokenInLink` before anything is

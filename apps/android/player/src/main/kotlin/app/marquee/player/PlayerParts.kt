@@ -71,6 +71,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.marquee.core.Format
 import app.marquee.core.StreamChoiceCopy
+import app.marquee.core.ZapCopy
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
@@ -531,6 +532,11 @@ fun PlayerStatus(
     kept: String? = null,
     /** Settings for the addons (noSource); null leaves the button out. */
     onSettings: ((EmptyKind) -> Unit)? = null,
+    /**
+     * A zap that played, then failed (plans/zap.md 2.3): Zap again, Try again and Back only; never another version or
+     * an offer, whose release names carry the title.
+     */
+    zapAgain: (() -> Unit)? = null,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -586,7 +592,10 @@ fun PlayerStatus(
             ) {
                 // The first one takes focus (plans/versions-android-spec.md, section 6; the shared table).
                 var backFirst = false
-                if (offer != null) {
+                if (zapAgain != null) {
+                    PrimaryButton(ZapCopy.AGAIN, zapAgain, icon = Icons.Shuffle, focusRequester = focus)
+                    onRetry?.let { SecondaryButton(StreamChoiceCopy.EMPTY_TRY_AGAIN, it, icon = Icons.RefreshCw) }
+                } else if (offer != null) {
                     // A hand pick did not start: the core's next version, another version, Back.
                     PrimaryButton(
                         "Play ${offer.label} instead",
@@ -779,6 +788,8 @@ fun EndCard(
     onBack: () -> Unit,
     focus: FocusRequester,
     modifier: Modifier = Modifier,
+    /** A zap (plans/zap.md 2.3): Zap again first, then Back; no Play again. */
+    zapAgain: (() -> Unit)? = null,
 ) {
     val colors = Marquee.colors
     val tv = Marquee.form == Form.Tv
@@ -795,6 +806,11 @@ fun EndCard(
             }
             val buttons: List<Triple<String, () -> Unit, ImageVector?>> =
                 buildList {
+                    if (zapAgain != null) {
+                        add(Triple(ZapCopy.AGAIN, zapAgain, Icons.Shuffle))
+                        add(Triple("Back", onBack, Icons.ArrowLeft))
+                        return@buildList
+                    }
                     if (next != null) add(Triple("Next episode", onNext, Icons.SkipForward))
                     if (next != null) add(Triple("Play again", onAgain, Icons.RotateCcw))
                     add(Triple("Back to $title", onBack, Icons.ArrowLeft))

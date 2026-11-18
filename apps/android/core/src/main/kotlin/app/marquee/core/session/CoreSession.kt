@@ -360,6 +360,8 @@ class CoreSession(
         poster: String?,
         season: Int?,
         episode: Int?,
+        /** A zap's start (plans/zap.md 1.2): the core starts there and holds progress until it has played. */
+        zapAt: Long? = null,
     ): PlaybackView {
         // The Versions view may have subscribed again since it opened; use its subscription now.
         val versionsSub = (versions.currentSubscription ?: versions.opened.await()).sub
@@ -373,6 +375,7 @@ class CoreSession(
         poster?.let { params["poster"] = JsonPrimitive(it) }
         season?.let { params["season"] = JsonPrimitive(it) }
         episode?.let { params["episode"] = JsonPrimitive(it) }
+        zapAt?.let { params["zapAt"] = JsonPrimitive(it) }
         // Return once the core has taken the playback subscription, so the caller can close
         // Versions without its unsubscribe overtaking this subscribe.
         return PlaybackView(client, scope, JsonObject(params)).also {

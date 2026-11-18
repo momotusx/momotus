@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import app.marquee.core.ZapCopy
 import app.marquee.core.route.Route
 import app.marquee.core.route.TOP_LEVEL
 import app.marquee.core.route.openToKids
@@ -55,6 +56,7 @@ import app.marquee.design.Marquee
 import app.marquee.design.MqIcon
 import app.marquee.design.MqText
 import app.marquee.design.Tokens
+import app.marquee.design.focusClickable
 import app.marquee.design.focusPalette
 import app.marquee.design.focusSelectable
 import app.marquee.design.marqueeFocus
@@ -93,6 +95,8 @@ fun TvShell(
     profileButton: (@Composable (lit: Boolean, modifier: Modifier) -> Unit)? = null,
     /** A kids session: no Discover or Calendar tab (plans/m11-kids.md 5). */
     kids: Boolean = false,
+    /** Zap (plans/zap.md 2.1): a round button before the avatar, out of the tabs; null leaves it out (kids). */
+    onZap: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     // A bar that left (a pushed page) holds nothing; one that comes back reports its focus again.
@@ -128,6 +132,7 @@ fun TvShell(
                 Modifier.zIndex(1f).fillMaxWidth().padding(top = NAV_TOP),
                 profileButton,
                 kids,
+                onZap,
             )
         }
         Box(
@@ -225,6 +230,7 @@ private fun TvTopNav(
     modifier: Modifier,
     profileButton: (@Composable (lit: Boolean, modifier: Modifier) -> Unit)?,
     kids: Boolean,
+    onZap: (() -> Unit)?,
 ) {
     val current = nav.current
     val pill = RoundedCornerShape(Marquee.radius.pill)
@@ -286,6 +292,8 @@ private fun TvTopNav(
                     }
                 }
             }
+            // An action, not a place: it fires on OK only, and focus resting on it shows nothing.
+            onZap?.let { ZapButton(it, onNavFocus) }
             val lit = selected == Route.Settings
             profileButton?.invoke(
                 lit,
@@ -342,6 +350,37 @@ private fun NavItem(
             }
         if (route in tools) MqIcon(place.icon, tint = ink, size = 30.dp)
         MqText(place.label, color = ink, weight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+/**
+ * Zap at the bar's end before the avatar (plans/zap.md 2.1, DECISION.md Navigation): its word with its icon, drawn as
+ * Search's tab is, but a button out of the tab list. A press (OK) zaps; focus resting on it settles no tab.
+ */
+@Composable
+private fun ZapButton(
+    onZap: () -> Unit,
+    onNavFocus: () -> Unit,
+) {
+    var focused by remember { mutableStateOf(false) }
+    val colors = focusPalette(focused)
+    val ink = if (focused) colors.text else colors.dim
+    Row(
+        Modifier
+            .marqueeFocus(NAV_ITEM / 2, Tokens.FOCUS_SCALE_TILE, rise = false)
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onNavFocus()
+            }.height(NAV_ITEM)
+            .clip(RoundedCornerShape(Marquee.radius.pill))
+            .background(if (focused) colors.surface else Color.Transparent)
+            .focusClickable(onZap)
+            .padding(horizontal = 26.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MqIcon(Icons.Shuffle, tint = ink, size = 30.dp)
+        MqText(ZapCopy.ZAP, color = ink, weight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 

@@ -399,6 +399,21 @@ data class Devices(
     override fun toString() = "Devices(members=$members, fingerprint=$fingerprint, epoch=$epoch, rotationPending=$rotationPending, account=$account, record=${record?.let { "hidden" }})"
 }
 
+@Serializable(with = Dial.Serializer::class)
+enum class Dial(
+    val wire: String,
+) {
+    Same("same"),
+    Near("near"),
+    Far("far"),
+
+    /** A value from a newer core that this app does not know yet. */
+    Unknown(""),
+    ;
+
+    object Serializer : FallbackEnumSerializer<Dial>("Dial", Dial.entries, Dial::wire, Unknown)
+}
+
 /** Discover's kind, service, sort, genre and decade, as `select` takes them; null for All, Any or not chosen. Written by Discover itself. */
 @Serializable
 data class DiscoverPrefs(
@@ -1478,6 +1493,8 @@ data class Prefs(
     val archive: Boolean = true,
     /** A screen showed this profile the Archive line: the first-run addon step, the Versions notice or the Settings notice. Until then the core never contacts archive.org for it. */
     val archiveNoticeSeen: Boolean = false,
+    /** Where Zap picks from (plans/zap.md 1.1). */
+    val zapDial: Dial = Dial.Near,
 )
 
 @Serializable
@@ -2610,4 +2627,19 @@ sealed interface VersionStatus {
 @Serializable
 data class WipePending(
     val debrid: Boolean,
+)
+
+@Serializable
+data class ZapPick(
+    val kind: String,
+    val itemId: String,
+    val videoId: String,
+    val season: Int? = null,
+    val episode: Int? = null,
+    val name: String,
+    val poster: String? = null,
+    val episodeName: String? = null,
+    val startMs: Long,
+    /** The pool that answered: Near falls to Far with no Trakt answer. */
+    val from: Dial,
 )

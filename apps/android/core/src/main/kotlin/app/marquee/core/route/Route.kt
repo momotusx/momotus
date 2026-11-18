@@ -204,6 +204,23 @@ sealed interface Route : NavKey {
         val binge: String? = null,
         /** Start over on the title page: this play starts at the beginning, not where it was left. */
         val startOver: Boolean = false,
+        /** A zap (plans/zap.md 2.2): where it starts, its name hidden until asked; null for an ordinary play. */
+        val zapAt: Long? = null,
+        /** The zaps in a row that did not play; the third ends on "Nothing played.". */
+        val zapTries: Int = 0,
+        /** Discover's kind the zap was pressed with, for the zaps after it. */
+        val zapKind: String? = null,
+    ) : Route
+
+    /**
+     * Zap (plans/zap.md 2.2): the loading screen while the core picks a random title, which then replaces it with a
+     * zap player. [kind] is Discover's when pressed there; [tries] counts the zaps in a row that did not play, 0 from
+     * every press.
+     */
+    @Serializable
+    data class Zap(
+        val kind: String? = null,
+        val tries: Int = 0,
     ) : Route
 }
 
@@ -233,7 +250,12 @@ val Route.openToKids: Boolean
             Route.Welcome, Route.FirstProfile, Route.Setup,
             -> false
 
-            is Route.Defaults, is Route.SignIn, is Route.SyncJoin, is Route.ReportLost, is Route.EditProfile -> false
+            is Route.Defaults, is Route.SignIn, is Route.SyncJoin, is Route.ReportLost, is Route.EditProfile,
+            is Route.Zap,
+            -> false
+
+            // A zap play is a zap all the same (plans/zap.md 2.2): a switch to kids drops it with the zap under it.
+            is Route.Player -> zapAt == null
 
             is Route.SettingsSection -> id !in KIDS_HIDDEN_SECTIONS
 
@@ -312,7 +334,10 @@ enum class DefaultsMode {
  * it, do not come back (plans/m6-android.md 7.1), so nothing starts playing by itself and the live
  * views it needs are not assumed. Its title page stands in, with Resume one press away.
  */
-fun restoredStack(stack: List<Route>): List<Route> {
+fun restoredStack(saved: List<Route>): List<Route> {
+    // A zap, and the zap player it became, leave with no title page in their place: the name stays hidden.
+    val stack =
+        saved.filter { it !is Route.Zap && !(it is Route.Player && it.zapAt != null) }.ifEmpty { listOf(Route.Home) }
     val at = stack.indexOfFirst { it is Route.Player }
     if (at < 0) return stack
     val player = stack[at] as Route.Player
@@ -323,6 +348,16 @@ fun restoredStack(stack: List<Route>): List<Route> {
     val onTitle = below is Route.Title && below.kind == player.kind && below.id == player.id
     return if (onTitle) kept else kept + Route.Title(player.kind, player.id)
 }
+
+/**
+ * The stack with [current], at its top, replaced by [with] (a zap's pick, the next zap, the next episode). Unchanged
+ * when [current] is no longer on top: the viewer left while the zap dealt or a dial press was being kept.
+ */
+fun replacedTop(
+    stack: List<Route>,
+    current: Route,
+    with: Route,
+): List<Route> = if (stack.lastOrNull() == current) stack.dropLast(1) + with else stack
 
 /**
  * On the phone Calendar is a row at the top of Library, pushed over it (D6): a stack stored with Calendar

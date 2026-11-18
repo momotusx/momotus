@@ -854,7 +854,8 @@ private fun StyleValue(text: String) =
 @Composable
 fun AudioStrip(
     controller: PlaybackController,
-    onVersions: () -> Unit,
+    /** Choose a version, offered with one track or none; null leaves it out (a zap: release names carry the title). */
+    onVersions: (() -> Unit)?,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     first: FocusRequester? = null,
@@ -884,7 +885,7 @@ fun AudioStrip(
                 )
             }
         }
-        if (tracks.size <= 1) {
+        if (tracks.size <= 1 && onVersions != null) {
             StripChip(
                 Bar.CHOOSE_VERSION,
                 onVersions,
