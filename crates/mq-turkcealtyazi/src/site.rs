@@ -10,11 +10,11 @@ use crate::form::download_form;
 use crate::page::{Kind, Row, TitlePage, title_page};
 use crate::rank::{Playing, Target, Track, tracks};
 use mq_http::{Body, HttpClient, HttpError, Method, Priority, RequestOptions, Response, Url};
+use mq_rt::Instant;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::time::Instant;
 
 /// The site's origin; tests point a site at a fixture of their own.
 pub const ORIGIN: &str = "https://turkcealtyazi.org";
@@ -264,7 +264,7 @@ impl Site {
     pub async fn fetch(&self, track: &Row, target: Target, playing: &Playing<'_>) -> Fetched {
         let flying = AtomicBool::new(false);
         let fetched = self.fetch_file(track, target, playing, &flying);
-        match tokio::time::timeout(self.limits.fetch, fetched).await {
+        match mq_rt::timeout(self.limits.fetch, fetched).await {
             Ok(fetched) => fetched,
             Err(_) => {
                 // Only a request of its own that the site left unanswered
@@ -441,7 +441,7 @@ impl Site {
     ) -> Result<Response, Failed> {
         let mut last = self.gate.lock().await;
         if let Some(at) = *last {
-            tokio::time::sleep_until(at + self.limits.spacing).await;
+            mq_rt::sleep_until(at + self.limits.spacing).await;
         }
         if let Some(problem) = self.backing_off() {
             return Err(Failed::Waiting(problem));

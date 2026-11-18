@@ -7,6 +7,8 @@
 
 mod cache;
 mod codec;
+// mq-rt: native-only
+#[cfg(not(target_arch = "wasm32"))]
 mod file;
 mod http;
 mod io;
@@ -18,6 +20,7 @@ use futures_util::future::BoxFuture;
 use std::time::Duration;
 
 pub use cache::{BLOCK_SIZE, ByteCache};
+#[cfg(not(target_arch = "wasm32"))]
 pub use file::FileRangeReader;
 pub use http::HttpRangeReader;
 pub use tokio_util::sync::CancellationToken;
@@ -259,7 +262,7 @@ pub async fn probe(
     budget: ProbeBudget,
     cancel: &CancellationToken,
 ) -> StreamProbe {
-    let started = tokio::time::Instant::now();
+    let started = mq_rt::Instant::now();
     let mut src = io::Src::new(reader, budget, cancel);
     let mut out = StreamProbe::default();
     src.load_len().await;

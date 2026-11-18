@@ -1,0 +1,5 @@
+# The webOS core (plans/webos.md 2): pure MVP wasm for webOS 6's V8 6.2, and
+# getrandom 0.3 takes its wasm backend only with this cfg (mq-rt turns on the
+# `wasm_js` features). Nothing here touches native builds.
+[target.wasm32-unknown-unknown]
+rustflags = ["-Ctarget-cpu=mvp", "--cfg", 'getrandom_backend="wasm_js"']

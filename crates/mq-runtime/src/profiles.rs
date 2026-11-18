@@ -12,9 +12,10 @@ use futures_util::StreamExt;
 use futures_util::stream::FuturesUnordered;
 use mq_library::{AllowedRow, ContinueItem, Library, LibraryError, MAX_ALLOWED, OWNER};
 use mq_protocol::{ResourcePath, ResourceResponse};
+use mq_rt::StdInstant as Instant;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Profiles `createProfile` allows on this device (two offline devices can
 /// sync to one more; all are shown).
@@ -478,13 +479,12 @@ impl Core {
             .filter(|p| p.ready() && (p.pin_hash().is_none() || viewer == OWNER || p.id == viewer))
             .filter_map(|p| Some((p.id.clone(), self.last_play_of(&p.id)?)))
             .collect();
-        let deadline = tokio::time::Instant::now() + ART_BUDGET;
+        let deadline = mq_rt::Instant::now() + ART_BUDGET;
         futures_util::future::join_all(plays.into_iter().map(|(profile, item)| async move {
-            let meta =
-                tokio::time::timeout_at(deadline, self.fetch_meta(&item.kind, &item.item_id))
-                    .await
-                    .ok()
-                    .and_then(Result::ok);
+            let meta = mq_rt::timeout_at(deadline, self.fetch_meta(&item.kind, &item.item_id))
+                .await
+                .ok()
+                .and_then(Result::ok);
             let art = meta.and_then(|(m, _)| {
                 let still = || {
                     m.videos
@@ -692,7 +692,7 @@ impl Core {
             .into_iter()
             .filter(|a| a.supports(&path))
             .collect();
-        let deadline = tokio::time::Instant::now() + ALLOW_WAIT;
+        let deadline = mq_rt::Instant::now() + ALLOW_WAIT;
         let mut asked: FuturesUnordered<_> = addons
             .iter()
             .enumerate()
@@ -703,7 +703,7 @@ impl Core {
             .collect();
         let mut verified: Vec<Option<(String, Option<String>)>> = vec![None; addons.len()];
         let mut answered = false;
-        while let Ok(Some((i, fetched))) = tokio::time::timeout_at(deadline, asked.next()).await {
+        while let Ok(Some((i, fetched))) = mq_rt::timeout_at(deadline, asked.next()).await {
             let meta = fetched.ok().and_then(|f| {
                 match serde_json::from_slice::<ResourceResponse>(&f.body) {
                     Ok(ResourceResponse::Meta { meta }) => Some(meta),
@@ -849,7 +849,7 @@ fn exit_attempt(
 async fn blocking<T: Send + 'static>(
     work: impl FnOnce() -> T + Send + 'static,
 ) -> Result<T, ProfileError> {
-    tokio::task::spawn_blocking(work)
+    mq_rt::spawn_blocking(work)
         .await
         .map_err(|e| ProfileError::Internal(e.to_string()))
 }

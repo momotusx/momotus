@@ -9,12 +9,12 @@
 
 use super::{kids, lock};
 use crate::Core;
+use mq_rt::Instant;
 use mq_tracking::tmdb::{self, Tmdb};
 use mq_tracking::trakt::search::{self, Found};
 use mq_tracking::trakt::{Answer, Api};
 use std::collections::HashMap;
 use std::time::Duration;
-use tokio::time::Instant;
 
 const KEPT_FOR: Duration = Duration::from_secs(24 * 3600);
 const REST: Duration = Duration::from_secs(60);

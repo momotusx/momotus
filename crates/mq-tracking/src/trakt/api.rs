@@ -2,10 +2,10 @@
 //! answer, so a Cloudflare page or a 5xx is never mistaken for "no data".
 
 use mq_http::{HttpClient, HttpError, Method, RequestOptions, Response};
+use mq_rt::Instant;
 use serde_json::Value;
 use std::time::Duration;
 use tokio::sync::Mutex;
-use tokio::time::Instant;
 
 /// Trakt allows one write per second per user; a little margin.
 const WRITE_GAP: Duration = Duration::from_millis(1050);
@@ -96,7 +96,7 @@ impl Gate {
     async fn wait(slot: &Mutex<Option<Instant>>, gap: Duration) {
         let mut last = slot.lock().await;
         if let Some(at) = *last {
-            tokio::time::sleep_until(at + gap).await;
+            mq_rt::sleep_until(at + gap).await;
         }
         *last = Some(Instant::now());
     }

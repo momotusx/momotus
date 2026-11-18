@@ -16,8 +16,9 @@ pub use transport::{
 use bytes::Bytes;
 use mq_http::{HttpClient, Priority, RequestOptions};
 use mq_protocol::{Manifest, ResourcePath};
+use mq_rt::StdInstant as Instant;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use url::Url;
 
 /// An addon the user installed. Its only private reach is its own host,
@@ -196,7 +197,7 @@ impl AddonClient {
         generation: u64,
     ) {
         let client = self.clone();
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             let _ = client
                 .fetch_network(&addon, &url, timeout, generation)
                 .await;

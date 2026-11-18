@@ -15,11 +15,11 @@ use crate::{
 use futures_util::FutureExt;
 use futures_util::future::{BoxFuture, Shared};
 use mq_http::Priority;
+use mq_rt::Instant;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
-use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 fn disconnected() -> DebridError {
@@ -449,7 +449,7 @@ impl Resolver {
                     _ => DebridError::NotCached,
                 });
             }
-            tokio::time::sleep(self.config.poll_interval).await;
+            mq_rt::sleep(self.config.poll_interval).await;
         }
     }
 }

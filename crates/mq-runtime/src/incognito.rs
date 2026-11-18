@@ -416,13 +416,11 @@ impl Core {
     /// stays for the next pass). One pass loop per device; it ends with
     /// the runtime.
     pub(crate) fn sweep_torrents_soon(&self) {
-        if tokio::runtime::Handle::try_current().is_err()
-            || self.sweeping().swap(true, Ordering::SeqCst)
-        {
+        if !mq_rt::in_runtime() || self.sweeping().swap(true, Ordering::SeqCst) {
             return;
         }
         let device = self.device().downgrade();
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             // The first retry comes soon: a Leave from the player drops the
             // stream's claim a moment after the end's pass.
             let mut wait = SWEEP_SOON;
@@ -438,7 +436,7 @@ impl Core {
                     continue;
                 }
                 drop(core);
-                tokio::time::sleep(wait).await;
+                mq_rt::sleep(wait).await;
                 wait = SWEEP_EVERY;
             }
         });

@@ -6,9 +6,9 @@
 use crate::realdebrid::Credentials;
 use crate::{DebridError, StoreId, alldebrid, realdebrid, torbox};
 use mq_http::HttpClient;
+use mq_rt::Instant;
 use std::fmt;
 use std::time::Duration;
-use tokio::time::Instant;
 
 /// What the device shows while it waits.
 #[derive(Debug, Clone, PartialEq, Eq)]

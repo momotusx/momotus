@@ -53,6 +53,7 @@ static REPORTS_OFF: AtomicBool = AtomicBool::new(false);
 /// The device's Incognito scope count, handed over by the drain's start.
 static SCOPES: Mutex<Option<Arc<AtomicUsize>>> = Mutex::new(None);
 /// `<data dir>/reports-pending`, set by `install`.
+#[cfg(not(target_arch = "wasm32"))]
 static PENDING: Mutex<Option<PathBuf>> = Mutex::new(None);
 /// The latest `reportContext`: the device and the relay's URL.
 static CONTEXT: Mutex<Option<(Device, String)>> = Mutex::new(None);
@@ -74,6 +75,8 @@ fn guard<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
 
+// mq-rt: native-only
+#[cfg(not(target_arch = "wasm32"))]
 /// Installs the panic hook once per process and points it at `data_dir`.
 /// Hosts call it at their logging seam, before the core opens; it reads
 /// nothing and imports nothing (the drain does, once the core is open).
@@ -89,6 +92,8 @@ pub fn install(data_dir: &Path) {
     });
 }
 
+// mq-rt: native-only
+#[cfg(not(target_arch = "wasm32"))]
 /// The native hook writes only the pending file: never the list (one panic
 /// counted once), never SQLite (the panicking thread may hold its lock).
 fn capture_panic(info: &std::panic::PanicHookInfo<'_>) {
@@ -118,10 +123,13 @@ fn capture_panic(info: &std::panic::PanicHookInfo<'_>) {
     NOTIFY.notify_one();
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn pending_dir() -> Option<PathBuf> {
     PENDING.try_lock().ok().and_then(|p| p.clone())
 }
 
+// mq-rt: native-only
+#[cfg(not(target_arch = "wasm32"))]
 fn write_pending(report: &Report) {
     let Some(dir) = pending_dir() else { return };
     if std::fs::create_dir_all(&dir).is_err() {
@@ -143,6 +151,8 @@ fn write_pending(report: &Report) {
     }
 }
 
+// mq-rt: native-only
+#[cfg(not(target_arch = "wasm32"))]
 /// Pending files read and deleted (the switch off: deleted unread).
 fn take_pending(read: bool) -> Vec<Report> {
     let Some(dir) = pending_dir() else {
@@ -165,6 +175,13 @@ fn take_pending(read: bool) -> Vec<Report> {
         let _ = std::fs::remove_file(&path);
     }
     out
+}
+
+/// No pending files on wasm: no hook writes them (a panic there ends the
+/// core through the host's `died`).
+#[cfg(target_arch = "wasm32")]
+fn take_pending(_read: bool) -> Vec<Report> {
+    Vec::new()
 }
 
 /// Any Incognito scope alive on this device. Unknown (the count is held
@@ -333,8 +350,8 @@ impl Core {
             // The first drain here, before the answer: the switch is read and
             // the pending files are in the queue (or gone, when off) by then.
             let crashed = drain(self.device_library());
-            if tokio::runtime::Handle::try_current().is_ok() {
-                tokio::spawn(run(self.clone(), crashed));
+            if mq_rt::in_runtime() {
+                mq_rt::spawn(run(self.clone(), crashed));
             }
         }
     }
@@ -389,21 +406,21 @@ fn switched_off(library: &Library) -> bool {
 /// uploads 30 s after start, every 6 hours, and 60 s after a crash kind,
 /// never before `reports.next`.
 async fn run(core: Core, mut crashed: bool) {
-    let mut next = std::time::Instant::now() + FIRST_UPLOAD;
+    let mut next = mq_rt::Instant::now() + FIRST_UPLOAD;
     loop {
         if crashed {
-            next = next.min(std::time::Instant::now() + AFTER_CRASH);
+            next = next.min(mq_rt::Instant::now() + AFTER_CRASH);
         }
         tokio::select! {
             () = NOTIFY.notified() => {
-                tokio::time::sleep(DRAIN_AFTER).await;
+                mq_rt::sleep(DRAIN_AFTER).await;
                 crashed = drain(core.device_library());
             }
-            () = tokio::time::sleep_until(next.into()) => {
+            () = mq_rt::sleep_until(next) => {
                 drain(core.device_library());
                 upload(&core).await;
                 crashed = false;
-                next = std::time::Instant::now() + EVERY;
+                next = mq_rt::Instant::now() + EVERY;
             }
         }
     }
@@ -547,11 +564,18 @@ fn options(server: &str) -> RequestOptions {
 
 /// Debug builds' dev hooks only: a real panic in a core task, so a walk
 /// can check the whole path (plans/error-reports.md 13).
-#[cfg(debug_assertions)]
+// mq-rt: native-only
+#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
 pub fn debug_panic() {
     std::thread::Builder::new()
         .name("debug-panic".into())
         .spawn(|| panic!("debugPanic: a test panic from the dev hooks"))
         .ok()
         .map(std::thread::JoinHandle::join);
+}
+
+/// The wasm twin: the panic runs in a core task, as natively in a thread.
+#[cfg(all(debug_assertions, target_arch = "wasm32"))]
+pub fn debug_panic() {
+    mq_rt::spawn(async { panic!("debugPanic: a test panic from the dev hooks") });
 }

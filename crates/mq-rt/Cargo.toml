@@ -1,0 +1,27 @@
+[package]
+name = "mq-rt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# Exports `selftest()` for the wasm run under the TV's Nodes (wasm-test.sh).
+selftest = []
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1", default-features = false, features = ["sync"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+wasm-bindgen = "=0.2.129"
+wasm-bindgen-futures = "0.4.79"
+web-time = "1.1"
+# Randomness from the host's `crypto.getRandomValues` for every crate that
+# asks getrandom (the cfg for 0.3 is in .cargo/config.toml).
+getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+getrandom_04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

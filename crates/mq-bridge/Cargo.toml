@@ -19,20 +19,26 @@ plugins = ["mq-runtime/plugins"]
 default = ["plugins"]
 
 [dependencies]
+mq-rt = { path = "../mq-rt" }
 mq-http = { path = "../mq-http" }
 mq-library = { path = "../mq-library" }
 mq-runtime = { path = "../mq-runtime" }
 mq-streams = { path = "../mq-streams" }
 mq-sync = { path = "../mq-sync" }
-axum = { version = "0.8", features = ["ws"] }
-tower-http = { version = "0.7", features = ["fs", "cors"] }
-tokio = { workspace = true, features = ["net", "signal"] }
 futures-util = "0.3"
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 # The bridge binary's subscriber: the error reports' layer (plans/error-reports.md 6.1).
 tracing-subscriber = { version = "0.3", default-features = false, features = ["registry"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["net", "signal"] }
+axum = { version = "0.8", features = ["ws"] }
+tower-http = { version = "0.7", features = ["fs", "cors"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1", default-features = false, features = ["sync", "macros"] }
 
 [dev-dependencies]
 # Paused time for the Incognito clock's timer tests.

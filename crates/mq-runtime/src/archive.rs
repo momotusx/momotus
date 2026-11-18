@@ -10,11 +10,12 @@
 use crate::Core;
 use mq_http::{HttpError, RequestOptions, Url};
 use mq_library::ArchiveFilm;
+use mq_rt::StdInstant as Instant;
 use mq_streams::ParsedStream;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// The source's name on its rows.
 pub const NAME: &str = "Internet Archive";
@@ -157,12 +158,12 @@ async fn ready(core: &Core) {
         return;
     }
     let first = core.device_library().archive_films().unwrap_or(0) == 0;
-    let task = tokio::spawn({
+    let task = mq_rt::spawn({
         let core = core.clone();
         async move { refresh(&core).await }
     });
     if first {
-        let _ = tokio::time::timeout(FIRST_LIST, task).await;
+        let _ = mq_rt::timeout(FIRST_LIST, task).await;
     }
 }
 

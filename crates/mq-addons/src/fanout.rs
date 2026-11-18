@@ -1,9 +1,9 @@
 use crate::{AddonClient, AddonError, InstalledAddon};
 use bytes::Bytes;
 use mq_protocol::ResourcePath;
+use mq_rt::JoinSet;
 use std::time::Duration;
 use tokio::sync::mpsc;
-use tokio::task::JoinSet;
 use url::Url;
 
 /// `soft`: after this, pending addons are reported as slow (results still
@@ -92,8 +92,8 @@ async fn drive(
             (addon.transport_url, addon.manifest.id, result)
         });
     }
-    let soft = tokio::time::sleep(deadlines.soft);
-    let hard = tokio::time::sleep(deadlines.hard);
+    let soft = mq_rt::sleep(deadlines.soft);
+    let hard = mq_rt::sleep(deadlines.hard);
     tokio::pin!(soft, hard);
     let mut soft_fired = false;
     while !pending.is_empty() {

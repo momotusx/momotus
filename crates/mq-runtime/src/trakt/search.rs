@@ -4,11 +4,11 @@
 
 use super::{kids, lock};
 use crate::Core;
+use mq_rt::Instant;
 use mq_tracking::trakt::Answer;
 use mq_tracking::trakt::search::{self, Found};
 use std::collections::HashMap;
 use std::time::Duration;
-use tokio::time::Instant;
 
 /// How long an answer is used without asking again.
 const FRESH: Duration = Duration::from_secs(10 * 60);
@@ -199,7 +199,7 @@ mod tests {
         let base = format!("http://{}", listener.local_addr().unwrap());
         let heads = Arc::new(Mutex::new(Vec::new()));
         let seen = heads.clone();
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             while let Ok((mut socket, _)) = listener.accept().await {
                 let mut buf = vec![0u8; 4096];
                 let n = socket.read(&mut buf).await.unwrap_or(0);

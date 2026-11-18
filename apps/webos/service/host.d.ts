@@ -33,6 +33,7 @@ export interface MqHost {
 
   // Logs and death (3.1). `died` closes every descriptor `fsOpen` handed out,
   // sends `{ died }` to the parent and exits the child.
+  /** `level` is tracing's: 1 error, 2 warn, 3 info, 4 debug, 5 trace. */
   log(level: number, line: string): void;
   died(message: string): void;
 }

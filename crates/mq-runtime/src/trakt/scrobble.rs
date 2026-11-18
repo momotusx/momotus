@@ -11,6 +11,7 @@ use crate::Core;
 use crate::core::WeakCore;
 use mq_library::hlc::now_ms;
 use mq_library::{IntentOp, NewIntent, TrackerKey};
+use mq_rt::Instant;
 use mq_tracking::trakt::call;
 use mq_tracking::trakt::{Answer, AuthError, Bound};
 use serde::Serialize;
@@ -21,7 +22,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::oneshot;
-use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 /// Scrobbles wait this long for a record when the profile uses Trakt and
@@ -198,7 +198,7 @@ impl Core {
             .get_or_init(|| {
                 let (tx, rx) = unbounded_channel();
                 let stop = conn.stop.clone();
-                tokio::spawn(run(self.downgrade(), conn.clone(), rx, stop));
+                mq_rt::spawn(run(self.downgrade(), conn.clone(), rx, stop));
                 tx
             })
             .clone();
@@ -281,7 +281,7 @@ async fn run(
     loop {
         let sleep = async {
             match retry {
-                Some(at) => tokio::time::sleep_until(at).await,
+                Some(at) => mq_rt::sleep_until(at).await,
                 None => std::future::pending().await,
             }
         };
@@ -762,7 +762,7 @@ async fn wait_for_record(core: &Core, conn: &Conn) {
     }
     tokio::select! {
         () = arrived => {}
-        () = tokio::time::sleep_until(conn.created + RECORD_WAIT) => {}
+        () = mq_rt::sleep_until(conn.created + RECORD_WAIT) => {}
     }
 }
 
@@ -911,7 +911,7 @@ mod tests {
         let base = format!("http://{}", listener.local_addr().unwrap());
         let seen = Arc::new(Mutex::new(Vec::<String>::new()));
         let paths = seen.clone();
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             while let Ok((mut socket, _)) = listener.accept().await {
                 let mut head = Vec::new();
                 let mut chunk = [0u8; 4096];

@@ -1,7 +1,7 @@
 use crate::{ByteCache, CancellationToken, ProbeBudget, ProbeError, RangeReader};
 use bytes::Bytes;
+use mq_rt::Instant;
 use std::future::Future;
-use tokio::time::Instant;
 
 /// Budgeted, block-cached view of a `RangeReader` for one probe. Reads fail
 /// soft: they return `None` and record why in the public flags.
@@ -56,7 +56,7 @@ impl<'a> Src<'a> {
                 self.cancelled = true;
                 None
             }
-            () = tokio::time::sleep_until(self.deadline) => {
+            () = mq_rt::sleep_until(self.deadline) => {
                 self.exhausted = true;
                 None
             }

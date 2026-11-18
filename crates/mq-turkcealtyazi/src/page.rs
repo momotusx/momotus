@@ -449,7 +449,7 @@ mod tests {
         // Each `&` once looked for `;` to the end of the text: tens of
         // seconds for a 1 MB run of them, and minutes for a 4 MB page.
         let many = "&".repeat(1_000_000);
-        let started = std::time::Instant::now();
+        let started = mq_rt::StdInstant::now();
         assert_eq!(text(&many).len(), 1_000_000);
         assert!(
             started.elapsed() < std::time::Duration::from_secs(2),

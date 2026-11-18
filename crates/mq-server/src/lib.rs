@@ -16,7 +16,11 @@
 //! `http://127.0.0.1:<port>/t/<token>/<id>/<tail>`, so a player never
 //! fetches from an origin.
 
+// mq-rt: native-only
+#[cfg(not(target_arch = "wasm32"))]
 mod ahead;
+// mq-rt: native-only
+#[cfg(not(target_arch = "wasm32"))]
 mod file;
 mod manifest;
 mod subtitles;
@@ -39,6 +43,7 @@ use futures_util::{FutureExt, Stream, StreamExt, stream};
 use manifest::{Children, Declared, Role, Sniffed};
 use mq_http::{HopRule, HttpClient, HttpError, Priority, RequestOptions, Url};
 use mq_media::CancellationToken;
+use mq_rt::StdInstant as Instant;
 use std::collections::HashMap;
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
@@ -46,7 +51,7 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::task::{Context, Poll};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 /// Where the bytes of one playback come from.
@@ -440,7 +445,7 @@ pub struct StreamServer {
     app: Router,
     /// The accept loop on the current listener; none once it was closed
     /// and could not be bound again.
-    accepting: tokio::sync::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    accepting: tokio::sync::Mutex<Option<mq_rt::JoinHandle<()>>>,
 }
 
 impl StreamServer {
@@ -489,8 +494,7 @@ impl StreamServer {
         let mut accepting = self.accepting.lock().await;
         let addr = self.shared.addr();
         let reached =
-            tokio::time::timeout(Duration::from_secs(1), tokio::net::TcpStream::connect(addr))
-                .await;
+            mq_rt::timeout(Duration::from_secs(1), tokio::net::TcpStream::connect(addr)).await;
         if matches!(reached, Ok(Ok(_))) {
             return Ok(false);
         }
@@ -567,7 +571,7 @@ impl StreamServer {
         // from then on, too slow is the playlist's fault, not the source's.
         let playlist = AtomicBool::new(false);
         let detect = self.detect(&source, &token, &playback.released, end, &playlist, plays);
-        match tokio::time::timeout_at(end.into(), detect).await {
+        match mq_rt::timeout_at(end.into(), detect).await {
             Ok(Ok(None)) => Ok(self.lease(token, playback, &file_name(filename), None)),
             Ok(Ok(Some(hls))) => {
                 // The cursors stop: every request fetches the playlist fresh.
@@ -815,7 +819,7 @@ impl Drop for StreamServer {
 /// the server is dropped, so a player that stopped reading cannot keep a
 /// connection task, or graceful shutdown, waiting.
 /// Ends the accept loop; its listener is closed once this returns.
-async fn close(accepting: &mut Option<tokio::task::JoinHandle<()>>) {
+async fn close(accepting: &mut Option<mq_rt::JoinHandle<()>>) {
     if let Some(task) = accepting.take() {
         task.abort();
         let _ = task.await;
@@ -829,10 +833,10 @@ fn accept(
     app: Router,
     tcp: tokio::net::TcpListener,
     shutdown: CancellationToken,
-) -> tokio::task::JoinHandle<()> {
+) -> mq_rt::JoinHandle<()> {
     let stop = shutdown.clone().cancelled_owned();
     let listener = Loopback { tcp, shutdown };
-    tokio::spawn(async move {
+    mq_rt::spawn(async move {
         let _ = axum::serve(listener, app)
             .with_graceful_shutdown(stop)
             .await;
@@ -915,7 +919,7 @@ where
     S: Stream<Item = std::io::Result<bytes::Bytes>> + Send + 'static,
 {
     let (tx, rx) = tokio::sync::mpsc::channel(1);
-    tokio::spawn(async move {
+    mq_rt::spawn(async move {
         let pump = async {
             let mut chunks = std::pin::pin!(chunks);
             while let Some(chunk) = chunks.next().await {
@@ -1800,7 +1804,7 @@ async fn table_within<'a>(
     released: &CancellationToken,
     bound: Duration,
 ) -> Result<tokio::sync::MutexGuard<'a, manifest::Table>, StatusCode> {
-    let table = tokio::time::timeout(bound, hls.table.lock());
+    let table = mq_rt::timeout(bound, hls.table.lock());
     match released.run_until_cancelled(table).await {
         None => Err(StatusCode::NOT_FOUND),
         Some(Err(_)) => Err(StatusCode::SERVICE_UNAVAILABLE),
@@ -1833,8 +1837,8 @@ async fn rewrite(
     released: &CancellationToken,
     end: Instant,
 ) -> Result<manifest::Rewritten, &'static str> {
-    let deadline = tokio::time::Instant::from_std(end);
-    let table = tokio::time::timeout_at(deadline, hls.table.clone().lock_owned());
+    let deadline = mq_rt::Instant::from_std(end);
+    let table = mq_rt::timeout_at(deadline, hls.table.clone().lock_owned());
     let table = match released.run_until_cancelled(table).await {
         None => return Err("released"),
         Some(Err(_)) => return Err("out of time"),
@@ -1848,7 +1852,7 @@ async fn rewrite(
     let _gone = gone.clone().drop_guard();
     let hls = hls.clone();
     let release = released.clone();
-    let work = tokio::task::spawn_blocking(move || {
+    let work = mq_rt::spawn_blocking(move || {
         let Some(mut table) = lock(&slot).take() else {
             return Err("out of time");
         };
@@ -1885,7 +1889,7 @@ async fn rewrite(
     });
     // Work still queued for a blocking thread cannot look at `released`:
     // release ends the wait here, and `_handoff` takes the table back.
-    let work = tokio::time::timeout_at(deadline, work);
+    let work = mq_rt::timeout_at(deadline, work);
     match released.run_until_cancelled(work).await {
         None => Err("released"),
         Some(Ok(Ok(rewritten))) => rewritten,
@@ -2267,7 +2271,7 @@ mod torrent {
             let file = s.leecher.select_file(t, "default", &hint).await.unwrap();
             let hold = mq_engine::test_hooks::hold_ranges(&s.leecher);
             let released = CancellationToken::new();
-            let request = tokio::spawn({
+            let request = mq_rt::spawn({
                 let claim = s.leecher.claim(t, "default").unwrap();
                 let released = released.clone();
                 async move {
@@ -2278,17 +2282,17 @@ mod torrent {
                         .status()
                 }
             });
-            let reached = tokio::time::timeout(Duration::from_secs(5), hold.reached()).await;
+            let reached = mq_rt::timeout(Duration::from_secs(5), hold.reached()).await;
             assert!(reached.is_ok(), "the setup never reached the barrier");
             let readers = || async { s.leecher.stats(t).await.unwrap().readers };
             assert_eq!(readers().await, 1, "the range's demand is open");
             released.cancel();
-            let ended = tokio::time::timeout(Duration::from_secs(1), request).await;
+            let ended = mq_rt::timeout(Duration::from_secs(1), request).await;
             let status = ended.expect("the setup outlived its release").unwrap();
             assert_eq!(status, StatusCode::NOT_FOUND);
             assert_eq!(readers().await, 0);
             hold.open();
-            tokio::time::sleep(Duration::from_millis(300)).await;
+            mq_rt::sleep(Duration::from_millis(300)).await;
             assert_eq!(readers().await, 0, "demand came back");
         }
     }
@@ -2389,7 +2393,7 @@ async fn proxy(
     head_only: bool,
     init: bool,
 ) -> Response {
-    let open = tokio::time::timeout(ahead::OPEN, http.stream(url, range, &opts));
+    let open = mq_rt::timeout(ahead::OPEN, http.stream(url, range, &opts));
     let mut upstream = match released.run_until_cancelled(open).await {
         None => return StatusCode::NOT_FOUND.into_response(),
         Some(Ok(Ok(response))) => response,
@@ -2772,7 +2776,7 @@ mod rewrites {
         let token = CancellationToken::new();
         let task = {
             let (first, token) = (first.clone(), token.clone());
-            tokio::spawn(
+            mq_rt::spawn(
                 async move { rewrite(&first, media(10), base(), None, &token, far()).await },
             )
         };
@@ -2809,7 +2813,7 @@ mod rewrites {
         held.go.send(()).unwrap();
         // Let go, the rewrite looks at its time before any work: it names
         // nothing and lets the table go.
-        let table = tokio::time::timeout(Duration::from_secs(5), hls.table.lock())
+        let table = mq_rt::timeout(Duration::from_secs(5), hls.table.lock())
             .await
             .expect("the table is free");
         assert_eq!(table.len(), 0, "the rewrite went on past its deadline");
@@ -2822,13 +2826,13 @@ mod rewrites {
         let token = CancellationToken::new();
         let task = {
             let (hls, token) = (hls.clone(), token.clone());
-            tokio::spawn(async move { rewrite(&hls, media(10), base(), None, &token, far()).await })
+            mq_rt::spawn(async move { rewrite(&hls, media(10), base(), None, &token, far()).await })
         };
         held.entered.await.unwrap();
         task.abort();
         let _ = task.await;
         held.go.send(()).unwrap();
-        let table = tokio::time::timeout(Duration::from_secs(5), hls.table.lock())
+        let table = mq_rt::timeout(Duration::from_secs(5), hls.table.lock())
             .await
             .expect("the table is free");
         assert_eq!(table.len(), 0, "the rewrite went on after its request");
@@ -2845,7 +2849,7 @@ mod rewrites {
             .unwrap();
         runtime.block_on(async {
             let (busy, wait) = mpsc::channel::<()>();
-            let occupied = tokio::task::spawn_blocking(move || {
+            let occupied = mq_rt::spawn_blocking(move || {
                 let _ = wait.recv_timeout(Duration::from_secs(10));
             });
             let hls = hls(None);
@@ -2876,10 +2880,10 @@ mod rewrites {
             let token = CancellationToken::new();
             let waiting = rewrite(&hls, media(10), base(), None, &token, far());
             let release = async {
-                tokio::task::yield_now().await;
+                mq_rt::yield_now().await;
                 token.cancel();
             };
-            let (result, ()) = tokio::time::timeout(Duration::from_secs(5), async {
+            let (result, ()) = mq_rt::timeout(Duration::from_secs(5), async {
                 tokio::join!(waiting, release)
             })
             .await
@@ -2888,18 +2892,18 @@ mod rewrites {
             drop(rewriting);
             // Queued behind a busy blocking thread, holding the table.
             let (busy, wait) = mpsc::channel::<()>();
-            let occupied = tokio::task::spawn_blocking(move || {
+            let occupied = mq_rt::spawn_blocking(move || {
                 let _ = wait.recv_timeout(Duration::from_secs(10));
             });
             let token = CancellationToken::new();
             let queued = rewrite(&hls, media(10), base(), None, &token, far());
             let release = async {
                 while hls.table.try_lock().is_ok() {
-                    tokio::task::yield_now().await;
+                    mq_rt::yield_now().await;
                 }
                 token.cancel();
             };
-            let (result, ()) = tokio::time::timeout(Duration::from_secs(5), async {
+            let (result, ()) = mq_rt::timeout(Duration::from_secs(5), async {
                 tokio::join!(queued, release)
             })
             .await
@@ -2909,7 +2913,7 @@ mod rewrites {
             busy.send(()).unwrap();
             occupied.await.unwrap();
             // Its work, run at last, finds the table taken back.
-            let table = tokio::time::timeout(Duration::from_secs(5), hls.table.lock())
+            let table = mq_rt::timeout(Duration::from_secs(5), hls.table.lock())
                 .await
                 .expect("the table is free");
             assert_eq!(table.len(), 0, "released work went on");
@@ -2922,13 +2926,13 @@ mod rewrites {
         let _rewriting = hls.table.clone().lock_owned().await;
         let token = CancellationToken::new();
         let bounded = table_within(&hls, &token, Duration::from_millis(50));
-        let gave_up = tokio::time::timeout(Duration::from_secs(5), bounded)
+        let gave_up = mq_rt::timeout(Duration::from_secs(5), bounded)
             .await
             .expect("the wait ended at its bound");
         assert_eq!(gave_up.err(), Some(StatusCode::SERVICE_UNAVAILABLE));
         token.cancel();
         let released = table_within(&hls, &token, Duration::from_secs(60));
-        let gone = tokio::time::timeout(Duration::from_secs(5), released)
+        let gone = mq_rt::timeout(Duration::from_secs(5), released)
             .await
             .expect("the wait ended at release");
         assert_eq!(gone.err(), Some(StatusCode::NOT_FOUND));

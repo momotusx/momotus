@@ -13,13 +13,13 @@ use eyeball_im::ObservableVector;
 use futures_util::{Stream, StreamExt};
 use mq_library::{LibraryItemRow, Table};
 use mq_protocol::MetaItem;
+use mq_rt::JoinSet;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use stremio_core::types::resource::{SeriesInfo, StreamSource, Video};
-use tokio::task::JoinSet;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(
@@ -510,7 +510,7 @@ impl TitleView {
             // Dropping the set aborts its tasks and empties it at once: an
             // aborted task stays in a set until the runtime reaps it, so a
             // visible right after would see it and start nothing.
-            *lookup = tokio::task::JoinSet::new();
+            *lookup = mq_rt::JoinSet::new();
         } else if lookup.is_empty() && !self.denied && !self.kids {
             // A repeated visible keeps the running wait and lookup.
             lookup.spawn(look_up(self.ctx()));
@@ -662,7 +662,7 @@ fn trakt_url(kind: &str, imdb: &str) -> Option<String> {
 async fn look_up(ctx: Ctx) {
     // From the moment the page shows; answers kept from an earlier visit
     // show at once, with no wait.
-    let wait = tokio::time::sleep(VISIBLE_FOR);
+    let wait = mq_rt::sleep(VISIBLE_FOR);
     let mut header = ctx.header.subscribe();
     while ctx.header.get().state == TitleState::Loading {
         if header.next().await.is_none() {
@@ -803,7 +803,7 @@ async fn watch_downloads(ctx: Ctx) {
     let mut shown = badges_of(&downloads.board().get(), &ctx.id);
     // A page that fell back while online (the meta failed) reads it again
     // now and then (code review r1 P3-3).
-    let mut again = tokio::time::interval(META_AGAIN);
+    let mut again = mq_rt::interval(META_AGAIN);
     again.tick().await;
     loop {
         let board = tokio::select! {
@@ -813,13 +813,13 @@ async fn watch_downloads(ctx: Ctx) {
             },
             _ = again.tick() => {
                 if !downloads.link().offline && lock(&ctx.state).offline {
-                    tokio::spawn(load_meta(ctx.clone()));
+                    mq_rt::spawn(load_meta(ctx.clone()));
                 }
                 continue;
             }
         };
         if offline && !board.link.offline && lock(&ctx.state).offline {
-            tokio::spawn(load_meta(ctx.clone()));
+            mq_rt::spawn(load_meta(ctx.clone()));
         }
         offline = board.link.offline;
         let mine = badges_of(&board, &ctx.id);

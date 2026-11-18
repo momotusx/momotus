@@ -3,9 +3,9 @@
 
 use super::api::{Answer, Api, Gate};
 use super::auth::{Auth, AuthError, Bound};
+use mq_rt::Instant;
 use serde_json::Value;
 use std::future::Future;
-use tokio::time::Instant;
 
 /// A list is read until an empty page; more pages than this is an error.
 const MAX_PAGES: u32 = 1000;
@@ -196,7 +196,7 @@ mod tests {
         let base = format!("http://{}", listener.local_addr().unwrap());
         let asked = Arc::new(AtomicUsize::new(0));
         let count = asked.clone();
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             while let Ok((mut socket, _)) = listener.accept().await {
                 let n = count.fetch_add(1, Ordering::SeqCst);
                 let mut buf = [0u8; 2048];

@@ -16,7 +16,7 @@ TARGET="${CARGO_TARGET_DIR:-$HOME/.cargo-targets/marquee-webos-http}/wasm-$mode"
 OUT="$TARGET/host-e2e"
 LLVM=/opt/homebrew/opt/llvm@20/bin
 if [ "$mode" = mvp ]; then
-  RUSTC_BOOTSTRAP=1 RUSTFLAGS='-Ctarget-cpu=mvp' \
+  RUSTC_BOOTSTRAP=1 \
     CC_wasm32_unknown_unknown="$LLVM/clang" AR_wasm32_unknown_unknown="$LLVM/llvm-ar" \
     CFLAGS_wasm32_unknown_unknown="-mcpu=mvp" \
     CARGO_PROFILE_RELEASE_STRIP=false CARGO_PROFILE_RELEASE_LTO=false \

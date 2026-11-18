@@ -9,10 +9,11 @@
 use crate::Core;
 use crate::plugins::{Repo, fetch_manifest, host_of};
 use mq_http::Url;
+use mq_rt::StdInstant as Instant;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// The directory, credited on its cards.
 pub const SOURCE: &str = "nuvioplugins.com";

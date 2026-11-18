@@ -15,6 +15,7 @@ use futures_util::{Stream, StreamExt};
 use mq_addons::{AddonEvent, Deadlines, InstalledAddon};
 use mq_library::{Policy, Table};
 use mq_protocol::{ResourcePath, decode_streams};
+use mq_rt::JoinSet;
 use mq_streams::{
     Conditions, DeviceCaps, Group, HideReason, ParsedStream, Playability, RankInput, RankKey,
     Ranked, RankedRow, Reason, ReasonLine, SourceClass, SourceKind, Speed, StreamPrefs, Target,
@@ -26,7 +27,6 @@ use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::task::JoinSet;
 use url::Url;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -1765,7 +1765,7 @@ async fn an_episode(core: &Core, ask: &crate::plugins::Ask) -> bool {
     let (Some(season), Some(episode)) = (ask.season, ask.episode) else {
         return false;
     };
-    let meta = tokio::time::timeout(SIDE_WAIT, core.fetch_meta("series", &ask.imdb)).await;
+    let meta = mq_rt::timeout(SIDE_WAIT, core.fetch_meta("series", &ask.imdb)).await;
     let Ok(Ok((meta, _))) = meta else {
         return true;
     };
@@ -1786,7 +1786,7 @@ async fn plugin_wait(
     state: Arc<Mutex<State>>,
     snapshot: SharedObservable<VersionsSnapshot>,
 ) {
-    tokio::time::sleep(wait).await;
+    mq_rt::sleep(wait).await;
     let mut s = lock(&state);
     s.plugins_waited = true;
     snapshot.set(render(&s));
@@ -1942,7 +1942,7 @@ async fn collect(
     // second before the counts on every pick of the audit
     // (plans/research/pick-audit.md).
     let mut live: JoinSet<Side> = JoinSet::new();
-    let mut hold: Option<tokio::time::Instant> = None;
+    let mut hold: Option<mq_rt::Instant> = None;
     let mut held_out = false;
     if needs_meta(params, &lock(&state).rank) {
         side.spawn(meta_facts(
@@ -2008,7 +2008,7 @@ async fn collect(
                 snapshot.set(render(&s));
                 continue;
             }
-            _ = tokio::time::sleep_until(hold.unwrap_or_else(tokio::time::Instant::now)),
+            _ = mq_rt::sleep_until(hold.unwrap_or_else(mq_rt::Instant::now)),
                 if hold.is_some() && !held_out && !live.is_empty() => {
                 held_out = true;
                 let mut s = lock(&state);
@@ -2032,7 +2032,7 @@ async fn collect(
                     .unwrap_or((addon_id.clone(), u16::MAX));
                 let (addon_id, body, start) = (addon_id.clone(), body.clone(), next_index);
                 let addon_url = transport_url.clone();
-                let parsed = tokio::task::spawn_blocking(move || {
+                let parsed = mq_rt::spawn_blocking(move || {
                     decode_streams(&body)
                         .map(|r| {
                             r.streams
@@ -2117,11 +2117,11 @@ async fn collect(
 fn awaited(
     rest: bool,
     live: &JoinSet<Side>,
-    hold: &mut Option<tokio::time::Instant>,
+    hold: &mut Option<mq_rt::Instant>,
     held_out: bool,
 ) -> bool {
     if rest && hold.is_none() {
-        *hold = Some(tokio::time::Instant::now() + SIDE_WAIT);
+        *hold = Some(mq_rt::Instant::now() + SIDE_WAIT);
     }
     !live.is_empty() && !held_out
 }
@@ -2180,15 +2180,15 @@ impl Side {
 // ponytail: looks every 250 ms for `ORIGINAL_WAIT`; a signal from the lookup
 // if a page shown later than that must still rank the original first.
 async fn original(core: Core, kind: String, item_id: String) -> Side {
-    let until = tokio::time::Instant::now() + ORIGINAL_WAIT;
+    let until = mq_rt::Instant::now() + ORIGINAL_WAIT;
     loop {
         if let Some(held) = core.original_language_held(&item_id, &kind) {
             return Side::Original(held);
         }
-        if tokio::time::Instant::now() >= until {
+        if mq_rt::Instant::now() >= until {
             return Side::Original(None);
         }
-        tokio::time::sleep(Duration::from_millis(250)).await;
+        mq_rt::sleep(Duration::from_millis(250)).await;
     }
 }
 
@@ -2210,7 +2210,7 @@ async fn meta_facts(
     video_id: String,
     season: Option<u32>,
 ) -> Side {
-    let Ok(Ok((meta, _))) = tokio::time::timeout(SIDE_WAIT, core.fetch_meta(&kind, &item_id)).await
+    let Ok(Ok((meta, _))) = mq_rt::timeout(SIDE_WAIT, core.fetch_meta(&kind, &item_id)).await
     else {
         return Side::Meta(TitleFacts::default());
     };
@@ -2325,7 +2325,7 @@ fn live_asks(
 /// leechers, or the stream's own tracker, reported (`Engine::scrape`).
 async fn live_check(core: Core, swarms: Vec<(String, Vec<String>)>) -> Side {
     let ask = || async {
-        let counts = tokio::time::timeout(LIVE_WAIT, core.live_seeders(&swarms)).await;
+        let counts = mq_rt::timeout(LIVE_WAIT, core.live_seeders(&swarms)).await;
         counts.unwrap_or_else(|_| vec![None; swarms.len()])
     };
     // A cold first scrape (the engine starting, tracker names not resolved
@@ -2333,7 +2333,7 @@ async fn live_check(core: Core, swarms: Vec<(String, Vec<String>)>) -> Side {
     // later (Android walk EW-1, the first open after an install).
     let mut counts = ask().await;
     if counts.iter().all(Option::is_none) {
-        tokio::time::sleep(LIVE_RETRY).await;
+        mq_rt::sleep(LIVE_RETRY).await;
         counts = ask().await;
     }
     Side::Live(
@@ -2364,7 +2364,7 @@ async fn cache_check(core: Core, store: Option<mq_debrid::StoreId>, hashes: Vec<
     let Some(resolver) = core.debrid() else {
         return Side::Cache(Vec::new());
     };
-    let answers = tokio::time::timeout(SIDE_WAIT, resolver.check(store, &hashes)).await;
+    let answers = mq_rt::timeout(SIDE_WAIT, resolver.check(store, &hashes)).await;
     let Ok(Ok(answers)) = answers else {
         return Side::Cache(Vec::new());
     };

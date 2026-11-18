@@ -25,6 +25,7 @@ use futures_util::Stream;
 use mq_addons::InstalledAddon;
 use mq_library::Table;
 use mq_protocol::{ResourcePath, ResourceResponse, decode_catalog};
+use mq_rt::{JoinHandle, JoinSet};
 use mq_tracking::trakt::search::Found;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -33,7 +34,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use stremio_core::types::addon::ExtraValue;
 use tokio::sync::broadcast::Receiver;
-use tokio::task::{JoinHandle, JoinSet};
 
 const DEBOUNCE: Duration = Duration::from_millis(250);
 const SOFT_DEADLINE: Duration = Duration::from_millis(2500);
@@ -102,13 +102,13 @@ impl SearchView {
         });
         let task: Arc<Mutex<Option<JoinHandle<()>>>> = Arc::default();
         let shelf = Arc::default();
-        *lock(&task) = Some(tokio::spawn(fill_start(
+        *lock(&task) = Some(mq_rt::spawn(fill_start(
             core.clone(),
             snapshot.clone(),
             Arc::clone(&shelf),
         )));
         let changes = core.library().subscribe();
-        let watch = tokio::spawn(watch_addons(
+        let watch = mq_rt::spawn(watch_addons(
             core.clone(),
             snapshot.clone(),
             Arc::clone(&task),
@@ -154,14 +154,14 @@ impl SearchView {
                 searchable: searchable(&self.core),
                 start: kids_start_for(&self.core).or_else(|| lock(&self.shelf).clone()),
             });
-            *lock(&self.task) = Some(tokio::spawn(fill_start(
+            *lock(&self.task) = Some(mq_rt::spawn(fill_start(
                 self.core.clone(),
                 self.snapshot.clone(),
                 Arc::clone(&self.shelf),
             )));
             return;
         }
-        let task = tokio::spawn(run(self.core.clone(), query, self.snapshot.clone()));
+        let task = mq_rt::spawn(run(self.core.clone(), query, self.snapshot.clone()));
         *lock(&self.task) = Some(task);
     }
 
@@ -231,7 +231,7 @@ async fn watch_addons(
                     ..shown
                 });
             }
-            let again = tokio::spawn(fill_start(
+            let again = mq_rt::spawn(fill_start(
                 core.clone(),
                 snapshot.clone(),
                 Arc::clone(&shelf),
@@ -241,7 +241,7 @@ async fn watch_addons(
             }
             continue;
         }
-        let again = tokio::spawn(run(core.clone(), query, snapshot.clone()));
+        let again = mq_rt::spawn(run(core.clone(), query, snapshot.clone()));
         if let Some(old) = lock(&task).replace(again) {
             old.abort();
         }
@@ -327,7 +327,7 @@ fn search_slots(addons: &[InstalledAddon], query: &str) -> Vec<Slot> {
 }
 
 async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapshot>) {
-    tokio::time::sleep(DEBOUNCE).await;
+    mq_rt::sleep(DEBOUNCE).await;
     if core.policy().kids() {
         snapshot.set(SearchSnapshot {
             rows: kids_matches(&core, &query),
@@ -356,7 +356,7 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
         })
     };
     publish(&top, &rows);
-    let top_work = tokio::time::timeout(HARD_DEADLINE, top_results(&core, &query, &key));
+    let top_work = mq_rt::timeout(HARD_DEADLINE, top_results(&core, &query, &key));
     tokio::pin!(top_work);
     let mut calls = JoinSet::new();
     for (index, slot) in slots.iter().cloned().enumerate() {
@@ -366,7 +366,7 @@ async fn run(core: Core, query: String, snapshot: SharedObservable<SearchSnapsho
             (index, result)
         });
     }
-    let soft = tokio::time::sleep(SOFT_DEADLINE);
+    let soft = mq_rt::sleep(SOFT_DEADLINE);
     tokio::pin!(soft);
     let mut soft_fired = false;
     loop {
@@ -404,7 +404,7 @@ async fn top_results(core: &Core, query: &str, key: &str) -> Option<Vec<Tile>> {
     let hits = match core.trakt_titles_held(key) {
         Some(hits) => hits,
         None => {
-            tokio::time::sleep(TRAKT_SETTLE.saturating_sub(DEBOUNCE)).await;
+            mq_rt::sleep(TRAKT_SETTLE.saturating_sub(DEBOUNCE)).await;
             core.trakt_titles(query, key).await?
         }
     };

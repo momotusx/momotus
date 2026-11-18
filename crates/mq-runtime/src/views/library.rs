@@ -8,11 +8,11 @@ use crate::views::home::{OTHER_KIND, Tile, kind_label, type_label};
 use eyeball::SharedObservable;
 use futures_util::Stream;
 use mq_library::{LibraryEntry, Table};
+use mq_rt::JoinHandle;
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
-use tokio::task::JoinHandle;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(
@@ -79,7 +79,7 @@ impl LibraryView {
         let changes = core.library().subscribe();
         let query = Arc::new(Mutex::new(Query::default()));
         let snapshot = SharedObservable::new(render(core, &Query::default()));
-        let task = tokio::spawn(watch(
+        let task = mq_rt::spawn(watch(
             core.clone(),
             changes,
             query.clone(),

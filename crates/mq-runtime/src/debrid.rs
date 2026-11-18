@@ -19,13 +19,13 @@ use mq_debrid::{
 };
 use mq_http::{HttpClient, HttpError};
 use mq_library::hlc::now_ms;
+use mq_rt::Instant;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, MutexGuard, RwLock, Weak};
 use std::time::Duration;
-use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 const MINUTE_MS: u64 = 60_000;
@@ -487,7 +487,7 @@ async fn keep_fresh(conn: Arc<Connection>) {
         if Instant::now() < due {
             tokio::select! {
                 () = conn.gone.cancelled() => return,
-                () = tokio::time::sleep_until(due) => continue,
+                () = mq_rt::sleep_until(due) => continue,
                 () = conn.wake.notified() => continue,
             }
         }
@@ -554,7 +554,7 @@ impl Accounts {
         });
         conn.reschedule();
         if oauth {
-            tokio::spawn(keep_fresh(conn.clone()));
+            mq_rt::spawn(keep_fresh(conn.clone()));
         }
         state.conns.insert(service, conn);
         // One order, the services' own, live and after a restore alike: which
@@ -875,7 +875,7 @@ impl Accounts {
             bump(&mut state, service)
         };
         if let Some(me) = self.me.upgrade() {
-            tokio::spawn(login(me, service, epoch, cancel.clone(), snapshot.clone()));
+            mq_rt::spawn(login(me, service, epoch, cancel.clone(), snapshot.clone()));
         }
         (snapshot, cancel)
     }
@@ -946,7 +946,7 @@ async fn login(
     let first_or_again = async {
         match start().await {
             Err(DebridError::Http(HttpError::Network(_))) => {
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                mq_rt::sleep(Duration::from_secs(1)).await;
                 start().await
             }
             other => other,
@@ -971,7 +971,7 @@ async fn login(
     loop {
         tokio::select! {
             () = cancel.cancelled() => return,
-            () = tokio::time::sleep(interval) => {}
+            () = mq_rt::sleep(interval) => {}
         }
         // Single flight per service: an older sign-in's request in flight
         // finishes first. Once sent, a request completes even if closed.

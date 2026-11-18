@@ -84,7 +84,7 @@ impl TraktLoginView {
                 owner,
                 ticket,
             };
-            tokio::spawn(login.run());
+            mq_rt::spawn(login.run());
         }
         Self { snapshot, polls }
     }
@@ -158,7 +158,7 @@ impl Login {
                 }
             },
         };
-        let deadline = tokio::time::Instant::now() + code.expires_in;
+        let deadline = mq_rt::Instant::now() + code.expires_in;
         self.set(TraktLoginSnapshot::Code {
             user_code: code.user_code.clone(),
             url: code.verification_url.clone(),
@@ -177,9 +177,9 @@ impl Login {
             tokio::select! {
                 () = self.polls.cancelled() => return,
                 () = self.owner.cancelled() => return self.overtaken(),
-                () = tokio::time::sleep(interval) => {}
+                () = mq_rt::sleep(interval) => {}
             }
-            if tokio::time::Instant::now() >= deadline {
+            if mq_rt::Instant::now() >= deadline {
                 return self.set(TraktLoginSnapshot::Expired);
             }
             match auth::poll(&api, &code).await {

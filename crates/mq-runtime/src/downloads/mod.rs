@@ -347,7 +347,7 @@ pub struct Link {
 #[derive(Debug, Clone, Copy)]
 struct Allowed {
     allowed: bool,
-    free: Option<(u64, std::time::Instant)>,
+    free: Option<(u64, mq_rt::StdInstant)>,
 }
 
 /// Everything the screens read, published as one value.
@@ -408,12 +408,12 @@ struct Running {
 /// Bytes over the last seconds.
 #[derive(Default)]
 struct Speed {
-    samples: std::collections::VecDeque<(std::time::Instant, u64)>,
+    samples: std::collections::VecDeque<(mq_rt::StdInstant, u64)>,
 }
 
 impl Speed {
     fn add(&mut self, bytes: u64) {
-        let now = std::time::Instant::now();
+        let now = mq_rt::StdInstant::now();
         self.samples.push_back((now, bytes));
         while self
             .samples
@@ -466,7 +466,7 @@ pub struct Downloads {
     strict: Mutex<std::collections::HashSet<String>>,
     /// When each job began waiting for space: one whose size is unknown
     /// looks again after a minute, not at every wake.
-    space_since: Mutex<HashMap<String, std::time::Instant>>,
+    space_since: Mutex<HashMap<String, mq_rt::StdInstant>>,
     /// Space waits that began with an I/O error on a disk that was not
     /// full: new room does not end them (code review r2 R4).
     io_waits: Mutex<std::collections::HashSet<String>>,
@@ -474,11 +474,11 @@ pub struct Downloads {
     subtitling: Mutex<std::collections::HashSet<String>>,
     /// Subtitle steps no source answered: when each asks again, and the
     /// wait after that (code review r1, runtime P2-3).
-    subtitle_waits: Mutex<HashMap<String, (std::time::Instant, Duration)>>,
+    subtitle_waits: Mutex<HashMap<String, (mq_rt::StdInstant, Duration)>>,
     /// Smart steps whose next episode is being looked up (4.14).
     smart_looking: Mutex<std::collections::HashSet<String>>,
     /// When the board last changed.
-    shown_at: Mutex<std::time::Instant>,
+    shown_at: Mutex<mq_rt::StdInstant>,
     /// The loopback URLs of downloads' posters and stills (4.11), by file,
     /// with the server port they were made on.
     images: Mutex<HashMap<PathBuf, (u16, String, mq_server::Lease)>>,
@@ -488,14 +488,14 @@ pub struct Downloads {
     /// the torrent file each kept.
     pending: Mutex<HashMap<String, Option<TorrentRef>>>,
     /// Smart steps whose meta could not be read: when each looks again.
-    smart_waits: Mutex<HashMap<String, std::time::Instant>>,
+    smart_waits: Mutex<HashMap<String, mq_rt::StdInstant>>,
     /// Each row's version as last parsed, with the text it came from: the
     /// queue reads every row each second (code review r1 m9).
     versions: Mutex<HashMap<String, (String, Arc<Version>)>>,
     /// Torrent files being let go, by hash: a run of the same torrent
     /// waits for every release of it (code review r3 N2, r5 R5-2).
     #[cfg(feature = "torrent")]
-    releasing: Mutex<Vec<(String, tokio::task::JoinHandle<()>)>>,
+    releasing: Mutex<Vec<(String, mq_rt::JoinHandle<()>)>>,
 }
 
 /// A smart download's step, kept on the episode it finished (4.14).
@@ -598,7 +598,7 @@ impl Downloads {
             subtitling: Mutex::default(),
             subtitle_waits: Mutex::default(),
             smart_looking: Mutex::default(),
-            shown_at: Mutex::new(std::time::Instant::now()),
+            shown_at: Mutex::new(mq_rt::StdInstant::now()),
             images: Mutex::default(),
             in_use: Mutex::default(),
             pending: Mutex::default(),
@@ -685,7 +685,7 @@ impl Downloads {
         let mut a = lock(&self.allowed);
         a.allowed = allowed;
         if let Some(free) = free {
-            a.free = Some((free, std::time::Instant::now()));
+            a.free = Some((free, mq_rt::StdInstant::now()));
         }
         drop(a);
         // Room may have come: space waits look again now.
@@ -931,7 +931,7 @@ impl Downloads {
         if same_steps(&old, &board) && shown_at.elapsed() < BYTES_EVERY {
             return;
         }
-        *shown_at = std::time::Instant::now();
+        *shown_at = mq_rt::StdInstant::now();
         drop(shown_at);
         self.board.set(board);
     }
@@ -1185,7 +1185,7 @@ impl Downloads {
         // meanwhile finds it (code review r5 R5-3).
         let mut releasing = lock(&self.releasing);
         releasing.retain(|(_, task)| !task.is_finished());
-        let task = tokio::spawn(async move { forget_torrent(&core, &id, t).await });
+        let task = mq_rt::spawn(async move { forget_torrent(&core, &id, t).await });
         releasing.push((hash, task));
     }
 
@@ -1368,7 +1368,7 @@ impl Downloads {
             return;
         }
         let (core, wake) = (core.clone(), self.wake.clone());
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             let opts = mq_http::RequestOptions {
                 timeout: std::time::Duration::from_secs(20),
                 max_bytes: 8 << 20,
@@ -1576,9 +1576,9 @@ impl Downloads {
     /// Tests: a free-space figure the platform reported `age` ago.
     #[doc(hidden)]
     pub fn report_free(&self, free: u64, age: Duration) {
-        let at = std::time::Instant::now()
+        let at = mq_rt::StdInstant::now()
             .checked_sub(age)
-            .unwrap_or_else(std::time::Instant::now);
+            .unwrap_or_else(mq_rt::StdInstant::now);
         lock(&self.allowed).free = Some((free, at));
     }
 
@@ -1841,13 +1841,13 @@ impl Downloads {
     fn keep_subtitles(self: &Arc<Self>, core: &Core, row: DownloadRecord) {
         let waiting = lock(&self.subtitle_waits)
             .get(&row.id)
-            .is_some_and(|(at, _)| std::time::Instant::now() < *at);
+            .is_some_and(|(at, _)| mq_rt::StdInstant::now() < *at);
         if waiting || self.link().offline || !lock(&self.subtitling).insert(row.id.clone()) {
             return;
         }
         let me = Arc::downgrade(self);
         let core = core.clone();
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             let Some(d) = me.upgrade() else { return };
             let kept = subtitles::keep(&d, &core, &row).await;
             lock(&d.subtitling).remove(&row.id);
@@ -1856,7 +1856,7 @@ impl Downloads {
                 let step = waits
                     .get(&row.id)
                     .map_or(SUBTITLE_WAIT, |(_, s)| (*s * 2).min(SUBTITLE_WAIT_MAX));
-                waits.insert(row.id.clone(), (std::time::Instant::now() + step, step));
+                waits.insert(row.id.clone(), (mq_rt::StdInstant::now() + step, step));
                 return;
             };
             lock(&d.subtitle_waits).remove(&row.id);
@@ -1913,13 +1913,13 @@ impl Downloads {
     fn smart_lookup(self: &Arc<Self>, core: &Core, row: DownloadRecord) {
         let waiting = lock(&self.smart_waits)
             .get(&row.id)
-            .is_some_and(|at| std::time::Instant::now() < *at);
+            .is_some_and(|at| mq_rt::StdInstant::now() < *at);
         if waiting || self.link().offline || !lock(&self.smart_looking).insert(row.id.clone()) {
             return;
         }
         let me = Arc::downgrade(self);
         let core = core.clone();
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             let Some(d) = me.upgrade() else { return };
             let next = match smart_next(&core, &row).await {
                 Next::Unreadable => None,
@@ -1957,7 +1957,7 @@ impl Downloads {
                 }
                 None => {
                     lock(&d.smart_waits)
-                        .insert(row.id.clone(), std::time::Instant::now() + SMART_WAIT);
+                        .insert(row.id.clone(), mq_rt::StdInstant::now() + SMART_WAIT);
                 }
             }
             lock(&d.smart_looking).remove(&row.id);
@@ -2061,7 +2061,7 @@ impl Downloads {
         drop(running);
         let me = Arc::downgrade(self);
         let core = core.clone();
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             let id = row.id.clone();
             let job = std::panic::AssertUnwindSafe(run_job(me.clone(), core.clone(), row));
             let outcome = cancel
@@ -2102,7 +2102,7 @@ impl Downloads {
             Outcome::Fail(reason) => (DownloadState::Failed, Some(reason)),
         };
         if reason == Some(DownloadReason::Space) {
-            lock(&self.space_since).insert(id.to_owned(), std::time::Instant::now());
+            lock(&self.space_since).insert(id.to_owned(), mq_rt::StdInstant::now());
         } else if state == DownloadState::Done {
             lock(&self.io_waits).remove(id);
             // Its room is free again: space waits look again now.
@@ -2256,7 +2256,7 @@ async fn run_queue(me: std::sync::Weak<Downloads>) {
         drop(d);
         tokio::select! {
             () = wake.notified() => {}
-            () = tokio::time::sleep(wait) => {}
+            () = mq_rt::sleep(wait) => {}
         }
     }
 }
@@ -2396,7 +2396,7 @@ async fn forget_torrent(core: &Core, id: &str, t: TorrentRef) {
     let slow = lock(&SLOW_RELEASES).get(&t.hash).copied();
     #[cfg(feature = "test-hooks")]
     if let Some(slow) = slow {
-        tokio::time::sleep(slow).await;
+        mq_rt::sleep(slow).await;
     }
     match core.torrent_engine().await {
         Ok(engine) => {
@@ -2444,7 +2444,7 @@ async fn pick_version(core: &Core, row: &DownloadRecord) -> Option<Vec<ParsedStr
     let view =
         crate::views::versions::VersionsView::open_to_download(&core, params, Some(&row.item_id));
     let (_, mut updates) = view.subscribe();
-    let settle = tokio::time::sleep(Duration::from_secs(60));
+    let settle = mq_rt::sleep(Duration::from_secs(60));
     tokio::pin!(settle);
     loop {
         let snapshot = view.snapshot();

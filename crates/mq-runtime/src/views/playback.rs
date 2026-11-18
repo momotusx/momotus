@@ -17,15 +17,16 @@ use mq_debrid::{ResolveRequest, Resolver, StoreId};
 use mq_library::{Authorization, FINISHED_RATIO, LibraryItemRow, Policy, ProgressRow};
 use mq_protocol::{ResourcePath, Source, decode_subtitles};
 use mq_relparse::fit;
+use mq_rt::JoinHandle;
+use mq_rt::StdInstant as Instant;
 use mq_server::{Format, Lease, SubtitleSlot, SubtitleTrouble, Upstream};
 use mq_streams::{DeviceCaps, ParsedStream};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex, OnceLock, Weak};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use stremio_core::types::addon::ExtraValue;
-use tokio::task::JoinHandle;
 
 /// Progress is written at most this often while playing.
 const SAVE_EVERY: Duration = Duration::from_secs(5);
@@ -657,10 +658,10 @@ struct State {
     /// A first play's start: its first attempt's add (the budget's origin,
     /// `START_BUDGET`) and the attempts begun in it. Cleared once a source
     /// played past its start, and for a "Try again" run (its own budget).
-    start_at: Option<tokio::time::Instant>,
+    start_at: Option<mq_rt::Instant>,
     tries: u32,
     /// When the loading screen began: `choose_another` after `CHOOSE_AFTER`.
-    loading_since: tokio::time::Instant,
+    loading_since: mq_rt::Instant,
     /// What the failures of this start say, for `empty`.
     failed_as: Option<EmptyKind>,
     /// The failed sources as an error report names them: classes, never a
@@ -677,7 +678,7 @@ struct State {
     played_ms: u64,
     /// When a "Try again" run gives up, however many sources are left
     /// (code review 2026-10-20 r3 P3-11); none once a source plays.
-    retry_until: Option<tokio::time::Instant>,
+    retry_until: Option<mq_rt::Instant>,
     /// The playing source's token: its URL and its subtitles' URLs live as
     /// long as it is kept here.
     lease: Option<Lease>,
@@ -779,7 +780,7 @@ struct State {
     /// The start's progress when the source starting now began, and when
     /// it began (`start`).
     start_base: f32,
-    source_since: tokio::time::Instant,
+    source_since: mq_rt::Instant,
     /// Torrents of this view that did not start (no details in time, a
     /// stall, the deadline), by lowercase info hash: another source of one
     /// is skipped at once. "Try again" clears it.
@@ -937,7 +938,7 @@ impl State {
             second_picked: false,
             delay: Vec::new(),
             start_base: 0.0,
-            source_since: tokio::time::Instant::now(),
+            source_since: mq_rt::Instant::now(),
             languages: Vec::new(),
             device_language: None,
             #[cfg(feature = "torrent")]
@@ -1175,7 +1176,7 @@ impl PlaybackView {
             s.candidates = s.first.clone();
             s.tried = s.first.iter().map(|c| c.key.clone()).collect();
             s.local_tried = false;
-            s.retry_until = Some(tokio::time::Instant::now() + RETRY_BUDGET);
+            s.retry_until = Some(mq_rt::Instant::now() + RETRY_BUDGET);
             s.start_at = None;
             s.tries = 0;
             s.failed_as = None;
@@ -1713,7 +1714,7 @@ impl PlaybackView {
         if let Some((torrent, file, len)) = s.rate_of {
             let core = self.core.clone();
             let metered = core.network() == crate::speed::Network::Cellular;
-            tokio::spawn(async move {
+            mq_rt::spawn(async move {
                 if let Ok(engine) = core.torrent_engine().await {
                     let rate = len * 1000 / duration_ms;
                     let _ = engine.set_rate(torrent, file, rate, metered).await;
@@ -1728,7 +1729,7 @@ impl PlaybackView {
             self.snapshot.set(s.snapshot.clone());
         }
         // Spawning does not block, so it happens under the lock.
-        let task = tokio::spawn(find_segments(
+        let task = mq_rt::spawn(find_segments(
             self.core.clone(),
             self.state.clone(),
             self.snapshot.clone(),
@@ -1856,7 +1857,7 @@ impl PlaybackView {
                 // (plans/streaming-window.md 2.3).
                 if let Some((torrent, ..)) = s.rate_of {
                     let core = self.core.clone();
-                    tokio::spawn(async move {
+                    mq_rt::spawn(async move {
                         if let Ok(engine) = core.torrent_engine().await {
                             let _ = engine.set_paused(torrent, paused).await;
                         }
@@ -1933,7 +1934,7 @@ impl PlaybackView {
             snapshot: self.snapshot.clone(),
             task: self.task.clone(),
         };
-        tokio::spawn(watch_stall(mover, stall));
+        mq_rt::spawn(watch_stall(mover, stall));
     }
 
     fn save(&self) {
@@ -1999,7 +2000,7 @@ fn spawn_original(
 ) {
     let (core, kind, item) = (core.clone(), target.kind.clone(), target.item_id.clone());
     let (state, snapshot) = (Arc::downgrade(state), snapshot.clone());
-    tokio::spawn(async move {
+    mq_rt::spawn(async move {
         let original = core.original_language(&item, &kind).await;
         if let (Some(original), Some(state)) = (original, state.upgrade()) {
             let mut s = lock(&state);
@@ -2023,7 +2024,7 @@ fn spawn_resolve(
         s.run += 1;
         s.run
     };
-    let task = tokio::spawn(resolve_next(
+    let task = mq_rt::spawn(resolve_next(
         core.clone(),
         target.clone(),
         plays.clone(),
@@ -2072,7 +2073,7 @@ struct Mover {
 /// `REACH`. A stall that may not move shows "Choose another version"
 /// instead.
 async fn watch_stall(m: Mover, stall: Stalled) {
-    tokio::time::sleep(stall.wait).await;
+    mq_rt::sleep(stall.wait).await;
     loop {
         let Some(state) = m.state.upgrade() else {
             return;
@@ -2121,7 +2122,7 @@ async fn watch_stall(m: Mover, stall: Stalled) {
             }
         }
         drop(state);
-        tokio::time::sleep(REACH).await;
+        mq_rt::sleep(REACH).await;
     }
 }
 
@@ -2171,7 +2172,7 @@ async fn reachable(
         ..Default::default()
     };
     for url in urls.iter().take(3) {
-        let asked = tokio::time::timeout(REACH, http.get_range(url, 0, 1, &opts)).await;
+        let asked = mq_rt::timeout(REACH, http.get_range(url, 0, 1, &opts)).await;
         if let Ok(
             Ok(_) | Err(mq_http::HttpError::Status { .. } | mq_http::HttpError::TooLarge { .. }),
         ) = asked
@@ -2337,10 +2338,9 @@ async fn find_segments(
         let finder = &finder;
         let target = &target;
         async move {
-            let extra =
-                tokio::time::timeout(SEGMENTS_DEADLINE, finder.fill(target, duration_ms, &have))
-                    .await
-                    .unwrap_or_default();
+            let extra = mq_rt::timeout(SEGMENTS_DEADLINE, finder.fill(target, duration_ms, &have))
+                .await
+                .unwrap_or_default();
             if !extra.is_empty() {
                 publish(&|s| s.segments = segments::merge(&s.segments, extra.clone()));
             }
@@ -2349,9 +2349,8 @@ async fn find_segments(
     let mut filled = false;
     let waits = std::iter::once(Duration::ZERO).chain(finder.retries());
     for wait in waits {
-        tokio::time::sleep(wait).await;
-        let asked =
-            tokio::time::timeout(SEGMENTS_DEADLINE, finder.primary(&target, duration_ms)).await;
+        mq_rt::sleep(wait).await;
+        let asked = mq_rt::timeout(SEGMENTS_DEADLINE, finder.primary(&target, duration_ms)).await;
         match asked {
             Ok(Some(found)) => {
                 if !found.segments.is_empty() {
@@ -2478,9 +2477,9 @@ fn out_of_budget(s: &mut State) {
 }
 
 /// Waits until `at`; forever with none.
-async fn until(at: Option<tokio::time::Instant>) {
+async fn until(at: Option<mq_rt::Instant>) {
     match at {
-        Some(at) => tokio::time::sleep_until(at).await,
+        Some(at) => mq_rt::sleep_until(at).await,
         None => std::future::pending().await,
     }
 }
@@ -2846,7 +2845,7 @@ async fn resolve_next(
             // A first play's attempt: the first one's add starts the budget.
             if !s.patient {
                 if s.start_at.is_none() {
-                    s.start_at = Some(tokio::time::Instant::now());
+                    s.start_at = Some(mq_rt::Instant::now());
                     let ends = mq_library::hlc::now_ms() + START_BUDGET.as_millis() as u64;
                     s.snapshot.start_budget_ends_at = Some(ends);
                 }
@@ -2884,7 +2883,7 @@ async fn resolve_next(
                     let long = lock(&state).source_since + LONG_STAGE;
                     let open = tokio::select! {
                         open = &mut open => open,
-                        () = tokio::time::sleep_until(long) => {
+                        () = mq_rt::sleep_until(long) => {
                             show_opening(&state, &snapshot, run);
                             open.await
                         }
@@ -2917,7 +2916,7 @@ async fn resolve_next(
                 let s = lock(&state);
                 let end = budget_left(&s)
                     .filter(|_| !swarm)
-                    .map(|left| tokio::time::Instant::now() + left);
+                    .map(|left| mq_rt::Instant::now() + left);
                 let choose = (!s.snapshot.choose_another).then_some(s.loading_since + CHOOSE_AFTER);
                 (end, choose)
             };
@@ -3061,6 +3060,7 @@ async fn resolve_next(
                 }
                 // The addons ask with the hash; the built-in source lists at
                 // once and ranks with the frame rate. Pending ends with both.
+                #[cfg(not(target_arch = "wasm32"))]
                 add_kept_tracks(
                     &core,
                     &target,
@@ -3126,7 +3126,7 @@ async fn resolve_next(
                     // addon (SubSense took 12 to 20 s, the iphone-a walk) never
                     // leaves subtitles off that long.
                     let early = async {
-                        tokio::time::sleep(START_SUBTITLE_WAIT).await;
+                        mq_rt::sleep(START_SUBTITLE_WAIT).await;
                         rated_done.notified().await;
                         let audio = lock(&state).snapshot.audio_languages.clone();
                         let wants = StartWants::read(
@@ -3144,7 +3144,7 @@ async fn resolve_next(
                             while !(settle_start(&state, &snapshot, run, &wants, false)
                                 & settle_second(&state, &snapshot, run, &wants, false))
                             {
-                                tokio::time::sleep(Duration::from_millis(100)).await;
+                                mq_rt::sleep(Duration::from_millis(100)).await;
                             }
                         }
                         std::future::pending::<()>().await;
@@ -3256,7 +3256,7 @@ const RETRY_GAVE_UP: &str = "Tried again for 3 minutes";
 /// start (`START_BUDGET`); None before a start's first attempt.
 fn budget_left(s: &State) -> Option<Duration> {
     let until = s.retry_until.or(s.start_at.map(|at| at + START_BUDGET))?;
-    Some(until.saturating_duration_since(tokio::time::Instant::now()))
+    Some(until.saturating_duration_since(mq_rt::Instant::now()))
 }
 
 /// `wait`, cut to what is left of the budget.
@@ -3604,7 +3604,7 @@ async fn open_torrent(
     let engine = core.torrent_engine().await.map_err(unsaid)?;
     // The add, once the engine is up: a cold engine start never eats into
     // the attempt's window.
-    let begun = tokio::time::Instant::now();
+    let begun = mq_rt::Instant::now();
     let policy = attempt_policy(&lock(state), begun, stream);
     // This playback's own check, read before the torrent is touched: a
     // hold placed after it (the title left a kids list) is never lifted by
@@ -3679,7 +3679,7 @@ async fn open_torrent(
         }
         None => {
             let wait = within_budget(state, METADATA_TIMEOUT);
-            tokio::time::timeout(wait, ticking(add, tick))
+            mq_rt::timeout(wait, ticking(add, tick))
                 .await
                 .map_err(|_| wait == METADATA_TIMEOUT)
         }
@@ -3771,7 +3771,7 @@ async fn open_torrent(
     // the device.
     let kept = {
         let (dir, hash) = (core.torrent_dir().to_owned(), info_hash.to_owned());
-        tokio::task::spawn_blocking(move || mq_engine::cached_on_disk(&dir, &hash, 0, 0).is_some())
+        mq_rt::spawn_blocking(move || mq_engine::cached_on_disk(&dir, &hash, 0, 0).is_some())
             .await
             .unwrap_or(false)
     };
@@ -4044,14 +4044,14 @@ fn look_ahead(core: &Core, engine: &mq_engine::Engine, s: &mut State, current: &
     let (engine, closing, kept) = (engine.clone(), s.closing.clone(), taken.clone());
     let (fetch, trackers) = (hash.clone(), trackers.clone());
     let core = core.clone();
-    tokio::spawn(async move {
+    mq_rt::spawn(async move {
         // Recorded before its add, as a start's own torrent; after the end
         // nothing is (plans/batch-10-incognito.md 2.5).
         let record = core.record_torrent(&fetch);
         if matches!(record, crate::incognito::Record::Ended) {
             return;
         }
-        let add = tokio::time::timeout(AHEAD_FOR, engine.add_magnet(&fetch, &trackers, &[]));
+        let add = mq_rt::timeout(AHEAD_FOR, engine.add_magnet(&fetch, &trackers, &[]));
         let added = tokio::select! {
             added = add => added.ok().and_then(Result::ok),
             () = closing.cancelled() => return,
@@ -4112,12 +4112,12 @@ impl Default for Sample {
 fn begin_start(s: &mut State, stage: StartStage) {
     // A loading screen begins with its first source.
     if s.snapshot.start.is_none() {
-        s.loading_since = tokio::time::Instant::now();
+        s.loading_since = mq_rt::Instant::now();
     }
     s.snapshot.choose_another = s.loading_since.elapsed() >= CHOOSE_AFTER;
     let progress = s.snapshot.start.as_ref().map_or(0.0, |p| p.progress);
     s.start_base = progress;
-    s.source_since = tokio::time::Instant::now();
+    s.source_since = mq_rt::Instant::now();
     let (source, sources) = (s.next as u32, s.candidates.len() as u32);
     s.snapshot.start = Some(StartProgress {
         stage,
@@ -4240,18 +4240,18 @@ fn sample(stats: &mq_engine::TorrentStats) -> Sample {
 #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
 async fn within_live<T>(
     work: impl std::future::Future<Output = T>,
-    added: tokio::time::Instant,
+    added: mq_rt::Instant,
     mut window: impl FnMut() -> Duration,
 ) -> Result<T, Duration> {
     tokio::pin!(work);
-    let mut every = tokio::time::interval(Duration::from_secs(1));
+    let mut every = mq_rt::interval(Duration::from_secs(1));
     loop {
         tokio::select! {
             biased;
             out = &mut work => return Ok(out),
             _ = every.tick() => {
                 let window = window();
-                if tokio::time::Instant::now() >= added + window {
+                if mq_rt::Instant::now() >= added + window {
                     return Err(window);
                 }
             }
@@ -4263,7 +4263,7 @@ async fn within_live<T>(
 #[cfg(feature = "torrent")]
 async fn ticking<T>(work: impl std::future::Future<Output = T>, mut tick: impl FnMut()) -> T {
     tokio::pin!(work);
-    let mut every = tokio::time::interval(Duration::from_secs(1));
+    let mut every = mq_rt::interval(Duration::from_secs(1));
     loop {
         tokio::select! {
             out = &mut work => return out,
@@ -4361,9 +4361,9 @@ struct Progress {
 #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
 #[derive(Clone, Copy, Debug)]
 struct Attempting {
-    added: tokio::time::Instant,
+    added: mq_rt::Instant,
     dead: Duration,
-    until: tokio::time::Instant,
+    until: mq_rt::Instant,
     last: bool,
     /// Under `LIVE` of the budget was left at its add: the last whatever
     /// else is listed later.
@@ -4404,11 +4404,7 @@ impl Attempting {
 /// Versions view says whether the trackers counted no seeder for
 /// `stream` before Play.
 #[cfg(feature = "torrent")]
-fn attempt_policy(
-    s: &State,
-    added: tokio::time::Instant,
-    stream: &ParsedStream,
-) -> Option<Attempting> {
+fn attempt_policy(s: &State, added: mq_rt::Instant, stream: &ParsedStream) -> Option<Attempting> {
     let start = s.start_at.filter(|_| !s.patient)?;
     Some(Attempting {
         none_counted: s.pick.as_ref().is_some_and(|p| p.none_counted(stream)),
@@ -4420,12 +4416,7 @@ fn attempt_policy(
 /// `more`: something else can play after it.
 #[cfg(any(test, feature = "torrent"))]
 #[cfg_attr(not(feature = "torrent"), allow(dead_code))]
-fn attempting(
-    start: tokio::time::Instant,
-    tries: u32,
-    added: tokio::time::Instant,
-    more: bool,
-) -> Attempting {
+fn attempting(start: mq_rt::Instant, tries: u32, added: mq_rt::Instant, more: bool) -> Attempting {
     let until = start + START_BUDGET;
     let short = until.saturating_duration_since(added) < LIVE;
     Attempting {
@@ -4461,12 +4452,12 @@ where
     let mut need = 0;
     // What it had received each second, over the last `GROWING`.
     let mut seen = std::collections::VecDeque::new();
-    let mut tick = tokio::time::interval(Duration::from_secs(1));
+    let mut tick = mq_rt::interval(Duration::from_secs(1));
     loop {
         tokio::select! {
             out = &mut ready => return Started::Ready(out),
             _ = tick.tick() => {
-                let now = tokio::time::Instant::now();
+                let now = mq_rt::Instant::now();
                 if now >= p.until {
                     return Started::Late { unchoked };
                 }
@@ -4522,7 +4513,7 @@ where
 
 /// Bytes received per second between two `(when, received)` readings.
 #[cfg(any(test, feature = "torrent"))]
-fn per_second(from: (tokio::time::Instant, u64), to: (tokio::time::Instant, u64)) -> f64 {
+fn per_second(from: (mq_rt::Instant, u64), to: (mq_rt::Instant, u64)) -> f64 {
     to.1.saturating_sub(from.1) as f64 / (to.0 - from.0).as_secs_f64().max(1.0)
 }
 
@@ -4544,17 +4535,17 @@ where
     P: FnMut() -> F,
     F: std::future::Future<Output = Option<Progress>>,
 {
-    let start = tokio::time::Instant::now();
+    let start = mq_rt::Instant::now();
     tokio::pin!(ready);
     let first = progress().await.map_or(0, |p| p.received);
     // The bytes and time the current window began with, and its length.
-    let mut window: Option<(u64, tokio::time::Instant, Duration)> = None;
-    let mut tick = tokio::time::interval(Duration::from_secs(1));
+    let mut window: Option<(u64, mq_rt::Instant, Duration)> = None;
+    let mut tick = mq_rt::interval(Duration::from_secs(1));
     loop {
         tokio::select! {
             out = &mut ready => return Started::Ready(out),
             _ = tick.tick() => {
-                let now = tokio::time::Instant::now();
+                let now = mq_rt::Instant::now();
                 // Within its current window, a swarm is progressing.
                 let progressing = window.is_some_and(|(_, since, length)| now - since < length);
                 let past = now - start >= rule.deadline && (rule.elsewhere || !progressing);
@@ -4676,8 +4667,8 @@ fn spawn_sample(
         return;
     }
     let core = core.clone();
-    tokio::spawn(async move {
-        tokio::time::sleep(SAMPLE_AFTER).await;
+    mq_rt::spawn(async move {
+        mq_rt::sleep(SAMPLE_AFTER).await;
         let Ok(engine) = core.torrent_engine().await else {
             return;
         };
@@ -4707,8 +4698,8 @@ fn spawn_sample(
 /// into the estimate.
 fn spawn_http_sample(core: &Core, state: &Arc<Mutex<State>>, attempt: u64) {
     let (core, state) = (core.clone(), Arc::downgrade(state));
-    tokio::spawn(async move {
-        tokio::time::sleep(SAMPLE_AFTER).await;
+    mq_rt::spawn(async move {
+        mq_rt::sleep(SAMPLE_AFTER).await;
         let Some(state) = state.upgrade() else {
             return;
         };
@@ -4876,7 +4867,7 @@ pub(crate) fn prefetch(
         return;
     };
     let request = with_store(&resolver, service.as_deref(), request);
-    tokio::spawn(async move {
+    mq_rt::spawn(async move {
         if let Err(e) = resolver.prefetch(request).await {
             tracing::debug!("debrid prefetch failed: {e}");
         }
@@ -5041,7 +5032,7 @@ async fn built_in_tracks(
         part: fit::part(stream_name(stream)),
     };
     let probe = async { probed.await.fps };
-    let listed = tokio::time::timeout(Deadlines::default().hard, async {
+    let listed = mq_rt::timeout(Deadlines::default().hard, async {
         // The request goes now; the ranking, from the cache, waits for the
         // frame rate.
         let (fps, _) = tokio::join!(probe, site.list(digits, want, &playing));
@@ -5934,7 +5925,7 @@ pub(crate) async fn video_extra(
     // Origins that ignore Range give no hash; filename and id still match.
     if let Some(reader) = reader
         && let Ok(Ok((hash, size))) =
-            tokio::time::timeout(HASH_TIMEOUT, mq_media::opensubtitles_hash(reader)).await
+            mq_rt::timeout(HASH_TIMEOUT, mq_media::opensubtitles_hash(reader)).await
     {
         extra.push(extra_value("videoHash", hash));
         extra.push(extra_value("videoSize", size.to_string()));
@@ -6036,6 +6027,8 @@ async fn find_subtitles(
 
 /// The tracks a download of this version kept (plans/offline-downloads.md
 /// 4.10), served from their files, ordered as their sources listed them.
+// mq-rt: native-only (no downloads on wasm)
+#[cfg(not(target_arch = "wasm32"))]
 fn add_kept_tracks(
     core: &Core,
     target: &PlayTarget,
@@ -6350,7 +6343,7 @@ pub(crate) async fn kept_start(core: &Core, item_id: &str, video_id: &str) -> Op
         Some(engine) => engine.cached(hash, file, at).await?,
         None => {
             let (dir, hash) = (core.torrent_dir().to_owned(), hash.to_owned());
-            tokio::task::spawn_blocking(move || mq_engine::cached_on_disk(&dir, &hash, file, at))
+            mq_rt::spawn_blocking(move || mq_engine::cached_on_disk(&dir, &hash, file, at))
                 .await
                 .ok()??
         }
@@ -6638,21 +6631,21 @@ mod tests {
     #[tokio::test]
     async fn a_stale_resolve_never_replaces_a_newer_one() {
         let slot = Mutex::new(None);
-        let task = || tokio::spawn(std::future::pending::<()>());
+        let task = || mq_rt::spawn(std::future::pending::<()>());
         let (older, newer, newest) = (task(), task(), task());
         let ends = [&older, &newer, &newest].map(|t| t.abort_handle());
         // Caller B installs run 2 before caller A, paused after spawning,
         // installs run 1.
         install(&slot, 2, newer);
         install(&slot, 1, older);
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        mq_rt::sleep(Duration::from_millis(10)).await;
         assert_eq!(
             ends.each_ref().map(|t| t.is_finished()),
             [true, false, false]
         );
         // A newer run still replaces it.
         install(&slot, 3, newest);
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        mq_rt::sleep(Duration::from_millis(10)).await;
         assert_eq!(
             ends.each_ref().map(|t| t.is_finished()),
             [true, true, false]
@@ -6816,7 +6809,7 @@ mod tests {
                 if view.snapshot().phase == PlaybackPhase::Failed {
                     return;
                 }
-                tokio::time::sleep(Duration::from_millis(10)).await;
+                mq_rt::sleep(Duration::from_millis(10)).await;
             }
             panic!("never failed: {:?}", view.snapshot());
         };
@@ -6828,11 +6821,11 @@ mod tests {
             let left = budget_left(&s).unwrap();
             assert!(left > RETRY_BUDGET - Duration::from_secs(5), "{left:?}");
         }
-        let soon = tokio::time::Instant::now() + Duration::from_secs(2);
+        let soon = mq_rt::Instant::now() + Duration::from_secs(2);
         lock(&view.state).retry_until = Some(soon);
         assert!(within_budget(&view.state, PROBE_TIMEOUT) <= Duration::from_secs(2));
         // The budget is spent before the resolve reaches a source.
-        lock(&view.state).retry_until = Some(tokio::time::Instant::now());
+        lock(&view.state).retry_until = Some(mq_rt::Instant::now());
         failed().await;
         let s = view.snapshot();
         let errors: Vec<&str> = s.attempts.iter().map(|a| a.error.as_str()).collect();
@@ -6854,7 +6847,7 @@ mod tests {
                 if view.snapshot().phase == PlaybackPhase::Failed {
                     return;
                 }
-                tokio::time::sleep(Duration::from_millis(10)).await;
+                mq_rt::sleep(Duration::from_millis(10)).await;
             }
             panic!("never failed: {:?}", view.snapshot());
         };
@@ -6891,7 +6884,7 @@ mod tests {
                 if view.snapshot().phase == PlaybackPhase::Failed {
                     return;
                 }
-                tokio::time::sleep(Duration::from_millis(10)).await;
+                mq_rt::sleep(Duration::from_millis(10)).await;
             }
             panic!("never failed: {:?}", view.snapshot());
         };
@@ -7057,12 +7050,12 @@ mod tests {
         ready_after: Option<Duration>,
         at: impl Fn(u64) -> (u64, usize),
     ) -> (Started<()>, Duration) {
-        let added = tokio::time::Instant::now();
+        let added = mq_rt::Instant::now();
         let start = added - Duration::from_secs(start_s);
         let policy = attempting(start, tries, added, more);
         let ready = async move {
             match ready_after {
-                Some(d) => tokio::time::sleep(d).await,
+                Some(d) => mq_rt::sleep(d).await,
                 None => std::future::pending::<()>().await,
             }
         };
@@ -7195,7 +7188,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn a_version_listed_after_play_cuts_the_first_attempt() {
         let run = |at: fn(u64) -> (u64, usize), listed_at: u64| async move {
-            let added = tokio::time::Instant::now();
+            let added = mq_rt::Instant::now();
             let policy = attempting(added, 1, added, false);
             let listed = move || added.elapsed() >= Duration::from_secs(listed_at);
             let never = std::future::pending::<()>();
@@ -7217,7 +7210,7 @@ mod tests {
     /// last shrinks to its dead window once a next version is listed.
     #[tokio::test(start_paused = true)]
     async fn the_details_wait_shrinks_once_a_version_is_listed() {
-        let added = tokio::time::Instant::now();
+        let added = mq_rt::Instant::now();
         let policy = attempting(added, 1, added, false);
         let window = || policy.window_now(|| added.elapsed() >= Duration::from_secs(10));
         let ended = within_live(std::future::pending::<()>(), added, window).await;
@@ -7260,7 +7253,7 @@ mod tests {
         let view = PlaybackView::open(&core, Vec::new(), PlayTarget::default());
         {
             let mut s = lock(&view.state);
-            s.start_at = Some(tokio::time::Instant::now());
+            s.start_at = Some(mq_rt::Instant::now());
             s.tries = 3;
             s.snapshot.start_budget_ends_at = Some(1);
         }
@@ -7272,7 +7265,7 @@ mod tests {
         // The next move's first attempt is a first one: 20 s, not 12 s
         // (review 2026-10-23 P2-1).
         assert_eq!(s.tries, 0);
-        let now = tokio::time::Instant::now();
+        let now = mq_rt::Instant::now();
         assert_eq!(attempting(now, s.tries + 1, now, true).dead, DEAD_FIRST);
     }
 
@@ -7282,7 +7275,7 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn a_last_attempt_counted_empty_ends_at_20s_unless_a_peer_comes() {
         let run = |none_counted: bool, peer: bool| async move {
-            let added = tokio::time::Instant::now();
+            let added = mq_rt::Instant::now();
             let policy = Attempting {
                 none_counted,
                 ..attempting(added, 1, added, false)
@@ -7319,10 +7312,10 @@ mod tests {
     /// s, six tries, and the last ends at 90 s.
     #[tokio::test(start_paused = true)]
     async fn every_swarm_dead_gives_six_tries_in_90s() {
-        let start = tokio::time::Instant::now();
+        let start = mq_rt::Instant::now();
         let mut begun = Vec::new();
         for tries in 1.. {
-            let added = tokio::time::Instant::now();
+            let added = mq_rt::Instant::now();
             if added >= start + START_BUDGET {
                 break;
             }
@@ -7332,7 +7325,7 @@ mod tests {
             watch_policy(never, fake(|_| (0, 0)), policy, || true).await;
         }
         assert_eq!(begun, [0, 20, 32, 44, 56, 68]);
-        assert_eq!((tokio::time::Instant::now() - start).as_secs(), 90);
+        assert_eq!((mq_rt::Instant::now() - start).as_secs(), 90);
     }
 
     async fn watch(
@@ -7354,10 +7347,10 @@ mod tests {
         at: impl Fn(u64) -> (u64, usize),
         rule: Rule,
     ) -> (Started<()>, Duration) {
-        let begun = tokio::time::Instant::now();
+        let begun = mq_rt::Instant::now();
         let ready = async move {
             match ready_after {
-                Some(d) => tokio::time::sleep(d).await,
+                Some(d) => mq_rt::sleep(d).await,
                 None => std::future::pending::<()>().await,
             }
         };
@@ -7430,7 +7423,7 @@ mod tests {
         assert!(rows.len() == 2 && rows.iter().all(|r| r.key.viable));
         let (hand, next) = (rows[0].stream.key.clone(), rows[1].stream.key.clone());
         while !versions.snapshot().done {
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            mq_rt::sleep(Duration::from_millis(10)).await;
         }
         versions.rows_for_tests(rows);
         let view =
@@ -7451,7 +7444,7 @@ mod tests {
             // (no picture) just as the 3 minutes ran out.
             let mut s = lock(&view.state);
             s.version_failed = Some(NOT_HERE);
-            s.retry_until = Some(tokio::time::Instant::now());
+            s.retry_until = Some(mq_rt::Instant::now());
         }
         failed().await;
         let s = view.snapshot();
@@ -7481,7 +7474,7 @@ mod tests {
         ]);
         let first = rows[0].stream.key.clone();
         while !versions.snapshot().done {
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            mq_rt::sleep(Duration::from_millis(10)).await;
         }
         versions.rows_for_tests(rows);
         versions.recommend_first_for_tests();
@@ -7575,7 +7568,7 @@ mod tests {
         let core = Core::temporary("default").unwrap();
         let view = PlaybackView::open(&core, Vec::new(), PlayTarget::default());
         while view.snapshot().phase != PlaybackPhase::Failed {
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            mq_rt::sleep(Duration::from_millis(10)).await;
         }
         lock(&view.state).version_failed = Some(NOT_HERE);
         view.retry();
@@ -7590,7 +7583,7 @@ mod tests {
         let core = Core::temporary("default").unwrap();
         let view = PlaybackView::open(&core, Vec::new(), PlayTarget::default());
         let left = Duration::from_secs(20);
-        lock(&view.state).retry_until = Some(tokio::time::Instant::now() + left);
+        lock(&view.state).retry_until = Some(mq_rt::Instant::now() + left);
         let rule = start_rule(&lock(&view.state));
         assert_eq!((rule.deadline, rule.cap), (left, left));
         assert_eq!(within_budget(&view.state, METADATA_TIMEOUT), left);
@@ -7609,10 +7602,10 @@ mod tests {
         core.set_torrent_engine(engine);
         let silent = silent_tracker();
         let swarm = dead_torrent(&silent);
-        let begun = tokio::time::Instant::now();
+        let begun = mq_rt::Instant::now();
         let view = PlaybackView::open(&core, vec![swarm], PlayTarget::default());
         while view.snapshot().phase != PlaybackPhase::Failed && begun.elapsed().as_secs() < 200 {
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            mq_rt::sleep(Duration::from_millis(100)).await;
         }
         let s = view.snapshot();
         assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
@@ -7640,14 +7633,14 @@ mod tests {
         let silent = silent_tracker();
         let (dead, mut again) = (dead_torrent(&silent), dead_torrent(&silent));
         again.addon_id = "another".into();
-        let begun = tokio::time::Instant::now();
+        let begun = mq_rt::Instant::now();
         let view = PlaybackView::open(&core, vec![dead, again], PlayTarget::default());
         // A peer was reached before in the chain.
         lock(&view.state).dead.reached = true;
         let mut ends = None;
         while view.snapshot().phase != PlaybackPhase::Failed && begun.elapsed().as_secs() < 200 {
             ends = ends.or(view.snapshot().start_budget_ends_at);
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            mq_rt::sleep(Duration::from_millis(100)).await;
         }
         let s = view.snapshot();
         assert!(
@@ -7673,7 +7666,7 @@ mod tests {
             if view.snapshot().phase == PlaybackPhase::Failed {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            mq_rt::sleep(Duration::from_millis(10)).await;
         }
         lock(&view.state).tries = 3;
         view.retry();
@@ -7690,7 +7683,7 @@ mod tests {
         // Takes every request and never answers.
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             let mut held = Vec::new();
             while let Ok((socket, _)) = listener.accept().await {
                 held.push(socket);
@@ -7704,10 +7697,10 @@ mod tests {
         ));
         let view = PlaybackView::open(&core, vec![torrent], PlayTarget::default());
         // Before the resolve runs (this test's one thread): 3 s left.
-        let moved = tokio::time::Instant::now();
+        let moved = mq_rt::Instant::now();
         lock(&view.state).start_at = Some(moved - START_BUDGET + Duration::from_secs(3));
         while view.snapshot().phase != PlaybackPhase::Failed && moved.elapsed().as_secs() < 60 {
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            mq_rt::sleep(Duration::from_millis(50)).await;
         }
         let s = view.snapshot();
         let ended = moved.elapsed();
@@ -7732,7 +7725,7 @@ mod tests {
         // Accepts and never answers: the probe waits its 8 s.
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             let mut held = Vec::new();
             while let Ok((socket, _)) = listener.accept().await {
                 held.push(socket);
@@ -7743,7 +7736,7 @@ mod tests {
         let view = PlaybackView::open(&core, vec![link], PlayTarget::default());
         // Before the resolve runs (this test's one thread): the loading
         // screen up 19 s, 3 s of the budget left.
-        let moved = tokio::time::Instant::now();
+        let moved = mq_rt::Instant::now();
         {
             let mut s = lock(&view.state);
             s.snapshot.start = Some(StartProgress {
@@ -7765,7 +7758,7 @@ mod tests {
             if view.snapshot().choose_another && button.is_none() {
                 button = Some(moved.elapsed());
             }
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            mq_rt::sleep(Duration::from_millis(50)).await;
         }
         let s = view.snapshot();
         let button = button.unwrap_or_else(|| panic!("no button: {s:?}"));
@@ -7793,7 +7786,7 @@ mod tests {
         {
             let mut s = lock(&view.state);
             // A "Try again" run, as `retry` starts it.
-            s.retry_until = Some(tokio::time::Instant::now() + Duration::from_secs(5));
+            s.retry_until = Some(mq_rt::Instant::now() + Duration::from_secs(5));
             s.patient = true;
             s.dead.reached = true;
         }
@@ -7801,7 +7794,7 @@ mod tests {
             if view.snapshot().phase == PlaybackPhase::Failed {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            mq_rt::sleep(Duration::from_millis(100)).await;
         }
         let s = view.snapshot();
         assert_eq!(s.phase, PlaybackPhase::Failed, "{s:?}");
@@ -8295,12 +8288,12 @@ mod tests {
         core.set_torrent_engine(engine);
         let dead = dead_torrent(&silent);
         let view = PlaybackView::open(&core, vec![dead.clone(), dead], PlayTarget::default());
-        let begun = tokio::time::Instant::now();
+        let begun = mq_rt::Instant::now();
         for _ in 0..1200 {
             if view.snapshot().phase == PlaybackPhase::Failed {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            mq_rt::sleep(Duration::from_millis(100)).await;
         }
         let s = view.snapshot();
         let errors: Vec<&str> = s.attempts.iter().map(|a| a.error.as_str()).collect();
@@ -8379,11 +8372,11 @@ mod tests {
         ));
         let mut st = State::new(vec![dead, next], None);
         // The first gets 6 s for its details, then the run's budget is spent.
-        st.retry_until = Some(tokio::time::Instant::now() + Duration::from_secs(6));
+        st.retry_until = Some(mq_rt::Instant::now() + Duration::from_secs(6));
         let snapshot = SharedObservable::new(st.snapshot.clone());
         let state = Arc::new(Mutex::new(st));
         let target = Arc::new(PlayTarget::default());
-        let run = tokio::spawn(resolve_next(
+        let run = mq_rt::spawn(resolve_next(
             core,
             target,
             Arc::from([]),
@@ -8392,7 +8385,7 @@ mod tests {
             0,
         ));
         // Review P2-2: nothing is asked of the next swarm in the first 3 s.
-        tokio::time::sleep(Duration::from_millis(1500)).await;
+        mq_rt::sleep(Duration::from_millis(1500)).await;
         assert_eq!(tracker.requests(), 0, "the next torrent was asked at once");
         run.await.unwrap();
         let errors: Vec<String> = lock(&state)
@@ -8414,7 +8407,7 @@ mod tests {
             None,
             "cleared as the budget ran out"
         );
-        let known = tokio::time::timeout(
+        let known = mq_rt::timeout(
             Duration::from_millis(200),
             s.leecher.add_magnet(&s.info_hash, &[], &[]),
         )
@@ -8427,7 +8420,7 @@ mod tests {
             if s.leecher.files(torrent).is_err() {
                 return;
             }
-            tokio::time::sleep(Duration::from_millis(50)).await;
+            mq_rt::sleep(Duration::from_millis(50)).await;
         }
         panic!("the torrent fetched ahead outlived the view");
     }
@@ -8477,7 +8470,7 @@ mod tests {
         let snapshot = SharedObservable::new(st.snapshot.clone());
         let state = Arc::new(Mutex::new(st));
         let target = Arc::new(PlayTarget::default());
-        let run = tokio::spawn(resolve_next(
+        let run = mq_rt::spawn(resolve_next(
             core,
             target,
             Arc::from([]),
@@ -8485,7 +8478,7 @@ mod tests {
             snapshot,
             0,
         ));
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        mq_rt::sleep(Duration::from_millis(1000)).await;
         assert_eq!(*lock(&asked), 1, "its own turn asked the swarm again");
         run.await.unwrap();
         {
@@ -8494,8 +8487,8 @@ mod tests {
             assert!(s2.ahead.is_empty(), "the taken entry stays");
             s2.closing.cancel();
         }
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        let torrent = tokio::time::timeout(
+        mq_rt::sleep(Duration::from_millis(500)).await;
+        let torrent = mq_rt::timeout(
             Duration::from_millis(200),
             s.leecher.add_magnet(&s.info_hash, &[], &[]),
         )
@@ -8519,7 +8512,7 @@ mod tests {
                 if view.snapshot().phase == PlaybackPhase::Failed {
                     return;
                 }
-                tokio::time::sleep(Duration::from_millis(100)).await;
+                mq_rt::sleep(Duration::from_millis(100)).await;
             }
             panic!("never failed: {:?}", view.snapshot());
         };
@@ -8568,7 +8561,7 @@ mod tests {
             if view.snapshot().phase == PlaybackPhase::Failed {
                 break;
             }
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            mq_rt::sleep(Duration::from_millis(100)).await;
         }
         let errors: Vec<String> = view
             .snapshot()
