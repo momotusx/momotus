@@ -30,3 +30,15 @@
 .wall-tile::before { content: ""; display: block; padding-top: 150%; }
 .wall-tile img { position: absolute; top: 0; left: 0; }
 .trailer-frame::before { content: ""; display: block; padding-top: 56.25%; }
+
+/* app.css, the player's focus ring (`--focus-ring` is 4px there, none in its bar): Chromium 79 draws an outline square
+ * around a pill or a circle (an outline follows border-radius from Chrome 94), so here the ring is the focused
+ * control's ::after, a border of the same width and colour at the same offset, with the control's own radius. */
+[data-form="tv"] .player-scr { --focus-ring: 0px; --mq-ring: 4px; }
+[data-form="tv"] .player-scr .osd { --mq-ring: 0px; }
+/* player.css sets the outline aside on these: so does the ring. */
+[data-form="tv"] .subp .sub-switch, [data-form="tv"] .subp-switch .seg, [data-form="tv"] .subp .opt,
+[data-form="tv"] .subp .sub-step, [data-form="tv"] .subp .sub-val, [data-form="tv"] .subp .sub-reset { --mq-ring: 0px; }
+[data-form="tv"] .player-scr [data-f]:focus::after {
+  content: ""; position: absolute; top: calc(-2 * var(--mq-ring)); right: calc(-2 * var(--mq-ring)); bottom: calc(-2 * var(--mq-ring));
+  left: calc(-2 * var(--mq-ring)); border: var(--mq-ring) solid var(--key); border-radius: inherit; pointer-events: none; }
