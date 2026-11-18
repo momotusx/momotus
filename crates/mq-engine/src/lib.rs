@@ -45,8 +45,8 @@ use std::time::{Duration, Instant};
 use librqbit::dht::DhtPersistenceConfig;
 use librqbit::{
     AddTorrent, AddTorrentOptions, AddTorrentResponse, ConnectionOptions, Destinations,
-    DhtSessionConfig, ExtSched, ListenerMode, ListenerOptions, ManagedTorrent, Session,
-    SessionOptions, generate_azereus_style,
+    DhtSessionConfig, ExtSched, ListenerMode, ListenerOptions, ManagedTorrent,
+    PeerConnectionOptions, Session, SessionOptions, generate_azereus_style,
 };
 use mq_engine_sched::{Config as SchedConfig, DemandId};
 use mq_http::AddressScope;
@@ -105,6 +105,18 @@ pub struct EngineConfig {
     /// Files kept for offline download (plans/offline-downloads.md 4.6), by
     /// lowercase info hash and file index: known from the first sweep on.
     pub kept: Vec<(String, usize)>,
+    /// How long a peer dial may take; librqbit's 10 s by default.
+    pub connect_timeout: Duration,
+    /// Dials in flight at once across every torrent, metadata included;
+    /// none by default. A NAT holds an entry for each one.
+    pub max_half_open: Option<usize>,
+    /// Dials started in any 60 s across every torrent; none by default.
+    pub dials_per_minute: Option<usize>,
+    /// Peers a torrent keeps; `None` takes the device class's.
+    pub peer_limit: Option<usize>,
+    /// Peers asked at once for one magnet's metadata; `None` keeps
+    /// librqbit's 128.
+    pub metadata_peers: Option<usize>,
 }
 
 impl EngineConfig {
@@ -120,6 +132,11 @@ impl EngineConfig {
             policy,
             limits: Default::default(),
             kept: Vec::new(),
+            connect_timeout: Duration::from_secs(10),
+            max_half_open: None,
+            dials_per_minute: None,
+            peer_limit: None,
+            metadata_peers: None,
         }
     }
 }
@@ -220,8 +237,17 @@ fn session_options(cfg: &EngineConfig, scopes: &Scopes) -> SessionOptions {
             enable_upnp_port_forwarding: false,
             ..Default::default()
         }),
-        connect: Some(ConnectionOptions::default()),
-        peer_limit: Some(cfg.device_class.peer_limit()),
+        connect: Some(ConnectionOptions {
+            peer_opts: Some(PeerConnectionOptions {
+                connect_timeout: Some(cfg.connect_timeout),
+                ..Default::default()
+            }),
+            max_half_open: cfg.max_half_open,
+            dials_per_minute: cfg.dials_per_minute,
+            metadata_peers: cfg.metadata_peers,
+            ..Default::default()
+        }),
+        peer_limit: Some(cfg.peer_limit.unwrap_or(cfg.device_class.peer_limit())),
         disable_upload: !cfg.upload,
         ratelimits: cfg.limits,
         destinations: Some(destinations(&scopes.peers, &scopes.trackers, &scopes.dht)),
@@ -3152,6 +3178,43 @@ mod tests {
             0,
             "loopback tests keep theirs"
         );
+    }
+
+    #[test]
+    fn connect_limits_reach_the_session_and_default_to_none() {
+        let http = mq_http::HttpClient::new(mq_http::ClientConfig::default()).unwrap();
+        let base = EngineConfig::new("unused", http.torrent_scope(&[]));
+        let opts = session_options(&base, &Scopes::new(&base.policy));
+        let c = opts.connect.as_ref().expect("connect options");
+        assert_eq!(
+            c.peer_opts.and_then(|p| p.connect_timeout),
+            Some(Duration::from_secs(10))
+        );
+        assert_eq!(
+            (c.max_half_open, c.dials_per_minute, c.metadata_peers),
+            (None, None, None)
+        );
+        assert_eq!(opts.peer_limit, Some(80), "the device class's");
+
+        let cfg = EngineConfig {
+            connect_timeout: Duration::from_secs(4),
+            max_half_open: Some(64),
+            dials_per_minute: Some(600),
+            peer_limit: Some(50),
+            metadata_peers: Some(16),
+            ..base
+        };
+        let opts = session_options(&cfg, &Scopes::new(&cfg.policy));
+        let c = opts.connect.as_ref().expect("connect options");
+        assert_eq!(
+            c.peer_opts.and_then(|p| p.connect_timeout),
+            Some(Duration::from_secs(4))
+        );
+        assert_eq!(
+            (c.max_half_open, c.dials_per_minute, c.metadata_peers),
+            (Some(64), Some(600), Some(16))
+        );
+        assert_eq!(opts.peer_limit, Some(50));
     }
 
     #[test]

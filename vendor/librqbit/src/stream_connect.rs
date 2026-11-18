@@ -1,6 +1,7 @@
 use std::{
+    collections::VecDeque,
     net::{IpAddr, SocketAddr},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
@@ -12,6 +13,7 @@ use tracing::debug;
 
 use crate::{
     Error, PeerConnectionOptions, Result,
+    peer_connection::with_timeout,
     type_aliases::{BoxAsyncReadVectored, BoxAsyncWrite},
     vectored_traits::AsyncReadVectoredIntoCompat,
 };
@@ -43,6 +45,15 @@ pub struct ConnectionOptions {
     // TCP outgoing connections are enabled by default
     pub enable_tcp: bool,
     pub peer_opts: Option<PeerConnectionOptions>,
+    /// Marquee fork: dials in flight at once across the session, metadata
+    /// and live, TCP and uTP; `None` sets no bound (upstream).
+    pub max_half_open: Option<usize>,
+    /// Marquee fork: dials started in any 60 s across the session; `None`
+    /// sets no bound (upstream).
+    pub dials_per_minute: Option<usize>,
+    /// Marquee fork: peers asked at once for one magnet's metadata; `None`
+    /// keeps upstream's 128.
+    pub metadata_peers: Option<usize>,
 }
 
 impl Default for ConnectionOptions {
@@ -51,6 +62,66 @@ impl Default for ConnectionOptions {
             enable_tcp: true,
             proxy_url: None,
             peer_opts: None,
+            max_half_open: None,
+            dials_per_minute: None,
+            metadata_peers: None,
+        }
+    }
+}
+
+const DIAL_WINDOW: Duration = Duration::from_secs(60);
+
+/// Marquee fork: the bounds every dial passes before it opens a socket. A
+/// NAT keeps each half-open entry past our socket's end, so both the
+/// number in flight and the number started per minute count.
+#[derive(Debug, Default)]
+pub(crate) struct DialGate {
+    half_open: Option<tokio::sync::Semaphore>,
+    /// The budget and the start times inside the last minute.
+    per_minute: Option<(usize, Mutex<VecDeque<tokio::time::Instant>>)>,
+}
+
+impl DialGate {
+    pub fn new(
+        max_half_open: Option<usize>,
+        dials_per_minute: Option<usize>,
+    ) -> anyhow::Result<Self> {
+        if max_half_open == Some(0) || dials_per_minute == Some(0) {
+            bail!("a dial bound of 0 dials nothing");
+        }
+        Ok(Self {
+            half_open: max_half_open.map(tokio::sync::Semaphore::new),
+            per_minute: dials_per_minute.map(|n| (n, Mutex::new(VecDeque::with_capacity(n)))),
+        })
+    }
+
+    /// Waits for a half-open slot, then for the minute's budget; the slot
+    /// is held until the returned permit drops. Slots go in arrival order.
+    pub async fn enter(&self) -> Option<tokio::sync::SemaphorePermit<'_>> {
+        let slot = match &self.half_open {
+            Some(s) => Some(s.acquire().await.expect("the gate is never closed")),
+            None => None,
+        };
+        let Some((budget, starts)) = &self.per_minute else {
+            return slot;
+        };
+        loop {
+            let next = {
+                let mut starts = starts.lock().unwrap_or_else(|e| e.into_inner());
+                let now = tokio::time::Instant::now();
+                while starts
+                    .front()
+                    .is_some_and(|t| now.duration_since(*t) >= DIAL_WINDOW)
+                {
+                    starts.pop_front();
+                }
+                if starts.len() < *budget {
+                    starts.push_back(now);
+                    return slot;
+                }
+                starts[0] + DIAL_WINDOW
+            };
+            tokio::time::sleep_until(next).await;
         }
     }
 }
@@ -81,6 +152,9 @@ pub(crate) struct StreamConnectorArgs {
     pub bind_device: Option<BindDevice>,
     pub ipv4_only: bool,
     pub permits: Option<Permits>,
+    pub max_half_open: Option<usize>,
+    pub dials_per_minute: Option<usize>,
+    pub metadata_peers: Option<usize>,
 }
 
 impl SocksProxyConfig {
@@ -150,6 +224,8 @@ pub(crate) struct StreamConnector {
     stats: ConnectStatsAtomic,
     ipv4_only: bool,
     permits: Option<Permits>,
+    gate: DialGate,
+    metadata_peers: usize,
 }
 
 impl StreamConnector {
@@ -168,6 +244,9 @@ impl StreamConnector {
             }
         }
 
+        if config.metadata_peers == Some(0) {
+            bail!("0 metadata peers asks no peer");
+        }
         Ok(Self {
             proxy_config: config.socks_proxy_config,
             enable_tcp: config.enable_tcp,
@@ -176,7 +255,14 @@ impl StreamConnector {
             stats: Default::default(),
             ipv4_only: config.ipv4_only,
             permits: config.permits,
+            gate: DialGate::new(config.max_half_open, config.dials_per_minute)?,
+            metadata_peers: config.metadata_peers.unwrap_or(128),
         })
+    }
+
+    /// Marquee fork: peers asked at once for one magnet's metadata.
+    pub fn metadata_peers(&self) -> usize {
+        self.metadata_peers
     }
 
     fn get_stat(&self, kind: ConnectionKind, is_v6: bool) -> &SingleStatAtomic {
@@ -225,9 +311,11 @@ impl StreamConnector {
         &self.stats
     }
 
+    /// Marquee fork: `timeout` bounds the dial, not the wait at the gate.
     pub async fn connect(
         &self,
         addr: SocketAddr,
+        timeout: Duration,
     ) -> Result<(ConnectionKind, BoxAsyncReadVectored, BoxAsyncWrite)> {
         if addr.port() == 0 {
             return Err(Error::Anyhow(anyhow::anyhow!(
@@ -254,6 +342,16 @@ impl StreamConnector {
             )));
         }
 
+        // Marquee fork: every dial passes the gate; a refused address above
+        // spends nothing.
+        let _slot = self.gate.enter().await;
+        with_timeout("connecting", timeout, self.dial(addr)).await
+    }
+
+    async fn dial(
+        &self,
+        addr: SocketAddr,
+    ) -> Result<(ConnectionKind, BoxAsyncReadVectored, BoxAsyncWrite)> {
         if let Some(proxy) = self.proxy_config.as_ref() {
             let (r, w) = self
                 .with_stat(ConnectionKind::Socks, addr.is_ipv6(), proxy.connect(addr))
@@ -351,5 +449,82 @@ impl StreamConnector {
                 },
             };
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SOON: Duration = Duration::from_millis(50);
+
+    #[tokio::test(start_paused = true)]
+    async fn a_dial_waits_for_a_half_open_slot() {
+        let gate = DialGate::new(Some(2), None).unwrap();
+        let first = gate.enter().await;
+        let _second = gate.enter().await;
+        assert!(tokio::time::timeout(SOON, gate.enter()).await.is_err());
+        drop(first);
+        assert!(tokio::time::timeout(SOON, gate.enter()).await.is_ok());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_minute_starts_at_most_its_budget() {
+        let gate = DialGate::new(None, Some(3)).unwrap();
+        for _ in 0..3 {
+            assert!(tokio::time::timeout(SOON, gate.enter()).await.is_ok());
+        }
+        assert!(
+            tokio::time::timeout(Duration::from_secs(59), gate.enter())
+                .await
+                .is_err(),
+            "the budget is spent for this minute"
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_secs(2), gate.enter())
+                .await
+                .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn connect_passes_the_gate_and_its_timeout_skips_the_wait() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let mut kept = Vec::new();
+            while let Ok((s, _)) = listener.accept().await {
+                kept.push(s);
+            }
+        });
+        let connector = Arc::new(
+            StreamConnector::new(StreamConnectorArgs {
+                enable_tcp: true,
+                max_half_open: Some(1),
+                dials_per_minute: Some(2),
+                ..Default::default()
+            })
+            .await
+            .unwrap(),
+        );
+        let wait = Duration::from_millis(300);
+
+        // Held slot: the dial waits longer than its timeout, then connects.
+        let held = connector.gate.enter().await;
+        let dial = tokio::spawn({
+            let c = connector.clone();
+            async move { c.connect(addr, Duration::from_millis(100)).await.is_ok() }
+        });
+        tokio::time::sleep(wait).await;
+        assert!(!dial.is_finished(), "a dial waits for the held slot");
+        drop(held);
+        assert!(dial.await.unwrap(), "the wait is not part of the timeout");
+
+        // Two starts spent in this minute: the next waits.
+        assert!(
+            tokio::time::timeout(wait, connector.connect(addr, wait))
+                .await
+                .is_err()
+        );
     }
 }
