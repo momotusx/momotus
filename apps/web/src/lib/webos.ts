@@ -10,6 +10,9 @@ export const isWebOSAgent = (ua: string): boolean => /Web0S/.test(ua);
 
 export const isWebOS = (): boolean => typeof navigator !== "undefined" && isWebOSAgent(navigator.userAgent);
 
+/** The engine lists a file's audio tracks (`HTMLMediaElement.audioTracks`); without the list each file plays its default one. */
+export const audioTrackList = (): boolean => typeof HTMLMediaElement !== "undefined" && "audioTracks" in HTMLMediaElement.prototype;
+
 /** Calls the platform's own Back: on Home it leaves the app (the system decides where to). */
 export function platformBack() {
   (window as unknown as { PalmSystem?: { platformBack?: () => void } }).PalmSystem?.platformBack?.();
