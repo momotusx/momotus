@@ -135,10 +135,13 @@ function install(core) {
       const parts = [];
       let size = 0;
       let finished = false;
+      // A response received whole has gone back to the keep-alive agent
+      // (gunzip may still be running); Node 8 hands a socket destroyed there to
+      // the next request, which then fails as reset.
       const finish = (truncated, error) => {
         if (finished) return;
         finished = true;
-        res.destroy();
+        if (!res.complete) res.destroy();
         if (error) return done({ error });
         const out = [];
         for (let i = 0; i < res.rawHeaders.length; i += 2) {
