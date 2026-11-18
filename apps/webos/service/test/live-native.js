@@ -14,8 +14,8 @@
 // - a download of the torrent kept under <data>/native/downloads, which then
 //   plays from the bridge's loopback server.
 // MQ_REAL_PLUGINS=1 adds the phone's own default repositories (Manitux, then
-// NiakVIO): one of their providers must list a row for a known film, and its
-// lease must answer. With the wasm core at service/core (build-wasm.sh), the
+// NiakVIO): both install with their providers, and these must list rows for a
+// known film (whether a site lets that link play is logged only). With the wasm core at service/core (build-wasm.sh), the
 // run starts with an update from the wasm-only app: the wasm core installs
 // an addon in the data dir, then the native core must find it there.
 // Without MQ_FIXTURE the torrent is a public domain film from the public
@@ -293,6 +293,33 @@ async function downloadAndPlay(c, data, film, params, versions, row, range, same
   };
 }
 
+// What runs the core: the binary's ELF header (`file`), and on Linux the bridge process's own exe and command line
+// (under binfmt, exe is qemu-arm and the command line names the ARM binary).
+function whatRuns(bin, pidFile) {
+  const run = (cmd, args) => {
+    try {
+      return require('child_process').execFileSync(cmd, args, { encoding: 'utf8' }).trim();
+    } catch (e) {
+      return null;
+    }
+  };
+  const pid = fs.existsSync(pidFile) ? fs.readFileSync(pidFile, 'utf8').trim() : null;
+  const proc = (name, read) => {
+    try {
+      return read('/proc/' + pid + '/' + name);
+    } catch (e) {
+      return null;
+    }
+  };
+  return {
+    file: run('file', ['-b', bin]),
+    pid,
+    exe: pid && proc('exe', fs.readlinkSync),
+    cmdline: pid && proc('cmdline', (p) => fs.readFileSync(p, 'utf8').split('\0').filter(Boolean).join(' ')),
+    host: run('uname', ['-m']),
+  };
+}
+
 function walk(dir) {
   if (!fs.existsSync(dir)) return [];
   return fs.readdirSync(dir).reduce((all, name) => {
@@ -301,34 +328,35 @@ function walk(dir) {
   }, []);
 }
 
-// The phone's default repositories, as a user adds them: the first provider row for a known film, and its lease.
+// The phone's default repositories, as a user adds them. Gating is what our code does: each installs with its
+// providers, and they run and list rows in Versions' plugin section for a known film. Whether a row's external link
+// then plays is the site's to decide (several refuse datacenter addresses), so a lease is logged, never gating.
 async function realPlugins(c) {
+  const result = { realReposInstall: true, realPluginRows: false };
   for (const repo of REAL_REPOS) {
     const added = await c.req('addPluginRepo', { url: repo }).catch((e) => ({ error: String(e.message || e) }));
     const info = (added.repos || []).filter((r) => r.url === repo)[0];
     log('real repo', { repo, error: added.error || (info && info.problem) || null, providers: info ? info.providers.length : 0 });
-    if (!info) continue;
-    for (const film of REAL_FILMS) {
-      const versions = await c.subscribe('versions', Object.assign({ kind: 'movie', videoId: film.id, itemId: film.id, title: film.title, releaseInfo: film.year }, CAPS));
-      await h.until('the plugin pass', () => versions.now().done && !(versions.now().plugins || {}).pending, 120000).catch(() => null);
-      const row = rowsOf(versions.now()).filter((r) => r.origin === 'plugin')[0];
-      log('real plugin rows', { repo, film: film.title, rows: ((versions.now().plugins || {}).rows || []).length, pick: row ? [row.sourceName, row.quality, row.host] : null });
-      if (row) {
-        const p = await play(c, versions, row, film).catch(() => null);
-        const got = p && (await fetchRange(p.snap.url, 'bytes=0-' + (CHUNK - 1)).catch((e) => ({ status: 0, bytes: 0, error: String(e.message) })));
-        log('real plugin lease', { manifest: p && p.snap.manifest, status: got && got.status, bytes: got && got.bytes, type: got && got.type });
-        if (p) await c.req('unsubscribe', { sub: p.playback.sub });
-        await c.req('unsubscribe', { sub: versions.sub });
-        if (p && p.snap.key === row.key && /^http:\/\/127\.0\.0\.1:\d+\//.test(p.snap.url) && got && got.bytes > 0 && got.status < 400) {
-          return { realPluginRow: true, realPluginLeaseAnswers: true };
-        }
-        continue;
-      }
-      await c.req('unsubscribe', { sub: versions.sub });
-    }
-    await c.req('removePluginRepo', { url: repo }).catch(() => null);
+    if (!info || !info.providers.length) result.realReposInstall = false;
   }
-  return { realPluginRow: false };
+  for (const film of REAL_FILMS) {
+    const versions = await c.subscribe('versions', Object.assign({ kind: 'movie', videoId: film.id, itemId: film.id, title: film.title, releaseInfo: film.year }, CAPS));
+    await h.until('the plugin pass', () => versions.now().done && !(versions.now().plugins || {}).pending, 120000).catch(() => null);
+    const rows = ((versions.now().plugins || {}).rows || []).filter((r) => r.origin === 'plugin');
+    log('real plugin rows', { film: film.title, rows: rows.map((r) => [r.sourceName, r.quality, r.host]) });
+    if (rows.length) result.realPluginRows = true;
+    // Information only: the first row's link through the bridge, as the player would ask for it.
+    if (rows.length && !result.leaseTried) {
+      result.leaseTried = true;
+      const p = await play(c, versions, rows[0], film).catch((e) => ({ error: String(e.message || e) }));
+      const got = p.snap && (await fetchRange(p.snap.url, 'bytes=0-' + (CHUNK - 1)).catch((e) => ({ status: 0, bytes: 0, error: String(e.message) })));
+      log('real plugin lease (information)', p.snap ? { key: p.snap.key === rows[0].key, manifest: p.snap.manifest, status: got.status, bytes: got.bytes, type: got.type } : { error: p.error });
+      if (p.playback) await c.req('unsubscribe', { sub: p.playback.sub });
+    }
+    await c.req('unsubscribe', { sub: versions.sub });
+  }
+  delete result.leaseTried;
+  return result;
 }
 
 // An update from the wasm-only app: the wasm core installs the addon at `addonUrl` into `dir`'s data.
@@ -362,6 +390,7 @@ async function main() {
   await svc.waitFor('ready', 1);
   const ready = svc.find('ready')[0];
   log('core ready', { core: ready.core, ms: Date.now() - started, node: process.version, arch: process.arch, fixture: FIXTURE || null });
+  log('native binary', whatRuns(BIN, path.join(svc.data, 'core.pid')));
   const page = await h.get(svc, '/');
   const ws = await h.authed(svc, { query: '?core=native' });
   const c = client(ws);
