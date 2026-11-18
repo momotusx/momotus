@@ -474,7 +474,9 @@ struct PlayerControls: View {
             PhoneOSD { top } bottom: { phoneBottom }
                 .padding(.leading, PhoneFrame.side(safe: safe.leading))
                 .padding(.trailing, PhoneFrame.side(safe: safe.trailing))
-            if model.strip == nil {
+            // An open strip, or a zap's What is this? panel, takes the middle: the transport gives way, so the panel's
+            // Start from the beginning and Open title are never under it (iPhone walk 2026-11-18).
+            if model.strip == nil && !aboutOpen {
                 transport(gap: PhoneFrame.transportGap(landscape: landscape), skip: 50, play: 68)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .ignoresSafeArea()
