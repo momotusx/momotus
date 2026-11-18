@@ -344,7 +344,7 @@ jobs:
           bun add --exact ws@7.5.10 >/dev/null
           cd "$GITHUB_WORKSPACE"
           WS_PATH="$RUNNER_TEMP/ws/node_modules" bash apps/webos/service/test/run.sh
-      - name: Native core live under qemu-user (Cinemeta Home, the fixture torrent with a seek and a resume, a plugin)
+      - name: Native core live under qemu-user (update from wasm, Home, torrent seek and resume, download, plugins)
         env:
           # The TV's loader and glibc for qemu-arm, which binfmt runs the ARM binary with.
           QEMU_LD_PREFIX: /usr/arm-linux-gnueabi
