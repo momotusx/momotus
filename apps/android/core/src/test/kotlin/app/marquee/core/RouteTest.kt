@@ -16,6 +16,7 @@ import app.marquee.core.route.isTopLevel
 import app.marquee.core.route.kidsStack
 import app.marquee.core.route.linkedTo
 import app.marquee.core.route.openToKids
+import app.marquee.core.route.replacedTop
 import app.marquee.core.route.restoredStack
 import app.marquee.core.route.switchedTo
 import kotlin.test.Test
@@ -171,6 +172,30 @@ class RouteTest {
     }
 
     @Test
+    fun `a restored stack drops a zap and its player with no title page in their place`() {
+        val zapping = Route.Zap("series", 1)
+        val zapPlayer = Route.Player("series", "tt2", "tt2:2:5", "Severance", zapAt = 600_000, zapTries = 1)
+        // The name stays hidden: no title page of the zapped title stands in.
+        assertEquals(listOf(Route.Home, Route.Discover), restoredStack(listOf(Route.Home, Route.Discover, zapPlayer)))
+        assertEquals(listOf(Route.Home), restoredStack(listOf(Route.Home, zapping)))
+        // A plain play over it still leaves its title page.
+        val plain = Route.Player("movie", "tt1", "tt1", "Sintel")
+        assertEquals(listOf(Route.Home, title), restoredStack(listOf(Route.Home, zapPlayer, plain)))
+        assertEquals(listOf(Route.Home), restoredStack(listOf(zapPlayer)))
+    }
+
+    @Test
+    fun `a late zap pick or dial press replaces only the route still on top`() {
+        val zapping = Route.Zap()
+        val pick = Route.Player("movie", "tt1", "tt1", "Sintel", zapAt = 600_000)
+        assertEquals(listOf(Route.Home, pick), replacedTop(listOf(Route.Home, zapping), zapping, pick))
+        // Back while it dealt: the pick opens nothing.
+        assertEquals(listOf(Route.Home), replacedTop(listOf(Route.Home), zapping, pick))
+        // Open title replaces the zap play, so Back never replays it from its start point.
+        assertEquals(listOf(Route.Home, title), replacedTop(listOf(Route.Home, pick), pick, title))
+    }
+
+    @Test
     fun `Versions opened from the player gives way with it to the chosen version, Back from it finds the player`() {
         val playing = Route.Player("movie", "tt1", "tt1", "Sintel", key = "k1")
         val versions = Route.Versions("movie", "tt1", "tt1", "Sintel")
@@ -230,6 +255,7 @@ class RouteTest {
             Route.EditProfile(null),
             Route.SettingsSection("Sources"),
             Route.SettingsSection("Account"),
+            Route.Zap(),
         )) {
             assertFalse(route.openToKids, "$route")
         }
@@ -246,5 +272,10 @@ class RouteTest {
         }
         assertEquals(listOf(Route.Home, title), kidsStack(listOf(Route.Home, Route.Discover, title, Route.Addons)))
         assertEquals(listOf(Route.Home), kidsStack(listOf(Route.Calendar)))
+        // A switch to kids mid-zap drops the zap player and the zap under it; a plain play stays.
+        val zapPlayer = Route.Player("movie", "tt1", "tt1", "Sintel", zapAt = 600_000)
+        val plain = Route.Player("movie", "tt1", "tt1", "Sintel")
+        assertEquals(listOf(Route.Home), kidsStack(listOf(Route.Home, Route.Zap(), zapPlayer)))
+        assertEquals(listOf(Route.Home, title, plain), kidsStack(listOf(Route.Home, title, plain)))
     }
 }

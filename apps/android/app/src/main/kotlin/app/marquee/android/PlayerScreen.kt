@@ -4,6 +4,10 @@ import android.content.Context
 import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.SavedStateHandle
@@ -17,7 +21,9 @@ import app.marquee.core.ErrorCopy
 import app.marquee.core.Format
 import app.marquee.core.PlayPick
 import app.marquee.core.VersionsCopy
+import app.marquee.core.ZapCopy
 import app.marquee.core.client.CoreLog
+import app.marquee.core.model.Dial
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.SubtitleBackground
@@ -34,13 +40,18 @@ import app.marquee.core.watchesAfterNone
 import app.marquee.design.Form
 import app.marquee.player.DEFAULT_POSITION
 import app.marquee.player.PlaybackController
+import app.marquee.player.PlaybackController.Stage
 import app.marquee.player.PlayerHost
 import app.marquee.player.PlayerLifecycle
 import app.marquee.player.ProfileSetting
+import app.marquee.player.ZapControls
+import app.marquee.player.dialPress
+import app.marquee.player.zapMissed
 import app.marquee.ui.phone.PhonePlayer
 import app.marquee.ui.tv.TvPlayer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
@@ -103,10 +114,46 @@ class PlayerHolder(
             openedAtMs = SystemClock.elapsedRealtime(),
             subtitleDelay = host.subtitleDelay,
             startOver = startsOver(route, saved),
+            // A zap hides the name until What is this? (plans/zap.md 2.3).
+            revealed = route.zapAt == null,
         )
 
-    /** Start the next episode by itself when one ends. */
+    /** Start the next episode by itself when one ends. A zap never does: the core offers it no next (zap.md 1.2). */
     val autoplayNext: Boolean get() = prefs.snapshot?.autoplayNext == true
+
+    /** The dial as pressed, until the profile's setting says it back; null shows the profile's. */
+    private var pressedDial: Dial? by mutableStateOf(null)
+
+    /** The last dial press, which a newer one cancels. */
+    private var dialJob: Job? = null
+
+    /** Where Zap picks from (plans/zap.md 1.1): the profile's `zapDial`, or the step just pressed. */
+    @Composable
+    fun dial(): Dial = pressedDial ?: prefs.current()?.zapDial ?: Dial.Near
+
+    /**
+     * A press on the dial: shown at once, kept as the profile's `zapDial`, then [then] zaps again with it. A write that
+     * fails puts the dial back and zaps nothing.
+     */
+    fun setDial(
+        step: Dial,
+        then: () -> Unit,
+    ) {
+        pressedDial = step
+        dialJob =
+            viewModelScope.dialPress(
+                dialJob,
+                write = { session.ops.setPrefs(buildJsonObject { put("zapDial", JsonPrimitive(step.wire)) }) },
+                failed = {
+                    pressedDial = null
+                    CoreLog.w("the zap dial was not kept: ${it.message}")
+                },
+                then = then,
+            )
+    }
+
+    /** A zap's episode name for What is this?, from the title's episodes once its season shows; null for a film. */
+    val episodeName: String? get() = art.episodes.firstOrNull { it.videoId == route.videoId }?.title
 
     /** The picker's Size: shown at once, and kept as the profile's setting, as Settings sets it. */
     private val sizes =
@@ -185,6 +232,8 @@ class PlayerHolder(
 
     init {
         viewModelScope.launch { start() }
+        // A zapped episode: its season, so What is this? can name it.
+        if (route.zapAt != null) Format.parseVideo(route.videoId)?.let { art.selectSeason(it.season) }
         // Subtitles show at the profile's size, and follow it when Settings change it.
         viewModelScope.launch {
             snapshotFlow {
@@ -253,6 +302,7 @@ class PlayerHolder(
                     poster = null,
                     season = ref?.season,
                     episode = ref?.episode,
+                    zapAt = route.zapAt,
                 )
             controller.attach(playback)
         } catch (e: CancellationException) {
@@ -361,6 +411,8 @@ fun PlayerScreen(
     onOffer: (String) -> Unit,
     /** The failure card's Settings: the addons or the accounts, by the core's state; null leaves it out (kids). */
     onSettings: ((EmptyKind) -> Unit)? = null,
+    /** A zap's ways on (plans/zap.md 2.3), each replacing this player: another zap, a plain play, the title page. */
+    onReplace: (Route) -> Unit = {},
 ) {
     val context = LocalContext.current
     val holder =
@@ -397,6 +449,17 @@ fun PlayerScreen(
         holder.shutdown()
         onOffer(key)
     }
+    val zap = if (route.zapAt == null) null else zapControls(route, holder, holder.dial(), onReplace)
+    // A zap that did not play zaps on by itself, one more try (plans/zap.md 2.3).
+    if (route.zapAt != null) {
+        LaunchedEffect(controller) {
+            snapshotFlow {
+                zapMissed(controller.stage == Stage.Failed, controller.chooseAnother, controller.firstFrameMs != null)
+            }.first { it }
+            holder.shutdown()
+            onReplace(ZapCopy.next(route, auto = true))
+        }
+    }
     if (form == Form.Tv) {
         TvPlayer(
             controller,
@@ -414,6 +477,7 @@ fun PlayerScreen(
             onSettings = onSettings,
             onSubtitlePosition = holder::setSubtitlePosition,
             onSubtitleBackground = holder::setSubtitleBackground,
+            zap = zap,
         )
     } else {
         PhonePlayer(
@@ -434,6 +498,31 @@ fun PlayerScreen(
             brightness = window.brightness,
             onSubtitlePosition = holder::setSubtitlePosition,
             onSubtitleBackground = holder::setSubtitleBackground,
+            zap = zap,
         )
     }
+}
+
+/** A zap's controls: every press starts the try count again (plans/zap.md 2.3). */
+private fun zapControls(
+    route: Route.Player,
+    holder: PlayerHolder,
+    dial: Dial,
+    onReplace: (Route) -> Unit,
+): ZapControls {
+    val go = { to: Route ->
+        holder.shutdown()
+        onReplace(to)
+    }
+    val again = { go(ZapCopy.next(route, auto = false)) }
+    val ref = Format.parseVideo(route.videoId)
+    return ZapControls(
+        name = route.title,
+        line = ZapCopy.episodeLine(ref?.season, ref?.episode, holder.episodeName),
+        dial = dial,
+        onAgain = again,
+        onDial = { holder.setDial(it, again) },
+        onFromStart = { go(ZapCopy.fromStart(route)) },
+        onOpenTitle = { go(Route.Title(route.kind, route.id)) },
+    )
 }

@@ -56,6 +56,7 @@ import app.marquee.core.Format
 import app.marquee.core.PendingRemoval
 import app.marquee.core.ProfileCopy
 import app.marquee.core.TileCopy
+import app.marquee.core.ZapCopy
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.model.Tile
@@ -69,6 +70,7 @@ import app.marquee.core.route.hasBackLink
 import app.marquee.core.route.isTopLevel
 import app.marquee.core.route.kidsStack
 import app.marquee.core.route.linkedTo
+import app.marquee.core.route.replacedTop
 import app.marquee.core.route.restoredStack
 import app.marquee.core.route.switchedTo
 import app.marquee.core.session.CoreSession
@@ -360,6 +362,7 @@ private fun AppNav(
     // A kids session opens no Discover, Calendar, source, account or profile page (plans/m11-kids.md 5): every way
     // there is hidden, and a stack that holds one (saved, or pushed by a link) drops it.
     val kids = gate.snapshot?.kids == true || AccountRules.activeProfile(gate.snapshot)?.kids == true
+    val zapOff = !ZapCopy.shown(gate.snapshot)
     LaunchedEffect(kids, routes) {
         val kept = if (kids) kidsStack(routes) else routes
         if (kept != routes) {
@@ -374,6 +377,11 @@ private fun AppNav(
         backStack.add(Route.Title(tile.kind, tile.id))
     }
 
+    // Zap (plans/zap.md 2.1): an action that pushes the zap route; [kind] is Discover's when pressed there.
+    fun zap(kind: String?) {
+        backStack.add(Route.Zap(kind))
+    }
+
     // The hero's Play: straight to the player, which picks the recommended version once it settles.
     fun playTile(tile: Tile) {
         backStack.add(Route.Player(tile.kind, tile.id, tile.playVideoId(), tile.name))
@@ -383,10 +391,11 @@ private fun AppNav(
     // return to a finished or abandoned player); Versions opens over it; Episodes goes back to the title
     // page, below or new.
     fun replacePlayer(
-        current: Route.Player,
+        current: Route,
         with: Route,
     ) {
-        if (backStack.lastOrNull() != current) return
+        val now = backStack.map { it as Route }
+        if (replacedTop(now, current, with) == now) return
         backStack.removeAt(backStack.lastIndex)
         backStack.add(with)
     }
@@ -842,6 +851,7 @@ private fun AppNav(
                                     onRemove = { app.removal.remove(it, accessibility::actionWindow) },
                                     removing = app.removal.removing?.id,
                                     notice = notice,
+                                    onZap = if (zapOff) null else ({ zap(null) }),
                                 )
                             }
                         }
@@ -867,6 +877,8 @@ private fun AppNav(
                                 },
                                 onAddons = ::addAnAddon,
                                 focus = app.discoverFocus,
+                                onKind = { app.discoverKind = it },
+                                onZap = if (zapOff) null else ({ zap(app.discoverKind) }),
                             )
                         }
                         entry<Route.Library> {
@@ -1065,6 +1077,18 @@ private fun AppNav(
                                 held = backStack.getOrNull(backStack.indexOf(route) - 1) is Route.Player,
                             )
                         }
+                        entry<Route.Zap> { route ->
+                            CompositionLocalProvider(LocalOverPicture provides true) {
+                                ZapScreen(
+                                    route,
+                                    session,
+                                    // The pick takes the zap's place: Back from its player returns where Zap was pressed.
+                                    onPick = { replacePlayer(route, it) },
+                                    onSettings = ::addAnAddon,
+                                    onBack = ::pop,
+                                )
+                            }
+                        }
                         entry<Route.Player> { route ->
                             // Removed from Continue Watching a moment ago and played now: the removal waiting for Undo goes.
                             LaunchedEffect(route) { app.removal.played(route.id) }
@@ -1092,8 +1116,10 @@ private fun AppNav(
                                             )
                                         }
                                     },
+                                    // A zap has no Episodes: the title page would name it.
                                     onTitle =
-                                        if (Format.parseVideo(route.videoId) !=
+                                        if (route.zapAt == null &&
+                                            Format.parseVideo(route.videoId) !=
                                             null
                                         ) {
                                             ({ toTitle(route) })
@@ -1118,6 +1144,7 @@ private fun AppNav(
                                     onOffer = { key -> replacePlayer(route, route.copy(key = key, startOver = false)) },
                                     // Where an addon is added (noSource). Accounts are set up in Settings only.
                                     onSettings = if (kids) null else ({ backStack.add(Route.Sources) }),
+                                    onReplace = { replacePlayer(route, it) },
                                 )
                             }
                         }
@@ -1172,6 +1199,8 @@ private fun AppNav(
             nav = tvNav,
             profileButton = { lit, bar -> PillProfile(gate, lit, bar, { choose(Route.Settings) }, ::pinFor) },
             kids = kids,
+            // The bar's Zap sends Discover's kind only while Discover is the place shown.
+            onZap = if (zapOff) null else ({ zap(app.discoverKind.takeIf { top == Route.Discover }) }),
             content = content,
         )
     } else {
@@ -1179,8 +1208,8 @@ private fun AppNav(
             selected = selected,
             showTabs = framed,
             onSelect = ::choose,
-            statusStrip = top !is Route.Title && top !is Route.Player && !sheetTop,
-            insetSides = top !is Route.Player && !sheetTop,
+            statusStrip = top !is Route.Title && top !is Route.Player && top !is Route.Zap && !sheetTop,
+            insetSides = top !is Route.Player && top !is Route.Zap && !sheetTop,
             onBack = if (top.hasBackLink) ({ systemBack?.onBackPressed() ?: pop() }) else null,
             profile = phoneProfile,
             // Offline, every page but the player says so, one press from the downloads (plans/offline-downloads.md 3.5).

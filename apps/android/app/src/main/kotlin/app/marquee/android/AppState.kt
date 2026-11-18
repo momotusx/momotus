@@ -66,6 +66,9 @@ class AppState(
      */
     var discoverRequest: DiscoverRequest? by mutableStateOf(null)
 
+    /** Discover's selected kind as it shows, which a Zap pressed there sends (plans/zap.md 2.1); null for All. */
+    var discoverKind: String? by mutableStateOf(null)
+
     /** A person's name from a title page, for Search to look up once it is open. */
     var searchRequest: String? by mutableStateOf(null)
 

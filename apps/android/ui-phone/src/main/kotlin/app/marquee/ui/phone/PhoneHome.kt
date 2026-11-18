@@ -62,6 +62,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import app.marquee.core.KidsCopy
 import app.marquee.core.TileCopy
+import app.marquee.core.ZapCopy
 import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.RowNotice
@@ -150,6 +151,8 @@ fun PhoneHome(
     removing: String? = null,
     /** The removal's note (Undo, or why it failed), under Continue Watching. */
     notice: (@Composable () -> Unit)? = null,
+    /** Zap (plans/zap.md 2.1): a round button at the hero's top right; null leaves it out (kids). */
+    onZap: (() -> Unit)? = null,
 ) {
     // A snapshot that came while this page first drew reaches every reader (LiveView.follow).
     home.follow()
@@ -209,12 +212,17 @@ fun PhoneHome(
                         onPlay,
                         trailers,
                         titleHidden = alert != null,
+                        onZap = onZap,
                     ) { heroVisible }
                     // Over the hero's top, under the status bar, where the page title was.
                     if (alert != null) {
-                        Box(
+                        Row(
                             Modifier.windowInsetsPadding(WindowInsets.statusBars).padding(top = Marquee.space.s),
-                        ) { alert() }
+                        ) {
+                            Box(Modifier.weight(1f)) { alert() }
+                            // The alert covers the hero's top row: Zap moves beside it, still in reach.
+                            onZap?.let { PhoneZap(it, Modifier.padding(end = 16.dp)) }
+                        }
                     }
                 }
             }
@@ -338,6 +346,7 @@ private fun PhoneHeroCarousel(
     trailers: TrailerHost,
     /** An alert lies over the page title: the title gives way (unseen, still the heading to TalkBack). */
     titleHidden: Boolean = false,
+    onZap: (() -> Unit)? = null,
     visible: () -> Boolean,
 ) {
     val n = heroes.size
@@ -456,6 +465,8 @@ private fun PhoneHeroCarousel(
                 role = TextRole.Hero,
                 maxLines = 1,
             )
+            // An alert over the title covers this row: Zap stands beside the alert instead (PhoneHome).
+            if (!titleHidden) onZap?.let { PhoneZap(it) }
         }
         if (heroes.size > 1) {
             HeroDots(
@@ -626,6 +637,15 @@ internal const val PHONE_HERO_TAG = "home-hero"
 internal const val PHONE_HERO_SOUND = "home-hero-sound"
 internal const val SOUND_LABEL = "Trailer sound"
 internal const val PHONE_HERO_BUTTONS = "home-hero-buttons"
+
+/** Zap at the hero's top right. */
+internal const val PHONE_ZAP = "home-zap"
+
+@Composable
+private fun PhoneZap(
+    onZap: () -> Unit,
+    modifier: Modifier = Modifier,
+) = RoundButton(Icons.Shuffle, ZapCopy.ZAP, onZap, modifier.testTag(PHONE_ZAP))
 
 /** The frame's 390 by 680. */
 private const val HERO_RATIO = 680f / 390f

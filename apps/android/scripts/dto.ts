@@ -89,6 +89,8 @@ const DEFAULTED = new Map([
   // none of these, and its rows are all addon rows.
   ["Prefs.archive", "true"],
   ["Prefs.archiveNoticeSeen", "false"],
+  // Zap (plans/zap.md 1.1): an older core and recorded traces send no dial; the core defaults to Near.
+  ["Prefs.zapDial", "Dial.Near"],
   ["VersionRow.origin", "RowOrigin.Addon"],
   ["VersionsSnapshot.archive", "SourceRows(pending = false)"],
   // Nuvio plugins (4.4, 7.8): an older core runs none.

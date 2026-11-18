@@ -51,6 +51,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.marquee.core.StreamChoiceCopy
+import app.marquee.core.ZapCopy
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.SubtitleBackground
@@ -62,10 +63,12 @@ import app.marquee.design.MqText
 import app.marquee.design.PauseFilled
 import app.marquee.design.PlayFilled
 import app.marquee.design.RoundButton
+import app.marquee.design.SecondaryButton
 import app.marquee.design.TextRole
 import app.marquee.design.marqueeFocus
 import app.marquee.player.ActionButton
 import app.marquee.player.AudioStrip
+import app.marquee.player.BarWidths
 import app.marquee.player.EndCard
 import app.marquee.player.LoadingLayer
 import app.marquee.player.PlaybackController
@@ -80,6 +83,9 @@ import app.marquee.player.Strip
 import app.marquee.player.SubtitleStrip
 import app.marquee.player.TvSubtitlePicker
 import app.marquee.player.UpNextCard
+import app.marquee.player.ZapControls
+import app.marquee.player.ZapDial
+import app.marquee.player.ZapPanel
 import app.marquee.player.activeSegment
 import app.marquee.player.audioDetail
 import app.marquee.player.clockText
@@ -100,6 +106,7 @@ import app.marquee.player.subtitleValues
 import app.marquee.player.subtitlesDetail
 import app.marquee.player.subtitlesStillListing
 import app.marquee.player.upNextDue
+import app.marquee.player.zapMissed
 import kotlinx.coroutines.flow.collectLatest
 import java.util.Date
 import kotlin.math.ceil
@@ -148,8 +155,13 @@ fun TvPlayer(
     /** The strip's Style: the profile's subtitle position and background, as Size. */
     onSubtitlePosition: (Int) -> Unit = {},
     onSubtitleBackground: (SubtitleBackground) -> Unit = {},
+    /** A zap (plans/zap.md 2.3): What is this?, Zap again and the dial; no Versions, Episodes or Choose another. */
+    zap: ZapControls? = null,
 ) {
     val safe = Marquee.safe
+    // What is this?'s panel, and the button that opens it (focus returns there when it closes).
+    var panel by remember { mutableStateOf(false) }
+    val whatFocus = remember { FocusRequester() }
     val stage = controller.stage
     // Back from Settings opened on the failure card: the start runs again when the player resumes, so what was added
     // plays without a press. The navigation resumes the entry on top, whether it stayed composed or not.
@@ -186,7 +198,7 @@ fun TvPlayer(
     val stalled = stage == Stage.Buffering && controller.picture
     // Choose another version when the core offers it, on the loading screen (20 s into the start) and over a stalled
     // frame (30 s): one clock, the core's, for every kind of source (plans/versions-android-spec.md, 6).
-    val chooseShown = (opening || stalled) && controller.chooseAnother
+    val chooseShown = (opening || stalled) && controller.chooseAnother && zap == null
     val chooseFocus = remember { FocusRequester() }
     var chooseFocused by remember { mutableStateOf(false) }
     // Cancel on Up Next stops the next episode from starting by itself, for this playback: the end card shows instead.
@@ -238,8 +250,10 @@ fun TvPlayer(
     // under TalkBack. Every key starts the wait again; `wake` is read here and not in composition, so a
     // key press recomposes nothing.
     val exploring = rememberTouchExploration()
-    LaunchedEffect(osd, stage, picker, strip, adjusting, showNext, exploring) {
-        if (osd && stage == Stage.Playing && !picker && strip == null && !adjusting && !showNext && !exploring) {
+    LaunchedEffect(osd, stage, picker, strip, adjusting, showNext, exploring, panel) {
+        if (osd && stage == Stage.Playing && !picker && strip == null && !adjusting && !showNext && !exploring &&
+            !panel
+        ) {
             snapshotFlow { wake }.collectLatest {
                 kotlinx.coroutines.delay(HIDE_MS)
                 osd = false
@@ -342,6 +356,11 @@ fun TvPlayer(
     // the picker, then the controls hide, then the player leaves.
     fun back() {
         when {
+            panel -> {
+                panel = false
+                returnTo = whatFocus
+            }
+
             adjusting -> {
                 adjusting = false
             }
@@ -492,7 +511,7 @@ fun TvPlayer(
                 fill = { controller.loadingFill },
                 lines = loadingLines(controller.status, controller.start?.caption),
                 opening = opening,
-                choose = onVersions.takeIf { opening || stalled },
+                choose = onVersions.takeIf { (opening || stalled) && zap == null },
                 chooseShown = chooseShown,
                 chooseFocus = chooseFocus,
                 chooseFocusChange = { chooseFocused = it },
@@ -514,6 +533,14 @@ fun TvPlayer(
                 Scrim(top = true, height = 200.dp, peak = 0.85f)
                 Header(
                     controller,
+                    zap?.let {
+                        {
+                            controller.revealed = true
+                            panel = !panel
+                            wake++
+                        }
+                    },
+                    whatFocus,
                     Modifier
                         .padding(start = safe.side, top = safe.top)
                         .onGloballyPositioned { headerFoot = with(density) { it.boundsInRoot().bottom.toDp() } },
@@ -524,7 +551,10 @@ fun TvPlayer(
 
         // While the loading screen shows, it says the status under the mark.
         val status = controller.status.takeUnless { opening || stalled }
-        if (stage == Stage.Failed || status != null || controller.notice != null) {
+        // A zap that failed before its first frame zaps on at once: no card. One that played, then failed, offers Zap
+        // again, Try again and Back (PlayerStatus).
+        val zapGone = zap != null && zapMissed(stage == Stage.Failed, false, controller.firstFrameMs != null)
+        if (!zapGone && (stage == Stage.Failed || status != null || controller.notice != null)) {
             PlayerStatus(
                 stage = stage,
                 status = status,
@@ -534,6 +564,7 @@ fun TvPlayer(
                 onVersions = onVersions,
                 onBack = onBack,
                 focus = failFocus,
+                zapAgain = zap?.onAgain,
                 modifier = Modifier.align(Alignment.TopStart).padding(start = safe.side, top = 360.dp),
                 offer = controller.offer,
                 onOffer = onOffer,
@@ -577,6 +608,8 @@ fun TvPlayer(
                 onEpisodes = onEpisodes,
                 onNext = next?.let { { onNext(it, controller.bingeGroup) } },
                 adjusting = adjusting,
+                zap = zap,
+                whatFocus = whatFocus,
                 onAdjust = { adjusting = it },
                 modifier =
                     Modifier
@@ -621,7 +654,7 @@ fun TvPlayer(
                 Strip.Audio -> {
                     AudioStrip(
                         controller,
-                        onVersions = onVersions,
+                        onVersions = onVersions.takeIf { zap == null },
                         onClose = ::closeStrip,
                         modifier = Modifier.align(Alignment.BottomStart).then(placed),
                         first = stripFirst,
@@ -633,6 +666,14 @@ fun TvPlayer(
                     Unit
                 }
             }
+        }
+
+        if (panel && zap != null) {
+            ZapPanel(
+                zap,
+                onClose = { panel = false },
+                modifier = Modifier.align(Alignment.TopStart).padding(start = safe.side, top = headerFoot + 24.dp),
+            )
         }
 
         if (picker) {
@@ -663,6 +704,7 @@ fun TvPlayer(
                 onBack = onBack,
                 focus = endFocus,
                 modifier = Modifier.fillMaxSize(),
+                zapAgain = zap?.onAgain,
             )
         }
 
@@ -703,12 +745,24 @@ fun TvPlayer(
 @Composable
 private fun Header(
     controller: PlaybackController,
+    /** A zap's What is this? (plans/zap.md 2.3), under the title; null for an ordinary play. */
+    onWhat: (() -> Unit)?,
+    whatFocus: FocusRequester,
     modifier: Modifier,
 ) {
     Column(modifier.fillMaxWidth(0.7f)) {
         MqText(controller.title, role = TextRole.Title2, maxLines = 2)
         controller.episode?.let {
             MqText(it, role = TextRole.Body, modifier = Modifier.padding(top = 8.dp))
+        }
+        if (onWhat != null) {
+            SecondaryButton(
+                ZapCopy.WHAT,
+                onWhat,
+                Modifier.padding(top = 16.dp),
+                icon = Icons.CircleQuestionMark,
+                focusRequester = whatFocus,
+            )
         }
     }
 }
@@ -753,6 +807,8 @@ private fun Controls(
     adjusting: Boolean,
     onAdjust: (Boolean) -> Unit,
     modifier: Modifier,
+    zap: ZapControls? = null,
+    whatFocus: FocusRequester? = null,
 ) {
     var scrubTarget by remember { mutableStateOf<Long?>(null) }
     var scrubFocused by remember { mutableStateOf(false) }
@@ -781,7 +837,12 @@ private fun Controls(
                             .focusRequester(scrub)
                             .focusProperties {
                                 down = play
-                                if (strip != null) up = stripFirst
+                                if (strip != null) {
+                                    up = stripFirst
+                                } else if (whatFocus != null && zap != null) {
+                                    // Up from the bar reaches What is this? under the title.
+                                    up = whatFocus
+                                }
                             }.marqueeFocus(8.dp, scale = 1f)
                             .onFocusChanged {
                                 scrubFocused = it.isFocused
@@ -803,12 +864,15 @@ private fun Controls(
                 // Each side's column: half of what the transport and the two gaps leave (D16).
                 val column = (maxWidth - TRANSPORT_WIDTH - COLUMN_GAP * 2) / 2
                 val pill = widths.pill
+                // A zap: Zap again in Versions' slot, the dial in those of Episodes and Next.
+                val third = if (zap != null) widths.pill(ZapCopy.AGAIN, null) else widths.pill(names.VERSIONS, version)
+                val dial = if (zap != null) dialWidth(widths) else 0.dp
                 val left =
                     sideFit(
                         column,
                         words =
                             widths.pill(names.AUDIO, audio) + widths.pill(names.SPEED, speed) +
-                                widths.pill(names.VERSIONS, version) + PILL_GAP * 2,
+                                third + PILL_GAP * 2,
                         icons = pill * 3 + PILL_GAP * 2,
                     )
                 val rightPills = 1 + (if (onEpisodes != null) 2 else 0)
@@ -819,8 +883,9 @@ private fun Controls(
                             widths.pill(names.SUBTITLES, subtitleValues, busy = true) +
                                 (if (onEpisodes != null) widths.pill(names.EPISODES, null) else 0.dp) +
                                 (if (onEpisodes != null) widths.pill(StreamChoiceCopy.Bar.NEXT, null) else 0.dp) +
+                                dial +
                                 PILL_GAP * rightPills,
-                        icons = pill * rightPills + PILL_GAP * rightPills,
+                        icons = pill * rightPills + PILL_GAP * rightPills + dial,
                         shiftWords = widths.shiftWords,
                     )
                 Row(
@@ -854,7 +919,12 @@ private fun Controls(
                             upLeft,
                             words = left.words,
                         )
-                        ActionButton(Icons.Layers, names.VERSIONS, version, onVersions, upLeft, words = left.words)
+                        // A zap has no Versions (release names carry the title): Zap again in its slot.
+                        if (zap != null) {
+                            ActionButton(Icons.Shuffle, ZapCopy.AGAIN, null, zap.onAgain, upLeft, words = left.words)
+                        } else {
+                            ActionButton(Icons.Layers, names.VERSIONS, version, onVersions, upLeft, words = left.words)
+                        }
                     }
                     Row(
                         Modifier.width(TRANSPORT_WIDTH),
@@ -931,12 +1001,17 @@ private fun Controls(
                                 spoken = nextName(next),
                             )
                         }
+                        // A zap's dial in the slots of Episodes and Next; a press changes it, focus never does.
+                        zap?.let { ZapDial(it.dial, it.onDial, chipModifier = upRight) }
                     }
                 }
             }
         }
     }
 }
+
+/** The zap dial on the bar: its three chips, each its word and its 24 dp on each side, on the track. */
+private fun dialWidth(widths: BarWidths) = ZapCopy.DIALS.fold(8.dp) { w, d -> w + widths.text(d.second) + 48.dp }
 
 /** A clock beside the position bar: its own scope, so the time's tick recomposes it alone. */
 @Composable

@@ -281,7 +281,8 @@ fun channelLayout(count: Int): String? =
 
 /**
  * The menu row of an audio track: "English" over "AC-3, 5.1". One that names no language reads by its place among
- * the file's [count] audio tracks ([audioPlace]).
+ * the file's [count] audio tracks ([audioPlace]). Without [labeled] (a zap not yet revealed) the file's label is left
+ * out: it is often the release name, which carries the title.
  */
 fun audioChoice(
     id: String,
@@ -289,25 +290,31 @@ fun audioChoice(
     selected: Boolean,
     index: Int = 0,
     count: Int = 1,
+    labeled: Boolean = true,
 ): TrackChoice {
-    val name = format.label ?: languageName(format.language) ?: audioPlace(index, count)
+    val name = format.label?.takeIf { labeled } ?: languageName(format.language) ?: audioPlace(index, count)
     val detail = listOfNotNull(codecName(format.sampleMimeType), channelLayout(format.channelCount)).joinToString(", ")
     return TrackChoice(id, name, detail.ifBlank { null }, selected)
 }
 
-/** The menu row of a subtitle track inside the file: "English" over "In the file · SRT · Forced", under its language. */
+/**
+ * The menu row of a subtitle track inside the file: "English" over "In the file · SRT · Forced", under its language.
+ * Without [labeled] the file's label is left out, as for [audioChoice].
+ */
 fun textChoice(
     id: String,
     format: Format,
     selected: Boolean,
+    labeled: Boolean = true,
 ): TrackChoice {
     val language = languageName(format.language)
-    val name = language ?: format.label ?: "Subtitles"
+    val label = format.label?.takeIf { labeled }
+    val name = language ?: label ?: "Subtitles"
     val forced = format.selectionFlags and C.SELECTION_FLAG_FORCED != 0
     val detail =
         listOfNotNull(
             IN_THE_FILE,
-            format.label?.takeIf { it != name },
+            label?.takeIf { it != name },
             // Media3 parses subtitles while extracting and then says "cues": the real type is in `codecs`.
             codecName(format.sampleMimeType) ?: codecName(format.codecs),
             "Forced".takeIf { forced },

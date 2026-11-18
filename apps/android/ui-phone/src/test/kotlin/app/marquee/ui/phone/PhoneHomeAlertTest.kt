@@ -13,8 +13,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import app.marquee.core.TileCopy
 import app.marquee.core.client.CoreClient
@@ -73,6 +75,7 @@ class PhoneHomeAlertTest {
         }
     private val scope = CoroutineScope(SupervisorJob() + main)
     private var alert by mutableStateOf<String?>(null)
+    private var zaps = 0
 
     @After
     fun stop() {
@@ -142,6 +145,7 @@ class PhoneHomeAlertTest {
                     onSetup = {},
                     onAddons = {},
                     alert = alert?.let { words -> { BasicText(words, Modifier.padding(24.dp)) } },
+                    onZap = { zaps++ },
                 )
             }
         }
@@ -192,5 +196,16 @@ class PhoneHomeAlertTest {
         val said = compose.onNodeWithText("A new device joined: QA device B.").fetchSemanticsNode().boundsInRoot
         assertEquals(before, playAt(), "the hero's Play stays where it was (QA r2, Q2 row 33)")
         assertTrue(said.top >= 0f && said.bottom <= before.top, "the alert is on the first screen, above Play: $said")
+    }
+
+    @Test
+    fun `Zap stands beside an alert over the hero, in reach`() {
+        alert = "A new device joined: QA device B."
+        show()
+        val said = compose.onNodeWithText("A new device joined: QA device B.").fetchSemanticsNode().boundsInRoot
+        val zap = compose.onNodeWithTag(PHONE_ZAP).fetchSemanticsNode().boundsInRoot
+        assertTrue(zap.left >= said.right, "Zap is beside the alert, not under it: $zap, $said")
+        compose.onNodeWithTag(PHONE_ZAP).performClick()
+        assertEquals(1, zaps)
     }
 }

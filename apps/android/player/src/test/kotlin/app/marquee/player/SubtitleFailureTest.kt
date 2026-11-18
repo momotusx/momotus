@@ -166,7 +166,7 @@ class SubtitleFailureTest {
                 SystemClock.elapsedRealtime(),
                 delay,
                 startOver,
-                fetch,
+                fetch = fetch,
             )
         controller.attach(PlaybackView(client, scope, JsonObject(emptyMap())).also { it.open() })
         if (loads) until("the stream loads") { player.items.size == 1 }
