@@ -5,7 +5,8 @@
 // how it misbehaves: `silent` never says ready, `exit` exits at once,
 // `orphan` outlives its parent (stays up when its stdin closes).
 // Socket texts: `env` answers what it was started with, `n` this socket's
-// session number, `die` exits the process, anything else is echoed.
+// session number, `open` the sessions open now, `big:<n>` an answer of n
+// bytes, `die` exits the process, anything else is echoed.
 const WebSocket = require('ws');
 
 const mode = process.env.FAKE_BRIDGE || '';
@@ -16,6 +17,7 @@ if (process.env.MQ_BRIDGE_EXIT_ON_EOF && mode !== 'orphan') {
 }
 const port = Number(process.env.MQ_BRIDGE_PORT);
 let sessions = 0;
+let open = 0;
 const wss = new WebSocket.Server({
   host: '127.0.0.1',
   port,
@@ -26,10 +28,15 @@ wss.on('listening', () => {
 });
 wss.on('connection', (ws) => {
   const session = (sessions += 1);
+  open += 1;
+  ws.on('close', () => (open -= 1));
   ws.on('message', (text) => {
     if (text === 'die') return process.exit(3);
     if (text === 'pid') return ws.send(JSON.stringify({ pid: process.pid }));
     if (text === 'n') return ws.send('session:' + session);
+    if (text === 'open') return ws.send('open:' + open);
+    if (text.indexOf('big:') === 0) return ws.send('x'.repeat(Number(text.slice(4))));
+    if (text.length > 1000) return ws.send('got:' + text.length);
     if (text === 'env') {
       const e = process.env;
       return ws.send(JSON.stringify({ argv: process.argv.slice(2), data: e.MQ_DATA, port: e.MQ_BRIDGE_PORT, token: e.MQ_BRIDGE_TOKEN, certs: e.SSL_CERT_FILE || null }));
