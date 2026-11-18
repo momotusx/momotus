@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { chromeMajor, isWebOSAgent, mediaKey } from "../lib/webos";
+import { chromeMajor, isWebOSAgent, mediaKey, nativeCore } from "../lib/webos";
 import { probeSystem, webosCaps, webosDeviceCaps } from "./webos-caps";
 
 const UA6 = "Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.79 Safari/537.36 WebAppManager";
@@ -70,4 +70,27 @@ test("the LG remote's media keys are named on webOS only", () => {
   expect(mediaKey(key(412), true)).toBe("MediaRewind");
   expect(mediaKey(key(19, "Pause"), false)).toBe("Pause");
   expect(mediaKey(key(13, "Enter"), true)).toBe("Enter");
+});
+
+test("with the native core the TV takes every stream (torrents, headers): the stream server serves them", () => {
+  expect(webosCaps(false, 79, "en", true).directOnly).toBe(false);
+  expect(webosCaps(true, 87, "en", false).directOnly).toBe(true);
+});
+
+test("the native core is the service's mark on index.html, and nothing else", () => {
+  const g = globalThis as { document?: unknown };
+  const had = g.document;
+  const page = (content: string | null) => ({
+    querySelector: (s: string) => (s === 'meta[name="mq-core"]' && content !== null ? { getAttribute: (a: string) => (a === "content" ? content : null) } : null),
+  });
+  try {
+    g.document = page("native");
+    expect(nativeCore()).toBe(true);
+    for (const other of [null, "wasm", "Native", ""]) {
+      g.document = page(other);
+      expect(nativeCore()).toBe(false);
+    }
+  } finally {
+    g.document = had;
+  }
 });

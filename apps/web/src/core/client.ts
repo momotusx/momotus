@@ -29,7 +29,7 @@ import type { Network } from "./generated/Network";
 import { webosDeviceCaps } from "./webos-caps";
 import { keepsAv1, probeAv1 } from "./av1-probe";
 import { webosTransport } from "./webos-transport";
-import { isWebOS } from "../lib/webos";
+import { isWebOS, nativeCore } from "../lib/webos";
 import type { ProbeAnswer } from "../lib/failover";
 
 export const bridgeUrl: string = import.meta.env.VITE_MQ_BRIDGE ?? `ws://${location.hostname || "127.0.0.1"}:7777/ws`;
@@ -40,8 +40,9 @@ export const bridgeUrl: string = import.meta.env.VITE_MQ_BRIDGE ?? `ws://${locat
 const shellHandler = window.__MQ_SHELL__ ? shellPost() : null;
 // The shell's player capabilities, from its `ready`, in the core's names.
 let shellCaps: DeviceCaps | null = null;
-// On webOS the service serves this page and its socket on one origin (a walk build has its own port).
-const webosSocket = `ws://${location.host}/ws`;
+// On webOS the service serves this page and its socket on one origin (a walk build has its own port). The page says
+// which core it was built for: the service closes a socket from a page whose core it no longer runs, and the page reloads.
+const webosSocket = `ws://${location.host}/ws?core=${nativeCore() ? "native" : "wasm"}`;
 const transport = shellHandler
   ? ipcTransport(shellHandler, (r) => (shellCaps = asCaps(r.caps)))
   : isWebOS()

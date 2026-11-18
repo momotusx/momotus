@@ -3,13 +3,15 @@
  * crossorigin, so both load directly. An HLS source in a browser without HLS
  * of its own plays through hls.js (./hls.ts).
  *
- * On LG webOS the element gets the CDN's own URL (no `crossorigin`: a CDN sends
- * no CORS headers) and plays HLS itself; that build leaves hls.js out. */
+ * On LG webOS with the wasm core the element gets the CDN's own URL (no
+ * `crossorigin`: a CDN sends no CORS headers); with the native core it gets the
+ * loopback URLs, as in a browser. The TV plays HLS itself; that build leaves
+ * hls.js out. */
 
 import type Hls from "hls.js";
 import { createSignal, onCleanup, Show } from "solid-js";
 import { earlyFailure, hlsFailure, mediaFailure, pendingStart } from "../lib/failover";
-import { isWebOS } from "../lib/webos";
+import { isWebOS, nativeCore } from "../lib/webos";
 import { startAudio } from "../lib/words";
 import type { Engine, EngineEvents, Track } from "./engine";
 import { needsHlsJs } from "./hls";
@@ -133,7 +135,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
       classList={{ on: started() }}
       playsinline
       preload="auto"
-      crossorigin={webos ? undefined : "anonymous"}
+      crossorigin={webos && !nativeCore() ? undefined : "anonymous"}
       onPlay={() => {
         setPaused(false);
         events.onPlay();

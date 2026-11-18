@@ -2,7 +2,7 @@
  * faithfully: the panel's size comes from the system (the graphics plane is 1080 on a 4K panel) and the engine's
  * `canPlayType` over-promises. */
 
-import { chromeMajor, isWebOS, luna } from "../lib/webos";
+import { chromeMajor, isWebOS, luna, nativeCore } from "../lib/webos";
 import type { DeviceCaps } from "./client";
 
 const SYSTEM_INFO = "luna://com.webos.service.tv.systemproperty/getSystemInfo";
@@ -19,7 +19,7 @@ export function probeSystem(bridgeClass?: Parameters<typeof luna>[3]) {
 }
 
 /** Caps for a TV with this panel and Chrome major. Order matters where the core reads it: HEVC before VP9 and AV1. */
-export function webosCaps(panelIsUhd: boolean, chrome: number, language: string): DeviceCaps {
+export function webosCaps(panelIsUhd: boolean, chrome: number, language: string, native = false): DeviceCaps {
   const old = chrome < VP9_4K_AND_AV1;
   // AV1 from Chrome 87 on any panel; VP9 at 1080p always, at 2160p from Chrome 87.
   const decoders = ["h264", "h265", "vp9", "av1"].filter((c) => !old || (c !== "av1" && !(c === "vp9" && panelIsUhd)));
@@ -34,15 +34,16 @@ export function webosCaps(panelIsUhd: boolean, chrome: number, language: string)
     containers: ["mkv", "mp4", "ts", "m3u8"],
     passthrough: [],
     hasFallbackEngine: false,
-    // The element gets the CDN's URL itself: a stream that needs headers cannot play here.
-    directOnly: true,
+    // The wasm core hands the element the CDN's URL itself: a stream that needs headers (or a torrent) cannot play
+    // there. The native core serves every source from its loopback stream server.
+    directOnly: !native,
     language,
   };
 }
 
 /** The TV's caps, or null off webOS. */
 export function webosDeviceCaps(language: string): DeviceCaps | null {
-  return isWebOS() ? webosCaps(uhd, chromeMajor(navigator.userAgent), language) : null;
+  return isWebOS() ? webosCaps(uhd, chromeMajor(navigator.userAgent), language, nativeCore()) : null;
 }
 
 if (isWebOS()) probeSystem();
