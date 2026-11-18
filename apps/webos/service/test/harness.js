@@ -88,6 +88,8 @@ async function startService(opts) {
     MQ_UI: ui,
     MQ_PORT: String(port),
     MQ_GRACE_MS: '30000',
+    // The wasm core unless a test names a native one (native.test.js).
+    MQ_NATIVE: '',
   }, o.env);
   const proc = track(spawn(process.execPath, (o.preload ? ['-r', path.join(__dirname, o.preload)] : []).concat(SERVICE), { env, stdio: ['ignore', 'pipe', 'inherit'] }));
   const svc = { proc, dir, data, port, events: [], exit: null, start: null };
@@ -122,7 +124,7 @@ function connect(svc, o) {
   const opts = o || {};
   const headers = {};
   if (opts.host) headers.Host = opts.host;
-  const ws = new WebSocket('ws://127.0.0.1:' + svc.port + '/ws', {
+  const ws = new WebSocket('ws://127.0.0.1:' + svc.port + '/ws' + (opts.query || ''), {
     origin: opts.origin === undefined ? 'http://127.0.0.1:' + svc.port : opts.origin || undefined,
     headers,
   });
@@ -138,8 +140,8 @@ function connect(svc, o) {
   return c;
 }
 
-async function authed(svc) {
-  const c = connect(svc);
+async function authed(svc, o) {
+  const c = connect(svc, o);
   await c.opened;
   c.send(svc.token);
   return c;

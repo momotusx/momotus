@@ -3,8 +3,11 @@
 // the stub with the token; the http server on 127.0.0.1 serves the built UI and
 // forwards /sub/ and /logo/ to the core child; the ws at /ws carries the
 // Session after a token; the keystore lives here, never in the core.
+// The core is the native binary bin/mq-bridge where it starts (torrents and
+// plugins; plans/webos.md v5), else the wasm core in a forked child.
 // The MQ_* variables are for tests and simulators: MQ_DATA, MQ_CORE, MQ_UI,
-// MQ_PORT, MQ_GRACE_MS, MQ_LUNA (a stand-in for webos-service), MQ_SIM.
+// MQ_PORT, MQ_GRACE_MS, MQ_LUNA (a stand-in for webos-service), MQ_SIM,
+// MQ_NATIVE (another native binary, or empty for none), MQ_NATIVE_READY_MS.
 const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
@@ -12,6 +15,7 @@ const path = require('path');
 const { execFile, fork } = require('child_process');
 const WebSocket = require('ws');
 const keystore = require('./keystore.js');
+const native = require('./native.js');
 
 const APP = 'app.momotus.webos';
 const PORT = Number(process.env.MQ_PORT) || 47801;
@@ -22,10 +26,16 @@ const RESTART_WINDOW_MS = 60000;
 const MAX_QUEUE = 1000;
 const MAX_BUFFERED = 8 * 1024 * 1024;
 const CLOSE_BAD_TOKEN = 4401;
+const NATIVE_BIN = process.env.MQ_NATIVE !== undefined ? process.env.MQ_NATIVE : path.join(__dirname, 'bin', 'mq-bridge');
+const NATIVE_READY_MS = Number(process.env.MQ_NATIVE_READY_MS) || 20000;
+// The native core's own socket, on the next port (a walk build's too).
+const BRIDGE_PORT = PORT + 1;
 
 const Service = require(process.env.MQ_LUNA || 'webos-service');
 const service = new Service(APP + '.service');
 const token = crypto.randomBytes(32).toString('hex');
+// The bridge's socket token: no other app's service on the TV gets a Session.
+const bridgeToken = crypto.randomBytes(32).toString('hex');
 const dataDir = process.env.MQ_DATA || '/media/internal/' + APP;
 const uiDir = process.env.MQ_UI || path.join(__dirname, 'ui');
 const pidFile = path.join(dataDir, 'core.pid');
@@ -50,6 +60,10 @@ let wantAlive = false;
 let graceTimer = null;
 // The write probe's result: a failed one runs the core's library in memory.
 let probed = { ok: true };
+// 'native' until the binary fails to start or keeps dying, then 'wasm' for the
+// rest of this process. The page learns it from index.html and says it back
+// on its socket, so a page loaded before a switch reloads into the new one.
+let coreKind = NATIVE_BIN && fs.existsSync(NATIVE_BIN) ? 'native' : 'wasm';
 
 const log = (entry) => console.log(JSON.stringify(entry));
 
@@ -135,7 +149,8 @@ function isAlive(pid) {
 // whole arguments.
 function isOurWorker(command) {
   const args = command.split(/\s+/);
-  return args.indexOf(path.join(__dirname, 'core-worker.js')) !== -1 && args.indexOf(dataDir) !== -1;
+  const ours = args.indexOf(path.join(__dirname, 'core-worker.js')) !== -1 || (!!NATIVE_BIN && args.indexOf(NATIVE_BIN) !== -1);
+  return ours && args.indexOf(dataDir) !== -1;
 }
 
 function commandOf(pid, cb) {
@@ -199,8 +214,35 @@ function stop(why) {
   setTimeout(() => process.exit(1), 100);
 }
 
+// The bridge gets the data dir as its argument only so a stale core.pid
+// can be told apart (isOurWorker); its own files sit in native/, never in
+// the wasm core's database (that one has no WAL).
+function startNative() {
+  try {
+    fs.accessSync(NATIVE_BIN, fs.constants.X_OK);
+  } catch (e) {
+    try {
+      fs.chmodSync(NATIVE_BIN, 0o755);
+    } catch (e2) {
+      log({ nativeChmod: String(e2.code || e2) });
+    }
+  }
+  const env = Object.assign({}, process.env, {
+    MQ_DATA: path.join(dataDir, 'native'),
+    MQ_BRIDGE_PORT: String(BRIDGE_PORT),
+    MQ_BRIDGE_TOKEN: bridgeToken,
+    MQ_BRIDGE_EXIT_ON_EOF: '1',
+  });
+  // The TV's own CA store may be out of the app's reach: Node's roots,
+  // shipped by package.sh, are the bridge's.
+  const roots = path.join(__dirname, 'cacert.pem');
+  if (!env.SSL_CERT_FILE && fs.existsSync(roots)) env.SSL_CERT_FILE = roots;
+  return native.start(NATIVE_BIN, [dataDir], env, NATIVE_READY_MS);
+}
+
 function spawnChild() {
-  const c = fork(path.join(__dirname, 'core-worker.js'), [dataDir], { execArgv: [] });
+  const c = coreKind === 'native' ? startNative() : fork(path.join(__dirname, 'core-worker.js'), [dataDir], { execArgv: [] });
+  c.native = coreKind === 'native';
   child = c;
   ready = false;
   c.retiring = false;
@@ -220,15 +262,17 @@ function spawnChild() {
     if (child !== c || c.retiring) return;
     if (m.kind === 'ready') {
       ready = true;
-      log({ ready: true, open: m.open });
+      c.wasReady = true;
+      log({ ready: true, core: coreKind, open: m.open });
       queue.forEach((q) => sendToChild(c, q.socket, q.text));
       queue = [];
       queueBytes = 0;
     } else if (m.kind === 'socket') {
       const ws = byId.get(m.socket);
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      // `text: null`: the session stopped past its output budget.
-      if (m.text === null) ws.close(1013, 'overflow');
+      // `text: null`: the session stopped past its output budget, or (with a
+      // `code`) the native core ended it.
+      if (m.text === null) ws.close(m.code || 1013, m.code ? 'core closed' : 'overflow');
       else if (ws.bufferedAmount > MAX_BUFFERED) ws.close(1013, 'slow reader');
       else ws.send(m.text);
     } else if (m.kind === 'served') {
@@ -280,6 +324,15 @@ function gone(c) {
   ready = false;
   const now = Date.now();
   restarts = restarts.filter((t) => now - t < RESTART_WINDOW_MS);
+  // A native core that never got ready (exec refused, another arch, a crash
+  // at start) or keeps dying gives way to the wasm core: the page reloads
+  // into its caps (direct sources only).
+  if (c.native && (!c.wasReady || restarts.length >= MAX_RESTARTS)) {
+    log({ native: 'off', why: c.wasReady ? 'restart cap' : 'never ready' });
+    coreKind = 'wasm';
+    restarts = [];
+    return spawnChild();
+  }
   if (restarts.length >= MAX_RESTARTS) return stop('restart cap');
   restarts.push(now);
   spawnChild();
@@ -363,6 +416,14 @@ const TYPES = {
   '.txt': 'text/plain; charset=utf-8',
 };
 
+// The page's mark that the native core runs (apps/web lib/webos.ts nativeCore):
+// in <head>, or right after the doctype when the file has no <head> tag.
+function markNative(html) {
+  const meta = '<meta name="mq-core" content="native">';
+  const head = /<head(\s[^>]*)?>/i;
+  return head.test(html) ? html.replace(head, (m) => m + meta) : html.replace(/^(<!doctype[^>]*>)?/i, (m) => m + meta);
+}
+
 // The built UI with a fallback to index.html for client routes (paths with no
 // extension); a missing file with one is a 404, never HTML served as a script.
 function serveUi(req, res) {
@@ -403,6 +464,7 @@ function serveUi(req, res) {
       if (type.indexOf('text/html') === 0) {
         headers['Content-Security-Policy'] = "frame-ancestors 'none'";
         headers['Cache-Control'] = 'no-cache';
+        if (coreKind === 'native') data = Buffer.from(markNative(String(data)));
       }
       res.writeHead(200, headers);
       res.end(data);
@@ -456,14 +518,17 @@ function onSocketText(ws, text) {
 const TOKEN_LEN = 64;
 const PRE_AUTH_MAX = 256;
 
-function onSocket(ws) {
+function onSocket(ws, req) {
   let authed = false;
+  const pageCore = /[?&]core=native(&|$)/.test(req.url) ? 'native' : 'wasm';
   ws._receiver._maxPayload = PRE_AUTH_MAX;
   const lateTimer = setTimeout(() => authed || ws.close(CLOSE_BAD_TOKEN, 'token'), 10000);
   ws.on('message', (data) => {
     if (typeof data !== 'string') return ws.close(1003, 'text only');
     if (!authed) {
       if (data.length > TOKEN_LEN || !sameToken(data)) return ws.close(CLOSE_BAD_TOKEN, 'token');
+      // A page built for the other core reloads (any close after the token does).
+      if (pageCore !== coreKind) return ws.close(1012, 'core changed');
       authed = true;
       ws._receiver._maxPayload = MAX_BUFFERED;
       ws.coreId = socketId += 1;
