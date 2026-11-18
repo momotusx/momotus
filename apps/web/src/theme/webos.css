@@ -23,3 +23,10 @@
 /* settings.css, the Settings list: `.snav` puts its icon tile before a bare text, which takes no margin, so the
  * gap's stand-in (scripts/webos-build.ts, margins) goes on the tile, as it does on a button's lone svg. */
 .no-flex-gap .snav > .stile:only-child { margin-right: 20px; }
+
+/* `aspect-ratio` (Chrome 88), which the build drops (scripts/webos-build.ts, ASPECT_RATIO_STANDINS): a ::before whose
+ * top padding is a share of the box's width gives the box its height, and what the box holds sits over it. */
+.wall-tile { position: relative; }
+.wall-tile::before { content: ""; display: block; padding-top: 150%; }
+.wall-tile img { position: absolute; top: 0; left: 0; }
+.trailer-frame::before { content: ""; display: block; padding-top: 56.25%; }

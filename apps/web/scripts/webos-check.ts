@@ -76,6 +76,7 @@ const BODY_BANS: [RegExp, string][] = [
   [/(^|;)translate:/, "translate:"],
   [/(^|;)(padding|margin)-inline:/, "padding-inline: or margin-inline:"],
   [/(^|;)overflow(-x|-y)?:[^;]*\bclip\b/, "overflow: clip"],
+  [/(^|;)aspect-ratio:/, "aspect-ratio:"],
 ];
 
 const flexRule = (body: string) => /(^|;)display:(inline-)?flex(;|$)/.test(body);
@@ -173,6 +174,7 @@ const CSS_MUTATIONS: { name: string; add: string; fails: boolean }[] = [
   { name: "translate:", add: ".mq-a{translate:0 -50%}", fails: true },
   { name: "padding-inline:", add: ".mq-a{padding-inline:4px}", fails: true },
   { name: "margin-inline:", add: ".mq-a{margin-inline:4px}", fails: true },
+  { name: "aspect-ratio:", add: ".mq-a{width:100%;aspect-ratio:2/3}", fails: true },
 ];
 const plant = (code: string) => (f: Record<string, string>) => ({ ...f, "planted.js": code });
 const JS_MUTATIONS: { name: string; change: (f: Record<string, string>) => Record<string, string>; fails: boolean }[] = [
