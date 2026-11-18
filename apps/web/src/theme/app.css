@@ -357,3 +357,10 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
   content: ""; position: absolute; inset: min(0px, (100% - 48px) / 2) min(0px, (100% - 48px) / 2); }
 /* Chips that wrap onto a second line sit 12 px apart, so the reach of one meets the next and never crosses it. */
 [data-form="phone"] .acts:has(> .chip) { row-gap: 12px; }
+
+/* Zap (plans/zap.md 2.1): an action beside Search on desktop (the size of the narrow Search field), a round glass button
+ * at the phone's title. On TV it is a `.nav` at the bar's end and takes the tabs' look. */
+[data-form="desktop"] .zap-btn { width: calc(28 * var(--px)); padding: 0; justify-content: center; }
+[data-form="desktop"] .zap-btn svg { width: calc(16 * var(--px)); height: calc(16 * var(--px)); }
+[data-form="phone"] .zap-btn { display: inline-grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; color: #fff; background: rgba(0, 0, 0, .64); }
+[data-form="phone"] .zap-btn svg { width: 24px; height: 24px; }

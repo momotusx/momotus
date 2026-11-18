@@ -50,6 +50,8 @@ import Onboarding, { RecommendedAddons } from "./screens/onboarding";
 import Pairing from "./screens/pairing";
 import ProfilesScreen, { EditProfile, ManageProfiles, Picker } from "./screens/profiles";
 import Player from "./screens/player";
+import Zap from "./screens/zap";
+import { ZapButton } from "./components/zap-button";
 import Search, { leaveSearch, openSearch, SearchOverlay, searchOpen } from "./screens/search";
 import SettingsScreen from "./screens/settings";
 import SignInScreen, { EmailSignIn, Found, NewAccount, OtherWays, OwnServer } from "./screens/sign-in";
@@ -165,10 +167,15 @@ function TopNav() {
       </span>
       <div class="tabbar">
         <For each={forKids(tv() ? barPlaces : barPlaces.filter((d) => d !== search))}>{link}</For>
-        <Show when={tv()}>{profile()}</Show>
+        <Show when={tv()}>
+          {/* An action at the bar's end, out of the tabs and their settle (plans/zap.md 2.1). */}
+          <ZapButton class="nav" word />
+          {profile()}
+        </Show>
       </div>
       <Show when={!tv()}>
         <div class="topnav-end">
+          <ZapButton class="nav zap-btn" />
           <A href={search.path} end class="nav nav-field" classList={{ on: section(location.pathname) === search.path }} data-f="nav:/search" on:click={paletteClick(search.path)}>
             <search.icon aria-hidden />
             <span>{search.label}</span>
@@ -240,7 +247,7 @@ function Shell(props: RouteSectionProps) {
       history.back();
       return;
     }
-    const parent = parentOf(location.pathname, form());
+    const parent = parentOf(location.pathname, form(), location.search);
     if (!parent) return platformBack(); // Home is the root: the platform shell owns exit (a no-op off webOS).
     markBack();
     navigate(parent, { replace: true });
@@ -400,7 +407,7 @@ function Shell(props: RouteSectionProps) {
                 <div class="backbar" classList={{ bar: place() === "bar", under: scrolled() || docScrolled() }} inert={searchOpen() || undefined}>
                   <a
                     class="back"
-                    href={incognito() ? "/" : (parentOf(location.pathname, form()) ?? "/")}
+                    href={incognito() ? "/" : (parentOf(location.pathname, form(), location.search) ?? "/")}
                     data-f="back"
                     on:click={(e) => {
                       e.preventDefault();
@@ -491,6 +498,7 @@ function routes() {
       <Route path="/title/:kind/:id" component={Title} />
       <Route path="/title/:kind/:id/versions/:videoId" component={Versions} />
       <Route path="/play/:kind/:id/:videoId" component={Player} />
+      <Route path="/zap" component={Zap} />
       <Route path="/welcome" component={Onboarding} />
       <Route path="/sign-in" component={SignInScreen} />
       <Route path="/sign-in/other" component={OtherWays} />

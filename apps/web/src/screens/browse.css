@@ -150,3 +150,5 @@
 [data-form="phone"] .dv-filters { gap: 8px; margin: 0 0 18px; }
 [data-form="phone"] .dv-filters .chips-row { flex-direction: row; }
 [data-form="phone"] .dv-clear { height: 48px; min-width: 48px; padding: 0 8px; font-size: 15px; }
+/* The phone's Discover title with Zap at its end (plans/zap.md 2.1). */
+[data-form="phone"] .dv-titlerow { display: flex; align-items: center; justify-content: space-between; }

@@ -26,6 +26,14 @@ test("Back with no history walks a Settings page up to its section, then out", (
   expect(parentOf("/title/movie/tt1/versions/tt1", "tv")).toBe("/title/movie/tt1");
 });
 
+test("Back from a zap's play with no history goes Home, never to a title it hides (plans/zap.md 2.2)", () => {
+  for (const form of ["phone", "tv", "desktop"] as const) {
+    expect(parentOf("/play/movie/tt1/tt1", form, "?zap=600000")).toBe("/");
+    expect(parentOf("/play/movie/tt1/tt1", form, "?zap=600000&tries=1")).toBe("/");
+    expect(parentOf("/play/movie/tt1/tt1", form)).toBe("/title/movie/tt1");
+  }
+});
+
 test("every Settings sub-page but the profile pages has a section", () => {
   for (const page of ["/addons", "/recommended-addons", "/find-addons", "/plugins", "/import", "/pair", "/home-rows", "/stream-choice", "/debrid", "/sync", "/trakt", "/sync/kit"]) {
     expect(isSettingsPage(page)).toBe(true);

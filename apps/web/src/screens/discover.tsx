@@ -16,6 +16,7 @@ import { extends_ } from "../lib/discover-hold";
 import { listFailed, problemWords } from "../lib/words";
 import { keptScroll } from "../lib/kept-scroll";
 import { Stalled } from "../components/stalled";
+import { ZapButton } from "../components/zap-button";
 import "./browse.css";
 
 // Where the page was scrolled to: the view is kept, so Back lands here too.
@@ -212,7 +213,13 @@ function DiscoverPage(props: { retry: () => void }) {
           {(s) => (
             <>
               <div class="dv-head">
-                <h1>Discover</h1>
+                {/* The phone has no header: Zap sits at the title's end (plans/zap.md 2.1). */}
+                <Show when={form() === "phone"} fallback={<h1>Discover</h1>}>
+                  <div class="dv-titlerow">
+                    <h1>Discover</h1>
+                    <ZapButton />
+                  </div>
+                </Show>
                 <div class="dv-kinds">
                   <Segmented
                     label="Kind"

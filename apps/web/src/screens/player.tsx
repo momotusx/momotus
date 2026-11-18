@@ -16,6 +16,8 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import RotateCcw from "lucide-solid/icons/rotate-ccw";
 import RotateCw from "lucide-solid/icons/rotate-cw";
 import SkipForward from "lucide-solid/icons/skip-forward";
+import Info from "lucide-solid/icons/info";
+import Shuffle from "lucide-solid/icons/shuffle";
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, untrack } from "solid-js";
 import { Backdrop } from "../components/art";
 import { played } from "../components/row";
@@ -37,6 +39,8 @@ import { form, viewport } from "../form";
 import { backThenReplace, entryFrom, historyBase, historyDepth, markBack, ownState, takeBack } from "../history";
 import { setMuted as setTrailerMuted } from "../components/yt-player";
 import { Loading, type Wait } from "../player/loading";
+import type { Dial } from "../core/generated/Dial";
+import { ZAP_TRIES, zapPath, zapWords } from "./zap";
 import { SubtitlePicker } from "../player/subtitle-picker";
 import { AudioStrip, inStrip, QuickShift, type ShiftAt, stripEntry, SubtitleStrip } from "../player/bar-strip";
 import { createVideoEngine } from "../player/video-engine";
@@ -121,9 +125,11 @@ export default function Player() {
   const viaTitle = () => (location.state as { viaTitle?: unknown } | null)?.viaTitle === true;
   // Try again on a title that could not be opened: the page opens anew.
   const [attempt, setAttempt] = createSignal(0);
+  // A zap's play (plans/zap.md 2.2): its start, its auto zaps so far and Discover's kind ride in the address.
+  const zapAt = () => (typeof query.zap === "string" && /^\d+$/.test(query.zap) ? Number(query.zap) : null);
   return (
     <KeyedPage
-      address={`${params.kind}/${params.id}/${params.videoId}/${chosen() ?? ""}/${attempt()}`}
+      address={`${params.kind}/${params.id}/${params.videoId}/${chosen() ?? ""}/${attempt()}/${zapAt() ?? ""}`}
       read={() => ({
         kind: decoded(params.kind),
         id: decoded(params.id),
@@ -133,13 +139,28 @@ export default function Player() {
         viaTitle: viaTitle(),
         binge: typeof query.binge === "string" ? query.binge : undefined,
         retry: () => setAttempt((n) => n + 1),
+        zapAt: zapAt(),
+        zapTries: Number(query.tries) || 0,
+        zapKind: typeof query.kind === "string" ? query.kind : null,
       })}
       page={PlayerPage}
     />
   );
 }
 
-function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: string | null; startOver: boolean; viaTitle: boolean; binge?: string; retry: () => void }) {
+function PlayerPage(props: {
+  kind: string;
+  id: string;
+  videoId: string;
+  chosen: string | null;
+  startOver: boolean;
+  viaTitle: boolean;
+  binge?: string;
+  retry: () => void;
+  zapAt: number | null;
+  zapTries: number;
+  zapKind: string | null;
+}) {
   const navigate = useNavigate();
   // Every play passes here: the hero's trailers are muted again, so Home after a film is never loud by surprise
   // (the lead, 2026-10-26). A tab or a page change on Home keeps the viewer's choice.
@@ -219,9 +240,14 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   // Back goes where the viewer came from: it names the title only when that
   // is the title page.
   const backWords = () => (entryFrom() === titlePath(props.kind, props.id) ? `Back to ${ctx.details()?.name ?? "the title"}` : "Back");
+  // A zap hides what it is until the viewer asks (plans/zap.md 2.3): every place that draws the name reads `hidden`.
+  const zapping = () => props.zapAt !== null;
+  const [revealed, setRevealed] = createSignal(false);
+  const hidden = () => zapping() && !revealed();
   createEffect(() => {
     const name = ctx.details()?.name;
-    if (name && !layer()) setTitle(`${name} · Momotus`);
+    if (hidden() && !layer()) setTitle(`${zapWords.zap} · Momotus`);
+    else if (name && !layer()) setTitle(`${name} · Momotus`);
   });
   const prefs = prefsView();
   const versions = () => ctx.versions()?.state.data ?? null;
@@ -273,6 +299,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         poster: ctx.details()?.poster ?? undefined,
         season: ctx.ref?.season ?? undefined,
         episode: ctx.ref?.episode,
+        zapAt: props.zapAt ?? undefined,
       }, false, "url"),
     );
   });
@@ -466,7 +493,9 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   const layout = () => prefs.state.data?.subtitleLayout ?? "stacked";
   const onPause = () => !!prefs.state.data?.secondOnPause;
   // The file's own subtitle tracks the engine lists (mpv; the <video> engine has none).
-  const fileSubs = () => engine.tracks().filter((t) => t.kind === "sub");
+  // A hidden zap drops the file's own track titles: they often carry the release name (plans/zap.md 2.3).
+  const unnamed = <T extends { label: string }>(t: T): T => (hidden() ? { ...t, label: "" } : t);
+  const fileSubs = () => engine.tracks().filter((t) => t.kind === "sub").map(unnamed);
   // The first line's language as drawn: the core's track's, else the file's own code.
   const firstLanguage = () => {
     const t = track();
@@ -847,7 +876,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
           e.preventDefault();
           e.stopImmediatePropagation();
           wake();
-          document.querySelector<HTMLElement>('[data-f="player:another"]')?.focus();
+          document.querySelector<HTMLElement>(zapping() ? '[data-f="player:zap"]' : '[data-f="player:another"]')?.focus();
           return;
         }
         // Controls hidden: Left and Right skip 10 s and bring the controls up,
@@ -1220,7 +1249,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
   };
   // The engine's own tracks (player/engine.ts): mpv lists the file's audio
   // and subtitle tracks; the <video> engine at most the audio ones.
-  const audioTracks = () => engine.tracks().filter((t) => t.kind === "audio");
+  const audioTracks = () => engine.tracks().filter((t) => t.kind === "audio").map(unnamed);
   // Audio: the track the engine reports, else what the playing version says.
   const audioText = () => {
     const picked = audioTracks().find((t) => t.selected);
@@ -1441,13 +1470,45 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
     on(midStall, (stalled) => void playback()?.command({ type: "stalled", stalled, positionMs: Math.round(engine.position() * 1000) }), { defer: true }),
   );
 
-  // Laid out from the start, hidden and inert until the offer, so nothing moves and nothing focuses it.
-  const anotherButton = () => (
-    <RouteA class="btn ld-another" classList={{ shown: another() }} href={layerHref()} on:click={openLayer} data-f="player:another" inert={!another()}>
-      <Layers aria-hidden />
-      {nextVersion.another}
-    </RouteA>
+  // A zap never offers another version or Try again (plans/zap.md 2.3): anything that ends its start before the first
+  // frame (a failure, the 20 s offer) zaps on in place of this play, up to ZAP_TRIES in a row, then "Nothing played."
+  // After the first frame nothing zaps by itself.
+  const zapOn = () => navigate(zapPath(props.zapKind, props.zapTries + 1), { replace: true, state: ownState(location.state) });
+  const zapAgain = () => navigate(zapPath(props.zapKind), { replace: true, state: ownState(location.state) });
+  const nothingPlayed = () => zapping() && props.zapTries + 1 >= ZAP_TRIES && !started() && (another() || (!!status() && !status()?.busy));
+  // Once: a snapshot that lands while the next zap opens never sends a second.
+  let zappedOn = false;
+  // The page left (Back while a dial turn saves): nothing navigates from it after.
+  let gone = false;
+  onCleanup(() => (gone = true));
+  createEffect(() => {
+    if (!zapping() || started() || nothingPlayed() || zappedOn) return;
+    if (another() || (status() && !status()?.busy)) {
+      zappedOn = true;
+      zapOn();
+    }
+  });
+  createEffect(
+    on(nothingPlayed, (n) => {
+      if (n) autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="end:zap"]'));
+    }),
   );
+  // Turning the dial keeps it for the profile and zaps from the new place at once.
+  const dial = () => prefs.state.data?.zapDial ?? "near";
+  const turn = (to: Dial) => {
+    if (to === dial()) return;
+    void op("setPrefs", { patch: { zapDial: to } })
+      .then(() => !gone && zapAgain())
+      .catch(() => undefined);
+  };
+  // Laid out from the start, hidden and inert until the offer, so nothing moves and nothing focuses it.
+  const anotherButton = () =>
+    zapping() ? undefined : (
+      <RouteA class="btn ld-another" classList={{ shown: another() }} href={layerHref()} on:click={openLayer} data-f="player:another" inert={!another()}>
+        <Layers aria-hidden />
+        {nextVersion.another}
+      </RouteA>
+    );
   return (
     <>
     <div
@@ -1554,14 +1615,14 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
       <Loading
         wait={wait()}
         fill={fill()}
-        logo={ctx.details()?.logo}
-        name={ctx.details()?.name}
-        background={ctx.details()?.background}
+        logo={hidden() ? undefined : ctx.details()?.logo}
+        name={hidden() ? zapWords.zap : ctx.details()?.name}
+        background={hidden() ? undefined : ctx.details()?.background}
         lines={waitLines()}
         action={form() === "tv" ? anotherButton() : undefined}
       />
       <p class="sr" aria-live="polite">
-        {another() ? nextVersion.anotherReady : ""}
+        {another() && !zapping() ? nextVersion.anotherReady : ""}
       </p>
       {/* The quick shift's one line once it settles (D12). */}
       <p class="sr said" aria-live="polite">
@@ -1581,14 +1642,81 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
             {anotherButton()}
           </div>
         </Show>
-        <h1>{ctx.details()?.name ?? ""}</h1>
-        <Show when={ctx.label()}>{(l) => <p>{l()}</p>}</Show>
-        <Show when={pausedNow() && (ctx.episode()?.overview ?? ctx.details()?.description)}>{(t) => <p class="psyn">{t()}</p>}</Show>
+        <Show
+          when={hidden()}
+          fallback={
+            <>
+              <h1>{ctx.details()?.name ?? ""}</h1>
+              <Show when={ctx.label()}>{(l) => <p>{l()}</p>}</Show>
+              <Show when={pausedNow() && (ctx.episode()?.overview ?? ctx.details()?.description)}>{(t) => <p class="psyn">{t()}</p>}</Show>
+            </>
+          }
+        >
+          <h1>{zapWords.zap}</h1>
+          {/* Nothing to name once nothing played. */}
+          <Show when={!nothingPlayed()}>
+            <button
+              class="pill zap-what"
+              data-f="player:what"
+              onClick={() => {
+                setRevealed(true);
+                // The button goes with the answer: the focus moves on to its first way on.
+                autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="player:fromstart"]'));
+              }}
+            >
+              <Info aria-hidden />
+              <b class="w">{zapWords.what}</b>
+            </button>
+          </Show>
+        </Show>
+        {/* What is this? answered: the name stays where it always is, with the ways to keep watching it. */}
+        <Show when={zapping() && revealed()}>
+          <div class="zap-acts" role="group" aria-label={zapWords.what}>
+            {/* A plain play of this video from 0, in place of the zap: its progress counts at once. A plain link, so
+                the router never marks it as the page it is on. */}
+            <a
+              class="pill"
+              href={playPath(props.kind, props.id, props.videoId)}
+              data-f="player:fromstart"
+              on:click={(e) => {
+                e.preventDefault();
+                navigate(playPath(props.kind, props.id, props.videoId), { replace: true, state: { ...ownState(location.state), startOver: true } });
+              }}
+            >
+              <RotateCcw aria-hidden />
+              <b class="w">{zapWords.fromStart}</b>
+            </a>
+            <RouteA class="pill" href={titlePath(props.kind, props.id)} replace data-f="player:opentitle">
+              <b class="w">{zapWords.openTitle}</b>
+            </RouteA>
+          </div>
+        </Show>
       </header>
       <Show when={endsAt()}>{(t) => <p class="clock num">Ends at {t()}</p>}</Show>
 
-      {/* Still on its way: the loading layer says so (above). */}
-      <Show when={status()}>
+      {/* A zap's start that ended, the third in a row: a quiet card, no versions and no Try again (plans/zap.md 2.3). */}
+      <Show when={nothingPlayed()}>
+        <section class="endcard" role="alert">
+          <div class="end-body">
+            <p class="st bad">
+              <CircleAlert aria-hidden />
+              {zapWords.nothingPlayed}
+            </p>
+            <div class="acts">
+              <button class="btn primary big" data-f="end:zap" data-autofocus onClick={zapAgain}>
+                <Shuffle aria-hidden />
+                {zapWords.again}
+              </button>
+              <button class="btn big" data-f="end:back" onClick={goBack}>
+                <ArrowLeft aria-hidden />
+                Back
+              </button>
+            </div>
+          </div>
+        </section>
+      </Show>
+      {/* Still on its way: the loading layer says so (above). A zap moves on instead. */}
+      <Show when={(!zapping() || started()) && status()}>
         {(s) => (
           <Show when={!s().busy}>
             {/* Nothing plays: a centered card with the way on, never a
@@ -1616,7 +1744,14 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                 <div class="acts">
                   {/* A version picked by hand failed for a reason of its
                       own: the ranking's next one, first and focused. */}
-                  <Show when={snap()?.offer}>
+                  {/* A zap that played, then failed: zap on, never another version (its names carry the title). */}
+                  <Show when={zapping()}>
+                    <button class="btn primary big" data-f="end:zap" data-autofocus onClick={zapAgain}>
+                      <Shuffle aria-hidden />
+                      {zapWords.again}
+                    </button>
+                  </Show>
+                  <Show when={!zapping() && snap()?.offer}>
                     {(o) => (
                       <button
                         class="btn primary big"
@@ -1632,8 +1767,8 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                   {/* A playback that could not open: mostly a version no
                       longer listed, which Try again cannot bring back, so
                       Choose a version comes first and has the focus. */}
-                  <Show when={openError() && !titleError()}>{chooseVersion()}</Show>
-                  <Show when={s().empty}>
+                  <Show when={!zapping() && openError() && !titleError()}>{chooseVersion()}</Show>
+                  <Show when={!zapping() && s().empty}>
                     {(e) => <EmptyActs empty={e()} at="player" big retry={props.retry} play={playKey} choose={chooseVersion()} />}
                   </Show>
                   {/* This play again from its first pick (`retry`), or the
@@ -1650,7 +1785,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                       Try again
                     </button>
                   </Show>
-                  <Show when={!openError() && !titleError() && !s().empty && failedAs() !== "unreachable"}>{chooseVersion()}</Show>
+                  <Show when={!zapping() && !openError() && !titleError() && !s().empty && failedAs() !== "unreachable"}>{chooseVersion()}</Show>
                   {/* The one way on when nothing plays and the state has no action of its own. */}
                   <button
                     class="btn big"
@@ -1675,6 +1810,27 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
             <Show
               when={next()}
               fallback={
+                <Show
+                  when={!zapping()}
+                  fallback={
+                    // A zap's end: zap on, or go back (plans/zap.md 2.3). The name shows once asked.
+                    <>
+                      <Show when={!hidden()}>
+                        <h2>{ctx.details()?.name}</h2>
+                      </Show>
+                      <div class="acts">
+                        <button class="btn primary big" data-f="end:zap" data-autofocus onClick={zapAgain}>
+                          <Shuffle aria-hidden />
+                          {zapWords.again}
+                        </button>
+                        <button class="btn big" data-f="end:back" onClick={goBack}>
+                          <ArrowLeft aria-hidden />
+                          {backWords()}
+                        </button>
+                      </div>
+                    </>
+                  }
+                >
                 <>
                   <h2>{ctx.details()?.name}</h2>
                   <div class="acts">
@@ -1690,6 +1846,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
                     </button>
                   </div>
                 </>
+                </Show>
               }
             >
               {(n) => (
@@ -1796,18 +1953,29 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
             </button>
             {/* Leaving for Versions or Episodes replaces this play in history:
                 Back from the next play goes to Versions, then the title, never to this one. */}
-            <RouteA
-              class="pill"
-              href={versionsPath(props.kind, props.id, props.videoId)}
-              replace
-              on:click={toVersions}
-              data-f="player:versionsact"
-              aria-label={[barWords.names.versions, playing() ? qualityCell(playing()?.quality ?? "") : ""].filter(Boolean).join(", ")}
-              title={barWords.names.versions}
+            {/* A zap: Zap again in Versions' place; release names carry the title (plans/zap.md 2.3). */}
+            <Show
+              when={!zapping()}
+              fallback={
+                <button class="pill" data-f="player:zap" aria-label={zapWords.again} title={zapWords.again} onClick={zapAgain}>
+                  <Shuffle aria-hidden />
+                  <b class="w">{zapWords.again}</b>
+                </button>
+              }
             >
-              <Layers aria-hidden />
-              <small class="w">{playing() ? qualityCell(playing()?.quality ?? "") : ""}</small>
-            </RouteA>
+              <RouteA
+                class="pill"
+                href={versionsPath(props.kind, props.id, props.videoId)}
+                replace
+                on:click={toVersions}
+                data-f="player:versionsact"
+                aria-label={[barWords.names.versions, playing() ? qualityCell(playing()?.quality ?? "") : ""].filter(Boolean).join(", ")}
+                title={barWords.names.versions}
+              >
+                <Layers aria-hidden />
+                <small class="w">{playing() ? qualityCell(playing()?.quality ?? "") : ""}</small>
+              </RouteA>
+            </Show>
           </div>
           <div class="transport">
               <button class="round" data-f="player:back10" aria-label="Back 10 seconds" onClick={() => seek(-10)}>
@@ -1854,7 +2022,26 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
               </div>
             </div>
             <div class="bnav">
-              <Show when={ctx.ref}>
+              {/* A zap: the dial in Episodes' and Next's place. A press turns it, never a focus (TV sweeps). */}
+              <Show when={zapping()}>
+                <div class="zap-dial" role="group" aria-label={zapWords.dial}>
+                  <For each={zapWords.dials}>
+                    {(d) => (
+                      <button
+                        class="pill"
+                        classList={{ on: dial() === d.value }}
+                        data-f={`player:dial-${d.value}`}
+                        aria-pressed={dial() === d.value}
+                        aria-label={d.spoken}
+                        onClick={() => turn(d.value)}
+                      >
+                        <b class="w">{d.label}</b>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </Show>
+              <Show when={ctx.ref && !zapping()}>
                 <RouteA class="pill ico" href={titlePath(props.kind, props.id)} replace on:click={toTitle} data-f="player:episodes" aria-label={barWords.names.episodes} title={barWords.names.episodes}>
                   <ListVideo aria-hidden />
                 </RouteA>
@@ -1938,7 +2125,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
 
       <Show when={panel() === "subs"}>
         <SubtitlePicker
-          tracks={snap()?.subtitles ?? []}
+          tracks={hidden() ? (snap()?.subtitles ?? []).map((t) => ({ ...t, release: null })) : (snap()?.subtitles ?? [])}
           fileSubs={fileSubs()}
           on={track()?.url ?? null}
           onFile={track() ? null : (fileSubs().find((t) => t.selected)?.id ?? null)}
@@ -2010,7 +2197,7 @@ function PlayerPage(props: { kind: string; id: string; videoId: string; chosen: 
         )}
       </Show>
     </div>
-      <Show when={layer()}>
+      <Show when={layer() && !zapping()}>
         <div class="vlayer">
           <VersionsPage kind={props.kind} id={props.id} videoId={props.videoId} binge={props.binge} retry={props.retry} onPlay={pickInLayer} onBack={closeLayer} hold />
         </div>
