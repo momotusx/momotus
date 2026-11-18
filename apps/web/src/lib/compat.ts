@@ -110,6 +110,9 @@ function inertFallback(g: typeof globalThis) {
         this.setAttribute("inert", "");
         if (!this.hasAttribute("aria-hidden")) this.setAttribute(HIDDEN, "");
         this.setAttribute("aria-hidden", "true");
+        // Native inert takes focus out of the region it covers (the focus fixup leaves it on the body).
+        const at = doc.activeElement as HTMLElement | null;
+        if (at && this.contains(at)) at.blur();
       } else {
         this.removeAttribute("inert");
         if (this.hasAttribute(HIDDEN)) this.removeAttribute("aria-hidden");
@@ -138,14 +141,19 @@ function inertFallback(g: typeof globalThis) {
     (e) => {
       const to = e.target as HTMLElement;
       if (!to.closest?.("[inert]")) return void (last = to);
+      const ways: (HTMLElement | null | undefined)[] = [];
       if (tabbing) {
         const live = [...doc.querySelectorAll<HTMLElement>(TABBABLE)].filter((el) => el.tabIndex >= 0 && !el.closest("[inert]"));
         const way = tabbing > 0 ? 4 : 2; // Node.DOCUMENT_POSITION_FOLLOWING, Node.DOCUMENT_POSITION_PRECEDING
-        const next = (tabbing > 0 ? live : live.reverse()).find((el) => to.compareDocumentPosition(el) & way);
-        if (next) return void next.focus();
+        ways.push((tabbing > 0 ? live : live.reverse()).find((el) => to.compareDocumentPosition(el) & way));
       }
-      if (last?.isConnected && !last.closest("[inert]")) last.focus();
-      else to.blur();
+      if (last?.isConnected && !last.closest("[inert]")) ways.push(last);
+      for (const el of ways) {
+        el?.focus();
+        if (doc.activeElement !== to) return;
+      }
+      // Nowhere took it (gone, hidden, disabled): out of the region, onto the body, as native inert leaves it.
+      to.blur();
     },
     true,
   );
