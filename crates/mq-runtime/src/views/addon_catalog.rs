@@ -14,6 +14,7 @@ use mq_addons::{AddonError, InstalledAddon, configure_url, normalize_transport_u
 use mq_http::{HttpError, RequestOptions, Url};
 use mq_library::{AddonRow, Table};
 use mq_protocol::{Manifest, ResourcePath};
+use mq_rt::{AbortHandle, JoinHandle, JoinSet};
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -23,7 +24,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use stremio_core::types::addon::{ManifestCatalog, ManifestResource};
-use tokio::task::{AbortHandle, JoinHandle, JoinSet};
 
 /// Cinemeta, the source of both lists (the address the onboardings use).
 pub const CINEMETA: &str = "https://v3-cinemeta.strem.io/manifest.json";
@@ -269,7 +269,7 @@ impl AddonCatalogView {
         let mut lists = Lists::new(source);
         lists.follow_addons(core);
         let snapshot = SharedObservable::new(lists.render(core));
-        let task = tokio::spawn(run(core.clone(), fresh, lists, changes, snapshot.clone()));
+        let task = mq_rt::spawn(run(core.clone(), fresh, lists, changes, snapshot.clone()));
         Self { snapshot, task }
     }
 
@@ -348,7 +348,7 @@ where
     F: FnOnce(Url) -> Fut,
     Fut: Future<Output = Result<Manifest, AddonError>>,
 {
-    let manifest = tokio::time::timeout(TIMEOUT, fetch(entry.key.clone()))
+    let manifest = mq_rt::timeout(TIMEOUT, fetch(entry.key.clone()))
         .await
         .map_err(|_| ListedFailure::Timeout)?
         .map_err(fetch_failure)?;
@@ -843,7 +843,7 @@ type Fetched = Result<(Vec<ListedAddon>, bool), String>;
 struct Fetches {
     tasks: JoinSet<(String, u64, Fetched)>,
     running: HashMap<String, AbortHandle>,
-    by_task: HashMap<tokio::task::Id, (String, u64)>,
+    by_task: HashMap<mq_rt::task::Id, (String, u64)>,
     generation: u64,
     /// Installed addons' lists only: Cinemeta's two never wait.
     slots: Arc<tokio::sync::Semaphore>,
@@ -872,7 +872,7 @@ impl Fetches {
             // One deadline from the start, the wait for a fetch slot
             // included: a list behind hung ones fails in time, it does not
             // wait round after round.
-            let fetched = tokio::time::timeout(TIMEOUT, async {
+            let fetched = mq_rt::timeout(TIMEOUT, async {
                 let _slot = match list.host {
                     Some(_) => Some(slots.acquire_owned().await),
                     None => None,
@@ -987,7 +987,7 @@ async fn fetch_list(core: &Core, list: &ListSource, fresh: bool) -> Fetched {
         }
     };
     // The deadline covers the wait for a host slot too.
-    let body = tokio::time::timeout(TIMEOUT, fetched)
+    let body = mq_rt::timeout(TIMEOUT, fetched)
         .await
         .map_err(|_| list_failure(&AddonError::TimedOut, who))?
         .map_err(|e| list_failure(&e, who))?

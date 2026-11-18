@@ -8,8 +8,9 @@ use crate::Core;
 use mq_engine::FileHint;
 use mq_library::DownloadRecord;
 use mq_protocol::Source;
+use mq_rt::StdInstant as Instant;
 use mq_streams::ParsedStream;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// How often the job reads its progress.
 const LOOK_EVERY: Duration = Duration::from_secs(1);
@@ -62,7 +63,7 @@ pub(super) async fn fetch(
         .map(|(_, release)| release)
         .collect();
     for release in releases {
-        if tokio::time::timeout(RELEASE_WAIT, release).await.is_err() {
+        if mq_rt::timeout(RELEASE_WAIT, release).await.is_err() {
             tracing::warn!("download {}: a release of its torrent is stuck", row.id);
         }
     }
@@ -171,7 +172,7 @@ pub(super) async fn fetch(
             handle.stop().await;
             return Ended::Move(DownloadReason::Source);
         }
-        tokio::time::sleep(LOOK_EVERY).await;
+        mq_rt::sleep(LOOK_EVERY).await;
     }
 }
 

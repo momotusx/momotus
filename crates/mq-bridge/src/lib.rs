@@ -51,8 +51,8 @@ use tokio::sync::{broadcast, watch};
 mod dev;
 pub mod output;
 pub use dev::{dev_replay, dev_segments, dev_tmdb, dev_trakt};
+use mq_rt::JoinHandle;
 pub use output::{Outgoing, Output, SendError};
-use tokio::task::JoinHandle;
 
 /// `signOut`'s removal (D13): whether the debrid connections go too.
 #[derive(Deserialize)]
@@ -1344,9 +1344,9 @@ struct Shared {
     /// Native sign-in flows started and not yet finished, by flow id, with
     /// when they started: their verifiers stay here, in memory only, for as
     /// long as the relay takes the flow.
-    native: HashMap<String, (std::time::Instant, mq_sync::identity::NativeFlow)>,
+    native: HashMap<String, (mq_rt::StdInstant, mq_sync::identity::NativeFlow)>,
     /// Email sign-in flows, the same way.
-    email: HashMap<String, (std::time::Instant, mq_sync::identity::EmailFlow)>,
+    email: HashMap<String, (mq_rt::StdInstant, mq_sync::identity::EmailFlow)>,
     /// Where pushes go, and this session itself: the downloads views are
     /// opened again under the lock with a fence of their own.
     out: Output,
@@ -1575,7 +1575,7 @@ impl Shared {
             let (snapshot, updates) = downloads.subscribe();
             let updates = futures_util::stream::once(async move { vec![snapshot] }).chain(updates);
             let fence = Some((self.me.clone(), self.generation));
-            let forward = tokio::spawn(forward(sub, Box::pin(updates), self.out.clone(), fence));
+            let forward = mq_rt::spawn(forward(sub, Box::pin(updates), self.out.clone(), fence));
             // The old view and its forward end as it is replaced.
             self.subs.insert(
                 sub,
@@ -1603,7 +1603,7 @@ fn usable(device: &Core, profile: &str) -> bool {
 /// clock checks at the next request cover that.
 async fn incognito_clock(shared: Weak<Mutex<Shared>>, generation: u64) {
     loop {
-        tokio::time::sleep(INCOGNITO_TICK).await;
+        mq_rt::sleep(INCOGNITO_TICK).await;
         let Some(shared) = shared.upgrade() else {
             return;
         };
@@ -1636,7 +1636,7 @@ async fn incognito_clock(shared: Weak<Mutex<Shared>>, generation: u64) {
 /// the foreground. Views see a changed manifest through the addon list.
 fn refresh_addons(core: &Core) {
     let core = core.clone();
-    tokio::spawn(async move {
+    mq_rt::spawn(async move {
         if core
             .refresh_addons(mq_library::hlc::now_ms())
             .await
@@ -1738,7 +1738,7 @@ impl Session {
         // A launch resumes the downloads a kill or a reboot left.
         let _ = core.downloads();
         let ends = core.incognito_ended_unseen().subscribe();
-        let watcher = tokio::spawn(watch_gone(
+        let watcher = mq_rt::spawn(watch_gone(
             Arc::downgrade(&shared),
             core,
             (changes, ends),
@@ -1993,7 +1993,7 @@ impl Session {
                     shared
                         .native
                         .retain(|_, (started, _)| started.elapsed() < NATIVE_FLOW_LIFE);
-                    let now = std::time::Instant::now();
+                    let now = mq_rt::StdInstant::now();
                     shared.native.insert(flow.flow.clone(), (now, flow));
                     Ok::<_, mq_sync::SyncError>(answer)
                 });
@@ -2033,7 +2033,7 @@ impl Session {
                         .retain(|_, (started, _)| started.elapsed() < NATIVE_FLOW_LIFE);
                     shared
                         .email
-                        .insert(flow.flow.clone(), (std::time::Instant::now(), flow));
+                        .insert(flow.flow.clone(), (mq_rt::StdInstant::now(), flow));
                     Ok::<_, mq_sync::SyncError>(answer)
                 });
             }
@@ -2642,7 +2642,7 @@ impl Session {
                 // The app may not come back: error reports into the queue now.
                 core.reports_flush();
                 self.spawn(id, async move {
-                    let _ = tokio::time::timeout(TRAKT_FLUSH, core.trakt_background()).await;
+                    let _ = mq_rt::timeout(TRAKT_FLUSH, core.trakt_background()).await;
                     Ok::<_, Failure>(json!({}))
                 });
             }
@@ -3055,7 +3055,7 @@ impl Session {
             .map_err(|e| Failure::coded(e.code(), &e.to_string()))?;
         let mut shared = lock(&self.shared);
         let generation = shared.generation + 1;
-        let timer = tokio::spawn(incognito_clock(shared.me.clone(), generation));
+        let timer = mq_rt::spawn(incognito_clock(shared.me.clone(), generation));
         let now = shared.wall_ms();
         shared.incognito = Some(Incognito {
             host: host.profile().to_owned(),
@@ -3167,7 +3167,7 @@ impl Session {
         work: impl Future<Output = Result<Value, E>> + Send + 'static,
     ) {
         let out = self.out.clone();
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             let result = run(work).await;
             send_answer(&out, json!(id), result);
         });
@@ -3184,7 +3184,7 @@ impl Session {
         let out = self.out.clone();
         let shared = Arc::downgrade(&self.shared);
         let generation = lock(&self.shared).generation;
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             let result = run(work).await;
             let Some(shared) = shared.upgrade() else {
                 return;
@@ -3215,7 +3215,7 @@ impl Session {
                 let state = lock(&self.shared).state.subscribe();
                 let profiles = ProfilesView::open(&core, state);
                 let (snapshot, updates) = profiles.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, None));
+                let forward = mq_rt::spawn(forward(sub, updates, out, None));
                 (
                     View::Profiles { _view: profiles },
                     to_value(&snapshot)?,
@@ -3226,7 +3226,7 @@ impl Session {
             "debrid" => {
                 let debrid = DebridView::open(&core);
                 let (snapshot, updates) = debrid.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, None));
+                let forward = mq_rt::spawn(forward(sub, updates, out, None));
                 (
                     View::Debrid { _view: debrid },
                     to_value(&snapshot)?,
@@ -3237,7 +3237,7 @@ impl Session {
                 let service = debrid_service(&param(params, "service")?)?;
                 let login = DebridLoginView::open(&core, service);
                 let (snapshot, updates) = login.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, None));
+                let forward = mq_rt::spawn(forward(sub, updates, out, None));
                 (
                     View::DebridLogin { _view: login },
                     to_value(&snapshot)?,
@@ -3247,13 +3247,13 @@ impl Session {
             "trakt" => {
                 let trakt = TraktView::open(&core);
                 let (snapshot, updates) = trakt.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (View::Trakt { _view: trakt }, to_value(&snapshot)?, forward)
             }
             "traktLogin" => {
                 let login = TraktLoginView::open(&core);
                 let (snapshot, updates) = login.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (
                     View::TraktLogin { _view: login },
                     to_value(&snapshot)?,
@@ -3263,7 +3263,7 @@ impl Session {
             "home" => {
                 let home = HomeView::open(&core);
                 let (snapshot, updates) = home.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (View::Home { _view: home }, to_value(&snapshot)?, forward)
             }
             "title" => {
@@ -3271,7 +3271,7 @@ impl Session {
                 let id = param(params, "id")?;
                 let title = TitleView::open(&core, &kind, &id);
                 let (snapshot, updates) = title.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (View::Title(title), to_value(&snapshot)?, forward)
             }
             "versions" => {
@@ -3291,13 +3291,13 @@ impl Session {
                     VersionsView::open_checked(&core, parsed, item)
                 };
                 let (snapshot, updates) = versions.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (View::Versions(versions), to_value(&snapshot)?, forward)
             }
             "addons" => {
                 let addons = AddonsView::open(&core);
                 let (snapshot, updates) = addons.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (
                     View::Addons { _view: addons },
                     to_value(&snapshot)?,
@@ -3308,13 +3308,13 @@ impl Session {
                 let fresh = params.get("fresh").and_then(Value::as_bool) == Some(true);
                 let catalog = AddonCatalogView::open_from(&core, &self.catalog_source(), fresh);
                 let (snapshot, updates) = catalog.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (View::AddonCatalog(catalog), to_value(&snapshot)?, forward)
             }
             "import" => {
                 let import = ImportView::open(&core, dev::stremio_endpoints());
                 let (snapshot, updates) = import.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (
                     View::Import { _view: import },
                     to_value(&snapshot)?,
@@ -3324,7 +3324,7 @@ impl Session {
             "settings" => {
                 let settings = SettingsView::open(&core);
                 let (snapshot, updates) = settings.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (
                     View::Settings { _view: settings },
                     to_value(&snapshot)?,
@@ -3337,7 +3337,7 @@ impl Session {
                 let pairing =
                     PairingView::open(&core, &param(params, "server")?, &name, form.as_deref());
                 let (snapshot, updates) = pairing.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (
                     View::Pairing { _view: pairing },
                     to_value(&snapshot)?,
@@ -3360,19 +3360,19 @@ impl Session {
                     revoke,
                 );
                 let (snapshot, updates) = sign_in.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (View::SignIn(sign_in), to_value(&snapshot)?, forward)
             }
             "discover" => {
                 let discover = DiscoverView::open(&core);
                 let (snapshot, updates) = discover.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (View::Discover(discover), to_value(&snapshot)?, forward)
             }
             "genres" => {
                 let genres = GenresView::open(&core);
                 let (snapshot, updates) = genres.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (
                     View::Genres { _view: genres },
                     to_value(&snapshot)?,
@@ -3387,19 +3387,19 @@ impl Session {
                     .ok_or_else(|| Failure::from("today must be YYYY-MM-DD".to_owned()))?;
                 let calendar = CalendarView::open(&core, today);
                 let (snapshot, updates) = calendar.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (View::Calendar(calendar), to_value(&snapshot)?, forward)
             }
             "library" => {
                 let library = LibraryView::open(&core);
                 let (snapshot, updates) = library.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (View::Library(library), to_value(&snapshot)?, forward)
             }
             "search" => {
                 let search = SearchView::open(&core);
                 let (snapshot, updates) = search.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (View::Search(search), to_value(&snapshot)?, forward)
             }
             "downloads" => {
@@ -3412,7 +3412,7 @@ impl Session {
                     DownloadsView::open(&core)
                 };
                 let (snapshot, updates) = downloads.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (
                     View::Downloads { _view: downloads },
                     to_value(&snapshot)?,
@@ -3422,14 +3422,14 @@ impl Session {
             "playback" => {
                 let playback = self.playback(&core, params)?;
                 let (snapshot, updates) = playback.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (View::Playback(playback), to_value(&snapshot)?, forward)
             }
             // The owner's views of kids profiles (plans/m11-kids.md 9.1).
             "kidsTitles" => {
                 let titles = KidsTitlesView::open(&core, &param(params, "profile")?)?;
                 let (snapshot, updates) = titles.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (
                     View::KidsTitles { _view: titles },
                     to_value(&snapshot)?,
@@ -3439,7 +3439,7 @@ impl Session {
             "kidsKeys" => {
                 let keys = KidsKeysView::open(&core)?;
                 let (snapshot, updates) = keys.subscribe();
-                let forward = tokio::spawn(forward(sub, updates, out, fence));
+                let forward = mq_rt::spawn(forward(sub, updates, out, fence));
                 (
                     View::KidsKeys { _view: keys },
                     to_value(&snapshot)?,
@@ -3457,7 +3457,7 @@ impl Session {
             let (policy, generation) = shared.kids_policy();
             if subscription.view.not_allowed(&policy) {
                 drop(shared);
-                tokio::spawn(stop_closed(vec![subscription], generation));
+                mq_rt::spawn(stop_closed(vec![subscription], generation));
                 return Err(Failure::coded(
                     "notAllowed",
                     "this title is not on the list",
@@ -3896,7 +3896,7 @@ fn message(id: Value, result: Result<Value, Failure>) -> Value {
 async fn run<E: Into<Failure> + Send + 'static>(
     work: impl Future<Output = Result<Value, E>> + Send + 'static,
 ) -> Result<Value, Failure> {
-    match tokio::spawn(work).await {
+    match mq_rt::spawn(work).await {
         Ok(result) => result.map_err(Into::into),
         Err(e) => Err(Failure::from(format!("internal error: {e}"))),
     }
@@ -4371,7 +4371,7 @@ mod liveness {
             #[allow(unreachable_code)]
             Ok::<Value, String>(json!({}))
         });
-        let reply = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
+        let reply = mq_rt::timeout(std::time::Duration::from_secs(5), rx.recv())
             .await
             .expect("a reply")
             .unwrap()
@@ -4432,7 +4432,7 @@ mod lifecycle {
             7,
             Subscription {
                 view: View::Playback(playback),
-                forward: tokio::spawn(async {}),
+                forward: mq_rt::spawn(async {}),
             },
         );
         for (paused, locks) in [(false, false), (true, true)] {
@@ -4499,7 +4499,7 @@ mod fence {
         let (feed, mut updates) = mpsc::unbounded_channel::<Vec<u32>>();
         let stream = futures_util::stream::poll_fn(move |cx| updates.poll_recv(cx));
         let fence = Some((Arc::downgrade(&session.shared), generation));
-        let task = tokio::spawn(forward(7, stream, session.out.clone(), fence));
+        let task = mq_rt::spawn(forward(7, stream, session.out.clone(), fence));
         feed.send(vec![1]).unwrap();
         assert_eq!(
             rx.recv().await.unwrap().json(),
@@ -4508,7 +4508,7 @@ mod fence {
 
         lock(&session.shared).generation += 1;
         feed.send(vec![2]).unwrap();
-        tokio::time::timeout(std::time::Duration::from_secs(5), task)
+        mq_rt::timeout(std::time::Duration::from_secs(5), task)
             .await
             .expect("the forwarder stops")
             .unwrap();
@@ -4544,9 +4544,9 @@ mod fence {
         lock(&session.shared).core = core.for_profile(&kid);
         core.update_profile("default", Some("Owner"), None, None)
             .unwrap();
-        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        mq_rt::timeout(std::time::Duration::from_secs(5), async {
             while !lock(&session.shared).locked {
-                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                mq_rt::sleep(std::time::Duration::from_millis(10)).await;
             }
         })
         .await
@@ -4627,10 +4627,10 @@ mod catalog {
     async fn cinemeta(list: Arc<Mutex<Value>>) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             while let Ok((mut socket, _)) = listener.accept().await {
                 let list = list.lock().unwrap().to_string();
-                tokio::spawn(async move {
+                mq_rt::spawn(async move {
                     let mut buf = vec![0u8; 4096];
                     let _ = socket.read(&mut buf).await;
                     let reply = format!(
@@ -4651,7 +4651,7 @@ mod catalog {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         let (release, mut released) = oneshot::channel();
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             let mut held = Vec::new();
             loop {
                 tokio::select! {
@@ -4669,7 +4669,7 @@ mod catalog {
 
     /// The next message for `pick`, skipping the others.
     async fn next(rx: &mut UnboundedReceiver<Outgoing>, pick: impl Fn(&Value) -> bool) -> Value {
-        tokio::time::timeout(Duration::from_secs(10), async {
+        mq_rt::timeout(Duration::from_secs(10), async {
             loop {
                 let message = rx.recv().await.expect("the session is open").json();
                 if pick(&message) {
@@ -4978,7 +4978,7 @@ mod incognito_clock {
         let app = mq_sync_server::router(&dir.join("relay.sqlite"), Default::default()).unwrap();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let server = format!("http://{}", listener.local_addr().unwrap());
-        tokio::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
+        mq_rt::spawn(async move { mq_sync_server::serve(listener, app).await.unwrap() });
         c.ok(json!({"op": "createSyncAccount", "server": server, "name": "Mac"}))
             .await
     }
@@ -5046,7 +5046,7 @@ mod incognito_clock {
             self.jump(ms);
             tokio::time::advance(std::time::Duration::from_millis(ms)).await;
             for _ in 0..20 {
-                tokio::task::yield_now().await;
+                mq_rt::yield_now().await;
             }
         }
 
@@ -5111,7 +5111,7 @@ mod incognito_clock {
             7,
             Subscription {
                 view: View::Playback(playback),
-                forward: tokio::spawn(async {}),
+                forward: mq_rt::spawn(async {}),
             },
         );
         c.event("idle").await;
@@ -5195,7 +5195,7 @@ mod incognito_clock {
             7,
             Subscription {
                 view: View::Playback(playback),
-                forward: tokio::spawn(async {}),
+                forward: mq_rt::spawn(async {}),
             },
         );
         for _ in 0..(2 * 60 * 12) {
@@ -5232,7 +5232,7 @@ mod incognito_clock {
             r#"{"id":"x","version":"1.0.0","name":"X","resources":[],"types":["movie"]}"#;
         let fetched = Arc::new(AtomicUsize::new(0));
         let count = fetched.clone();
-        tokio::spawn(async move {
+        mq_rt::spawn(async move {
             while let Ok((mut socket, _)) = listener.accept().await {
                 count.fetch_add(1, Ordering::SeqCst);
                 let mut buf = [0u8; 1024];
@@ -5257,7 +5257,7 @@ mod incognito_clock {
             .unwrap();
         let mut c = Client::new(core);
         c.enter().await;
-        let settle = || tokio::time::sleep(std::time::Duration::from_millis(300));
+        let settle = || mq_rt::sleep(std::time::Duration::from_millis(300));
         settle().await;
         let start = fetched.load(Ordering::SeqCst);
         c.event("active").await;

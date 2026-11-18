@@ -9,12 +9,12 @@ use crate::Core;
 use crate::live::{FRAME, snapshots};
 use eyeball::SharedObservable;
 use futures_util::Stream;
+use mq_rt::JoinHandle;
 use mq_sync::identity::start_brokered;
 use mq_sync::wire::Taken;
 use serde::Serialize;
 use std::pin::Pin;
 use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(
@@ -102,7 +102,7 @@ impl SignInView {
     pub fn open(core: &Core, server: &str, provider: &str, return_to: &str, revoke: bool) -> Self {
         let snapshot = SharedObservable::new(SignInSnapshot::Starting);
         let (back, returned) = mpsc::channel(4);
-        let task = tokio::spawn(run(
+        let task = mq_rt::spawn(run(
             core.clone(),
             [server.to_owned(), provider.to_owned(), return_to.to_owned()],
             revoke,

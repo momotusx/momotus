@@ -13,10 +13,10 @@ use mq_import::{
     Endpoints, ImportError, ImportReport, LinkLogin, LinkPoll, SeriesVideos, Snapshot,
     StremioClient, apply_snapshot, import_account,
 };
+use mq_rt::JoinHandle;
 use serde::Serialize;
 use std::pin::Pin;
 use std::time::Duration;
-use tokio::task::JoinHandle;
 
 const POLL_EVERY: Duration = Duration::from_secs(2);
 /// Episode lists fetched at once for the watched-marks pass.
@@ -79,7 +79,7 @@ impl ImportView {
     /// Starts the sign-in. `Endpoints::default()` is the real Stremio service.
     pub fn open(core: &Core, endpoints: Endpoints) -> Self {
         let snapshot = SharedObservable::new(ImportSnapshot::Starting);
-        let task = tokio::spawn(run(core.clone(), endpoints, snapshot.clone()));
+        let task = mq_rt::spawn(run(core.clone(), endpoints, snapshot.clone()));
         Self { snapshot, task }
     }
 
@@ -155,7 +155,7 @@ async fn import(
         qr_url: login.qr_url.clone(),
     });
     let auth_key = loop {
-        tokio::time::sleep(POLL_EVERY).await;
+        mq_rt::sleep(POLL_EVERY).await;
         match login.poll().await {
             Ok(LinkPoll::Pending) => {}
             Ok(LinkPoll::Authorized { auth_key }) => break auth_key,

@@ -14,13 +14,13 @@ use crate::Core;
 use crate::live::{FRAME, snapshots};
 use eyeball::SharedObservable;
 use futures_util::Stream;
+use mq_rt::Instant;
+use mq_rt::JoinHandle;
 use mq_sync::SyncConfig;
 use mq_sync::pair::{Offer, PairingRequest, start_pairing_as};
 use serde::Serialize;
 use std::pin::Pin;
 use std::time::Duration;
-use tokio::task::JoinHandle;
-use tokio::time::Instant;
 
 /// How often the screen asks whether its code was answered: every 2 s while
 /// a scan is likely (its first 5 minutes), then every 5 s, so a TV left on its
@@ -75,7 +75,7 @@ impl PairingView {
     /// `tv`, `computer`, `web`).
     pub fn open(core: &Core, server: &str, name: &str, form: Option<&str>) -> Self {
         let snapshot = SharedObservable::new(PairingSnapshot::Starting);
-        let task = tokio::spawn(run(
+        let task = mq_rt::spawn(run(
             core.clone(),
             server.to_owned(),
             [name.to_owned(), form.unwrap_or_default().to_owned()],
@@ -155,7 +155,7 @@ async fn run(
                 Err(e) => {
                     tracing::debug!("pairing code not started: {e}");
                     if current.is_none() {
-                        tokio::time::sleep(RETRY).await;
+                        mq_rt::sleep(RETRY).await;
                         continue;
                     }
                     if let Some((_, renew_at)) = current.as_mut() {
@@ -164,7 +164,7 @@ async fn run(
                 }
             }
         }
-        tokio::time::sleep(poll_every(opened.elapsed())).await;
+        mq_rt::sleep(poll_every(opened.elapsed())).await;
         // Each live code once: the one that gave way first, then the current.
         if previous.as_ref().is_some_and(|p| Instant::now() >= p.until) {
             previous = None;

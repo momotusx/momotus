@@ -396,7 +396,7 @@ impl Core {
             id: catalog.id.clone(),
             extra: vec![],
         };
-        let fetched = tokio::time::timeout(
+        let fetched = mq_rt::timeout(
             WALL_BUDGET,
             // A little past the budget, so the request itself never times out first and records a failure
             // in the health of an addon this profile may install later.

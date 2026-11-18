@@ -7,10 +7,10 @@ use eyeball::SharedObservable;
 use futures_util::Stream;
 use mq_library::Table;
 use mq_protocol::Manifest;
+use mq_rt::JoinHandle;
 use serde::Serialize;
 use std::pin::Pin;
 use stremio_core::types::addon::ManifestResource;
-use tokio::task::JoinHandle;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(
@@ -67,7 +67,7 @@ impl AddonsView {
         // Subscribe before the first read so no change slips in between.
         let changes = core.library().subscribe();
         let snapshot = SharedObservable::new(list(core));
-        let task = tokio::spawn(watch(core.clone(), changes, snapshot.clone()));
+        let task = mq_rt::spawn(watch(core.clone(), changes, snapshot.clone()));
         Self { snapshot, task }
     }
 

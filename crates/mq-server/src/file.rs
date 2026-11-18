@@ -95,7 +95,7 @@ fn chunks(
             }
             let mut want = (end - pos).min(256 * 1024);
             if let Some(rx) = held.as_mut() {
-                let covered = tokio::time::timeout(PARTIAL_WAIT, rx.wait_for(|h| *h > pos))
+                let covered = mq_rt::timeout(PARTIAL_WAIT, rx.wait_for(|h| *h > pos))
                     .await
                     .ok()
                     .and_then(Result::ok)
@@ -108,7 +108,7 @@ fn chunks(
                 want = want.min(have - pos);
             }
             let mut buf = vec![0u8; want as usize];
-            let reading = std::time::Instant::now();
+            let reading = mq_rt::StdInstant::now();
             loop {
                 match file.read(&mut buf).await {
                     // The download holds these bytes, the file shows them not
@@ -116,7 +116,7 @@ fn chunks(
                     // wait for the download lasts, never an early end (code
                     // review r2 m5).
                     Ok(0) if held.is_some() && reading.elapsed() < PARTIAL_WAIT => {
-                        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                        mq_rt::sleep(std::time::Duration::from_millis(20)).await;
                     }
                     Ok(0) => return Some((Err(not_downloaded()), None)),
                     Ok(n) => {
@@ -205,8 +205,8 @@ mod tests {
         // The rest arrives while the player waits.
         let url = lease.url.clone();
         let read =
-            tokio::spawn(async move { http().get_range(&url, 40_000, 20_000, &local()).await });
-        tokio::time::sleep(Duration::from_millis(200)).await;
+            mq_rt::spawn(async move { http().get_range(&url, 40_000, 20_000, &local()).await });
+        mq_rt::sleep(Duration::from_millis(200)).await;
         std::fs::write(&path, &body).unwrap();
         tx.send(body.len() as u64).unwrap();
         let resp = read.await.unwrap().unwrap();
@@ -295,8 +295,8 @@ mod tests {
             .await
             .unwrap();
         let rest = body[100_000..].to_vec();
-        let writer = tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(300)).await;
+        let writer = mq_rt::spawn(async move {
+            mq_rt::sleep(Duration::from_millis(300)).await;
             let mut file = std::fs::OpenOptions::new()
                 .append(true)
                 .open(&part)

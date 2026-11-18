@@ -89,7 +89,7 @@ where
 {
     futures_util::stream::unfold(stream, move |mut stream| async move {
         let mut batch = stream.next().await?;
-        let deadline = tokio::time::sleep(window);
+        let deadline = mq_rt::sleep(window);
         tokio::pin!(deadline);
         loop {
             tokio::select! {
@@ -128,7 +128,7 @@ where
         (updates, window),
         |(mut updates, window)| async move {
             let mut newest = updates.next().await?;
-            let deadline = tokio::time::sleep(window(&newest));
+            let deadline = mq_rt::sleep(window(&newest));
             tokio::pin!(deadline);
             loop {
                 tokio::select! {
@@ -175,7 +175,7 @@ mod tests {
         let burst = async {
             for n in 1..=3 {
                 source.set(n);
-                tokio::time::sleep(Duration::from_millis(2)).await;
+                mq_rt::sleep(Duration::from_millis(2)).await;
             }
         };
         let (push, ()) = tokio::join!(pushes.next(), burst);
@@ -197,7 +197,7 @@ mod tests {
         let mut pushes = paced(source.subscribe(), slow);
         let later = async {
             source.set(10);
-            tokio::time::sleep(Duration::from_millis(60)).await;
+            mq_rt::sleep(Duration::from_millis(60)).await;
             source.set(11);
         };
         let (push, ()) = tokio::join!(pushes.next(), later);

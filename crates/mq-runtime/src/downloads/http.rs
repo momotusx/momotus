@@ -213,7 +213,7 @@ async fn backoff(tries: &mut usize) -> Option<()> {
         wait
     };
     *tries += 1;
-    tokio::time::sleep(wait).await;
+    mq_rt::sleep(wait).await;
     Some(())
 }
 

@@ -26,7 +26,7 @@ impl RangeReader for FileRangeReader {
     fn len(&self) -> BoxFuture<'_, Result<u64, ProbeError>> {
         let path = self.path.clone();
         Box::pin(async move {
-            tokio::task::spawn_blocking(move || std::fs::metadata(path).map(|m| m.len()))
+            mq_rt::spawn_blocking(move || std::fs::metadata(path).map(|m| m.len()))
                 .await
                 .map_err(|e| ProbeError::Http(e.to_string()))?
                 .map_err(failed)
@@ -36,7 +36,7 @@ impl RangeReader for FileRangeReader {
     fn read_at(&self, offset: u64, len: u64) -> BoxFuture<'_, Result<Bytes, ProbeError>> {
         let path = self.path.clone();
         Box::pin(async move {
-            tokio::task::spawn_blocking(move || {
+            mq_rt::spawn_blocking(move || {
                 let mut file = std::fs::File::open(path)?;
                 file.seek(SeekFrom::Start(offset))?;
                 let mut out = Vec::new();

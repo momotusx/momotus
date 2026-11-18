@@ -22,14 +22,15 @@ use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
 use mq_library::Table;
 use mq_protocol::{ResourcePath, ResourceResponse, decode_catalog};
+use mq_rt::JoinHandle;
+use mq_rt::StdInstant as Instant;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use stremio_core::types::addon::ExtraValue;
 use tokio::sync::broadcast::Receiver;
-use tokio::task::JoinHandle;
 
 /// One try at a page or a list; a failed page is tried once more.
 const TIMEOUT: Duration = Duration::from_secs(12);
@@ -484,10 +485,10 @@ impl DiscoverView {
             },
             false,
         );
-        tokio::spawn(fetch_logos(inner.clone()));
+        mq_rt::spawn(fetch_logos(inner.clone()));
         let (watched, library_watch) = (inner.clone(), inner.clone());
         let library = core.library().subscribe();
-        let watch = tokio::spawn(async move {
+        let watch = mq_rt::spawn(async move {
             futures_util::join!(
                 watch_addons(watched, changes),
                 watch_library(library_watch, library)
@@ -1249,7 +1250,7 @@ impl Inner {
         // An older load is not aborted: it finishes its lists into the
         // cache, and its generation keeps it from writing the screen. Past
         // `LOADS` the oldest is, so flicking through sorts cannot stack ten.
-        let task = tokio::spawn(async move {
+        let task = mq_rt::spawn(async move {
             match source {
                 Source::Paged {
                     catalog,
@@ -1276,8 +1277,8 @@ impl Inner {
     fn remember_later(&self) {
         let at = lock(&self.state).remember;
         let (state, core) = (self.state.clone(), self.core.clone());
-        tokio::spawn(async move {
-            tokio::time::sleep(REMEMBER_AFTER).await;
+        mq_rt::spawn(async move {
+            mq_rt::sleep(REMEMBER_AFTER).await;
             let s = lock(&state);
             if s.remember == at {
                 remember(&core, &s.snapshot);
@@ -1619,7 +1620,7 @@ async fn load_set(
         })
         .collect();
     let mut failed = 0u32;
-    let deadline = tokio::time::sleep(SOFT_DEADLINE);
+    let deadline = mq_rt::sleep(SOFT_DEADLINE);
     tokio::pin!(deadline);
     let mut published = false;
     let mut stale = false;

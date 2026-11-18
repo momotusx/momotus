@@ -18,13 +18,14 @@ use crate::Core;
 use crate::core::CoreError;
 use mq_http::Url;
 use mq_library::{PluginCode, PluginRepoRow};
+use mq_rt::StdInstant as Instant;
 use mq_streams::ParsedStream;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// A row key's prefix: `plugin:{repo}/{provider}:{url digest}` (4.4).
 pub const KEY_PREFIX: &str = "plugin:";
@@ -1180,7 +1181,7 @@ mod engine {
             return Outcome::Memory;
         };
         let http = public(core);
-        let mut asks = tokio::task::JoinSet::new();
+        let mut asks = mq_rt::JoinSet::new();
         // The channel closes when the engine's thread ends.
         while let Some(HostRequest { call, reply }) = rx.recv().await {
             let HostCall::Fetch(req) = call else { continue };
@@ -1195,7 +1196,7 @@ mod engine {
             });
         }
         drop(asks);
-        tokio::task::spawn_blocking(move || thread.join())
+        mq_rt::spawn_blocking(move || thread.join())
             .await
             .ok()
             .and_then(Result::ok)

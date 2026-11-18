@@ -1521,9 +1521,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 6.0.0",
  "rand_core 0.10.1",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -2659,6 +2661,7 @@ dependencies = [
  "bytes",
  "mq-http",
  "mq-protocol",
+ "mq-rt",
  "percent-encoding",
  "serde",
  "serde_json",
@@ -2681,6 +2684,7 @@ dependencies = [
  "mq-http",
  "mq-library",
  "mq-relparse",
+ "mq-rt",
  "mq-runtime",
  "mq-streams",
  "mq-sync",
@@ -2730,6 +2734,7 @@ version = "0.1.0"
 dependencies = [
  "futures-util",
  "mq-http",
+ "mq-rt",
  "regex",
  "serde",
  "serde_json",
@@ -2815,6 +2820,7 @@ dependencies = [
  "mq-http",
  "mq-library",
  "mq-protocol",
+ "mq-rt",
  "rusqlite",
  "serde",
  "serde_json",
@@ -2847,6 +2853,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "mq-http",
+ "mq-rt",
  "proptest",
  "thiserror 2.0.21",
  "tokio",
@@ -2907,6 +2914,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "mq-rt"
+version = "0.1.0"
+dependencies = [
+ "futures-util",
+ "getrandom 0.3.4",
+ "getrandom 0.4.3",
+ "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-time",
+]
+
+[[package]]
 name = "mq-runtime"
 version = "0.1.0"
 dependencies = [
@@ -2931,6 +2951,7 @@ dependencies = [
  "mq-protocol",
  "mq-relparse",
  "mq-reports",
+ "mq-rt",
  "mq-server",
  "mq-streams",
  "mq-sync",
@@ -2966,6 +2987,7 @@ dependencies = [
  "mq-engine",
  "mq-http",
  "mq-media",
+ "mq-rt",
  "quick-xml",
  "tempfile",
  "thiserror 2.0.21",
@@ -3003,6 +3025,7 @@ dependencies = [
  "hpke",
  "mq-http",
  "mq-library",
+ "mq-rt",
  "proptest",
  "serde",
  "serde_json",
@@ -3047,6 +3070,7 @@ version = "0.1.0"
 dependencies = [
  "getrandom 0.3.4",
  "mq-http",
+ "mq-rt",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
@@ -3061,6 +3085,7 @@ dependencies = [
  "flate2",
  "mq-http",
  "mq-relparse",
+ "mq-rt",
  "mq-server",
  "regex",
  "thiserror 2.0.21",

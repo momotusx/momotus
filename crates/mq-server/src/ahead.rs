@@ -45,15 +45,15 @@ const SAMPLE_WINDOW: Duration = Duration::from_secs(30);
 /// back by the read-ahead limit waits on no one).
 #[derive(Debug)]
 struct Sample {
-    started: std::time::Instant,
+    started: mq_rt::StdInstant,
     waiting: usize,
-    since: Option<std::time::Instant>,
+    since: Option<mq_rt::StdInstant>,
     busy: Duration,
     bytes: u64,
 }
 
 impl Sample {
-    fn new(now: std::time::Instant) -> Self {
+    fn new(now: mq_rt::StdInstant) -> Self {
         Self {
             started: now,
             waiting: 0,
@@ -64,7 +64,7 @@ impl Sample {
     }
 
     /// A cursor starts waiting for the origin's next chunk.
-    fn wait(&mut self, now: std::time::Instant) {
+    fn wait(&mut self, now: mq_rt::StdInstant) {
         if self.waiting == 0 {
             self.since = Some(now);
         }
@@ -72,7 +72,7 @@ impl Sample {
     }
 
     /// A cursor's wait ended with `bytes`; only the first 30 s count.
-    fn got(&mut self, bytes: u64, now: std::time::Instant) {
+    fn got(&mut self, bytes: u64, now: mq_rt::StdInstant) {
         self.waiting = self.waiting.saturating_sub(1);
         let end = now.min(self.started + SAMPLE_WINDOW);
         if now <= self.started + SAMPLE_WINDOW {
@@ -138,7 +138,7 @@ struct Cursor {
     wake: Notify,
     used: AtomicU64,
     refusal: Mutex<Option<Refusal>>,
-    task: Mutex<Option<tokio::task::AbortHandle>>,
+    task: Mutex<Option<mq_rt::AbortHandle>>,
 }
 
 impl Cursor {
@@ -230,7 +230,7 @@ impl Source {
                 passthrough: AtomicBool::new(false),
                 released: CancellationToken::new(),
                 writing: Mutex::default(),
-                sample: Mutex::new(Sample::new(std::time::Instant::now())),
+                sample: Mutex::new(Sample::new(mq_rt::StdInstant::now())),
             }),
             cursors: Mutex::default(),
             tick: AtomicU64::new(0),
@@ -293,7 +293,7 @@ impl Source {
     /// Starts reading the file's beginning, so the player's first request
     /// finds it under way. Outside a runtime it does nothing.
     pub(crate) fn prefetch(&self) {
-        if tokio::runtime::Handle::try_current().is_ok() {
+        if mq_rt::in_runtime() {
             let _ = self.cursor_at(0);
         }
     }
@@ -391,7 +391,7 @@ impl Source {
             refusal: Mutex::default(),
             task: Mutex::default(),
         });
-        let task = tokio::spawn(run(self.shared.clone(), cursor.clone()));
+        let task = mq_rt::spawn(run(self.shared.clone(), cursor.clone()));
         *lock(&cursor.task) = Some(task.abort_handle());
         cursors.push(cursor.clone());
         Some(cursor)
@@ -452,7 +452,7 @@ async fn wait_past(cursor: &Cursor, pos: u64) -> bool {
             Phase::Opening => OPEN + Duration::from_secs(2),
             _ => STALL,
         };
-        match tokio::time::timeout(limit, rx.changed()).await {
+        match mq_rt::timeout(limit, rx.changed()).await {
             Ok(Ok(())) => {}
             _ => return false,
         }
@@ -534,7 +534,7 @@ impl Shared {
     }
 
     async fn open(&self, start: u64) -> Result<StreamingResponse, Refusal> {
-        let upstream = match tokio::time::timeout(OPEN, self.request(start)).await {
+        let upstream = match mq_rt::timeout(OPEN, self.request(start)).await {
             Ok(Ok(upstream)) => upstream,
             Ok(Err(HttpError::BlockedPrivate(_))) => {
                 tracing::warn!("stream upstream refused: blocked address");
@@ -621,20 +621,17 @@ async fn pump(shared: &Shared, cursor: &Cursor, mut upstream: StreamingResponse)
                 .load(Ordering::Acquire)
                 .saturating_add(READ_AHEAD)
         {
-            if tokio::time::timeout(IDLE, cursor.wake.notified())
-                .await
-                .is_err()
-            {
+            if mq_rt::timeout(IDLE, cursor.wake.notified()).await.is_err() {
                 return Phase::Closed;
             }
         }
-        lock(&shared.sample).wait(std::time::Instant::now());
+        lock(&shared.sample).wait(mq_rt::StdInstant::now());
         let next = upstream.next_chunk().await;
         let got = match &next {
             Some(Ok(chunk)) => chunk.len() as u64,
             _ => 0,
         };
-        lock(&shared.sample).got(got, std::time::Instant::now());
+        lock(&shared.sample).got(got, mq_rt::StdInstant::now());
         match next {
             Some(Ok(chunk)) => {
                 pending.extend_from_slice(&chunk);
@@ -681,7 +678,7 @@ fn content_range(headers: &HeaderMap) -> Option<(u64, u64, u64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Instant;
+    use mq_rt::StdInstant as Instant;
 
     /// Only time with the origin's answer awaited counts, overlapping waits
     /// once, and nothing past the first 30 s.

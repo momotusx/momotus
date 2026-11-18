@@ -12,14 +12,14 @@ use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_library::Table;
 use mq_protocol::{ResourcePath, ResourceResponse, decode_catalog};
+use mq_rt::Instant;
+use mq_rt::JoinHandle;
 use serde::Serialize;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use stremio_core::types::addon::ExtraValue;
 use tokio::sync::broadcast::Receiver;
-use tokio::task::JoinHandle;
-use tokio::time::Instant;
 
 const TIMEOUT: Duration = Duration::from_secs(12);
 /// Art lookups at once: Cinemeta's 50 or so genres fill in within a few
@@ -157,7 +157,7 @@ impl GenresView {
         });
         inner.refresh();
         let watched = inner.clone();
-        let watch = tokio::spawn(watch_addons(watched, changes));
+        let watch = mq_rt::spawn(watch_addons(watched, changes));
         Self { inner, watch }
     }
 
@@ -226,7 +226,7 @@ impl Inner {
         }
         self.snapshot.set(snapshot);
         let this = self.clone();
-        *task = Some(tokio::spawn(async move { this.fetch_art(missing).await }));
+        *task = Some(mq_rt::spawn(async move { this.fetch_art(missing).await }));
     }
 
     /// Fetches each genre's art, `AT_ONCE` at a time, and shows each as it

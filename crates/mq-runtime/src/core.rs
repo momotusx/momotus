@@ -298,7 +298,7 @@ impl Device {
             library: Arc::new(library),
             clock,
             sync_gate: Arc::default(),
-            pins: std::sync::Mutex::new(crate::profiles::Throttle::new(std::time::Instant::now())),
+            pins: std::sync::Mutex::new(crate::profiles::Throttle::new(mq_rt::StdInstant::now())),
             trakt: std::sync::OnceLock::new(),
             live_scopes: Arc::default(),
             ended_unseen: tokio::sync::watch::Sender::new(false),
@@ -363,6 +363,8 @@ impl Core {
 
     /// A core over a throwaway database, for tests and the CLI. `profile` is
     /// created (with no PIN) and made the active one.
+    // mq-rt: native-only
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn temporary(profile: &str) -> Result<Self, CoreError> {
         let torrents = std::env::temp_dir().join(format!("mq-torrents-{}", std::process::id()));
         static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -393,7 +395,7 @@ impl Core {
     ) -> Result<Self, CoreError> {
         // Build the release-name rule table off the UI path, so the first
         // stream list does not pay for it.
-        std::thread::spawn(mq_relparse::warm_up);
+        mq_rt::background(mq_relparse::warm_up);
         // Older version lists kept raw stream keys (code review 2026-10-20 P2-5).
         crate::speed::digest_version_lists(&device.library);
         let http = HttpClient::new(ClientConfig::default())?;
@@ -828,7 +830,7 @@ impl Core {
                 tokio::runtime::Handle::try_current(),
             ) {
                 let metered = network == crate::speed::Network::Cellular;
-                tokio::spawn(async move { engine.set_metered(metered).await });
+                mq_rt::spawn(async move { engine.set_metered(metered).await });
             }
         }
     }
@@ -954,7 +956,7 @@ impl Core {
             (fake.delay, answer)
         });
         if let Some((delay, answer)) = fake {
-            tokio::time::sleep(delay).await;
+            mq_rt::sleep(delay).await;
             return answer;
         }
         #[cfg(feature = "torrent")]
@@ -1645,9 +1647,9 @@ impl Core {
     /// older.
     pub(crate) fn refresh_addons_soon(&self) -> Result<(), CoreError> {
         self.library().set_device_value(ADDONS_REFRESHED, "0")?;
-        if tokio::runtime::Handle::try_current().is_ok() {
+        if mq_rt::in_runtime() {
             let core = self.clone();
-            tokio::spawn(async move {
+            mq_rt::spawn(async move {
                 let now = mq_library::hlc::now_ms();
                 if let Err(e) = core.refresh_addons(now).await {
                     tracing::debug!("addon refresh after the defaults: {}", error_kind(&e));
@@ -2116,6 +2118,8 @@ struct Walk {
 }
 
 impl Walk {
+    // mq-rt: native-only
+    #[cfg(not(target_arch = "wasm32"))]
     fn read(data_dir: &Path) -> Option<Self> {
         if !cfg!(debug_assertions) {
             return None;
@@ -2138,6 +2142,8 @@ impl Walk {
     /// The watchdog: every second the free space where torrents are kept,
     /// logged; under the line the process stops, playback and engine with
     /// it (our writes never take free space under the 512 MiB reserve).
+    // mq-rt: native-only
+    #[cfg(not(target_arch = "wasm32"))]
     fn watch(self, torrent_dir: PathBuf) {
         tracing::info!(window = ?self.window, line = self.line, "walk setting");
         std::thread::spawn(move || {

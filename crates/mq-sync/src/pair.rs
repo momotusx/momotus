@@ -155,7 +155,7 @@ pub struct PairingRequest {
     pub ttl: std::time::Duration,
     /// When this device asked for the slot: the relay's life for it starts
     /// no earlier, so a view counted from here never outlives it.
-    pub sent: std::time::Instant,
+    pub sent: mq_rt::StdInstant,
     server: String,
     pairing: String,
     take: String,
@@ -178,7 +178,7 @@ pub async fn start_pairing_as(
 ) -> Result<PairingRequest, SyncError> {
     require_secure(server)?;
     let form = checked_form(form)?;
-    let sent = std::time::Instant::now();
+    let sent = mq_rt::StdInstant::now();
     let slot: Slot = http
         .post_json(
             &format!("{server}/v1/pairings"),

@@ -8,12 +8,12 @@ use crate::{Core, CoreError};
 use eyeball::SharedObservable;
 use futures_util::Stream;
 use mq_library::Table;
+use mq_rt::JoinHandle;
 use mq_streams::{QualityPref, StreamPrefs};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::pin::Pin;
 use tokio::sync::broadcast;
-use tokio::task::JoinHandle;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(
@@ -395,7 +395,7 @@ impl SettingsView {
         // Subscribe before the first read so no change slips in between.
         let changes = core.library().subscribe();
         let snapshot = SharedObservable::new(core.prefs());
-        let task = tokio::spawn(watch(core.clone(), changes, snapshot.clone()));
+        let task = mq_rt::spawn(watch(core.clone(), changes, snapshot.clone()));
         Self { snapshot, task }
     }
 

@@ -9,13 +9,14 @@ use chrono::{Days, NaiveDate};
 use eyeball::SharedObservable;
 use futures_util::Stream;
 use mq_library::Table;
+use mq_rt::StdInstant as Instant;
+use mq_rt::{JoinHandle, JoinSet};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::pin::Pin;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::sync::mpsc;
-use tokio::task::{JoinHandle, JoinSet};
 
 const PAST_DAYS: u64 = 7;
 const FUTURE_DAYS: u64 = 30;
@@ -161,7 +162,7 @@ impl CalendarView {
         // app never shows "nothing scheduled" before the first fetch.
         owner.sync_membership(false);
         owner.render();
-        let task = tokio::spawn(owner.run(changes, rx));
+        let task = mq_rt::spawn(owner.run(changes, rx));
         Self {
             snapshot,
             commands,

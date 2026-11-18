@@ -10,9 +10,9 @@ use crate::profiles::ProfileError;
 use eyeball::SharedObservable;
 use futures_util::Stream;
 use mq_library::{AllowedRow, MAX_ALLOWED, OWNER, Table};
+use mq_rt::JoinHandle;
 use serde::Serialize;
 use std::pin::Pin;
-use tokio::task::JoinHandle;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(
@@ -85,7 +85,7 @@ impl<T: Clone + PartialEq + Send + Sync + 'static> Live<T> {
         let mut changes = core.library().subscribe();
         let snapshot = SharedObservable::new(read(core));
         let (core, shared) = (core.clone(), snapshot.clone());
-        let task = tokio::spawn(async move {
+        let task = mq_rt::spawn(async move {
             while let Some(tables) = crate::views::next_change(&mut changes).await {
                 if !tables.contains(&Table::Access) && !tables.contains(&Table::Profiles) {
                     continue;

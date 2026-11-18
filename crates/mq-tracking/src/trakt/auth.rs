@@ -4,12 +4,12 @@
 //! app says it stored it.
 
 use super::api::{Answer, Api};
+use mq_rt::Instant;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::fmt;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::time::Instant;
+use std::time::Duration;
 
 /// After a refresh Trakt did not answer, calls fail fast for this long.
 const RETRY_AFTER: Duration = Duration::from_secs(30);
@@ -228,9 +228,7 @@ fn refusal(status: u16, error: Option<&str>) -> String {
 }
 
 pub fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_millis() as u64)
+    mq_rt::now_ms()
 }
 
 #[derive(Default)]
@@ -624,7 +622,7 @@ impl Auth {
             (record.clone(), s.generation)
         };
         let (api, state, redirect) = (api.clone(), self.state.clone(), self.redirect_uri.clone());
-        let task = tokio::spawn(async move {
+        let task = mq_rt::spawn(async move {
             let _guard = guard;
             let result = refresh(&api, &redirect, &old.refresh_token).await;
             let mut s = lock(&state);

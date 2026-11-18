@@ -18,12 +18,12 @@ use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
 use mq_library::{AllowedRow, ContinueItem, Policy, Table};
 use mq_protocol::{MetaItem, ResourcePath, ResourceResponse, decode_catalog};
+use mq_rt::JoinSet;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::task::JoinSet;
 
 pub const CONTINUE_ROW_ID: &str = "continue-watching";
 /// A kids profile's own titles, on Home and in Search.
@@ -1041,7 +1041,7 @@ async fn load_catalogs(
             (slot.row_id, result)
         });
     }
-    let soft = tokio::time::sleep(SOFT_DEADLINE);
+    let soft = mq_rt::sleep(SOFT_DEADLINE);
     tokio::pin!(soft);
     let mut soft_fired = false;
     loop {
@@ -1316,12 +1316,12 @@ async fn watch_hero_play(core: Core, header: SharedObservable<HomeHeader>) {
     let mut changes = core.library().subscribe();
     let mut metas: HashMap<String, MetaItem> = HashMap::new();
     // Asked and not answered (yet, or at all), by tile id: when it was asked.
-    let mut asked: HashMap<String, tokio::time::Instant> = HashMap::new();
+    let mut asked: HashMap<String, mq_rt::Instant> = HashMap::new();
     let mut waiting: HashSet<String> = HashSet::new();
     let mut fetches = futures_util::stream::FuturesUnordered::new();
     let mut dirty = true;
     // Progress written while something plays: Play is read again once the writes pause.
-    let mut settle: Option<tokio::time::Instant> = None;
+    let mut settle: Option<mq_rt::Instant> = None;
     loop {
         if dirty {
             dirty = false;
@@ -1347,7 +1347,7 @@ async fn watch_hero_play(core: Core, header: SharedObservable<HomeHeader>) {
                 {
                     continue;
                 }
-                asked.insert(tile.id.clone(), tokio::time::Instant::now());
+                asked.insert(tile.id.clone(), mq_rt::Instant::now());
                 waiting.insert(tile.id.clone());
                 let (core, kind, id) = (core.clone(), tile.kind.clone(), tile.id.clone());
                 fetches.push(async move {
@@ -1378,16 +1378,16 @@ async fn watch_hero_play(core: Core, header: SharedObservable<HomeHeader>) {
             },
             tables = crate::views::next_change(&mut changes) => match tables {
                 Some(t) if t.iter().any(|t| matches!(t, Table::Progress | Table::Watched)) => {
-                    settle = Some(tokio::time::Instant::now() + HERO_PLAY_SETTLE);
+                    settle = Some(mq_rt::Instant::now() + HERO_PLAY_SETTLE);
                 }
                 Some(_) => {}
                 None => return,
             },
-            () = tokio::time::sleep_until(settle.unwrap_or_else(tokio::time::Instant::now)), if settle.is_some() => {
+            () = mq_rt::sleep_until(settle.unwrap_or_else(mq_rt::Instant::now)), if settle.is_some() => {
                 settle = None;
                 dirty = true;
             }
-            () = tokio::time::sleep_until(retry.unwrap_or_else(tokio::time::Instant::now)), if retry.is_some() => {
+            () = mq_rt::sleep_until(retry.unwrap_or_else(mq_rt::Instant::now)), if retry.is_some() => {
                 dirty = true;
             }
         }
@@ -1519,10 +1519,10 @@ async fn watch_continue(
     // here at most once per `PLAYING_REFRESH`, and at once when the play
     // ends (batch 13 perf C2): each refresh reads every tile's meta.
     let (mut plays, mut counting) = (core.plays(), true);
-    let mut waiting: Option<tokio::time::Instant> = None;
+    let mut waiting: Option<mq_rt::Instant> = None;
     refresh_continue(&core, &rows).await;
     maybe_pick_hero(&rows, &header);
-    let mut last = tokio::time::Instant::now();
+    let mut last = mq_rt::Instant::now();
     loop {
         let refresh = tokio::select! {
             tables = crate::views::next_change(&mut changes) => {
@@ -1549,14 +1549,14 @@ async fn watch_continue(
                 let open_plays = *plays.borrow_and_update();
                 waiting.is_some() && open_plays == 0
             }
-            () = tokio::time::sleep_until(waiting.unwrap_or_else(tokio::time::Instant::now)),
+            () = mq_rt::sleep_until(waiting.unwrap_or_else(mq_rt::Instant::now)),
                 if waiting.is_some() => true,
         };
         if refresh {
             waiting = None;
             refresh_continue(&core, &rows).await;
             maybe_pick_hero(&rows, &header);
-            last = tokio::time::Instant::now();
+            last = mq_rt::Instant::now();
         }
     }
 }

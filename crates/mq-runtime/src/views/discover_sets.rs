@@ -197,10 +197,7 @@ pub(crate) fn genre_label(options: &[String]) -> &'static str {
 
 /// Today, from the system clock (UTC).
 pub(crate) fn today() -> NaiveDate {
-    let secs = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or_default();
+    let secs = i64::try_from(mq_rt::now_ms() / 1000).unwrap_or_default();
     chrono::DateTime::from_timestamp(secs, 0)
         .map(|d| d.date_naive())
         .unwrap_or_default()

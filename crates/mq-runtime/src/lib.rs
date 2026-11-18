@@ -9,6 +9,8 @@ mod core;
 mod covers;
 mod debrid;
 pub mod defaults;
+// mq-rt: native-only
+#[cfg(not(target_arch = "wasm32"))]
 pub mod downloads;
 pub mod incognito;
 pub mod languages;

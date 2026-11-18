@@ -8,6 +8,7 @@ rust-version.workspace = true
 publish.workspace = true
 
 [dependencies]
+mq-rt = { path = "../mq-rt" }
 # The archive reader inflates with the flate2 the workspace already locks
 # (1.0, pinned by stremio-core's watched bitfield crate); see src/archive.rs.
 flate2 = "1"
@@ -15,8 +16,13 @@ mq-http = { path = "../mq-http" }
 mq-relparse = { path = "../mq-relparse" }
 regex = "1"
 thiserror.workspace = true
-tokio.workspace = true
 tracing.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1", default-features = false, features = ["sync", "macros"] }
 
 [dev-dependencies]
 mq-http = { path = "../mq-http", features = ["test-dns"] }

@@ -17,6 +17,7 @@ test-hooks = ["torrent", "mq-engine/test-hooks"]
 plugins = ["dep:mq-plugins"]
 
 [dependencies]
+mq-rt = { path = "../mq-rt" }
 libc = "0.2"
 ts-rs = { version = "12", optional = true, features = ["serde-compat"] }
 mq-http = { path = "../mq-http" }
@@ -48,7 +49,6 @@ eyeball = "0.8"
 eyeball-im = "0.9"
 imbl = "7"
 futures-util = "0.3"
-tokio = { workspace = true, features = ["fs", "io-util"] }
 tokio-util = "0.7"
 url.workspace = true
 serde.workspace = true
@@ -59,6 +59,12 @@ tracing.workspace = true
 # and the `tracing` layer the hosts add beside their log layer.
 mq-reports = { path = "../mq-reports" }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["std"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["fs", "io-util"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1", default-features = false, features = ["sync", "macros"] }
 
 [dev-dependencies]
 mq-http = { path = "../mq-http", features = ["test-dns"] }

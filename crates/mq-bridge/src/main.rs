@@ -211,7 +211,7 @@ fn origin_allowed(origin: Option<&str>, allowed: &[String]) -> bool {
 async fn serve_socket(socket: WebSocket, core: Core, private: bool) {
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx) = Output::channel();
-    let writer = tokio::spawn(async move {
+    let writer = mq_rt::spawn(async move {
         while let Some(message) = rx.recv().await {
             let Outgoing::Message { text, held } = message else {
                 // The client stopped reading past the session's budget: the
@@ -364,7 +364,7 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         let app = router(core, dev(port));
-        let server = tokio::spawn(async move { axum::serve(listener, app).await });
+        let server = mq_rt::spawn(async move { axum::serve(listener, app).await });
         let url = format!("ws://127.0.0.1:{port}/ws");
         let open = |origin: Option<&str>| {
             let mut request = url.as_str().into_client_request().unwrap();
@@ -415,7 +415,7 @@ mod tests {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         let app = with_static(router(core, dev(port)), dir.clone());
-        let server = tokio::spawn(async move { axum::serve(listener, app).await });
+        let server = mq_rt::spawn(async move { axum::serve(listener, app).await });
         for (path, status, body) in [
             ("/", 200, "<!doctype html>app"),
             ("/title/movie/tt0056923", 200, "<!doctype html>app"),

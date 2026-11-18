@@ -1,11 +1,7 @@
 use crate::DebridError;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(crate) fn unix_now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+    mq_rt::now_ms() / 1000
 }
 
 /// Parses `YYYY-MM-DDTHH:MM:SS[.fff]Z` (UTC) into unix seconds.

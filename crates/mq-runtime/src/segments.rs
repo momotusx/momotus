@@ -4,11 +4,12 @@
 //! in memory for the life of the core.
 
 use mq_http::{HttpClient, HttpError, RequestOptions};
+use mq_rt::StdInstant as Instant;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Per request; the playback view bounds a whole lookup separately.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(4);

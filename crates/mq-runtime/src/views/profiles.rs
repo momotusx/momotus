@@ -7,10 +7,10 @@ use crate::live::{FRAME, snapshots};
 use eyeball::SharedObservable;
 use futures_util::Stream;
 use mq_library::Table;
+use mq_rt::JoinHandle;
 use serde::Serialize;
 use std::pin::Pin;
 use tokio::sync::watch;
-use tokio::task::JoinHandle;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(
@@ -111,7 +111,7 @@ impl ProfilesView {
         let core = &core.device();
         let changes = core.library().subscribe();
         let snapshot = SharedObservable::new(read(core, &session));
-        let task = tokio::spawn(watch(core.clone(), changes, session, snapshot.clone()));
+        let task = mq_rt::spawn(watch(core.clone(), changes, session, snapshot.clone()));
         Self { snapshot, task }
     }
 

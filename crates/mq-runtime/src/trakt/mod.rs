@@ -213,7 +213,7 @@ pub(crate) struct Conn {
     stop: CancellationToken,
     /// When the outbox next has a retry due (ms).
     retry_at: Mutex<Option<u64>>,
-    created: tokio::time::Instant,
+    created: mq_rt::Instant,
     /// A sign-in made here that the account's link has not taken yet.
     signed_in_here: AtomicBool,
     /// Rounds the link of another Trakt account waited for the old one's
@@ -317,7 +317,7 @@ impl Trakt {
                     login: Mutex::new(None),
                     retry_at: Mutex::new(None),
                     stop: self.shutdown.child_token(),
-                    created: tokio::time::Instant::now(),
+                    created: mq_rt::Instant::now(),
                     signed_in_here: AtomicBool::new(false),
                     deferred: AtomicU32::new(0),
                     drop_stored: AtomicBool::new(false),
@@ -625,7 +625,7 @@ impl Core {
             });
             self.trakt_drop_here(&conn);
             if let (Some(own), Some((api, _))) = (own, trakt.api()) {
-                tokio::spawn(async move {
+                mq_rt::spawn(async move {
                     mq_tracking::trakt::auth::revoke(&api, &own.access_token).await
                 });
             }
@@ -645,7 +645,7 @@ impl Core {
             let _ = futures_util::FutureExt::now_or_never(conn.auth.set(None));
         }
         if let (Some(token), Some((api, _))) = (token, trakt.api()) {
-            tokio::spawn(async move { mq_tracking::trakt::auth::revoke(&api, &token).await });
+            mq_rt::spawn(async move { mq_tracking::trakt::auth::revoke(&api, &token).await });
         }
         let (library, profile) = (self.library(), self.profile());
         library.set_tracker_account(profile, TRACKER, None, 0, now_ms() as i64)?;
@@ -701,7 +701,7 @@ impl Core {
     /// one turned kids later is stopped by the loop's own check.
     fn trakt_schedule(&self, conn: &Arc<Conn>) {
         if !conn.scheduler.swap(true, Ordering::SeqCst) {
-            tokio::spawn(schedule(self.downgrade(), conn.clone()));
+            mq_rt::spawn(schedule(self.downgrade(), conn.clone()));
         }
         conn.wake.notify_one();
     }
@@ -920,7 +920,7 @@ async fn schedule(weak: crate::core::WeakCore, conn: Arc<Conn>) {
         tokio::select! {
             () = conn.stop.cancelled() => return,
             () = conn.wake.notified() => {}
-            () = tokio::time::sleep(wait) => {}
+            () = mq_rt::sleep(wait) => {}
             () = turned_kids(&weak, &mut changes) => {}
         }
         let Some(core) = weak.upgrade() else { return };

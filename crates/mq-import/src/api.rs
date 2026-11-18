@@ -4,10 +4,11 @@
 use crate::ImportError;
 use crate::map::Snapshot;
 use mq_http::{HttpClient, RequestOptions, is_private_host};
+use mq_rt::StdInstant as Instant;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::fmt;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use stremio_core::types::api::{APIResult, LinkAuthKey};
 use url::Url;
 

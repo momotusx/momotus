@@ -7,9 +7,9 @@ use crate::downloads::{Board, DownloadRow, DownloadSettings, DownloadState};
 use crate::live::{FRAME, snapshots};
 use eyeball::SharedObservable;
 use futures_util::Stream;
+use mq_rt::JoinHandle;
 use serde::Serialize;
 use std::pin::Pin;
-use tokio::task::JoinHandle;
 
 #[cfg_attr(
     feature = "ts",
@@ -124,7 +124,7 @@ impl DownloadsView {
         let snapshot = SharedObservable::new(render(core, &downloads.board().get(), locked));
         let (core2, out) = (core.clone(), snapshot.clone());
         let mut changes = core.library().subscribe();
-        let task = tokio::spawn(async move {
+        let task = mq_rt::spawn(async move {
             loop {
                 tokio::select! {
                     board = boards.next() => {
