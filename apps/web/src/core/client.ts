@@ -30,6 +30,7 @@ import { webosDeviceCaps } from "./webos-caps";
 import { keepsAv1, probeAv1 } from "./av1-probe";
 import { webosTransport } from "./webos-transport";
 import { isWebOS } from "../lib/webos";
+import type { ProbeAnswer } from "../lib/failover";
 
 export const bridgeUrl: string = import.meta.env.VITE_MQ_BRIDGE ?? `ws://${location.hostname || "127.0.0.1"}:7777/ws`;
 
@@ -276,6 +277,11 @@ export function homeView(): HomeState {
  * row turns loading, then shows the answer or fails anew), not all of Home. */
 export const retryHomeRow = (rowId: string) => homeOpening?.then((s) => s?.command({ type: "retryRow", rowId }));
 
+/** How the playback view `sub`'s source answers one byte now (plans/webos.md 3.4, webOS); a stale `attempt` is refused
+ * with `switched`. */
+export const probeSource = (sub: number, attempt: number | null) =>
+  bridge.request<ProbeAnswer>("command", { sub, command: { type: "probe", ...(attempt === null ? {} : { attempt }) } });
+
 export interface TitleState {
   status: ViewStatus;
   header: TitleHeader | null;
@@ -348,6 +354,9 @@ export interface DeviceCaps {
   containers: string[];
   passthrough: string[];
   hasFallbackEngine: boolean;
+  /** The player gets the source's own URL and can send no request headers (webOS, plans/webos.md 3.4): the core ranks a
+   * stream that needs `proxyHeaders` as unplayable. Absent means false. */
+  directOnly?: boolean;
   /** ISO 639-1; the core prefers it, then English, until the user picks. */
   language: string;
 }

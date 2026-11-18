@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { PlaybackSnapshot } from "../core/generated/PlaybackSnapshot";
-import { earlyFailure, hlsFailure, loadedSource, mediaFailure, pendingStart, sourceStart, tryingAgain } from "./failover";
+import { earlyFailure, hlsFailure, loadedSource, mediaFailure, pendingStart, probeGet, type ProbeAnswer, sourceStart, tryingAgain } from "./failover";
 
 test("a failover names the source the engine loaded, not the one the core moved to", () => {
   let snapshot = { attempt: 1 } as PlaybackSnapshot;
@@ -114,4 +114,35 @@ test("an hls.js failure says whose it is", () => {
   expect(network("fragLoadError", 0)).toEqual({ kind: "network", error: "hls.js fragLoadError" });
   expect(hlsFailure({ type: "mediaError", details: "bufferAppendError" })).toEqual({ kind: "decode", error: "hls.js bufferAppendError" });
   expect(hlsFailure({ type: "otherError", details: "internalException" }).kind).toBe("other");
+});
+
+test("on webOS the core's probe answers for the source: its kind and status, or the file's own failure when it served", async () => {
+  const error = { code: 4, message: "MEDIA_ELEMENT_ERROR: Format error" };
+  const asked: number[] = [];
+  const probe = (answer: ProbeAnswer) =>
+    probeGet(async () => {
+      asked.push(1);
+      return answer;
+    });
+  expect(await earlyFailure("https://cdn.example/f.mp4", error, probe({ kind: "http", status: 403 }))).toMatchObject({ kind: "http", status: 403 });
+  expect((await earlyFailure("u", error, probe({ kind: "timeout", status: null }))).kind).toBe("timeout");
+  expect((await earlyFailure("u", error, probe({ kind: "network", status: null }))).kind).toBe("network");
+  // The source served its byte: the element's own error stands (here, a file it cannot play).
+  expect((await earlyFailure("u", error, probe({ kind: null, status: null }))).kind).toBe("decode");
+  expect(asked.length).toBe(4);
+  // Another source plays now (`switched`): a network failure for a stale attempt, which the core ignores.
+  expect((await earlyFailure("u", error, probeGet(() => Promise.reject(new Error("another source plays now"))))).kind).toBe("network");
+  // A probe slower than earlyFailure's own limit is a timeout.
+  const never = probeGet(() => new Promise<ProbeAnswer>(() => undefined));
+  const signal = AbortSignal.abort();
+  await expect(never("u", { signal })).rejects.toMatchObject({ name: "TimeoutError" });
+});
+
+test("the loaded source's attempt is what a probe names", () => {
+  let snapshot = { attempt: 3 } as PlaybackSnapshot;
+  const loaded = loadedSource(() => snapshot);
+  expect(loaded.attempt()).toBe(null);
+  loaded.load();
+  snapshot = { attempt: 4 } as PlaybackSnapshot;
+  expect(loaded.attempt()).toBe(3);
 });

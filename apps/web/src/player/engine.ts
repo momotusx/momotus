@@ -31,6 +31,8 @@ export interface EngineEvents {
   onEnded(): void;
   /** The source cannot play here: the player fails over. */
   onError(failure: PlayerFailure): void;
+  /** How an error before the metadata asks the source (`earlyFailure`'s `get`); the page's own fetch when absent. */
+  sourceGet?: (url: string, init: RequestInit) => Promise<Response>;
   /** The file's length is known (after any resume seek); may repeat. */
   onLoaded(): void;
   /** A subtitle file did not load. */

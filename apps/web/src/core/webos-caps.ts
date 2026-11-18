@@ -34,6 +34,8 @@ export function webosCaps(panelIsUhd: boolean, chrome: number, language: string)
     containers: ["mkv", "mp4", "ts", "m3u8"],
     passthrough: [],
     hasFallbackEngine: false,
+    // The element gets the CDN's URL itself: a stream that needs headers cannot play here.
+    directOnly: true,
     language,
   };
 }
