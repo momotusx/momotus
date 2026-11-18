@@ -67,6 +67,8 @@ pub struct Prefs {
     /// step, the Versions notice or the Settings notice. Until then the
     /// core never contacts archive.org for it.
     pub archive_notice_seen: bool,
+    /// Where Zap picks from (plans/zap.md 1.1).
+    pub zap_dial: crate::zap::Dial,
 }
 
 /// Discover's kind, service, sort, genre and decade, as `select` takes
@@ -174,6 +176,7 @@ impl Default for Prefs {
             discover: DiscoverPrefs::default(),
             archive: true,
             archive_notice_seen: false,
+            zap_dial: crate::zap::Dial::default(),
         }
     }
 }

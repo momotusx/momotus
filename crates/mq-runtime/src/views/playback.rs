@@ -714,6 +714,16 @@ struct State {
     /// The HTTP capacity sample was taken (once per view: at 30 s, or when
     /// the view closes first, as a short trailer's does).
     sampled: bool,
+    /// A zap play (plans/zap.md 1.2): where it started, and whether it is
+    /// still held (no progress, Trakt or stream memory) until it has played
+    /// `zap::HOLD_MS`, counted across sources (`adopt` never resets it).
+    zap_at: Option<u64>,
+    zap_held: bool,
+    zap_played_ms: u64,
+    /// What a held zap would have written: the stream it plays, and
+    /// Trakt's state, written and shown when the hold lifts.
+    held_stream: Option<(ParsedStream, Option<(usize, u64)>)>,
+    trakt_kept: Option<crate::trakt::TraktPlayback>,
     last: Option<(u64, u64)>,
     saved_at: Option<Instant>,
     dirty: bool,
@@ -908,6 +918,11 @@ impl State {
             last: None,
             saved_at: None,
             dirty: false,
+            zap_at: None,
+            zap_held: false,
+            zap_played_ms: 0,
+            held_stream: None,
+            trakt_kept: None,
             source: 0,
             lookup: None,
             segments_task: None,
@@ -998,7 +1013,18 @@ impl PlaybackView {
         target: PlayTarget,
         plays: &[Format],
     ) -> Self {
-        Self::open_with(core, candidates, None, target, plays)
+        Self::open_with(core, candidates, None, target, plays, None)
+    }
+
+    /// `open` as a zap starting at `zap_at`, with no Versions pick
+    /// (`open_zap` is the apps' way in).
+    pub fn open_zap_at(
+        core: &Core,
+        candidates: Vec<ParsedStream>,
+        target: PlayTarget,
+        zap_at: u64,
+    ) -> Self {
+        Self::open_with(core, candidates, None, target, &[Format::Hls], Some(zap_at))
     }
 
     fn open_with(
@@ -1007,6 +1033,7 @@ impl PlaybackView {
         pick: Option<crate::views::versions::PickHandle>,
         target: PlayTarget,
         plays: &[Format],
+        zap_at: Option<u64>,
     ) -> Self {
         let denied = core.policy().kids()
             && !matches!(
@@ -1037,13 +1064,16 @@ impl PlaybackView {
             .progress(core.profile(), &target.video_id)
             .ok()
             .flatten();
-        let resume_ms = resume_point(progress);
+        // A zap starts where it was dealt, whatever was saved (plans/zap.md 1.2).
+        let resume_ms = zap_at.or_else(|| resume_point(progress));
         let mut state = State::new(candidates, resume_ms);
+        state.zap_at = zap_at;
+        state.zap_held = zap_at.is_some();
         // The last session's length: a torrent's rate before the player
         // reports this one's (plans/streaming-window.md 2.2).
         state.known_duration_ms = progress.map(|(_, dur)| dur as u64).filter(|&d| d > 0);
         state.pick = pick;
-        state.resume_key = resume_ms.and_then(|_| {
+        state.resume_key = resume_ms.filter(|_| zap_at.is_none()).and_then(|_| {
             stream_memory(core, &target)?["key"]
                 .as_str()
                 .map(str::to_owned)
@@ -1059,6 +1089,11 @@ impl PlaybackView {
             move |trakt| {
                 if let Some(state) = shared.upgrade() {
                     let mut s = lock(&state);
+                    // A held zap shows Trakt off and keeps the real state.
+                    if s.zap_held {
+                        s.trakt_kept = Some(trakt);
+                        return;
+                    }
                     s.snapshot.trakt = trakt;
                     snapshot.set(s.snapshot.clone());
                 }
@@ -1094,7 +1129,27 @@ impl PlaybackView {
         target: PlayTarget,
         plays: &[Format],
     ) -> Self {
-        let view = Self::open_with(core, pick.candidates, Some(pick.handle), target, plays);
+        Self::open_zap(core, pick, target, plays, None)
+    }
+
+    /// `open_picked` as a zap when `zap_at` is set (plans/zap.md 1.2): it
+    /// starts there, and writes no progress, Trakt or stream memory, and
+    /// offers no next episode, until it has played `zap::HOLD_MS`.
+    pub fn open_zap(
+        core: &Core,
+        pick: crate::views::versions::Pick,
+        target: PlayTarget,
+        plays: &[Format],
+        zap_at: Option<u64>,
+    ) -> Self {
+        let view = Self::open_with(
+            core,
+            pick.candidates,
+            Some(pick.handle),
+            target,
+            plays,
+            zap_at,
+        );
         let mut s = lock(&view.state);
         s.languages = pick.languages;
         s.device_language = pick.device_language;
@@ -1605,6 +1660,11 @@ impl PlaybackView {
 
     /// Rewrites the title's stream memory with `change`.
     fn remember(&self, binge_group: Option<String>, change: impl FnOnce(&mut serde_json::Value)) {
+        // ponytail: a held zap's subtitle choice holds for this play only and is not kept for the title
+        // (plans/zap.md 1.2); kept and written at the lift if anyone misses it.
+        if lock(&self.state).zap_held {
+            return;
+        }
         let library = self.core.library();
         let mut memory: serde_json::Value = library
             .stream_memory(self.core.profile(), &self.target.item_id)
@@ -1691,13 +1751,19 @@ impl PlaybackView {
         // A file far off the title's runtime is another title (a plugin's
         // link to the wrong film, QA r1 Q5 row 23): it plays on, but its
         // position is not this title's progress, here or on Trakt.
-        let off = off_runtime(lock(&self.state).runtime_s, duration_ms);
-        if let Some(trakt) = self.trakt.as_ref().filter(|_| !off) {
+        let (off, held) = {
+            let s = lock(&self.state);
+            (off_runtime(s.runtime_s, duration_ms), s.zap_held)
+        };
+        // Nor is a held zap's (plans/zap.md 1.2).
+        if let Some(trakt) = self.trakt.as_ref().filter(|_| !off && !held) {
             trakt.progress(position_ms, duration_ms, paused);
         }
         // A torrent that plays past the start keeps up again: written outside
         // the lock, once (plans/swarm-speed.md v2).
         let mut kept_up: Option<String> = None;
+        // A zap's stream memory, written outside the lock as its hold lifts.
+        let mut released: Option<(ParsedStream, Option<(usize, u64)>)> = None;
         let due = {
             let mut s = lock(&self.state);
             let step = s
@@ -1707,6 +1773,17 @@ impl PlaybackView {
                 .filter(|&step| step <= PLAYED_STEP.as_millis() as u64);
             if let Some(step) = step {
                 s.played_ms += step;
+                if s.zap_held {
+                    s.zap_played_ms += step;
+                    if s.zap_played_ms >= crate::zap::HOLD_MS {
+                        s.zap_held = false;
+                        released = s.held_stream.take();
+                        if let Some(trakt) = s.trakt_kept.take() {
+                            s.snapshot.trakt = trakt;
+                            self.snapshot.set(s.snapshot.clone());
+                        }
+                    }
+                }
             }
             // A report at the frozen frame of a stall still on is not playing
             // on, though it is past the report before the stall (QA r5 Q5
@@ -1754,11 +1831,16 @@ impl PlaybackView {
                 s.failed_as = None;
             }
             s.last = Some((position_ms, duration_ms));
-            s.dirty = !off;
+            s.dirty = !off && !s.zap_held;
             // Nor where it starts (QA r2 Q5 row 10): the saved position is
             // gone once its length is known, and the apps go to its start. A
             // position a stall carried over to the next version stays.
-            if off
+            // A zap dealt past three quarters of a file shorter than its
+            // guessed runtime starts it from 0 too (plans/zap.md 1.2).
+            let late = s
+                .zap_at
+                .is_some_and(|at| crate::zap::too_late(at, duration_ms));
+            if (off || late)
                 && !s.progressed
                 && s.snapshot.resume_ms.is_some()
                 && s.snapshot.resume_ms == s.saved_resume_ms
@@ -1785,6 +1867,9 @@ impl PlaybackView {
             let _ = changed;
             s.saved_at.is_none_or(|t| t.elapsed() >= SAVE_EVERY)
         };
+        if let Some((stream, played)) = &released {
+            remember_stream(&self.core, &self.target, stream, *played);
+        }
         if let Some(hash) = &kept_up {
             crate::speed::forget_slow(self.core.library(), hash);
         }
@@ -2963,7 +3048,17 @@ async fn resolve_next(
                     Upstream::Torrent { file, .. } => size.map(|len| (*file, len)),
                     _ => None,
                 };
-                remember_stream(&core, &target, &stream, played);
+                // A held zap keeps it for when its hold lifts (plans/zap.md 1.2).
+                let held = {
+                    let mut s = lock(&state);
+                    if s.zap_held {
+                        s.held_stream = Some((stream.clone(), played));
+                    }
+                    s.zap_held
+                };
+                if !held {
+                    remember_stream(&core, &target, &stream, played);
+                }
                 // The addons ask with the hash; the built-in source lists at
                 // once and ranks with the frame rate. Pending ends with both.
                 add_kept_tracks(
@@ -3069,6 +3164,10 @@ async fn resolve_next(
                     settle_second(&state, &snapshot, run, &wants, true);
                 };
                 let next = async {
+                    // A zap offers no next episode (plans/zap.md 1.2).
+                    if lock(&state).zap_at.is_some() {
+                        return;
+                    }
                     if let Some(next) = next_episode(&core, &target).await {
                         let mut s = lock(&state);
                         // Checked as it is set: the title may have left a

@@ -25,6 +25,7 @@ pub mod speed;
 mod trakt;
 mod turkcealtyazi;
 pub mod views;
+pub mod zap;
 
 pub use crate::core::{Core, CoreConfig, CoreError, TvdbMiss};
 pub use crate::debrid::{
@@ -36,6 +37,7 @@ pub use crate::trakt::{
     TmdbHost, TraktConfig, TraktImporting, TraktLoginSnapshot, TraktLoginView, TraktPlayback,
     TraktReport, TraktState, TraktStatus, TraktUnmapped, TraktView,
 };
+pub use crate::zap::{Dial, ZapMiss, ZapPick};
 pub use mq_debrid::StoreId;
 pub use mq_import::Endpoints as StremioEndpoints;
 pub use mq_tracking::trakt::{Hosts as TraktHosts, TraktRecord};
