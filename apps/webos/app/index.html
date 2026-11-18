@@ -1,30 +1,52 @@
 <!doctype html>
 <html>
 <head><meta charset="utf-8"><title>Momotus</title>
-<style>html,body{margin:0;background:#06121a;color:#cfe;font:32px sans-serif}p{margin:80px}</style></head>
-<body><p id="m"></p>
+<style>
+html,body{margin:0;height:100%;background:#1C1C1E;color:rgba(255,255,255,.92);font:500 32px/1.4 sans-serif}
+#f{display:none;padding:120px 160px}
+#f.on{display:block}
+p{margin:0 0 40px;max-width:1200px}
+button{height:72px;padding:0 40px;border:0;border-radius:36px;font:600 32px/1 sans-serif;background:rgba(255,255,255,.16);color:#fff;outline:none}
+button:focus{background:rgba(255,255,255,.92);color:rgba(0,0,0,.88);transform:scale(1.06)}
+</style></head>
+<body><div id="f" role="alert"><p>Momotus could not start. Close the app and open it again.</p><button id="r" type="button">Try again</button></div>
 <script>
 // The stub (plans/webos.md section 1): start the service over Luna, then hand
 // the page to the service's origin with the token in the fragment. The bridge
 // stays referenced in a global until it answers, or its callback never runs.
+// When the service does not start, the words and a focused Try again, which
+// asks once more.
 var bridge;
+var box = document.getElementById('f');
+var again = document.getElementById('r');
 function fail() {
-  document.getElementById('m').textContent = 'Momotus could not start. Close the app and open it again.';
+  bridge = null;
+  box.className = 'on';
+  again.disabled = false;
+  again.focus();
 }
-try {
-  bridge = new PalmServiceBridge();
-  bridge.onservicecallback = function (raw) {
-    var r;
-    try {
-      r = JSON.parse(raw);
-    } catch (e) {}
-    if (!r || !r.returnValue) return fail();
-    location.replace('http://127.0.0.1:47801/#t=' + r.token + '&stub=' + encodeURIComponent(location.href));
-  };
-  bridge.call('luna://app.momotus.webos.service/start', '{}');
-} catch (e) {
-  fail();
+function start() {
+  try {
+    bridge = new PalmServiceBridge();
+    bridge.onservicecallback = function (raw) {
+      var r;
+      try {
+        r = JSON.parse(raw);
+      } catch (e) {}
+      if (!r || !r.returnValue) return fail();
+      location.replace('http://127.0.0.1:47801/#t=' + r.token + '&stub=' + encodeURIComponent(location.href));
+    };
+    bridge.call('luna://app.momotus.webos.service/start', '{}');
+  } catch (e) {
+    fail();
+  }
 }
+again.onclick = function () {
+  again.disabled = true;
+  box.className = '';
+  start();
+};
+start();
 </script>
 </body>
 </html>

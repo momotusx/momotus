@@ -277,5 +277,18 @@ if (import.meta.main) {
     const [vx, vy, vw] = viewBox(master);
     render(join(pub, "brand", "mark.webp"), 384, 384, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vx} ${vy} ${vw} ${vw}">${inner(master)}</svg>`);
   }
+  // ---------- LG webOS: apps/webos/app ----------
+  // The launcher's icons are the web tile, 80 and 130 px, opaque as webOS shows them on a card. The 1920 x 1080 splash
+  // is the page's first frame (apps/web/index.html, the boot frame): the bird at 81 px and the 36 px wordmark 16 px
+  // apart, faint (0.2) on #1C1C1E, so the splash, the stub and the app hand over with nothing moving.
+  const webos = join(root, "apps/webos/app");
+  render(join(webos, "icon.png"), 80, 80, tile(80), true);
+  render(join(webos, "largeIcon.png"), 130, 130, tile(130), true);
+  {
+    const W = 1920, H = 1080, m = 81, gap = 16, wh = 36;
+    const x = (W - (m + gap + wordWidth(wh))) / 2;
+    render(join(webos, "splash.png"), W, H,
+      svg(W, H, rect(W, H, "#1C1C1E") + `<g opacity="0.2">${bird(x, (H - m) / 2, m)}${word(x + m + gap, H / 2, wh)}</g>`), true);
+  }
   console.log("brand assets written");
 }
