@@ -50,7 +50,7 @@ import { bytes, clock, decoded, startsText, episodeLabel, groupFailures, playPat
 import { DELAY_SETTLE_MS, nudge, QUICK_STEP } from "../lib/delay";
 import { barWords, chipCap, desktopFit, type Fit, nextShown, phoneFit, positionStep, positionText, shiftSaid, shiftShown, stripLanguages } from "../lib/bar";
 import { cuePlace, cueSpot, cueTop, SAFE_LINE } from "../lib/cues";
-import { bufferShare, loadingLines, STALL_AHEAD_S, startFill } from "../lib/loading";
+import { bufferShare, loadingLines, pickedListed, STALL_AHEAD_S, startFill } from "../lib/loading";
 import { bestOption, fileChoice, offSummary, pickerLanguages, sameLanguage, startOption } from "../lib/subtitles";
 import { NOTICE_MS, noticeShows, noticeSince, traktWords } from "../lib/trakt";
 import { audioTrackName, choiceWords, emptyWords, languageName, nextVersion, qualityCell, qualityText, restartLine, subtitleNote, subtitleNoteLines } from "../lib/words";
@@ -265,16 +265,9 @@ function PlayerPage(props: {
       onCleanup(() => clearTimeout(t));
     }
   });
-  // A version picked by hand opens once Versions lists it (the Archive's and
-  // the plugins' sections too) or is done: after a reload the Versions view
-  // is new and has listed nothing yet.
-  const listed = (k: string) => {
-    const v = versions();
-    const rows = v ? [...v.rows, ...v.archive.rows, ...v.plugins.rows] : [];
-    return !!v && (v.done || v.recommended?.key === k || rows.some((r) => r.key === k));
-  };
+  // After a reload the Versions view is new and has listed nothing yet (lib/loading.ts, pickedListed).
   const key = createMemo<string | null>(
-    (prev) => prev ?? (props.chosen ? (listed(props.chosen) ? props.chosen : null) : settled() ? (versions()?.recommended?.key ?? null) : null),
+    (prev) => prev ?? (props.chosen ? (pickedListed(versions(), props.chosen) ? props.chosen : null) : settled() ? (versions()?.recommended?.key ?? null) : null),
     null,
   );
 

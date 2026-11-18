@@ -1,6 +1,8 @@
 /** The player's loading layer (plans/player-polish.md 1.2): how far the
  * logo is filled, and the words under it. */
 
+import type { VersionsSnapshot } from "../core/generated/VersionsSnapshot";
+
 /** Seconds of video ahead of the playhead the player wants: before it starts
  * (a link's start, and a torrent's after `ready`) and before it plays on
  * after a stall. The apps' own rule, as the Android player sets it
@@ -32,4 +34,16 @@ export function loadingLines(status: string | null, caption: string | null | und
   const lines: string[] = [];
   for (const l of [status, caption]) if (l && !lines.includes(l)) lines.push(l);
   return lines;
+}
+
+type Listing = Pick<VersionsSnapshot, "done" | "recommended" | "rows" | "archive" | "plugins">;
+
+/** A version picked by hand opens once Versions lists it (the Archive's and the plugins' sections too), or once
+ * every pass is over: `done` is the addons' pass only, and those sections can list it after (a reload, a player
+ * opened on its own Versions view). */
+export function pickedListed(v: Listing | null | undefined, key: string): boolean {
+  if (!v) return false;
+  const rows = [...v.rows, ...v.archive.rows, ...v.plugins.rows];
+  if (v.recommended?.key === key || rows.some((r) => r.key === key)) return true;
+  return v.done && !v.archive.pending && !v.plugins.pending;
 }
