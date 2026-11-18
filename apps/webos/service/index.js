@@ -147,8 +147,10 @@ function commandOf(pid, cb) {
 
 // A pid left in core.pid counts only while its command line is this install's
 // core-worker (the file survives a reboot and the pid may be reused). It gets
-// SIGTERM, SIGKILL after 2 s, and the start goes on after 5 s at most. A
-// process we may not signal (EPERM) is not ours: the start goes on.
+// SIGTERM, then SIGKILL after 2 s; no new core starts while it lives, since two
+// cores would write the unlocked database. One still alive after 5 s stops the
+// service (the page's relaunch tries again, then shows the could-not-start
+// line). A process we may not signal (EPERM) is not ours: the start goes on.
 function sweepStale(done) {
   let pid = NaN;
   try {
@@ -165,10 +167,13 @@ function sweepStale(done) {
     }
     const t0 = Date.now();
     const poll = setInterval(() => {
-      const gone = !isAlive(pid);
-      if (gone || Date.now() - t0 >= 5000) {
+      if (!isAlive(pid)) {
         clearInterval(poll);
         return done();
+      }
+      if (Date.now() - t0 >= 5000) {
+        clearInterval(poll);
+        return stop('stale core alive');
       }
       if (Date.now() - t0 >= 2000) {
         try {
