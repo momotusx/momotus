@@ -16,6 +16,9 @@ export const isWebOS = (): boolean => typeof navigator !== "undefined" && isWebO
 export const nativeCore = (): boolean =>
   typeof document !== "undefined" && document.querySelector('meta[name="mq-core"]')?.getAttribute("content") === "native";
 
+/** A TV on the wasm core: what that core cannot do (torrents, plugins, error reports, loopback sources) stays off. */
+export const wasmCore = (): boolean => isWebOS() && !nativeCore();
+
 /** The engine lists a file's audio tracks (`HTMLMediaElement.audioTracks`); without the list each file plays its default one. */
 export const audioTrackList = (): boolean => typeof HTMLMediaElement !== "undefined" && "audioTracks" in HTMLMediaElement.prototype;
 

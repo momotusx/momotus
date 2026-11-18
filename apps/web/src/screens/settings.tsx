@@ -43,7 +43,7 @@ import type { SubtitleSize } from "../core/generated/SubtitleSize";
 import { chooseForm, type Form, form, pinned } from "../form";
 import { headerOnTvNow, previewsOn, setPreviewsOn } from "../lib/trailers";
 import { defaultsWords } from "../lib/defaults";
-import { audioTrackList, isWebOS } from "../lib/webos";
+import { audioTrackList, isWebOS, wasmCore } from "../lib/webos";
 import reportWords from "../../../shared/report-words.json";
 import { addonsSummary, choiceSummary, choiceWords, findAddons, languageName, syncSummary, syncWords, tmdbCredit } from "../lib/words";
 import * as sync from "../core/sync";
@@ -812,7 +812,7 @@ export default function SettingsScreen() {
                   onPick={(v) => chooseForm(v)}
                 />
               </div>
-              <Show when={!isWebOS()}>
+              <Show when={!wasmCore()}>
                 <ReportsRow />
               </Show>
             </section>

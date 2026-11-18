@@ -11,7 +11,7 @@
 import type Hls from "hls.js";
 import { createSignal, onCleanup, Show } from "solid-js";
 import { earlyFailure, hlsFailure, mediaFailure, pendingStart } from "../lib/failover";
-import { isWebOS, nativeCore } from "../lib/webos";
+import { isWebOS, wasmCore } from "../lib/webos";
 import { startAudio } from "../lib/words";
 import type { Engine, EngineEvents, Track } from "./engine";
 import { needsHlsJs } from "./hls";
@@ -135,7 +135,7 @@ export function createVideoEngine(events: EngineEvents): Engine {
       classList={{ on: started() }}
       playsinline
       preload="auto"
-      crossorigin={webos && !nativeCore() ? undefined : "anonymous"}
+      crossorigin={wasmCore() ? undefined : "anonymous"}
       onPlay={() => {
         setPaused(false);
         events.onPlay();

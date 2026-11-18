@@ -57,9 +57,9 @@ test("the shared words are the ones the plan gives", () => {
   expect(words.privacyPath).toBe("/privacy");
 });
 
-test("Settings shows the switch outside webOS, and About the privacy page", () => {
+test("Settings shows the switch except on a TV with the wasm core, and About the privacy page", () => {
   const settings = readFileSync(new URL("../screens/settings.tsx", import.meta.url), "utf8");
   expect(settings).toContain("<ReportsRow />");
-  expect(settings).toMatch(/<Show when=\{!isWebOS\(\)\}>\s*<ReportsRow \/>/);
+  expect(settings).toMatch(/<Show when=\{!wasmCore\(\)\}>\s*<ReportsRow \/>/);
   expect(settings).toContain("<PrivacyLink url={url()} />");
 });
