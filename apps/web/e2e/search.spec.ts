@@ -83,6 +83,29 @@ for (const form of Object.keys(FORMS) as Form[]) {
   });
 }
 
+test("tv: Up and Down leave the field when its arrows never bubble, as on webOS", async ({ browser }) => {
+  const { context, page } = await open(browser, "tv", "/");
+  await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
+  // webOS hands a focused field's arrows to the field alone: nothing above it on the way back up hears them.
+  await page.evaluate(() =>
+    document.addEventListener("keydown", (e) => e.target instanceof HTMLInputElement && e.key.startsWith("Arrow") && e.stopPropagation(), { capture: true }),
+  );
+  await openFromNav(page, "tv");
+  await expect.poll(() => focused(page)).toBe("search:input");
+  await page.keyboard.type("thrones");
+  await expect(page.locator(".hit").first()).toBeVisible({ timeout: 30_000 });
+  // Left and Right stay the caret's; the text is as typed.
+  await page.keyboard.press("ArrowLeft");
+  expect(await focused(page)).toBe("search:input");
+  await expect(page.locator('[data-f="search:input"]')).toHaveValue("thrones");
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(() => focused(page)).toBe("search:scope");
+  await page.keyboard.press("ArrowUp");
+  await expect.poll(() => focused(page)).toBe("search:input");
+  await expect(page.locator('[data-f="search:input"]')).toHaveValue("thrones");
+  await context.close();
+});
+
 test("desktop: a query nothing matches repeats it and offers Recommended addons, the addons can search", async ({ browser }) => {
   const { context, page } = await open(browser, "desktop", "/");
   await expect(page.locator(".hero-page.on .reason")).toBeVisible({ timeout: 30_000 });
