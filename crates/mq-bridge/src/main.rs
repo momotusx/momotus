@@ -5,7 +5,7 @@ use axum::Router;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade, close_code};
 use axum::extract::{Request, State};
 use axum::handler::HandlerWithoutStateExt;
-use axum::http::{HeaderMap, StatusCode, header};
+use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use futures_util::{SinkExt, StreamExt};
@@ -35,6 +35,15 @@ async fn main() {
             .try_init();
     }
     mq_runtime::reports::install(&data);
+    // A parent that cannot always reap the bridge (the webOS service, which
+    // the system may kill outright; plans/webos.md v5) holds its stdin: when
+    // that closes, the bridge ends too, so no second core outlives it.
+    if std::env::var_os("MQ_BRIDGE_EXIT_ON_EOF").is_some() {
+        std::thread::spawn(|| {
+            let _ = std::io::copy(&mut std::io::stdin().lock(), &mut std::io::sink());
+            std::process::exit(0);
+        });
+    }
     let core = Core::open(CoreConfig {
         data_dir: data,
         profile_id: std::env::var("MQ_PROFILE").unwrap_or_else(|_| "default".into()),
@@ -51,7 +60,10 @@ async fn main() {
     for entry in ignored {
         eprintln!("MQ_BRIDGE_ORIGINS entry ignored: {entry} is not http(s)://host[:port]");
     }
-    let mut app = router(core, origins.clone());
+    let token = std::env::var("MQ_BRIDGE_TOKEN")
+        .ok()
+        .filter(|t| !t.is_empty());
+    let mut app = router(core, origins.clone(), token);
     if let Ok(dir) = std::env::var("MQ_STATIC") {
         app = with_static(app, PathBuf::from(dir));
     }
@@ -62,20 +74,73 @@ async fn main() {
     axum::serve(listener, app).await.expect("serve");
 }
 
+/// C23's minimumNumber and maximumNumber (a NaN gives the other operand; -0 is
+/// below +0). LLVM calls these for `f32::min` and `f64::max` on soft-float
+/// 32-bit ARM, and the glibc the webOS TV core links against (2.17, older than
+/// any TV's; plans/webos.md v5) has none of them.
+#[cfg(all(target_os = "linux", target_arch = "arm", target_env = "gnu"))]
+mod minmax {
+    macro_rules! pick {
+        ($name:ident, $t:ty, $min:literal) => {
+            #[unsafe(no_mangle)]
+            extern "C" fn $name(x: $t, y: $t) -> $t {
+                if x.is_nan() {
+                    return y;
+                }
+                if y.is_nan() {
+                    return x;
+                }
+                let x_first = if x == y {
+                    x.is_sign_negative() == $min
+                } else {
+                    (x < y) == $min
+                };
+                if x_first { x } else { y }
+            }
+        };
+    }
+    pick!(fminimum_num, f64, true);
+    pick!(fmaximum_num, f64, false);
+    pick!(fminimum_numf, f32, true);
+    pick!(fmaximum_numf, f32, false);
+}
+
 #[derive(Clone)]
 struct Bridge {
     core: Core,
     origins: Arc<[String]>,
     refused: Arc<Refused>,
+    token: Option<Arc<str>>,
 }
 
-fn router(core: Core, origins: Vec<String>) -> Router {
+fn router(core: Core, origins: Vec<String>, token: Option<String>) -> Router {
     let origins = origins.into();
     Router::new().route("/ws", get(ws)).with_state(Bridge {
         core,
         origins,
         refused: Arc::default(),
+        token: token.map(Into::into),
     })
+}
+
+/// The header a parent process sends its token in (`MQ_BRIDGE_TOKEN`).
+const TOKEN_HEADER: &str = "x-mq-token";
+
+/// With a token set (the webOS service starts the bridge with one, since
+/// any other app's service on the TV may reach 127.0.0.1), only a request
+/// that carries it gets a socket; the bytes are compared in constant time.
+/// With none, as on the desktop and in the web e2e, every request may.
+fn token_allowed(want: Option<&str>, got: Option<&HeaderValue>) -> bool {
+    let Some(want) = want else {
+        return true;
+    };
+    let got = got.map(HeaderValue::as_bytes).unwrap_or_default();
+    got.len() == want.len()
+        && got
+            .iter()
+            .zip(want.as_bytes())
+            .fold(0u8, |diff, (a, b)| diff | (a ^ b))
+            == 0
 }
 
 /// The web build at `dir`. A path that names no file and has no extension
@@ -126,8 +191,12 @@ async fn ws(
         core,
         origins,
         refused,
+        token,
     }): State<Bridge>,
 ) -> axum::response::Response {
+    if !token_allowed(token.as_deref(), headers.get(TOKEN_HEADER)) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let origin = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok());
     if !origin_allowed(origin, &origins) {
         // Another program's page, or another site's: no session for it.
@@ -242,7 +311,7 @@ async fn serve_socket(socket: WebSocket, core: Core, private: bool) {
 
 #[cfg(test)]
 mod tests {
-    use super::{allowed_origins, origin_allowed, router, with_static};
+    use super::{allowed_origins, origin_allowed, router, token_allowed, with_static};
     use futures_util::{SinkExt, StreamExt};
     use mq_runtime::Core;
     use tokio_tungstenite::tungstenite::{self, Message, client::IntoClientRequest};
@@ -363,7 +432,7 @@ mod tests {
         let core = Core::temporary("default").unwrap();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
-        let app = router(core, dev(port));
+        let app = router(core, dev(port), None);
         let server = mq_rt::spawn(async move { axum::serve(listener, app).await });
         let url = format!("ws://127.0.0.1:{port}/ws");
         let open = |origin: Option<&str>| {
@@ -414,7 +483,7 @@ mod tests {
         let core = Core::temporary("default").unwrap();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
-        let app = with_static(router(core, dev(port)), dir.clone());
+        let app = with_static(router(core, dev(port), None), dir.clone());
         let server = mq_rt::spawn(async move { axum::serve(listener, app).await });
         for (path, status, body) in [
             ("/", 200, "<!doctype html>app"),
@@ -433,6 +502,65 @@ mod tests {
         }
         server.abort();
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn with_a_token_only_its_exact_bytes_open_the_socket() {
+        use axum::http::HeaderValue;
+        let want = "a".repeat(64);
+        assert!(token_allowed(None, None), "no token set: anyone");
+        assert!(token_allowed(
+            Some(&want),
+            Some(&HeaderValue::from_str(&want).unwrap())
+        ));
+        for got in [
+            None,
+            Some(""),
+            Some("b"),
+            Some(&want[..63]),
+            Some(&*format!("{want}a")),
+        ] {
+            let got = got.map(|g| HeaderValue::from_str(g).unwrap());
+            assert!(!token_allowed(Some(&want), got.as_ref()), "{got:?}");
+        }
+    }
+
+    /// The real server with a token: a socket without it, or with another,
+    /// is refused before any op; the right one is answered.
+    #[tokio::test]
+    async fn the_server_with_a_token_refuses_a_socket_without_it() {
+        let core = Core::temporary("default").unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let app = router(core, dev(port), Some("s3cret".into()));
+        let server = mq_rt::spawn(async move { axum::serve(listener, app).await });
+        let open = |token: Option<&str>| {
+            let mut request = format!("ws://127.0.0.1:{port}/ws")
+                .into_client_request()
+                .unwrap();
+            if let Some(token) = token {
+                request
+                    .headers_mut()
+                    .insert("x-mq-token", token.parse().unwrap());
+            }
+            tokio_tungstenite::connect_async(request)
+        };
+        for token in [None, Some("s3creT"), Some("s3cretx"), Some("")] {
+            match open(token).await {
+                Err(tungstenite::Error::Http(response)) => {
+                    assert_eq!(response.status(), 403, "{token:?}")
+                }
+                other => panic!("{token:?} opened a socket: {:?}", other.map(|_| ())),
+            }
+        }
+        let (mut socket, _) = open(Some("s3cret")).await.unwrap();
+        socket
+            .send(Message::text(r#"{"id":1,"op":"ping"}"#))
+            .await
+            .unwrap();
+        let reply = socket.next().await.unwrap().unwrap();
+        assert!(reply.to_text().unwrap().contains(r#""ok":true"#), "{reply}");
+        server.abort();
     }
 
     #[test]

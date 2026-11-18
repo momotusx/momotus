@@ -25,8 +25,9 @@ tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
 libc = "0.2"
 
 # rquickjs-sys 0.14.0 ships no generated bindings for Android or Apple's
-# mobile targets.
-[target.'cfg(any(target_os = "android", target_os = "ios", target_os = "tvos"))'.dependencies]
+# mobile targets, and stale ones for 32-bit ARM Linux (the webOS TV core,
+# plans/webos.md v5: its JS_NewArrayBuffer has one argument fewer).
+[target.'cfg(any(target_os = "android", target_os = "ios", target_os = "tvos", all(target_os = "linux", target_arch = "arm")))'.dependencies]
 rquickjs = { version = "=0.14.0", default-features = false, features = ["std", "futures", "bindgen"] }
 
 [dev-dependencies]
