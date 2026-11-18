@@ -217,12 +217,8 @@ impl<H: PeerConnectionHandler> PeerConnection<H> {
             .unwrap_or_else(|| Duration::from_secs(10));
 
         let now = Instant::now();
-        let (ckind, mut read, mut write) = with_timeout(
-            "connecting",
-            connect_timeout,
-            self.connector.connect(self.addr),
-        )
-        .await?;
+        let (ckind, mut read, mut write) =
+            self.connector.connect(self.addr, connect_timeout).await?;
 
         async move {
             self.handler.on_connected(now.elapsed());

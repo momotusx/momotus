@@ -822,6 +822,9 @@ impl Session {
                     bind_device: bind_device.clone(),
                     ipv4_only: opts.ipv4_only,
                     permits: peer_permits.clone(),
+                    max_half_open: opts.connect.as_ref().and_then(|c| c.max_half_open),
+                    dials_per_minute: opts.connect.as_ref().and_then(|c| c.dials_per_minute),
+                    metadata_peers: opts.connect.as_ref().and_then(|c| c.metadata_peers),
                 })
                 .await
                 .context("error creating stream connector")?,

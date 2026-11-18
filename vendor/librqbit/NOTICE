@@ -131,3 +131,12 @@ Marquee changes (each changed spot carries a "Marquee fork" comment):
   info hash) on another machine.
 - Cargo.toml: a [patch.crates-io] table with the sibling forks, so this
   crate's own tests build on their own as in the Marquee workspace.
+- src/stream_connect.rs, src/peer_connection.rs, src/dht_utils.rs,
+  src/session.rs, Cargo.toml (tokio test-util for tests):
+  `ConnectionOptions::max_half_open` and `dials_per_minute`, a gate every
+  dial passes in `StreamConnector::connect` (metadata and live, TCP and
+  uTP): a slot among the dials in flight, held until the connect returns,
+  then a start inside the last 60 s budget. The connect timeout bounds the
+  dial, not the wait at the gate. `ConnectionOptions::metadata_peers`
+  replaces upstream's fixed 128 peers asked at once per magnet. Unset, all
+  three keep upstream's behaviour.

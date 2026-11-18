@@ -54,7 +54,8 @@ pub async fn read_metainfo_from_peer_receiver<A: Stream<Item = SocketAddr> + Unp
     let mut seen = HashSet::<SocketAddr>::new();
     let mut addrs = addrs_stream;
 
-    let semaphore = tokio::sync::Semaphore::new(128);
+    // Marquee fork: upstream's 128 by default, `ConnectionOptions::metadata_peers`.
+    let semaphore = tokio::sync::Semaphore::new(connector.metadata_peers());
 
     let read_info_guarded = |addr| {
         let semaphore = &semaphore;

@@ -387,6 +387,10 @@ version = "1"
 [dev-dependencies.tempfile]
 version = "3"
 
+[dev-dependencies.tokio]
+version = "1"
+features = ["test-util"]
+
 [dev-dependencies.tokio-test]
 version = "0.4"
 
