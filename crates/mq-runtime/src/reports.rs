@@ -18,6 +18,7 @@ use mq_http::{HttpError, RequestOptions};
 use mq_library::Library;
 pub use mq_reports::{App, Attempt, Channel, Context, CoreBuild, Device, Form, Kind, Report};
 use std::collections::VecDeque;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};

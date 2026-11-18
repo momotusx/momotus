@@ -22,36 +22,58 @@ mod ahead;
 // mq-rt: native-only
 #[cfg(not(target_arch = "wasm32"))]
 mod file;
+// webOS uses only its detection: the player fetches a playlist itself.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
 mod manifest;
 mod subtitles;
 #[cfg(all(test, feature = "torrent"))]
 #[allow(dead_code)]
 #[path = "../../mq-engine/tests/support/mod.rs"]
 mod torrent_support;
+#[cfg(target_arch = "wasm32")]
+mod wasm;
 
 pub use subtitles::to_vtt;
 
+#[cfg(not(target_arch = "wasm32"))]
 use axum::Router;
+#[cfg(not(target_arch = "wasm32"))]
 use axum::body::Body;
+#[cfg(not(target_arch = "wasm32"))]
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, HeaderValue, Method, Request, StatusCode, header};
+#[cfg(not(target_arch = "wasm32"))]
 use axum::middleware::Next;
+#[cfg(not(target_arch = "wasm32"))]
 use axum::response::{IntoResponse, Response};
+#[cfg(not(target_arch = "wasm32"))]
 use axum::routing::get;
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
+#[cfg(not(target_arch = "wasm32"))]
+use bytes::BytesMut;
+#[cfg(not(target_arch = "wasm32"))]
 use futures_util::{FutureExt, Stream, StreamExt, stream};
-use manifest::{Children, Declared, Role, Sniffed};
+use http::{HeaderMap, StatusCode, header};
+#[cfg(not(target_arch = "wasm32"))]
+use http::{HeaderValue, Method, Request};
+#[cfg(not(target_arch = "wasm32"))]
+use manifest::{Children, Role};
+use manifest::{Declared, Sniffed};
 use mq_http::{HopRule, HttpClient, HttpError, Priority, RequestOptions, Url};
 use mq_media::CancellationToken;
 use mq_rt::StdInstant as Instant;
 use std::collections::HashMap;
+#[cfg(not(target_arch = "wasm32"))]
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
+#[cfg(not(target_arch = "wasm32"))]
 use std::pin::Pin;
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
+#[cfg(not(target_arch = "wasm32"))]
 use std::task::{Context, Poll};
 use std::time::Duration;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 /// Where the bytes of one playback come from.
@@ -158,15 +180,21 @@ pub fn upstream_http(http: &HttpClient, addon_url: Option<&Url>) -> HttpClient {
 
 /// Where one playback's bytes come from.
 enum Content {
+    #[cfg(not(target_arch = "wasm32"))]
     Http(Arc<ahead::Source>),
+    /// webOS: the player reads the source itself; the core only probes it.
+    #[cfg(target_arch = "wasm32")]
+    Http(Arc<wasm::RangeSource>),
     /// An HLS playlist or a DASH manifest, fetched fresh and rewritten for
     /// every request.
+    #[cfg(not(target_arch = "wasm32"))]
     Hls(Arc<Hls>),
     #[cfg(feature = "torrent")]
     Torrent {
         claim: mq_engine::Claim,
         file: usize,
     },
+    #[cfg(not(target_arch = "wasm32"))]
     File(Arc<file::LocalFile>),
 }
 
@@ -298,6 +326,7 @@ struct SourceFault(Option<u16>);
 const FAULT_FRESH: Duration = Duration::from_secs(30);
 
 /// The source's error status in a failed fetch; `None` for no answer.
+#[cfg(not(target_arch = "wasm32"))]
 fn error_status(e: &HttpError) -> Option<u16> {
     match e {
         HttpError::Status { status, .. } => Some(*status),
@@ -306,11 +335,16 @@ fn error_status(e: &HttpError) -> Option<u16> {
 }
 
 /// `answer` for the player, with the source's failure behind it kept.
+#[cfg(not(target_arch = "wasm32"))]
 fn faulted(answer: impl IntoResponse, fault: Option<u16>) -> Response {
     let mut response = answer.into_response();
     response.extensions_mut().insert(SourceFault(fault));
     response
 }
+
+/// A source's failure in `failOver`'s terms: its kind (`http`, `timeout`,
+/// `network`) and, for `http`, the status.
+pub type Fault = (&'static str, Option<u16>);
 
 /// Why a subtitle was answered with an empty WebVTT instead of its cues.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -328,12 +362,14 @@ type Reporter = Arc<dyn Fn(&str, SubtitleTrouble) + Send + Sync>;
 impl Playback {
     fn release(&self) {
         self.released.cancel();
+        #[cfg(not(target_arch = "wasm32"))]
         if let Content::Http(source) = &self.body {
             source.shutdown();
         }
     }
 
     /// Keeps the source's failure behind `response`, if one is.
+    #[cfg(not(target_arch = "wasm32"))]
     fn note(&self, response: Response) -> Response {
         if let Some(fault) = response.extensions().get::<SourceFault>() {
             *lock(&self.fault) = Some((Instant::now(), *fault));
@@ -345,6 +381,7 @@ impl Playback {
 /// A manifest playback (HLS or DASH, `kind`): the stream URL's manifest
 /// and the children its rewrites named, all fetched through the playback's
 /// scoped handle.
+#[cfg(not(target_arch = "wasm32"))]
 struct Hls {
     url: Url,
     /// What the source is.
@@ -373,6 +410,7 @@ struct Hls {
     hook: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Hls {
     fn options(&self) -> RequestOptions {
         RequestOptions {
@@ -411,6 +449,7 @@ const UNREADABLE_PLAYLIST: &str = "The stream's playlist could not be read";
 /// and a DRM protected one: the version's own, never the source's reach.
 pub use manifest::{COPY_PROTECTED, FORMAT_NOT_HERE};
 /// A playlist's fetch, unless a blocking reload may wait longer.
+#[cfg(not(target_arch = "wasm32"))]
 const MANIFEST_DEADLINE: Duration = Duration::from_secs(10);
 
 /// What the routes and every lease share.
@@ -441,15 +480,22 @@ pub struct Logo {
 pub struct StreamServer {
     shared: Arc<Shared>,
     /// Stops accepting and closes every connection, keep-alive ones too.
+    #[cfg(not(target_arch = "wasm32"))]
     shutdown: CancellationToken,
+    #[cfg(not(target_arch = "wasm32"))]
     app: Router,
     /// The accept loop on the current listener; none once it was closed
     /// and could not be bound again.
+    #[cfg(not(target_arch = "wasm32"))]
     accepting: tokio::sync::Mutex<Option<mq_rt::JoinHandle<()>>>,
 }
 
+#[cfg(target_arch = "wasm32")]
+pub use wasm::{Answer, set_origin};
+
 impl StreamServer {
     /// Binds an ephemeral port on 127.0.0.1 only.
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn start(http: HttpClient) -> std::io::Result<Self> {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await?;
         let shared = Arc::new(Shared {
@@ -490,6 +536,7 @@ impl StreamServer {
     /// plans/architecture.md 4.3). The same port first, so the URLs handed
     /// out keep working; another one when it is taken. True when the
     /// address moved: a player must open its URL again.
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn revive(&self) -> std::io::Result<bool> {
         let mut accepting = self.accepting.lock().await;
         let addr = self.shared.addr();
@@ -512,6 +559,7 @@ impl StreamServer {
 
     /// Tests: the listener goes, as when the system takes it.
     #[doc(hidden)]
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn close_listener(&self) {
         close(&mut *self.accepting.lock().await).await;
     }
@@ -519,6 +567,7 @@ impl StreamServer {
     /// A playback that serves at once, with no check of its origin: for the
     /// CLI and examples. `filename` only helps players guess the container;
     /// it carries no secrets. An HTTP upstream starts reading at once.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn register(&self, upstream: Upstream, filename: &str) -> Lease {
         self.lease(
             new_token(),
@@ -549,6 +598,7 @@ impl StreamServer {
     /// `open` for a player that plays the formats `plays` names (its device
     /// caps): a playlist of another format fails with its words, whether
     /// its type or path declared it or its first bytes did.
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn open_for(
         &self,
         upstream: Upstream,
@@ -610,6 +660,7 @@ impl StreamServer {
     /// 3.3). A ranged origin's first bytes come from the read-ahead cache, a
     /// passthrough origin's from one fresh request; a video or audio type of
     /// a size no playlist has is a file at once, so files keep their start.
+    #[cfg(not(target_arch = "wasm32"))]
     async fn detect(
         &self,
         source: &ahead::Source,
@@ -725,6 +776,7 @@ impl StreamServer {
         Ok(Some(hls))
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn playback(&self, upstream: Upstream, filename: &str) -> Arc<Playback> {
         let body = match upstream {
             Upstream::Http {
@@ -758,6 +810,7 @@ impl StreamServer {
     }
 
     /// `name` is already the main URL's name (`file_name`, `manifest_name`).
+    #[cfg(not(target_arch = "wasm32"))]
     fn lease(
         &self,
         token: String,
@@ -803,6 +856,7 @@ impl StreamServer {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Drop for StreamServer {
     /// Every token goes, every body and fetch ends, and axum closes the
     /// connections, keep-alive ones too.
@@ -819,6 +873,7 @@ impl Drop for StreamServer {
 /// the server is dropped, so a player that stopped reading cannot keep a
 /// connection task, or graceful shutdown, waiting.
 /// Ends the accept loop; its listener is closed once this returns.
+#[cfg(not(target_arch = "wasm32"))]
 async fn close(accepting: &mut Option<mq_rt::JoinHandle<()>>) {
     if let Some(task) = accepting.take() {
         task.abort();
@@ -829,6 +884,7 @@ async fn close(accepting: &mut Option<mq_rt::JoinHandle<()>>) {
 /// Serves `app` on `tcp` until the server stops or `revive` replaces the
 /// listener (dropping this task closes only the listener: connections run
 /// on their own tasks).
+#[cfg(not(target_arch = "wasm32"))]
 fn accept(
     app: Router,
     tcp: tokio::net::TcpListener,
@@ -843,11 +899,13 @@ fn accept(
     })
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 struct Loopback {
     tcp: tokio::net::TcpListener,
     shutdown: CancellationToken,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl axum::serve::Listener for Loopback {
     type Io = Conn;
     type Addr = SocketAddr;
@@ -863,11 +921,13 @@ impl axum::serve::Listener for Loopback {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 struct Conn {
     io: tokio::net::TcpStream,
     closed: Pin<Box<dyn Future<Output = ()> + Send>>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Conn {
     /// An error once the server is gone. Polling also wakes a task that
     /// waits on the socket when that happens.
@@ -879,6 +939,7 @@ impl Conn {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl AsyncRead for Conn {
     fn poll_read(
         mut self: Pin<&mut Self>,
@@ -890,6 +951,7 @@ impl AsyncRead for Conn {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl AsyncWrite for Conn {
     fn poll_write(
         mut self: Pin<&mut Self>,
@@ -914,6 +976,7 @@ impl AsyncWrite for Conn {
 /// whether or not the player reads, and when the player goes. So a player
 /// that stopped reading keeps neither an upstream response and its request
 /// slot nor a torrent range's demand.
+#[cfg(not(target_arch = "wasm32"))]
 fn pumped<S>(chunks: S, released: CancellationToken) -> Body
 where
     S: Stream<Item = std::io::Result<bytes::Bytes>> + Send + 'static,
@@ -966,10 +1029,15 @@ impl Lease {
     /// torrent, which has its own reader.
     pub fn reader(&self) -> Option<Box<dyn mq_media::RangeReader>> {
         match &self.playback.body {
+            #[cfg(target_arch = "wasm32")]
+            Content::Http(source) => Some(Box::new(source.reader())),
+            #[cfg(not(target_arch = "wasm32"))]
             Content::Http(source) if !source.passthrough() => {
                 Some(Box::new(ahead::Reader(source.clone())))
             }
+            #[cfg(not(target_arch = "wasm32"))]
             Content::File(file) => Some(Box::new(mq_media::FileRangeReader::new(&file.path))),
+            #[allow(unreachable_patterns)]
             _ => None,
         }
     }
@@ -981,9 +1049,69 @@ impl Lease {
     /// ignores ranges.
     pub fn sample(&self) -> Option<(u64, std::time::Duration)> {
         match &self.playback.body {
+            #[cfg(not(target_arch = "wasm32"))]
             Content::Http(source) if !source.passthrough() => Some(source.sample()),
+            // webOS: the player reads the source; the core sees no bytes.
             _ => None,
         }
+    }
+
+    /// One byte of the source, asked now through the playback's scoped
+    /// client: how it answers, in `failOver`'s terms (`http` with the
+    /// status, `timeout`, `network`), or `None` when it served it. For a
+    /// player that cannot say why it failed (webOS: the player reads the
+    /// source itself; plans/webos.md 3.4). `None` too for a body that is
+    /// not an HTTP source, and once the playback was released.
+    pub fn probe(&self) -> futures_util::future::BoxFuture<'static, Option<Fault>> {
+        #[cfg(not(target_arch = "wasm32"))]
+        let (http, url, opts) = match &self.playback.body {
+            Content::Http(source) => (
+                source.http().clone(),
+                source.url().to_owned(),
+                source.options(),
+            ),
+            _ => return Box::pin(async { None }),
+        };
+        #[cfg(target_arch = "wasm32")]
+        let (http, url, opts) = match &self.playback.body {
+            Content::Http(source) => (
+                source.http.clone(),
+                source.final_url.clone(),
+                source.options(),
+            ),
+        };
+        let opts = RequestOptions {
+            timeout: Duration::from_secs(10),
+            // A source that ignores the range sends its whole body: what
+            // came is enough.
+            max_bytes: 64 * 1024,
+            ..opts
+        };
+        // webOS: the host drops the answer after its first byte, whatever
+        // its status.
+        #[cfg(target_arch = "wasm32")]
+        let ask = async move {
+            let prefix = http.get_prefix(&url, 0, 1, &opts).await?;
+            match prefix.response.status {
+                200..=299 => Ok(()),
+                status => Err(HttpError::Status {
+                    status,
+                    body: Bytes::new(),
+                    retry_after: None,
+                }),
+            }
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        let ask = async move { http.get_range(&url, 0, 1, &opts).await.map(drop) };
+        let released = self.playback.released.clone();
+        Box::pin(async move {
+            match released.run_until_cancelled(ask).await? {
+                Ok(()) | Err(HttpError::TooLarge { .. }) => None,
+                Err(HttpError::Status { status, .. }) => Some(("http", Some(status))),
+                Err(HttpError::Timeout(_)) => Some(("timeout", None)),
+                Err(_) => Some(("network", None)),
+            }
+        })
     }
 
     /// Whether the file has an `hev1` or `dvhe` entry with no parameter
@@ -1148,10 +1276,12 @@ fn sanitize(name: &str) -> String {
 /// Extensions players take for a playlist: Media3 by its source factory
 /// (`.ism`, `.isml` for SmoothStreaming, which the app does not ship), mpv by
 /// its headerless M3U probe.
+#[cfg(not(target_arch = "wasm32"))]
 const PLAYLIST_EXTENSIONS: [&str; 7] = ["m3u", "m3u8", "mpd", "strm", "pls", "ism", "isml"];
 
 /// A file's main URL name: a playlist extension becomes `.bin`, so no
 /// player takes the file for a playlist.
+#[cfg(not(target_arch = "wasm32"))]
 fn file_name(filename: &str) -> String {
     let name = sanitize(filename);
     match name.rsplit_once('.') {
@@ -1164,6 +1294,7 @@ fn file_name(filename: &str) -> String {
 
 /// A manifest playback's main URL name: Media3 picks the source by `.m3u8`
 /// or `.mpd`.
+#[cfg(not(target_arch = "wasm32"))]
 fn manifest_name(filename: &str, kind: Format) -> String {
     let name = file_name(filename);
     let stem = name
@@ -1178,6 +1309,7 @@ fn header_text(headers: &HeaderMap) -> Option<&str> {
 }
 
 /// Response headers forwarded from the origin to the player.
+#[cfg(not(target_arch = "wasm32"))]
 const PASSTHROUGH: [header::HeaderName; 6] = [
     header::CONTENT_TYPE,
     header::CONTENT_LENGTH,
@@ -1192,6 +1324,7 @@ const PASSTHROUGH: [header::HeaderName; 6] = [
 /// the authority of an absolute-form or `CONNECT` target (a player sending
 /// everything through the core as its proxy). Any other gets 403, and one
 /// debug line that names no address (a hostile page can send many).
+#[cfg(not(target_arch = "wasm32"))]
 async fn only_loopback(
     State(shared): State<Arc<Shared>>,
     request: Request<Body>,
@@ -1214,25 +1347,28 @@ async fn only_loopback(
 
 /// A logo of `set_logos`, under this server's logo token; anything else
 /// is not found.
+fn logo(shared: &Shared, token: &str, key: &str) -> Option<&'static Logo> {
+    let logo = shared.logos.get()?.iter().find(|l| l.key == key)?;
+    (token == shared.logo_token).then_some(logo)
+}
+
+/// A logo's answer headers.
+fn logo_headers(logo: &Logo) -> [(header::HeaderName, &'static str); 3] {
+    [
+        (header::CONTENT_TYPE, logo.mime),
+        (header::CACHE_CONTROL, "private, max-age=86400"),
+        (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+    ]
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 async fn serve_logo(
     State(shared): State<Arc<Shared>>,
     Path((token, key)): Path<(String, String)>,
 ) -> Response {
-    let logo = shared
-        .logos
-        .get()
-        .and_then(|l| l.iter().find(|l| l.key == key));
-    match logo {
-        Some(logo) if token == shared.logo_token => (
-            [
-                (header::CONTENT_TYPE, logo.mime),
-                (header::CACHE_CONTROL, "private, max-age=86400"),
-                (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
-            ],
-            logo.bytes,
-        )
-            .into_response(),
-        _ => StatusCode::NOT_FOUND.into_response(),
+    match logo(&shared, &token, &key) {
+        Some(logo) => (logo_headers(logo), logo.bytes).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
@@ -1244,17 +1380,29 @@ fn playback(shared: &Shared, token: &str) -> Option<Arc<Playback>> {
 /// Fetches the addon's subtitle file and answers with UTF-8 WebVTT. Any
 /// origin may read it (a browser's `<track crossorigin>`); the token is the
 /// capability.
+#[cfg(not(target_arch = "wasm32"))]
 async fn serve_subtitle(
     State(shared): State<Arc<Shared>>,
     Path((token, id, _name)): Path<(String, String, String)>,
 ) -> Response {
-    let Some(playback) = playback(&shared, &token) else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
-    let subtitle = parse_id(&id).and_then(|id| lock(&playback.subtitles).get(id).cloned());
-    let Some(subtitle) = subtitle else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
+    match subtitle_vtt(&shared, &token, &id).await {
+        Some(vtt) => cors((VTT_HEADERS, vtt).into_response()),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+/// Never kept by a player's or a browser's cache: a subtitle names what
+/// plays (plans/batch-10-incognito.md 5.5), for every profile.
+const VTT_HEADERS: [(header::HeaderName, &str); 2] = [
+    (header::CONTENT_TYPE, "text/vtt; charset=utf-8"),
+    (header::CACHE_CONTROL, "no-store"),
+];
+
+/// Subtitle `id` of the playback `token` names, as UTF-8 WebVTT; `None` is
+/// not found (no such track, or the playback was released meanwhile).
+async fn subtitle_vtt(shared: &Shared, token: &str, id: &str) -> Option<String> {
+    let playback = playback(shared, token)?;
+    let subtitle = parse_id(id).and_then(|id| lock(&playback.subtitles).get(id).cloned())?;
     let track = format!(
         "http://{}/sub/{token}/{id}/{}.vtt",
         shared.addr(),
@@ -1276,7 +1424,7 @@ async fn serve_subtitle(
                 .run_until_cancelled(http.get(&url, &opts))
                 .await
             {
-                None => return StatusCode::NOT_FOUND.into_response(),
+                None => return None,
                 Some(Ok(response)) => read(&response.body),
                 Some(Err(e)) => {
                     tracing::warn!("subtitle upstream failed: {}", e.kind());
@@ -1285,7 +1433,7 @@ async fn serve_subtitle(
             }
         }
         Origin::Fetch { fetch, .. } => match playback.released.run_until_cancelled(fetch()).await {
-            None => return StatusCode::NOT_FOUND.into_response(),
+            None => return None,
             Some(Some(bytes)) => read(&bytes),
             Some(None) => Err(None),
         },
@@ -1299,13 +1447,7 @@ async fn serve_subtitle(
         // subtitle may stop or fail over the video.
         EMPTY_VTT.to_owned()
     });
-    // Never kept by a player's or a browser's cache: a subtitle names what
-    // plays (plans/batch-10-incognito.md 5.5), for every profile.
-    let headers = [
-        (header::CONTENT_TYPE, "text/vtt; charset=utf-8"),
-        (header::CACHE_CONTROL, "no-store"),
-    ];
-    cors((headers, vtt).into_response())
+    Some(vtt)
 }
 
 /// What a subtitle that could not be served answers.
@@ -1323,6 +1465,7 @@ fn trouble(e: &HttpError) -> SubtitleTrouble {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn serve(
     State(shared): State<Arc<Shared>>,
     Path((token, _name)): Path<(String, String)>,
@@ -1395,6 +1538,7 @@ type Relabelled = (u64, [u8; 4]);
 #[derive(Clone, Default)]
 struct Scan {
     /// The entries to serve under the type Apple decodes.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     relabel: Arc<[Relabelled]>,
     /// An `hev1` or `dvhe` entry whose `hvcC` has no parameter sets:
     /// Apple shows no picture from it in any form.
@@ -1403,6 +1547,7 @@ struct Scan {
 
 /// A body's relabels, awaited before its first bytes: the headers never
 /// wait for the scan, and a HEAD request never starts it.
+#[cfg(not(target_arch = "wasm32"))]
 type Relabel = futures_util::future::BoxFuture<'static, Arc<[Relabelled]>>;
 
 /// The offsets of the file's `hev1` types to serve as `hvc1`: Apple's
@@ -1410,6 +1555,7 @@ type Relabel = futures_util::future::BoxFuture<'static, Arc<[Relabelled]>>;
 /// `hev1` file's sound with no picture. Found once per playback, by the
 /// first body sent, wherever `moov` sits; only entries whose `hvcC` holds
 /// the parameter sets, since the label does not add them.
+#[cfg(not(target_arch = "wasm32"))]
 fn relabels(playback: Arc<Playback>) -> Relabel {
     Box::pin(async move { scan(&playback).await.relabel })
 }
@@ -1417,9 +1563,12 @@ fn relabels(playback: Arc<Playback>) -> Relabel {
 async fn scan(playback: &Playback) -> Scan {
     let found = playback.relabel.get_or_init(|| async {
         let reader: Box<dyn mq_media::RangeReader> = match &playback.body {
+            #[cfg(not(target_arch = "wasm32"))]
             Content::Http(source) if !source.passthrough() => {
                 Box::new(ahead::Reader(source.clone()))
             }
+            #[cfg(target_arch = "wasm32")]
+            Content::Http(source) => Box::new(source.reader()),
             #[cfg(feature = "torrent")]
             // A torrent's file names are its own: only an MP4 or MOV one is
             // read, so other files never wait on the scan's pieces.
@@ -1429,9 +1578,11 @@ async fn scan(playback: &Playback) -> Scan {
                 }
                 _ => return Scan::default(),
             },
+            #[cfg(not(target_arch = "wasm32"))]
             Content::File(local) if iso_bmff(&local.path.to_string_lossy()) => {
                 Box::new(mq_media::FileRangeReader::new(&local.path))
             }
+            #[allow(unreachable_patterns)]
             _ => return Scan::default(),
         };
         let cancel = playback.released.clone();
@@ -1455,6 +1606,7 @@ async fn scan(playback: &Playback) -> Scan {
 /// Writes each relabel's type over the one at its offset, for the part
 /// that falls in `chunk`, which starts at file offset `pos`: a range may
 /// hold part of one.
+#[cfg(not(target_arch = "wasm32"))]
 fn relabel_chunk(chunk: &mut [u8], pos: u64, relabel: &[Relabelled]) {
     for &(at, kind) in relabel {
         for (i, &byte) in kind.iter().enumerate() {
@@ -1471,6 +1623,7 @@ fn relabel_chunk(chunk: &mut [u8], pos: u64, relabel: &[Relabelled]) {
 
 /// `bytes` from file offset `pos` as served: the same buffer when no
 /// relabelled type falls in it.
+#[cfg(not(target_arch = "wasm32"))]
 fn relabelled(bytes: Bytes, pos: u64, relabel: &[Relabelled]) -> Bytes {
     let end = pos + bytes.len() as u64;
     if !relabel.iter().any(|&(at, _)| at < end && at + 4 > pos) {
@@ -1483,12 +1636,14 @@ fn relabelled(bytes: Bytes, pos: u64, relabel: &[Relabelled]) -> Bytes {
 
 /// The largest init section read whole to be relabelled; a larger one
 /// streams unchanged.
+#[cfg(not(target_arch = "wasm32"))]
 const INIT_MAX: usize = 1 << 20;
 
 /// An init section (`ftyp` and `moov`) with its `hev1` and `dvhe` entries
 /// served as `hvc1` and `dvh1`, the files' rule (`relabels`) on bytes in
 /// hand: only entries whose `hvcC` holds the parameter sets; anything else,
 /// a range that starts inside the section included, comes back unchanged.
+#[cfg(not(target_arch = "wasm32"))]
 async fn relabel_init(body: Bytes, released: &CancellationToken) -> Bytes {
     let reader = InMemory(body.clone());
     let budget = mq_media::ProbeBudget {
@@ -1508,8 +1663,10 @@ async fn relabel_init(body: Bytes, released: &CancellationToken) -> Bytes {
 }
 
 /// Bytes already read, as `mq_media` reads a file.
+#[cfg(not(target_arch = "wasm32"))]
 struct InMemory(Bytes);
 
+#[cfg(not(target_arch = "wasm32"))]
 impl mq_media::RangeReader for InMemory {
     fn len(&self) -> futures_util::future::BoxFuture<'_, Result<u64, mq_media::ProbeError>> {
         let len = self.0.len() as u64;
@@ -1532,6 +1689,7 @@ impl mq_media::RangeReader for InMemory {
 /// playlist or DASH manifest rewritten, media bytes with `Range`, or a small
 /// key or time read whole. Every answer may be read by any page; the token
 /// is the capability.
+#[cfg(not(target_arch = "wasm32"))]
 async fn serve_child(
     State(shared): State<Arc<Shared>>,
     Path((token, id, _name)): Path<(String, String, String)>,
@@ -1583,6 +1741,7 @@ async fn serve_child(
 /// A media playlist of DASH served as HLS: the `n`th the last master named.
 /// Asked before any master (a player that kept the URL), the master is made
 /// first. A static MPD's playlists never change, so they are kept.
+#[cfg(not(target_arch = "wasm32"))]
 async fn serve_rendition(
     State(shared): State<Arc<Shared>>,
     Path((token, n, _name)): Path<(String, usize, String)>,
@@ -1614,6 +1773,7 @@ async fn serve_rendition(
 
 /// A file under a DASH base or template directory: `tail` (the raw path,
 /// never decoded) on the entry's origin and prefix, with `Range`.
+#[cfg(not(target_arch = "wasm32"))]
 async fn serve_template(
     State(shared): State<Arc<Shared>>,
     Path((token, id, _tail)): Path<(String, String, String)>,
@@ -1667,12 +1827,14 @@ async fn serve_template(
 }
 
 /// Lets any page read the answer (`<video crossorigin>` and Safari's HLS).
+#[cfg(not(target_arch = "wasm32"))]
 fn cors(mut response: Response) -> Response {
     allow_any_origin(response.headers_mut());
     response
 }
 
 /// `Access-Control-Allow-Origin: *`: the token in the path is the capability.
+#[cfg(not(target_arch = "wasm32"))]
 fn allow_any_origin(headers: &mut HeaderMap) {
     headers.insert(
         header::ACCESS_CONTROL_ALLOW_ORIGIN,
@@ -1681,6 +1843,7 @@ fn allow_any_origin(headers: &mut HeaderMap) {
 }
 
 /// The request's `Range` header.
+#[cfg(not(target_arch = "wasm32"))]
 fn range_of(request: &Request<Body>) -> Option<String> {
     let range = request.headers().get(header::RANGE)?;
     range.to_str().ok().map(str::to_owned)
@@ -1688,6 +1851,7 @@ fn range_of(request: &Request<Body>) -> Option<String> {
 
 /// The request's LL-HLS directives (`_HLS_msn`, `_HLS_part`, `_HLS_skip`),
 /// the only part of a request's query passed on to a playlist's origin.
+#[cfg(not(target_arch = "wasm32"))]
 fn hls_directives(query: Option<&str>) -> Vec<(String, String)> {
     let Some(query) = query else {
         return Vec::new();
@@ -1703,6 +1867,7 @@ fn hls_directives(query: Option<&str>) -> Vec<(String, String)> {
 
 /// A playlist fetched whole (at most `MANIFEST_MAX`), with `directives`
 /// added to its query; and the final URL it came from, its base.
+#[cfg(not(target_arch = "wasm32"))]
 async fn fetch_playlist(
     hls: &Hls,
     url: &Url,
@@ -1727,11 +1892,13 @@ async fn fetch_playlist(
 
 /// The largest target duration a blocking reload's wait counts: three of
 /// them, 90 s, is longer than an origin should hold a reload.
+#[cfg(not(target_arch = "wasm32"))]
 const TARGET_MAX: u64 = 30;
 
 /// How long a playlist request may take: `MANIFEST_DEADLINE`, or for a
 /// blocking reload three of its target durations, each at most
 /// `TARGET_MAX`; an origin's huge value would overflow the deadline.
+#[cfg(not(target_arch = "wasm32"))]
 fn reload_deadline(target: Option<u64>) -> Duration {
     let wait = target.map_or(0, |target| target.min(TARGET_MAX) * 3);
     MANIFEST_DEADLINE.max(Duration::from_secs(wait))
@@ -1740,6 +1907,7 @@ fn reload_deadline(target: Option<u64>) -> Duration {
 /// A playlist (`id`: a child's, `None`: the main one) fetched fresh and
 /// rewritten: never cached, as a live one changes with every reload. A
 /// blocking reload (`_HLS_msn`) may wait three of its target durations.
+#[cfg(not(target_arch = "wasm32"))]
 async fn serve_playlist(
     playback: &Playback,
     hls: &Arc<Hls>,
@@ -1799,6 +1967,7 @@ async fn serve_playlist(
 
 /// The playback's table, for a request that reads it: the wait for a
 /// rewrite that holds it ends at `bound` (503) or at release (404).
+#[cfg(not(target_arch = "wasm32"))]
 async fn table_within<'a>(
     hls: &'a Hls,
     released: &CancellationToken,
@@ -1816,8 +1985,10 @@ async fn table_within<'a>(
 /// it when it starts; until then it stays here, and when the request gives
 /// up (its deadline, release, or a dropped request) this takes it back, so
 /// work still queued for a blocking thread never holds the table.
+#[cfg(not(target_arch = "wasm32"))]
 struct Handoff(Arc<Mutex<Option<tokio::sync::OwnedMutexGuard<manifest::Table>>>>);
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Drop for Handoff {
     fn drop(&mut self) {
         lock(&self.0).take();
@@ -1829,6 +2000,7 @@ impl Drop for Handoff {
 /// release, or when the request is dropped: the rewrite is CPU work no
 /// `await` interrupts, so it checks for those itself and runs where it holds
 /// no runtime worker.
+#[cfg(not(target_arch = "wasm32"))]
 async fn rewrite(
     hls: &Arc<Hls>,
     body: Bytes,
@@ -1900,6 +2072,7 @@ async fn rewrite(
 
 /// The attempt list's words for a playlist the dry run refused: the format
 /// and copy protection words as they are, any other reason as unreadable.
+#[cfg(not(target_arch = "wasm32"))]
 fn refusal_words(reason: &str) -> &str {
     if [FORMAT_NOT_HERE, COPY_PROTECTED].contains(&reason) {
         reason
@@ -1909,6 +2082,7 @@ fn refusal_words(reason: &str) -> &str {
 }
 
 /// A key, read whole: at most `SMALL_MAX`, else 502.
+#[cfg(not(target_arch = "wasm32"))]
 async fn serve_small(hls: &Hls, url: &Url, released: &CancellationToken) -> Response {
     let opts = RequestOptions {
         timeout: MANIFEST_DEADLINE,
@@ -2004,6 +2178,7 @@ pub fn failure_words(kind: Option<&str>, status: Option<u16>, error: &str) -> St
 
 /// `bytes=a-b`, `bytes=a-` or `bytes=-n` against `len`, as `[start, end)`.
 /// `None` when unsatisfiable or not a single byte range.
+#[cfg(not(target_arch = "wasm32"))]
 fn parse_range(header: &str, len: u64) -> Option<(u64, u64)> {
     let spec = header.trim().strip_prefix("bytes=")?;
     let (a, b) = spec.split_once('-')?;
@@ -2020,6 +2195,7 @@ fn parse_range(header: &str, len: u64) -> Option<(u64, u64)> {
 
 /// Status and span for a request against `len`, with `Content-Range` and
 /// `Content-Length` set. `None` is unsatisfiable: answer 416 with `out`.
+#[cfg(not(target_arch = "wasm32"))]
 fn range_headers(
     range: Option<&str>,
     len: u64,
@@ -2048,11 +2224,13 @@ fn range_headers(
 }
 
 /// An MP4 or MOV file by its name (in a torrent, or a download's).
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn iso_bmff(name: &str) -> bool {
     matches!(content_type(name), "video/mp4" | "video/quicktime")
 }
 
 /// A video file's type by its name's extension.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn content_type(name: &str) -> &'static str {
     let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase());
     match ext.as_deref() {
@@ -2299,6 +2477,7 @@ mod torrent {
 }
 
 /// Serves a range from the playback's read-ahead cache, `relabel` applied.
+#[cfg(not(target_arch = "wasm32"))]
 async fn serve_http(
     source: Arc<ahead::Source>,
     range: Option<String>,
@@ -2363,6 +2542,7 @@ async fn serve_http(
 
 /// Plain proxy with Range passthrough, for origins that ignore ranges or
 /// give no length.
+#[cfg(not(target_arch = "wasm32"))]
 async fn proxy_http(source: &ahead::Source, range: Option<String>, head_only: bool) -> Response {
     let released = source.released().clone();
     let (http, url) = (source.http(), source.url());
@@ -2384,6 +2564,7 @@ async fn proxy_http(source: &ahead::Source, range: Option<String>, head_only: bo
 /// the same request and drops it after the headers. An `init` section of a
 /// known length up to `INIT_MAX` is read whole and its `hev1` entries are
 /// served as `hvc1` (`relabel_init`); any other body streams as it comes.
+#[cfg(not(target_arch = "wasm32"))]
 async fn proxy(
     http: &HttpClient,
     url: &str,

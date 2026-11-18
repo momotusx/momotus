@@ -77,3 +77,18 @@ librqbit-utp = { path = "vendor/librqbit-utp" }
 librqbit-bencode = { path = "vendor/librqbit-bencode" }
 # Marquee fork: iOS and tvOS bind sockets by interface index, as macOS does.
 librqbit-dualstack-sockets = { path = "vendor/librqbit-dualstack-sockets" }
+
+# The webOS core (plans/webos.md 2), built by apps/webos/scripts/build-wasm.sh:
+# smallest code, and nothing stripped before wasm-bindgen reads the module.
+[profile.wasm]
+inherits = "release"
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+strip = false
+
+# The web e2e's core: the shipped build plus the dev hooks.
+[profile.wasm-e2e]
+inherits = "wasm"
+debug-assertions = true
+overflow-checks = false

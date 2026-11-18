@@ -88,8 +88,10 @@ export interface CoreConfig {
   deviceSeed: string;
   /** `process.version`, which maps one to one to the webOS generation. */
   node: string;
-  /** Base for lease, subtitle and logo URLs: `http://127.0.0.1:47801`. */
+  /** Base for subtitle and logo URLs: `http://127.0.0.1:47801`. */
   origin: string;
+  /** The write probe failed: the library lives in memory (plans/webos.md 3.3). */
+  memoryOnly: boolean;
   /** Only with the `dev-hooks` feature. */
   dev?: Record<string, string>;
 }

@@ -376,6 +376,7 @@ impl Core {
         if !core.in_account() {
             core.give_new_defaults();
         }
+        #[cfg(not(target_arch = "wasm32"))]
         if let Some(walk) = walk {
             walk.watch(core.inner.torrent_dir.clone());
         }
@@ -2149,6 +2150,7 @@ impl Walk {
         Self::parse(&text)
     }
 
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     fn parse(text: &str) -> Option<Self> {
         let mut n = text.split_whitespace().map(str::parse::<u64>);
         let window = Some(n.next()?.ok()?).filter(|&w| w > 0);

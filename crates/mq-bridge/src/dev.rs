@@ -3,6 +3,32 @@
 use mq_runtime::{Core, StremioEndpoints};
 use std::net::IpAddr;
 
+/// A hook's setting: the process environment natively; on webOS the map the
+/// service's config carried (`set_dev_env`), since a wasm core has no
+/// environment (plans/webos.md 3.5).
+#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+fn var(name: &str) -> Result<String, std::env::VarError> {
+    std::env::var(name)
+}
+
+#[cfg(all(debug_assertions, target_arch = "wasm32"))]
+fn var(name: &str) -> Result<String, std::env::VarError> {
+    DEV_ENV
+        .get()
+        .and_then(|env| env.get(name).cloned())
+        .ok_or(std::env::VarError::NotPresent)
+}
+
+#[cfg(all(debug_assertions, target_arch = "wasm32"))]
+static DEV_ENV: std::sync::OnceLock<std::collections::HashMap<String, String>> =
+    std::sync::OnceLock::new();
+
+/// webOS: the dev hooks' settings, set once before the core opens.
+#[cfg(all(debug_assertions, target_arch = "wasm32"))]
+pub fn set_dev_env(env: std::collections::HashMap<String, String>) {
+    let _ = DEV_ENV.set(env);
+}
+
 /// Development builds only (`debug_assertions`; a release build has no hook):
 /// `MQ_DEV_TRAKT=<loopback url>` points Trakt at a local fake (the web e2e on
 /// the dev bridge, emulator walks through the FFI) with a test app id. A
@@ -12,7 +38,7 @@ use std::net::IpAddr;
 /// default: no title page holds a Trakt slot it will never fill).
 #[cfg(debug_assertions)]
 pub fn dev_trakt(core: &Core) {
-    let Ok(url) = std::env::var("MQ_DEV_TRAKT") else {
+    let Ok(url) = var("MQ_DEV_TRAKT") else {
         return;
     };
     if url == "off" {
@@ -45,7 +71,7 @@ pub fn dev_trakt(_: &Core) {}
 /// page holds a TMDB slot it will never fill).
 #[cfg(debug_assertions)]
 pub fn dev_tmdb(core: &Core) {
-    let Ok(url) = std::env::var("MQ_DEV_TMDB") else {
+    let Ok(url) = var("MQ_DEV_TMDB") else {
         return;
     };
     if url == "off" {
@@ -77,7 +103,7 @@ pub fn dev_tmdb(_: &Core) {}
 /// recorded answer and never waits on a live service.
 #[cfg(debug_assertions)]
 pub fn dev_segments(core: &Core) {
-    let Ok(url) = std::env::var("MQ_DEV_SEGMENTS") else {
+    let Ok(url) = var("MQ_DEV_SEGMENTS") else {
         return;
     };
     if !loopback_url(&url) {
@@ -105,7 +131,7 @@ pub fn dev_segments(_: &Core) {}
 /// then runs with the network off.
 #[cfg(debug_assertions)]
 pub fn dev_replay() {
-    let Ok(url) = std::env::var("MQ_DEV_REPLAY") else {
+    let Ok(url) = var("MQ_DEV_REPLAY") else {
         return;
     };
     if !loopback_url(&url) {
@@ -124,7 +150,7 @@ pub fn dev_replay() {}
 /// the empty and filter-empty states, which the live lists never show).
 #[cfg(debug_assertions)]
 pub(crate) fn catalog_source() -> Option<String> {
-    let url = std::env::var("MQ_DEV_CINEMETA").ok()?;
+    let url = var("MQ_DEV_CINEMETA").ok()?;
     if loopback_url(&url) {
         return Some(url);
     }
@@ -143,7 +169,7 @@ pub(crate) fn catalog_source() -> Option<String> {
 /// into the recommended addons can be walked without an account.
 #[cfg(debug_assertions)]
 pub(crate) fn stremio_endpoints() -> StremioEndpoints {
-    match std::env::var("MQ_DEV_STREMIO") {
+    match var("MQ_DEV_STREMIO") {
         Ok(url) if loopback_url(&url) => {
             let base = url.trim_end_matches('/').to_owned();
             StremioEndpoints {
