@@ -5,6 +5,7 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { parseAst } from "vite";
 
 type CssRule = { selector: string; body: string };
 
@@ -117,9 +118,26 @@ const JS_BANS: [RegExp, string][] = [
   [/\bAbortSignal\.any\b/, "AbortSignal.any"],
   [/\bnew WeakRef\(|\bFinalizationRegistry\b/, "WeakRef/FinalizationRegistry"],
   [/\bArray\.fromAsync\b/, "Array.fromAsync"],
-  [/["'`][^"'`\n]*:(focus-visible|has\(|(is|where)\(\s*[.#[:*])/, "a :focus-visible, :has(, :is( or :where( selector in script (Chrome 88 and later)"],
   [/\bhls\.js\b|\bHls\.Events\b|MANIFEST_PARSED/, "hls.js (never loaded on webOS)"],
 ];
+/** Every string a script holds: its string literals and the parts of its template literals. */
+function scriptStrings(code: string): string[] {
+  const out: string[] = [];
+  const walk = (node: unknown): void => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) return node.forEach(walk);
+    const n = node as { type?: string; value?: unknown };
+    if (n.type === "Literal" && typeof n.value === "string") out.push(n.value);
+    if (n.type === "TemplateElement") out.push((n.value as { raw: string }).raw);
+    Object.values(node).forEach(walk);
+  };
+  walk(parseAst(code));
+  return out;
+}
+
+/** What Chromium 79 cannot parse in a selector a script hands to querySelector, matches or closest: it throws there. */
+const scriptSelectorBan = (s: string) => /:(focus-visible|has\(|is\(|where\()/.exec(s)?.[0] ?? (complexNot(s) ? "a complex :not(" : null);
+
 /** APIs newer than Chromium 79 the app uses, each installed by lib/compat.ts: the installer's name must be there. */
 const COMPAT = ["replaceAll", "at", "hasOwn", "timeout", "randomUUID", "replaceChildren", "DisplayNames", "Segmenter", "onscrollend", "data-mq-inert-hid"];
 
@@ -128,6 +146,11 @@ export function checkJs(files: Record<string, string>): string[] {
   const problems: string[] = [];
   const all = Object.values(files).join("\n");
   for (const [name, code] of Object.entries(files)) for (const [re, what] of JS_BANS) if (re.test(code)) problems.push(`${what} in ${name}`);
+  for (const [name, code] of Object.entries(files))
+    for (const s of scriptStrings(code)) {
+      const what = scriptSelectorBan(s);
+      if (what) problems.push(`${what} in a script selector, "${s}" in ${name}`);
+    }
   for (const name of COMPAT) if (!all.includes(`"${name}"`)) problems.push(`lib/compat.ts no longer installs ${name}`);
   if (Object.keys(files).some((f) => /(^|\/)hls[-.]/.test(f))) problems.push("an hls.js chunk is in the bundle");
   return problems;
@@ -151,12 +174,18 @@ const CSS_MUTATIONS: { name: string; add: string; fails: boolean }[] = [
   { name: "padding-inline:", add: ".mq-a{padding-inline:4px}", fails: true },
   { name: "margin-inline:", add: ".mq-a{margin-inline:4px}", fails: true },
 ];
-const JS_MUTATIONS: { name: string; change: (f: Record<string, string>) => Record<string, string> }[] = [
-  { name: "structuredClone", change: (f) => ({ ...f, "planted.js": "const a=structuredClone(b);" }) },
-  { name: "a querySelector(':focus-visible')", change: (f) => ({ ...f, "planted.js": 'document.querySelector(".a:focus-visible")' }) },
-  { name: "a querySelector(':is()')", change: (f) => ({ ...f, "planted.js": 'document.querySelector("main :is(.a, .b) .c")' }) },
-  { name: "hls.js loaded", change: (f) => ({ ...f, "planted.js": 'import("./hls-x.js").then(m=>m.default.Events.MANIFEST_PARSED)' }) },
+const plant = (code: string) => (f: Record<string, string>) => ({ ...f, "planted.js": code });
+const JS_MUTATIONS: { name: string; change: (f: Record<string, string>) => Record<string, string>; fails: boolean }[] = [
+  { name: "structuredClone", change: plant("const a=structuredClone(b);"), fails: true },
+  { name: "a querySelector(':focus-visible')", change: plant('document.querySelector(".a:focus-visible")'), fails: true },
+  { name: "a querySelector(':is(')", change: plant('document.querySelector("main :is(.a, .b) [data-x]")'), fails: true },
+  { name: "a matches(':where(')", change: plant('a.matches(":where(.a) .b")'), fails: true },
+  { name: "a complex :not( in a template", change: plant('document.querySelector(`[data-f="${a}"]:not([inert] *)`)'), fails: true },
+  { name: "a :not( of one simple selector", change: plant('document.querySelector("[data-f]:not([inert])")'), fails: false },
+  { name: "is() called after a minified key", change: plant("const o={index:is().filter(Boolean)}"), fails: false },
+  { name: "hls.js loaded", change: plant('import("./hls-x.js").then(m=>m.default.Events.MANIFEST_PARSED)'), fails: true },
   {
+    fails: true,
     name: "a compat fallback removed",
     change: (f) => Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.replaceAll('"replaceAll"', '"replaceAllGone"')])),
   },
@@ -189,8 +218,9 @@ function main() {
   }
   for (const m of JS_MUTATIONS) {
     const failed = checkJs(m.change(js)).length > base.js;
-    if (!failed) missed++;
-    console.log(`${failed ? "ok  " : "MISS"} js mutation, ${m.name}: ${failed ? "fails" : "passes"}`);
+    const ok = failed === m.fails;
+    if (!ok) missed++;
+    console.log(`${ok ? "ok  " : "MISS"} js mutation, ${m.name}: ${failed ? "fails" : "passes"}`);
   }
   console.log(problems.length || missed ? `webos check FAILED: ${problems.length} problems, ${missed} mutations missed` : "webos check passed, every mutation caught");
   process.exit(problems.length || missed ? 1 : 0);

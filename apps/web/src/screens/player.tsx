@@ -692,7 +692,8 @@ function PlayerPage(props: {
       (s, was) => {
         if (s) return autoFocusSoon(stripEntry);
         const at = document.activeElement;
-        if (was && (!at || at === document.body || !at.isConnected)) focusOn(document.querySelector<HTMLElement>(`[data-f="player:${was}"]:not([inert] *)`));
+        // The opener outside any inert region, found in script: Chromium 79 throws on `:not([inert] *)`.
+        if (was && (!at || at === document.body || !at.isConnected)) focusOn([...document.querySelectorAll<HTMLElement>(`[data-f="player:${was}"]`)].find((el) => !el.parentElement?.closest("[inert]")));
       },
       { defer: true },
     ),
