@@ -311,10 +311,10 @@ jobs:
         with:
           persist-credentials: false
       - run: rustup toolchain install 1.98.0 --profile minimal -c rust-src -t wasm32-unknown-unknown -t armv7-unknown-linux-gnueabi
-      - name: qemu-user and the TV's ABI (armel glibc), libclang
+      - name: qemu-user and the TV's ABI (armel glibc), libclang, aria2 (the live check's seeder)
         run: |
           sudo apt-get update -q
-          sudo apt-get install -yq --no-install-recommends qemu-user-static libc6-armel-cross libclang-18-dev
+          sudo apt-get install -yq --no-install-recommends qemu-user-static libc6-armel-cross libclang-18-dev aria2
           test -e /proc/sys/fs/binfmt_misc/qemu-arm
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
@@ -344,15 +344,11 @@ jobs:
           bun add --exact ws@7.5.10 >/dev/null
           cd "$GITHUB_WORKSPACE"
           WS_PATH="$RUNNER_TEMP/ws/node_modules" bash apps/webos/service/test/run.sh
-      - name: Native core live under qemu-user (Cinemeta Home, a torrent on loopback)
+      - name: Native core live under qemu-user (Cinemeta Home, the fixture torrent with a seek and a resume, a plugin)
         env:
           # The TV's loader and glibc for qemu-arm, which binfmt runs the ARM binary with.
           QEMU_LD_PREFIX: /usr/arm-linux-gnueabi
-        run: |
-          cd apps/webos/service/test
-          for v in $NODES; do
-            NODE_PATH="$RUNNER_TEMP/ws/node_modules" fnm exec --using="v$v" node live-native.js
-          done
+        run: WS_PATH="$RUNNER_TEMP/ws/node_modules" bash apps/webos/scripts/live-native.sh
       - name: Wasm selftests (runtime shim, storage, stream server)
         env:
           TOOLS: ${{ github.workspace }}/.tools/bin
