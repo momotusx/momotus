@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { bufferShare, loadingLines, START_AHEAD_S, STALL_AHEAD_S, startFill } from "./loading";
+import { bufferShare, loadingLines, pickedListed, START_AHEAD_S, STALL_AHEAD_S, startFill } from "./loading";
 
 test("the buffer's share: seconds ahead of the playhead over what the player wants", () => {
   expect(bufferShare([], 0)).toBe(0);
@@ -36,4 +36,25 @@ test("the caption: the player's status, then the core's words, each once", () =>
   expect(loadingLines("Starting", "Starting")).toEqual(["Starting"]);
   expect(loadingLines(null, undefined)).toEqual([]);
   expect(loadingLines(null, "Opening the video")).toEqual(["Opening the video"]);
+});
+
+test("a version picked by hand waits for the section that lists it, not only the addons' pass", () => {
+  const row = (key: string) => ({ key }) as never;
+  const view = (o: { done?: boolean; rows?: string[]; archive?: string[]; archivePending?: boolean; pluginsPending?: boolean }) => ({
+    done: o.done ?? false,
+    recommended: null,
+    rows: (o.rows ?? []).map(row),
+    archive: { rows: (o.archive ?? []).map(row), pending: o.archivePending ?? false },
+    plugins: { rows: [], pending: o.pluginsPending ?? false },
+  });
+  const k = "archive:film:film.mp4";
+  expect(pickedListed(null, k)).toBe(false);
+  // The addons are done and the Archive still works: not yet (it would open as "no longer listed").
+  expect(pickedListed(view({ done: true, archivePending: true }), k)).toBe(false);
+  expect(pickedListed(view({ done: true, pluginsPending: true }), k)).toBe(false);
+  // Listed in its section, before or after the addons are done.
+  expect(pickedListed(view({ archive: [k], archivePending: false }), k)).toBe(true);
+  expect(pickedListed(view({ rows: [k] }), k)).toBe(true);
+  // Every pass over and it is nowhere: it opens, and the playback says so.
+  expect(pickedListed(view({ done: true }), k)).toBe(true);
 });
