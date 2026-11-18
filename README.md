@@ -52,7 +52,7 @@
 | Android TV and Fire TV | Yes | Yes | Yes |
 | iPhone and iPad | From source | Sideload, AltStore PAL in the EU, Brazil and Japan | Sideload |
 | Apple TV | From source | Sideload | No |
-| LG TV | In progress | Yes, 2020 and later models | Sideload, with its own installer |
+| LG TV | Sideload, Developer Mode (not yet tested on a TV) | Yes, 2020 and later models | Sideload, with its own installer |
 | Mac | From source | Yes | Alpha |
 | Web browser | From source | Yes | No |
 | End-to-end encrypted sync | **Yes** | No | No |
@@ -85,6 +85,8 @@
 ## Install
 
 **Android, Android TV and Fire TV.** Download the APK from the newest release on the [Releases](https://github.com/momotusx/momotus/releases) page, open it on the device and allow installs from that source. `momotus-android-arm64-phone.apk` is for phones, tablets and 64-bit TVs; `momotus-android-armv7-firetv.apk` is for 32-bit devices such as Fire TV sticks.
+
+**LG TV (webOS).** Download `momotus-webos-<version>.ipk` from the newest release on the [Releases](https://github.com/momotusx/momotus/releases) page. Turn on Developer Mode on the TV with LG's Developer Mode app (it needs an LG developer account), then install the IPK with the [webOS Dev Manager](https://github.com/webosbrew/dev-manager-desktop) app, or with LG's command line tools: `ares-setup-device` once, then `ares-install momotus-webos-<version>.ipk`. webOS 6 (2021 models) and newer are expected to work; it has not been tested on a TV yet. Developer Mode lapses after 1000 hours unless renewed in its app, and the TV then removes the app.
 
 **Mac.** Build it with Xcode (below). It needs macOS 15 or later.
 
