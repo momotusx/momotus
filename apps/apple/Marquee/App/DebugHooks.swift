@@ -40,10 +40,16 @@ enum DebugHooks {
     /// a walk shows the offline pages without the phone's airplane mode.
     static var offline: Bool { UserDefaults.standard.bool(forKey: "MQOffline") }
 
-    /// One walk line on stderr and in `Documents/walk.log`, which `devicectl device copy from` reads off a phone.
+    /// One walk line on stderr and in `Documents/walk.log`, which `devicectl device copy from` reads off a phone. The Mac
+    /// writes it to its temporary folder: its Documents folder asks the owner first, and that question held a walk's
+    /// main thread until it was answered.
     static func note(_ line: String) {
         FileHandle.standardError.write(Data("walk \(line)\n".utf8))
+        #if os(macOS)
+        let url = URL.temporaryDirectory.appending(path: "walk.log")
+        #else
         let url = URL.documentsDirectory.appending(path: "walk.log")
+        #endif
         let data = Data("\(Date().ISO8601Format()) \(line)\n".utf8)
         if let handle = try? FileHandle(forWritingTo: url) {
             handle.seekToEndOfFile()
