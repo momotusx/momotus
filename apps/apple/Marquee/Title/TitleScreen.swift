@@ -108,6 +108,10 @@ struct TitleScreen: View {
             if DebugHooks.showVersions, kind != nil { showVersions = true }
         }
         #endif
+        #if MARQUEE_WALK
+        .onReceive(NotificationCenter.default.publisher(for: NavWalk.versions)) { _ in showVersions = true }
+        .onReceive(NotificationCenter.default.publisher(for: NavWalk.versionsBack)) { _ in showVersions = false }
+        #endif
         .fullBleedTop()
         // Read outside the full-bleed: inside it the top inset is ignored and reads 0.
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.top } action: { safeTop = $0 }

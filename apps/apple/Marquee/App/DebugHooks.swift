@@ -282,7 +282,7 @@ import QuartzCore
 
     /// A window in a Space out of sight still draws, but its views pile up and each pass costs more than the last: the
     /// walk tries the other displays in turn (moved only, never in front, no focus) and says whether the window shows.
-    private static func showOnSomeScreen(_ window: NSWindow) async -> Bool {
+    static func showOnSomeScreen(_ window: NSWindow) async -> Bool {
         for screen in NSScreen.screens where screen != window.screen {
             if window.occlusionState.contains(.visible) { break }
             window.setFrameOrigin(NSPoint(x: screen.visibleFrame.midX - window.frame.width / 2, y: screen.visibleFrame.midY - window.frame.height / 2))
