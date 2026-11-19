@@ -90,16 +90,27 @@ class PlayerHost(
                 player.release()
                 throw e
             }
+        live.incrementAndGet()
     }
 
     fun release() {
+        if (released) return
+        released = true
+        live.decrementAndGet()
         walkLog?.release()
         session.release()
         player.release()
     }
 
-    private companion object {
-        val ids =
+    private var released = false
+
+    companion object {
+        private val ids =
+            java.util.concurrent.atomic
+                .AtomicInteger()
+
+        /** Players alive now: the app updater installs nothing while one is (plans/auto-update.md). */
+        val live =
             java.util.concurrent.atomic
                 .AtomicInteger()
     }

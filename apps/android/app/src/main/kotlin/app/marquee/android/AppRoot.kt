@@ -796,8 +796,20 @@ private fun AppNav(
                             // An Incognito end this session has not read: first, until its OK (plans/batch-10-incognito.md 5.4).
                             val endedCard: (@Composable () -> Unit)? =
                                 if (profile?.incognitoEnded == true) ({ IncognitoEndedCard(gate::ackEnded) }) else null
+                            // An update that waits for a press: one quiet line, last, while it waits (plans/auto-update.md 5).
+                            val updateCard: (@Composable () -> Unit)? =
+                                (marquee.updater?.state as? Updater.State.Ready)
+                                    ?.takeUnless { it.silent }
+                                    ?.let { ready ->
+                                        {
+                                            UpdateNote(ready.version) {
+                                                choose(Route.Settings)
+                                                backStack.add(Route.SettingsSection(SettingsSection.About.name))
+                                            }
+                                        }
+                                    }
                             // Both show, the account card first, as on the web.
-                            val cards = listOfNotNull(endedCard, accountCard, addonsCard)
+                            val cards = listOfNotNull(endedCard, accountCard, addonsCard, updateCard)
                             val card: (@Composable () -> Unit)? =
                                 cards.takeIf { it.isNotEmpty() }?.let {
                                     {

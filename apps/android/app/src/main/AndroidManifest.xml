@@ -21,6 +21,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Updates from GitHub Releases (plans/auto-update.md): the install session, and with the second (a normal
+         permission) Android 12 and later let the app update itself without the system's dialog once "Install
+         unknown apps" is on for it. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
 
     <!-- PlayerWindow sets picture in picture's auto-enter on Android 12 and later; lint cannot see it. -->
     <application
@@ -95,6 +100,10 @@
             android:name=".DownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+        <!-- The update install session's status (Updater). -->
+        <receiver
+            android:name=".UpdateReceiver"
+            android:exported="false" />
         <!-- Empties the clipboard a minute after a recovery kit was copied, even when the app was ended meanwhile. -->
         <receiver
             android:name=".KitClipReceiver"

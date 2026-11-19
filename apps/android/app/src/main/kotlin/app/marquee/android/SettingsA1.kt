@@ -535,12 +535,14 @@ internal fun TvSettings(
     parts: List<SettingsPart>,
     /** Incognito: Leave Incognito beside the block, which still opens the chooser (plans/batch-10-incognito.md 5.2). */
     onLeave: (() -> Unit)? = null,
+    /** The section shown first (Home's update line opens About); null: Sources. */
+    start: SettingsSection? = null,
 ) {
     val profile = remember { FocusRequester() }
     val entries = remember { SettingsSection.entries.associateWith { FocusRequester() } }
     val pane = remember { FocusRequester() }
     val list = rememberLazyListState()
-    var chosen by rememberSaveable { mutableStateOf(SettingsSection.Sources.name) }
+    var chosen by rememberSaveable { mutableStateOf((start ?: SettingsSection.Sources).name) }
     val shownPart = parts.firstOrNull { it.section.name == chosen } ?: parts.firstOrNull()
     val scope = rememberCoroutineScope()
     var menuFocus by remember { mutableStateOf<SettingsSection?>(null) }

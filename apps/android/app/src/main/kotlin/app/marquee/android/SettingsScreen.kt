@@ -431,6 +431,7 @@ fun SettingsScreen(
             onManageProfiles,
             parts,
             onLeave,
+            settingsSection(section),
         )
     } else {
         PhoneSettings(
@@ -1460,6 +1461,7 @@ private fun About() {
                 spoken = false,
             )
             MqText("Momotus ${version.orEmpty()}", role = TextRole.Headline, weight = FontWeight.Bold)
+            UpdateRow()
             MqText(
                 "Copyright 2026 the Momotus authors. Momotus is free software under the GNU Affero General " +
                     "Public License, version 3 or later, and comes with no warranty. " +

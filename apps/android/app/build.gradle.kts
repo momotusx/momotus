@@ -12,6 +12,12 @@ plugins {
 /** The app's version, bumped by release-please (release-please-config.json). */
 val appVersion = "0.5.0" // x-release-please-version
 
+/** The version this build says it is: a walk build may set an older or newer one (marquee.version) to test updates. */
+val buildVersion = property("marquee.version").toString().ifEmpty { appVersion }
+
+/** The apps' update feed on the fixed `updates` release (plans/auto-update.md). */
+val updateFeed = "https://github.com/momotusx/momotus/releases/download/updates/latest.json"
+
 /** The last digit of a split APK's versionCode, by its ABI. */
 val abiCodes = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2)
 
@@ -37,10 +43,10 @@ android {
         // MAJOR*1_000_000 + MINOR*1_000 + PATCH; the ABI loop below makes each APK's code *10 + digit, so 0.1.0
         // ships 10002 (arm64-v8a) and 10001 (armeabi-v7a). Major stays under 210 (2_100_000_000 is the ceiling).
         versionCode =
-            appVersion.split('.').map(String::toInt).let { (major, minor, patch) ->
+            buildVersion.split('.').map(String::toInt).let { (major, minor, patch) ->
                 major * 1_000_000 + minor * 1_000 + patch
             }
-        versionName = appVersion
+        versionName = buildVersion
         // Accounts (plans/accounts.md 4.4, section 9): the hosted sync service, the link host (the passkeys' relying
         // party and the App Link host for /pair) and the Google web client id Credential Manager asks for. Each is
         // the owner's (gradle properties marquee.syncServer, marquee.linkHost, marquee.googleWebClientId); unset,
@@ -200,6 +206,17 @@ androidComponents {
         // -Pmarquee.reports=true (a live check); a benchmark build never.
         val reports = !benchmark && (variant.buildType == "release" || property("marquee.reports").toString() == "true")
         variant.buildConfigFields?.put("REPORTS", BuildConfigField("boolean", "$reports", "error reports are sent"))
+        // Updates (plans/auto-update.md): the GitHub feed only in a release build of the owner's package; a walk names its own.
+        val feed =
+            property("marquee.updateFeed").toString().ifEmpty {
+                if (variant.buildType == "release" && !benchmark && walkSuffix.isEmpty()) updateFeed else ""
+            }
+        variant.buildConfigFields?.put("UPDATE_FEED", BuildConfigField("String", "\"$feed\"", "the update feed"))
+        val key = property("marquee.updateKey").toString()
+        variant.buildConfigFields?.put(
+            "UPDATE_KEY",
+            BuildConfigField("String", "\"$key\"", "the feed key, empty: the release key"),
+        )
         // The home-screen shortcut opens the package it came with (res/xml/shortcuts.xml), never the owner's app.
         variant.resValues.put(
             variant.makeResValueKey("string", "shortcut_package"),
