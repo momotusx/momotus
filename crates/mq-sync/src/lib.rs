@@ -1,10 +1,12 @@
 //! End-to-end encrypted sync of library registers through a blind relay.
 
 mod engine;
+pub mod escrow;
 pub mod identity;
 pub mod pair;
 pub mod roster;
 pub mod seal;
+mod store;
 pub mod wire;
 
 pub use engine::{
@@ -14,3 +16,4 @@ pub use engine::{
     pull_changes, push_changes, queued_announcements, remove_devices, report_lost, sign_out,
     stored_devices, sync_from, sync_once, use_server_roster,
 };
+pub use store::{Bookkeeping, Registers, Store};

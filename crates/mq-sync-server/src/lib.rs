@@ -26,10 +26,12 @@
 // ponytail: database calls run on the async workers under one lock; move
 // them to spawn_blocking when one relay serves many busy accounts.
 
+mod escrow;
 mod identity;
 mod jwt;
 mod reports;
 
+pub use escrow::rekey;
 pub use identity::IdentityFile;
 pub use identity::email::EmailConfig;
 
@@ -61,6 +63,11 @@ use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex};
 
 const MAX_REQUEST: usize = 8 * 1024 * 1024;
+/// Record bodies one pull page carries at most (always at least one record),
+/// so 13 large covers in a row do not pass a device's answer cap (16 MiB).
+/// Raw bytes, where the engine's push cap counts base64: the same order of
+/// size, not the same unit.
+const PULL_BYTES: usize = 8 * 1024 * 1024;
 /// Bytes charged per stored record on top of its body.
 const RECORD_OVERHEAD: i64 = 96;
 /// Pairing slots open at once across the relay, and how long one lives.
@@ -129,6 +136,9 @@ pub struct Config {
     /// database file. `None`, or a file that fails to open, leaves
     /// `/v1/reports` off and sync as it is.
     pub reports: Option<PathBuf>,
+    /// Escrow mode (`--escrow`, `escrow.rs`): keep one kit secret per account
+    /// under the identity file's `escrowKey`. Needs `identity`.
+    pub escrow: bool,
 }
 
 impl Default for Config {
@@ -147,6 +157,7 @@ impl Default for Config {
             signup_bytes: 5 * 1024 * 1024 * 1024,
             pairing_ms: PAIRING_MS,
             reports: None,
+            escrow: false,
         }
     }
 }
@@ -207,7 +218,7 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
                 .public_host
                 .as_deref()
                 .ok_or("an identity file needs the relay's public host")?;
-            let identity = identity::Identity::new(file.clone(), host)?;
+            let mut identity = identity::Identity::new(file.clone(), host)?;
             // It goes into every pairing QR as `https://{host}/pair` (plans/tv-qr-login.md Q8).
             if let Some(link) = identity.link_host() {
                 check_host(link, "linkHost")?;
@@ -221,7 +232,24 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
                 );
             }
             check_identity_key(&conn, &identity.fingerprint())?;
+            if config.escrow {
+                let key = file
+                    .escrow()?
+                    .ok_or("escrow needs an escrowKey in the identity file")?;
+                check_key(
+                    &conn,
+                    "escrow_key",
+                    key.fingerprint(),
+                    "the escrow key is not the one this database holds; restore its identity file, or rekey",
+                )?;
+                identity.escrow = Some(key);
+            }
             Some(Arc::new(identity))
+        }
+        None if config.escrow => {
+            return Err(
+                "escrow needs an identity file: a kit is given back after a sign-in".into(),
+            );
         }
         None => None,
     };
@@ -285,6 +313,12 @@ pub fn router(db: &Path, config: Config) -> Result<Router, String> {
             post(reports::receive).layer(DefaultBodyLimit::max(mq_reports::MAX_BATCH_BYTES)),
         );
     }
+    if escrow::key(&state).is_some() {
+        routes = routes
+            .route("/v1/escrow", get(escrow::info).post(escrow::put))
+            .route("/v1/escrow/status", get(escrow::status))
+            .route("/v1/escrow/take", post(escrow::take));
+    }
     if state.identity.is_some() {
         use identity::*;
         routes = routes
@@ -333,24 +367,32 @@ fn check_host(host: &str, what: &str) -> Result<(), String> {
 /// The database keeps the identity key's fingerprint: another key would
 /// turn every user into a new one, so the relay does not start on it.
 fn check_identity_key(db: &Connection, fingerprint: &str) -> Result<(), String> {
+    check_key(
+        db,
+        "identity_key",
+        fingerprint,
+        "the identity key is not the one this database was made with; restore its identity file",
+    )
+}
+
+/// The key fingerprint stored under `name` in `meta` must be `fingerprint`;
+/// the first time, it is stored.
+fn check_key(db: &Connection, name: &str, fingerprint: &str, wrong: &str) -> Result<(), String> {
     let stored: Option<String> = db
         .query_row(
-            "SELECT value FROM meta WHERE key = 'identity_key'",
-            [],
+            "SELECT value FROM meta WHERE key = ?1",
+            params![name],
             |r| r.get(0),
         )
         .optional()
         .map_err(|e| e.to_string())?;
     match stored {
-        Some(stored) if stored != fingerprint => Err(
-            "the identity key is not the one this database was made with; restore its identity file"
-                .into(),
-        ),
+        Some(stored) if stored != fingerprint => Err(wrong.into()),
         Some(_) => Ok(()),
         None => db
             .execute(
-                "INSERT INTO meta (key, value) VALUES ('identity_key', ?1)",
-                params![fingerprint],
+                "INSERT INTO meta (key, value) VALUES (?1, ?2)",
+                params![name, fingerprint],
             )
             .map(drop)
             .map_err(|e| e.to_string()),
@@ -554,6 +596,15 @@ CREATE TABLE IF NOT EXISTS email_event (
 );
 CREATE INDEX IF NOT EXISTS email_event_key ON email_event (kind, key, at_ms);
 CREATE INDEX IF NOT EXISTS email_event_at ON email_event (at_ms);
+-- Escrow mode (escrow.rs): one kit secret per account, sealed under the
+-- escrow key. New in schema 4 without a version change, like email_event.
+CREATE TABLE IF NOT EXISTS escrow (
+    account  TEXT PRIMARY KEY,
+    kit_id   BLOB NOT NULL,
+    sealed   BLOB NOT NULL,
+    -- The escrow generation it was put in (meta escrow_generation; rekey raises it).
+    generation  INTEGER NOT NULL DEFAULT 0
+);
 ";
 
 type Opened = (Connection, String, u64, Id);
@@ -718,8 +769,8 @@ fn open_journal(path: &Path, conn: &Connection) -> Result<std::fs::File, String>
             None => {
                 let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
                 let entry = std::slice::from_ref(entry);
-                if let Err(refused) =
-                    append_entries(&tx, account, entry, None, false).map_err(|e| e.to_string())?
+                if let Err(refused) = append_entries(&tx, account, entry, None, false, false)
+                    .map_err(|e| e.to_string())?
                 {
                     return Err(format!("roster journal seq {}: {}", body.seq, refused.1));
                 }
@@ -809,7 +860,7 @@ fn is_gone(db: &Connection, account: &Id) -> rusqlite::Result<bool> {
 
 /// Deletes everything the relay holds for `account` (records, roster,
 /// recovery data, tokens, the pairings it filled, identity links and their
-/// receipts, a scheduled deletion) and keeps only its tombstone, inside the
+/// receipts, a scheduled deletion, an escrowed kit) and keeps only its tombstone, inside the
 /// caller's transaction. An earlier tombstone keeps its date.
 fn purge(tx: &Connection, account: &str, deleted_ms: u64) -> rusqlite::Result<()> {
     tx.execute(
@@ -821,7 +872,7 @@ fn purge(tx: &Connection, account: &str, deleted_ms: u64) -> rusqlite::Result<()
         [account],
     )?;
     for table in [
-        "record", "roster", "recovery", "device", "pairing", "identity", "deletion",
+        "record", "roster", "recovery", "device", "pairing", "identity", "deletion", "escrow",
     ] {
         tx.execute(
             &format!("DELETE FROM {table} WHERE account = ?1"),
@@ -1004,6 +1055,12 @@ async fn relay_info(State(state): State<AppState>) -> Response {
 /// Accounts one client address may create by replay in the grace hour.
 const GRACE_CREATIONS: u32 = 20;
 
+/// The hour after a start with `new_generation` (a restore), when devices
+/// send back what the backup lost.
+fn restored_lately(state: &AppState) -> bool {
+    state.generation_since_ms != 0 && state.now_ms() < state.generation_since_ms + 60 * 60 * 1000
+}
+
 /// Whether a replayed genesis may create its account. Without sign-in, as
 /// for `/v1/accounts` (the invite, when one is set). With it, sign-up needs
 /// a ticket, so a replay creates only with the invite, or within the hour
@@ -1016,8 +1073,7 @@ fn may_replay_create(state: &AppState, headers: &HeaderMap, address: IpAddr) -> 
     if invite_matches(state, headers) {
         return true;
     }
-    let grace = state.generation_since_ms != 0
-        && state.now_ms() < state.generation_since_ms + 60 * 60 * 1000;
+    let grace = restored_lately(state);
     let mut created = state
         .grace_created
         .lock()
@@ -1133,7 +1189,14 @@ async fn create_account(
         }
         let mut scheduled = None;
         if let Some(ticket) = ticket {
-            match signed_up(&tx, ticket, &body.account, request.move_link, now)? {
+            match signed_up(
+                &tx,
+                ticket,
+                &body.account,
+                request.move_link,
+                escrow::key(&state).is_some(),
+                now,
+            )? {
                 Ok(old) => scheduled = old,
                 Err(refused) => return Ok(Err(refused)),
             }
@@ -1163,6 +1226,7 @@ async fn create_account(
             std::slice::from_ref(&request.entry),
             None,
             true,
+            escrow::key(&state).is_some(),
         )? {
             return Ok(Err(refused.into_response()));
         }
@@ -1206,6 +1270,7 @@ fn signed_up(
     ticket: &str,
     account: &Id,
     move_link: bool,
+    escrow: bool,
     now: u64,
 ) -> rusqlite::Result<Result<Option<(Id, u64)>, Response>> {
     let Some((provider, subject)) = identity::ticket(tx, ticket, now, false)? else {
@@ -1223,6 +1288,9 @@ fn signed_up(
     match identity::identity_link(tx, &provider, &subject)? {
         Some(_) if !move_link => return Ok(Err(identity::linked_elsewhere())),
         Some((link, old)) => {
+            if let Some(refused) = escrow::first_link(tx, escrow, &old, link)? {
+                return Ok(Err(refused));
+            }
             tx.execute(
                 "UPDATE identity SET account = ?2, created_ms = ?3 WHERE link = ?1",
                 params![link, new, now as i64],
@@ -1295,7 +1363,7 @@ async fn delete_account(
         return stopped;
     }
     let account = hex::encode(auth.account.0);
-    let deleted = (|| -> rusqlite::Result<Result<(), Response>> {
+    let deleted = (|| -> rusqlite::Result<Result<Option<u64>, Response>> {
         let tx = db.transaction()?;
         if !signed_delete(&tx, &state, &auth, &asked.request, &asked.sig, now)? {
             return Ok(Err(error(
@@ -1316,12 +1384,25 @@ async fn delete_account(
         if asked.receipt.is_none() && !apple.is_empty() {
             tracing::info!("an account with an Apple link was deleted without a revoke receipt");
         }
+        // Escrow mode: a deletion from an app waits like the web page's, shown
+        // on every device, so a stolen sign-in cannot wipe the account at once.
+        if escrow::key(&state).is_some() {
+            let due = escrow::schedule_deletion(&tx, &account, now)?;
+            tx.commit()?;
+            return Ok(Ok(Some(due)));
+        }
         purge(&tx, &account, now)?;
         tx.commit()?;
-        Ok(Ok(()))
+        Ok(Ok(None))
     })();
     match deleted {
-        Ok(Ok(())) => {}
+        Ok(Ok(Some(due))) => {
+            return match journal_deletion(&state, &auth.account, Some(due), None) {
+                Ok(()) => Json(json!({ "dueMs": due })).into_response(),
+                Err(e) => journal_error(e),
+            };
+        }
+        Ok(Ok(None)) => {}
         Ok(Err(refused)) => return refused,
         Err(e) => return storage_error("delete account", e),
     }
@@ -1464,14 +1545,13 @@ fn mint(
 }
 
 /// Why an append was refused, as an HTTP answer.
-struct Refused(StatusCode, String);
+struct Refused(StatusCode, String, Option<&'static str>);
 
 impl Refused {
     fn into_response(self) -> Response {
-        match self.0 {
-            // Not 409, which a device reads as "the head moved" and retries.
-            StatusCode::UNPROCESSABLE_ENTITY => identity::coded(self.0, "kitTaken", &self.1),
-            status => error(status, &self.1),
+        match self.2 {
+            Some(code) => identity::coded(self.0, code, &self.1),
+            None => error(self.0, &self.1),
         }
     }
 }
@@ -1508,10 +1588,11 @@ fn append_entries(
     entries: &[Entry],
     pending: Option<&[u8]>,
     live: bool,
+    guard_escrow: bool,
 ) -> rusqlite::Result<Result<Vec<Entry>, Refused>> {
     let mut roster = load_roster(tx, account)?;
     let mut stored = Vec::new();
-    let refuse = |status, why: &str| Ok(Err(Refused(status, why.to_owned())));
+    let refuse = |status, why: &str| Ok(Err(Refused(status, why.to_owned(), None)));
     for entry in entries {
         let body = match entry.parse() {
             Ok(body) if body.account == *account => body,
@@ -1545,10 +1626,31 @@ fn append_entries(
                 )
                 .optional()?;
             if holder.is_some_and(|h| h != hex::encode(account.0)) {
-                return refuse(
+                // Not 409, which a device reads as "the head moved" and retries.
+                return Ok(Err(Refused(
                     StatusCode::UNPROCESSABLE_ENTITY,
-                    "this kit's lookup belongs to another account",
-                );
+                    "this kit's lookup belongs to another account".into(),
+                    Some("kitTaken"),
+                )));
+            }
+        }
+        // Escrow mode (escrow.rs): no entry past the head drops the escrowed
+        // kit, alone or with its maker, whichever route sent it (a replay
+        // needs no token), so a sign-in keeps opening the account; another
+        // kit goes into escrow first. Only the relay's own journal at start
+        // and a replay in the hour after a restore (`guard_escrow` false) may.
+        if guard_escrow && let Some(kit) = escrow::escrowed_kit(tx, &hex::encode(account.0))? {
+            let drops = match &body.kind {
+                Kind::Revoke(r) => r.dropped.contains(&kit),
+                Kind::Leave(_) => roster.kits_of(&[body.author]).contains(&kit),
+                _ => false,
+            };
+            if drops {
+                return Ok(Err(Refused(
+                    StatusCode::FORBIDDEN,
+                    "this drops the kit kept in escrow; put another kit in escrow first".into(),
+                    Some("escrowKit"),
+                )));
             }
         }
         match roster.apply(entry) {
@@ -1614,6 +1716,19 @@ fn append_entries(
                         "DELETE FROM recovery WHERE account = ?1 AND kit_id = ?2",
                         params![account_hex, id.0.to_vec()],
                     )?;
+                    // A dropped kit opens nothing: an escrow row naming it goes
+                    // (devices then see no escrow and put a new kit). Only the
+                    // start's journal read or a replay in the hour after a restore
+                    // gets here: logged, so a restore drill can tell it was history.
+                    let dropped = tx.execute(
+                        "DELETE FROM escrow WHERE account = ?1 AND kit_id = ?2",
+                        params![account_hex, id.0.to_vec()],
+                    )?;
+                    if dropped > 0 {
+                        tracing::warn!(
+                            "escrow_dropped: account {account_hex} lost its escrowed kit to a roster entry from history (start or replay after a restore)"
+                        );
+                    }
                 }
                 tx.execute(
                     "UPDATE account SET epoch = ?2, rotation_pending = 0 WHERE id = ?1",
@@ -1740,6 +1855,7 @@ async fn append_roster(
             &[request.entry],
             pending.as_deref(),
             true,
+            escrow::key(&state).is_some(),
         )?;
         if stored.is_ok() {
             tx.commit()?;
@@ -1814,7 +1930,11 @@ async fn replay_roster(
     }
     let appended = (|| {
         let tx = db.transaction()?;
-        let stored = append_entries(&tx, &request.account, &request.entries, None, false)?;
+        // History, but never past the escrow rule: a replay needs no token.
+        // Only in the hour after a restore may it carry a drop of the
+        // escrowed kit that the backup missed (its row then goes too).
+        let guard = escrow::key(&state).is_some() && !restored_lately(&state);
+        let stored = append_entries(&tx, &request.account, &request.entries, None, false, guard)?;
         if stored.is_ok() {
             tx.commit()?;
         }
@@ -2194,6 +2314,7 @@ async fn pull(
     let limit = query.limit.unwrap_or(PAGE).clamp(1, PAGE);
     type Rows = (
         Vec<WireRecord>,
+        bool,
         u64,
         u32,
         Option<RosterHead>,
@@ -2211,23 +2332,37 @@ async fn pull(
             "SELECT coll, key_id, hlc, epoch, body, seq FROM record
              WHERE account = ?1 AND seq > ?2 ORDER BY seq LIMIT ?3",
         )?;
-        let records = stmt
-            .query_map(
-                params![account, query.after as i64, limit as i64 + 1],
-                |r| {
-                    Ok(WireRecord {
-                        coll: r.get(0)?,
-                        key_id: hex::encode(r.get::<_, Vec<u8>>(1)?),
-                        hlc: r.get(2)?,
-                        epoch: r.get(3)?,
-                        body: B64.encode(r.get::<_, Vec<u8>>(4)?),
-                        seq: r.get::<_, i64>(5)? as u64,
-                    })
-                },
-            )?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let rows = stmt.query_map(
+            params![account, query.after as i64, limit as i64 + 1],
+            |r| {
+                let body = r.get::<_, Vec<u8>>(4)?;
+                let record = WireRecord {
+                    coll: r.get(0)?,
+                    key_id: hex::encode(r.get::<_, Vec<u8>>(1)?),
+                    hlc: r.get(2)?,
+                    epoch: r.get(3)?,
+                    body: B64.encode(&body),
+                    seq: r.get::<_, i64>(5)? as u64,
+                };
+                Ok((body.len(), record))
+            },
+        )?;
+        // At most `limit` records and `PULL_BYTES` of bodies, at least one
+        // record: a page of large ones stays below what a device reads in
+        // one answer. A row past either tells `more`.
+        let (mut records, mut more, mut bytes) = (Vec::new(), false, 0);
+        for row in rows {
+            let (size, record) = row?;
+            if records.len() == limit || (!records.is_empty() && bytes + size > PULL_BYTES) {
+                more = true;
+                break;
+            }
+            bytes += size;
+            records.push(record);
+        }
         Ok((
             records,
+            more,
             head as u64,
             epoch,
             roster,
@@ -2235,9 +2370,7 @@ async fn pull(
         ))
     })();
     match rows {
-        Ok((mut records, head, epoch, roster, deletion)) => {
-            let more = records.len() > limit;
-            records.truncate(limit);
+        Ok((records, more, head, epoch, roster, deletion)) => {
             let last = records.last().map_or(query.after, |r| r.seq);
             Json(PullResponse {
                 records,

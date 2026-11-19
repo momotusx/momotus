@@ -25,6 +25,7 @@ use crate::roster::{
     Bundle, FORMS, Hex, Id, KitKind, MAX_KITS, MemberKeys, MemberSecret, NewKit, Role, Sponsor,
     open_form, open_name, seal_form, seal_name,
 };
+use crate::store::Store;
 use crate::wire::{AccountResponse, AppendRequest, Redeemed, RosterHead};
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD as B64, URL_SAFE_NO_PAD as B64URL};
@@ -34,7 +35,6 @@ use hpke::kdf::HkdfSha256;
 use hpke::kem::X25519HkdfSha256;
 use hpke::{Deserializable, OpModeR, OpModeS, Serializable};
 use mq_http::{HttpClient, HttpError};
-use mq_library::Library;
 use mq_library::hlc::{HlcClock, now_ms};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -559,18 +559,19 @@ pub struct Approval {
 
 /// On a device that already syncs, by a trusted caller (the CLI, test
 /// peers): as `approve_pairing_with` for a scan behind the screen lock.
-pub async fn approve_pairing(
-    library: &Library,
+pub async fn approve_pairing<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     qr: &str,
 ) -> Result<(String, SyncConfig), SyncError> {
+    let store = store.into();
     let trusted = Approval {
         scanned: true,
         unlocked: true,
     };
-    approve_pairing_with(library, http, config, clock, qr, trusted).await
+    approve_pairing_with(store, http, config, clock, qr, trusted).await
 }
 
 /// On a device that already syncs: vouches for the device whose QR it got
@@ -581,18 +582,19 @@ pub async fn approve_pairing(
 /// Returns the new device's member id (hex) and this device's record to
 /// store. If the new device does not join in time, the next sync cancels
 /// the approval with a key rotation.
-pub async fn approve_pairing_with(
-    library: &Library,
+pub async fn approve_pairing_with<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     qr: &str,
     how: Approval,
 ) -> Result<(String, SyncConfig), SyncError> {
+    let store = store.into();
     let (pairing, keys) = read_code(&config.server, qr)?;
     let public =
         PublicKey::from_bytes(&keys.boxk.0).map_err(|_| bad("pairing code has no valid keys"))?;
-    let session = Session::open(library, http, config, clock).await?;
+    let session = Session::open(store, http, config, clock).await?;
     // Only a phone or a tablet approves (D6): a device that said it is a TV, a computer or the
     // web never vouches for another, whatever its app shows. One that said nothing (an older
     // core) still may.
@@ -648,18 +650,18 @@ pub async fn approve_pairing_with(
     // clock or this device's, the next sync cancels the approval with a
     // rotation.
     let approval = format!("{APPROVAL}{}", hex::encode(keys.id().0));
-    let earlier = library.sync_state(&approval)?;
+    let earlier = store.book.sync_state(&approval)?;
     let deadlines = format!(
         "{}:{}",
         session.info.server_ms + PAIRING_MS,
         clock.wall_now() + PAIRING_MS
     );
-    library.set_sync_state(&approval, &deadlines)?;
+    store.book.set_sync_state(&approval, &deadlines)?;
     // Refused for sure: this payload never reached the slot, so only an
     // earlier attempt's approval stands.
     let undo = || match &earlier {
-        Some(value) => library.set_sync_state(&approval, value),
-        None => library.delete_sync_state(&approval),
+        Some(value) => store.book.set_sync_state(&approval, value),
+        None => store.book.delete_sync_state(&approval),
     };
     let filled = http
         .request(
@@ -707,14 +709,14 @@ pub fn new_recovery_kit() -> String {
 
 /// What a kit derives: lookup id (hex), redeem secret, tag key and the
 /// kit's member keys.
-struct KitKeys {
+pub(crate) struct KitKeys {
     lookup: String,
     auth: [u8; 32],
     tag: [u8; 32],
-    member: MemberSecret,
+    pub(crate) member: MemberSecret,
 }
 
-fn kit_keys(kit: &str) -> Result<KitKeys, SyncError> {
+pub(crate) fn kit_keys(kit: &str) -> Result<KitKeys, SyncError> {
     let secret: [u8; 20] = unbase32(kit)
         .and_then(|s| s.try_into().ok())
         .ok_or_else(|| bad("not a recovery kit"))?;
@@ -792,16 +794,17 @@ impl KitKeys {
 /// (the current key and a sponsor statement bound to this roster head) is
 /// worth nothing: a join built on it no longer fits the roster. Returns
 /// this device's record to store.
-pub async fn cancel_pairing(
-    library: &Library,
+pub async fn cancel_pairing<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     qr: &str,
 ) -> Result<SyncConfig, SyncError> {
+    let store = store.into();
     let (_, keys) = read_code(&config.server, qr)?;
     let id = keys.id();
-    let mut session = Session::open(library, http, config, clock).await?;
+    let mut session = Session::open(store, http, config, clock).await?;
     let me = session.member.id();
     // A user's own action: no grace period after a relay restore delays it.
     // Judged on the roster each try is built on, as a lost report is.
@@ -813,7 +816,9 @@ pub async fn cancel_pairing(
         })
         .await?;
     for state in [APPROVAL, CANCEL] {
-        library.delete_sync_state(&format!("{state}{}", hex::encode(id.0)))?;
+        store
+            .book
+            .delete_sync_state(&format!("{state}{}", hex::encode(id.0)))?;
     }
     Ok(session.changed().unwrap_or_else(|| session.record.clone()))
 }
@@ -822,16 +827,17 @@ pub async fn cancel_pairing(
 /// the current key. Returns the kit (show it once, then forget it), its id
 /// in the roster (the `id` of its `syncDevices` entry), and this device's
 /// record to store.
-pub async fn make_kit(
-    library: &Library,
+pub async fn make_kit<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
 ) -> Result<(String, Id, SyncConfig), SyncError> {
+    let store = store.into();
     let kit = new_recovery_kit();
     let keys = kit_keys(&kit)?;
     let new_kit = keys.new_kit(KitKind::Recovery, None);
-    let (id, record) = add_kit(library, http, config, clock, new_kit).await?;
+    let (id, record) = add_kit(store, http, config, clock, new_kit).await?;
     Ok((kit, id, record))
 }
 
@@ -841,16 +847,17 @@ pub async fn make_kit(
 /// roster and this device's record to store. A PRF output whose lookup
 /// another account holds is `kitTaken`; a kit dropped before is never let
 /// in again.
-pub async fn save_passkey(
-    library: &Library,
+pub async fn save_passkey<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     prf: &[u8; 32],
     label: &str,
 ) -> Result<(Id, SyncConfig), SyncError> {
+    let store = store.into();
     let new_kit = passkey_kit(prf, Some(label.to_owned()));
-    add_kit(library, http, config, clock, new_kit).await
+    add_kit(store, http, config, clock, new_kit).await
 }
 
 /// What the roster gets of the passkey kit a PRF output makes.
@@ -859,13 +866,13 @@ pub fn passkey_kit(prf: &[u8; 32], label: Option<String>) -> NewKit {
 }
 
 async fn add_kit(
-    library: &Library,
+    store: Store<'_>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     new_kit: NewKit,
 ) -> Result<(Id, SyncConfig), SyncError> {
-    let mut session = Session::open(library, http, config, clock).await?;
+    let mut session = Session::open(store, http, config, clock).await?;
     let at_ms = clock.tick(clock.wall_now()).wall_ms;
     let id = new_kit.keys.id();
     session

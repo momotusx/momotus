@@ -1,6 +1,7 @@
 //! `mq-sync-server --db PATH [--listen 127.0.0.1:8787] [--invite CODE] [--open]
 //! [--new-generation] [--trust-proxy] [--public-host HOST] [--identity FILE]
-//! [--mail FILE] [--reports FILE] [--clients-per-address N] [--mail-gap-ms MS]`
+//! [--mail FILE] [--reports FILE] [--escrow] [--quota-mib N] [--clients-per-address N]
+//! [--mail-gap-ms MS]`, or `mq-sync-server rekey --db PATH --identity FILE --to FILE`
 //!
 //! `--reports`: take error and crash reports at `POST /v1/reports` into
 //! their own database (plans/error-reports.md 7). Without it the route is
@@ -22,6 +23,17 @@
 //! Amazon SES credential file (`accessKeyId`, `secretAccessKey`, `region`,
 //! `from`). It needs `--identity`. A file that is not there leaves email
 //! sign-in off; one that does not parse refuses to start.
+//!
+//! `--escrow`: keep one recovery kit secret per account and give it back
+//! after a sign-in for that account (escrow.rs). The operator can then open
+//! every account. It needs `--identity` with an `escrowKey`.
+//!
+//! `--quota-mib N`: sealed bytes one account may store, in MiB (50).
+//!
+//! `rekey`: with the relay stopped, every escrowed kit sealed again under
+//! the `escrowKey` of `--to` (a copy of the identity file with a new key);
+//! the relay then starts with that file. Old backups still open with the
+//! old key until they age out.
 //!
 //! `--clients-per-address N` (every per-client sign-in and mail budget times
 //! N; 1) and `--mail-gap-ms` (between two codes to one mailbox; 60000) are
@@ -48,12 +60,17 @@ async fn main() {
     let mut open = false;
     let mut identity = None;
     let mut mail = None;
-    let mut args = std::env::args().skip(1);
+    let mut args = std::env::args().skip(1).peekable();
+    if args.peek().map(String::as_str) == Some("rekey") {
+        args.next();
+        rekey(args);
+    }
     while let Some(flag) = args.next() {
         match flag.as_str() {
             "--open" => open = true,
             "--new-generation" => config.new_generation = true,
             "--trust-proxy" => config.trust_proxy = true,
+            "--escrow" => config.escrow = true,
             _ => {
                 let value = args.next().unwrap_or_else(|| usage(&flag));
                 match flag.as_str() {
@@ -64,6 +81,13 @@ async fn main() {
                     "--identity" => identity = Some(PathBuf::from(value)),
                     "--mail" => mail = Some(PathBuf::from(value)),
                     "--reports" => config.reports = Some(PathBuf::from(value)),
+                    "--quota-mib" => {
+                        let mib: u64 = value.parse().unwrap_or_else(|_| usage(&flag));
+                        config.quota_bytes = match mib.checked_mul(1 << 20) {
+                            Some(bytes) if mib > 0 => bytes,
+                            _ => usage(&flag),
+                        };
+                    }
                     // Tests only (the web e2e): never in the relay's unit.
                     "--clients-per-address" => {
                         config.clients_per_address = value.parse().unwrap_or_else(|_| usage(&flag))
@@ -128,6 +152,39 @@ async fn main() {
     mq_sync_server::serve(listener, app).await.expect("serve");
 }
 
+/// `rekey --db PATH --identity FILE --to FILE`, then exit.
+fn rekey(mut args: impl Iterator<Item = String>) -> ! {
+    let (mut db, mut from, mut to) = (None, None, None);
+    while let Some(flag) = args.next() {
+        let value = args
+            .next()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| usage(&flag));
+        match flag.as_str() {
+            "--db" => db = Some(value),
+            "--identity" => from = Some(value),
+            "--to" => to = Some(value),
+            _ => usage(&flag),
+        }
+    }
+    let (Some(db), Some(from), Some(to)) = (db, from, to) else {
+        refuse("usage: mq-sync-server rekey --db PATH --identity FILE --to FILE");
+    };
+    let read = |path: &PathBuf| -> IdentityFile {
+        let text = std::fs::read_to_string(path)
+            .unwrap_or_else(|e| refuse(&format!("cannot read {}: {e}", path.display())));
+        serde_json::from_str(&text)
+            .unwrap_or_else(|e| refuse(&format!("{} is not an identity file: {e}", path.display())))
+    };
+    match mq_sync_server::rekey(&db, &read(&from), &read(&to)) {
+        Ok(n) => {
+            println!("{{\"event\":\"escrow_rekeyed\",\"entries\":{n}}}");
+            std::process::exit(0)
+        }
+        Err(e) => refuse(&e),
+    }
+}
+
 fn refuse(why: &str) -> ! {
     eprintln!("{why}");
     std::process::exit(2);
@@ -135,6 +192,6 @@ fn refuse(why: &str) -> ! {
 
 fn usage(flag: &str) -> ! {
     refuse(&format!(
-        "bad argument {flag}; usage: mq-sync-server --db PATH [--listen ADDR] [--invite CODE] [--open] [--new-generation] [--trust-proxy] [--public-host HOST] [--identity FILE] [--mail FILE] [--reports FILE]"
+        "bad argument {flag}; usage: mq-sync-server --db PATH [--listen ADDR] [--invite CODE] [--open] [--new-generation] [--trust-proxy] [--public-host HOST] [--identity FILE] [--mail FILE] [--reports FILE] [--escrow] [--quota-mib N]"
     ));
 }
