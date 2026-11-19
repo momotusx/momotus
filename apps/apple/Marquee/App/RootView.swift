@@ -539,9 +539,10 @@ struct MainShell: View {
 
     /// Every opened place, the current one shown. The others stay alive but
     /// out of sight, touch, VoiceOver and (on TV) focus, so leaving a place
-    /// and coming back finds it as it was (review apple-journey P2-2).
+    /// and coming back finds it as it was (review apple-journey P2-2). Stacked in a `Fill`, not a ZStack: the bar's
+    /// and the banner's insets and the Mac window's minimum size each measured every place's pages to size a ZStack.
     private var places: some View {
-        ZStack {
+        Fill {
             ForEach(AppTab.allCases.filter(opened.contains), id: \.self) { item in
                 screen(item)
                     .environment(\.tabShown, item == tab)
