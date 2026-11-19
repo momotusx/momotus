@@ -26,9 +26,13 @@ import { autoFocusSoon, inputCount } from "../focus/dom";
 import { form } from "../form";
 import { syncWords } from "../lib/words";
 import { keptScroll } from "../lib/kept-scroll";
+import { nativeInert } from "../lib/compat";
 import "./home.css";
 
 const pageScroll = keptScroll();
+/** False while a title, Versions or the player is over a kept Home (app.tsx, `keepHome`): it waits out of view and out of the D-pad's reach, its
+ * hero's clock and trailer stopped, and is shown again as it was. */
+export const [homeHere, setHomeHere] = createSignal(true);
 // Another profile's Home opens at the top (web journey review P3-14).
 onProfileReset(pageScroll.reset);
 
@@ -263,7 +267,7 @@ export default function Home() {
   const navigate = useNavigate();
   const addons = liveView<AddonsSnapshot>("addons");
   createEffect(() => {
-    if (addons.state.data?.fresh && !kidsSession(profiles())) navigate("/welcome", { replace: true });
+    if (homeHere() && addons.state.data?.fresh && !kidsSession(profiles())) navigate("/welcome", { replace: true });
   });
   const [page, setPage] = createSignal<HTMLElement | null>(null);
   const hasContinue = () => home.rows[0]?.rowId === CONTINUE_ROW;
@@ -289,7 +293,7 @@ export default function Home() {
     on(
       hero,
       (has, had) => {
-        if (!has || had || inputCount() !== opened) return;
+        if (!has || had || !homeHere() || inputCount() !== opened) return;
         if (!(document.activeElement instanceof HTMLElement) || !document.activeElement.closest("[data-row]")) return;
         autoFocusSoon(() => document.querySelector<HTMLElement>('[data-f="hero:play"], [data-f="hero:details"]'));
       },
@@ -303,7 +307,13 @@ export default function Home() {
   };
 
   return (
-    <div class="home">
+    <div
+      class="home"
+      classList={{ away: !homeHere() }}
+      data-away={homeHere() ? undefined : ""}
+      aria-hidden={homeHere() ? undefined : "true"}
+      inert={(nativeInert && !homeHere()) || undefined}
+    >
       <main class="page" data-vscroll ref={attach}>
         {/* A deletion, the account gone, a new device: first, before the hero, never kept for later. */}
         <AccountCard top />

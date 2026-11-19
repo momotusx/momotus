@@ -177,4 +177,9 @@ export function installCompat(g: typeof globalThis = globalThis) {
   inertFallback(g);
 }
 
+/** Whether the engine has `inert` itself. The fallback's `[inert] *` rule restyles every element of a region each time
+ * it toggles, so a large region that only needs keeping out of the D-pad's reach skips it there (screens/home.tsx, a
+ * kept Home). */
+export const nativeInert = typeof HTMLElement !== "undefined" && "inert" in HTMLElement.prototype;
+
 installCompat();
