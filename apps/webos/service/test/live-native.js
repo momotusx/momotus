@@ -14,8 +14,9 @@
 // - a download of the torrent kept under <data>/native/downloads, which then
 //   plays from the bridge's loopback server.
 // MQ_REAL_PLUGINS=1 adds the phone's own default repositories (Manitux, then
-// NiakVIO): both install with their providers, and these must list rows for a
-// known film (whether a site lets that link play is logged only). With the wasm core at service/core (build-wasm.sh), the
+// NiakVIO): both must install with their providers; the rows they list for a
+// known film and whether a site lets that link play are logged only, since
+// those sites answer a datacenter address as they please. With the wasm core at service/core (build-wasm.sh), the
 // run starts with an update from the wasm-only app: the wasm core installs
 // an addon in the data dir, then the native core must find it there.
 // Without MQ_FIXTURE the torrent is a public domain film from the public
@@ -328,9 +329,10 @@ function walk(dir) {
   }, []);
 }
 
-// The phone's default repositories, as a user adds them. Gating is what our code does: each installs with its
-// providers, and they run and list rows in Versions' plugin section for a known film. Whether a row's external link
-// then plays is the site's to decide (several refuse datacenter addresses), so a lease is logged, never gating.
+// The phone's default repositories, as a user adds them. Gating is what our code does alone: each installs with its
+// providers. The rows they list for a known film and whether a row's link plays are the sites' to decide (from a
+// datacenter address they refuse, or list nothing), so both are logged, never gating; the fixture's plugin gates the
+// plugin engine end to end.
 async function realPlugins(c) {
   const result = { realReposInstall: true, realPluginRows: false };
   for (const repo of REAL_REPOS) {
@@ -423,8 +425,9 @@ async function main() {
     },
     update,
     media,
-    real,
+    { realReposInstall: real.realReposInstall !== false },
   );
+  if (real.realPluginRows !== undefined) log('real plugin rows listed (information)', real.realPluginRows);
   log('checks', checks);
   await svc.kill();
   const ok = Object.keys(checks).every((k) => checks[k]);
