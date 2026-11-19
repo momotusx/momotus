@@ -65,7 +65,11 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: var(--weight-heading
 [data-hscroll] { overscroll-behavior-y: auto; }
 [data-vscroll]::-webkit-scrollbar, [data-hscroll]::-webkit-scrollbar { display: none; }
 [data-vscroll] { overflow-y: auto; overflow-x: clip; }
-[data-hscroll] { overflow-x: auto; overflow-y: clip; }
+/* A lane stacks its own tiles (the art, its keyline and sheen, the caption each take a z-index): without its own stacking
+ * context they joined the page's, and Chromium before 94 gave each of them a compositing layer for a lift's animation
+ * and for a scrolled lane, 400 to 500 on Home, rebuilt on every D-pad press (plans/perf-nav.md). The lane
+ * clips what it holds, so nothing in it ever painted outside it. */
+[data-hscroll] { overflow-x: auto; overflow-y: clip; isolation: isolate; }
 
 /* Focus: on TV the white lift with no ring (design/DECISION.md): controls and
  * rows turn white with dark words and rise, art rises higher with a deeper
