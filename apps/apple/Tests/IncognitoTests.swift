@@ -370,6 +370,8 @@ private let main = profile("main", owner: true)
         "Player/PlayerModel.swift: coreLog.notice(\"metric subtitles_settled_ms=",
         "Player/PlayerModel.swift: coreLog.notice(\"metric engine_fallback_ms=",
         "Player/PlayerSwipe.swift: coreLog.notice(\"debug: walk ",
+        // The navigation walk's lines: step names and numbers, no title.
+        "App/NavWalk.swift: coreLog.notice(\"\\(line, privacy: .public)\")",
         // The walk's wall line: two numbers, no title (plans/first-screens.md 3.1).
         "Onboarding/PosterWall.swift: coreLog.notice(\"\\(line, privacy: .public)\")",
         "Profiles/ProfileSession.swift: coreLog.error(\"leave on close: ", "Profiles/ProfileSession.swift: coreLog.error(\"switch: views still open: ",

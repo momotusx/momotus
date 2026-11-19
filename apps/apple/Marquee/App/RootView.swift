@@ -266,6 +266,16 @@ struct MainShell: View {
                 }
             }
             #endif
+            #if MARQUEE_WALK
+            .task {
+                // `-MQInstallDefaults YES`: a fresh walk library takes every recommended addon, as first run's Skip.
+                if UserDefaults.standard.bool(forKey: "MQInstallDefaults") { await DefaultsStep(core: core, scope: .all).install() }
+                guard NavWalk.on, (try? await Task.sleep(for: .seconds(20))) != nil else { return }
+                await NavWalk.run(NavWalk.Driver(
+                    select: { select($0) }, search: { searchInput.text = $0 },
+                    push: { push($0, on: .home) }, popHome: { popToRoot(.home) }))
+            }
+            #endif
     }
 
     @ViewBuilder private var content: some View {
