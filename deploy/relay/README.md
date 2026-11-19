@@ -4,11 +4,13 @@ Marquee's sync relay (`mq-sync-server`) at `https://momotus.normalisdead.mom`, o
 
 | File | What |
 |---|---|
-| `momotus-relay.service` | the relay, loopback `127.0.0.1:8787`, user `momotus`, data in `/var/lib/momotus`, the identity file through `LoadCredential` |
-| `momotus-backup.service`, `.timer` | `backup.py` nightly at 04:20, 14 sets kept |
+| `momotus.env` | Momotus's instance: name (service user, `/opt`, `/var/lib` and `/etc` folders, unit names), public host, ports, flags, credential files |
+| `relay.service` | the relay unit's template: loopback `127.0.0.1:<PORT>`, user `<NAME>`, data in `/var/lib/<NAME>`, the identity file through `LoadCredential`; installed as `<NAME>-relay.service` |
+| `backup.service`, `.timer` | templates of `<NAME>-backup.*`: `backup.py` nightly at 04:20, 14 sets kept |
+| `render.sh` | renders the three units of an instance (`render.sh momotus.env OUT_DIR` to read them) |
 | `backup.py` | SQLite's online backup, integrity check, the roster journal, `SHA256SUMS` |
 | `identity.py` | creates the identity file (a new key, never printed) and merges the provider values into it |
-| `deploy.sh` | build, backup, preflight on a copy, switch, health, rollback |
+| `deploy.sh` | build, backup, preflight on a copy, switch, health, rollback, for one instance file (`momotus.env` by default) |
 | `pull-backup.sh`, `app.momotus.relay-backup.plist` | the Mac's daily pull of the newest set, 7 kept |
 
 Checks: `bun test deploy/relay`, `uv run python -I deploy/relay/backup.py --self-test`, `uv run python -I deploy/relay/identity.py --self-test`, `shellcheck deploy/relay/*.sh`.
@@ -28,6 +30,41 @@ MQ_RELAY_SSH=... deploy/relay/deploy.sh
 ```
 
 `deploy.sh` builds the checked-out commit, which must be on the trunk and already published to GitHub with publish.sh (the hosted terms page points users at the published source), with no uncommitted change under `crates` or here, as a static `x86_64-unknown-linux-musl` binary (`cargo zigbuild`, its own target dir under `~/.cargo-targets/`). The relay has no schema migration: a commit that changes `SCHEMA_VERSION` fails the preflight on a copy of the database, and nothing switches until a migration exists.
+
+## Another instance
+
+Another app's relay runs beside Momotus's from the same files, under its own name: its own service user, database, journal, identity file, port, units and backups, so a deploy of one never touches the other. Its instance file lives in that app's repository (nothing secret in it) and names `NAME`, `TITLE`, `HOST`, `PORT`, `PREFLIGHT_PORT` (both free on the server), `FLAGS` (for example `--escrow --quota-mib 200`) and `CREDENTIALS` (files in `/etc/<NAME>/` the flags read besides `identity.json`, often none).
+
+```sh
+ssh "$MQ_RELAY_SSH" 'sudo useradd --system --no-create-home --shell /usr/sbin/nologin <NAME>'
+# With --escrow the file also gets an escrow key; the owner copies it into his password manager.
+ssh "$MQ_RELAY_SSH" 'sudo python3 -I - create <NAME> <HOST> --escrow' < deploy/relay/identity.py
+# Flags that must stay out of every repository, as one root-only line (optional):
+ssh "$MQ_RELAY_SSH" 'sudo install -m 0600 /dev/stdin /etc/<NAME>/relay.env' <<< 'RELAY_FLAGS=--invite <code>'
+MQ_RELAY_SSH=... deploy/relay/deploy.sh <path to the instance file>
+```
+
+`--escrow` makes the relay keep one recovery kit secret per account (`crates/mq-sync-server/src/escrow.rs`), so its operator can open every account: the app's privacy page must say so. The escrow key in the identity file opens every kit in the database and in every backup of it; it never leaves the server and the password manager.
+
+## Rekey
+
+For the day the escrow key, or a copy of the database, may have leaked.
+
+What rekey does: every escrowed kit is sealed again under a new escrow key, and the escrow generation goes up. What it cannot do by itself: the kit secrets stay the same, and whoever holds the old key and any copy of the database (the server's 14 backups and the Mac's 7 included) holds them. A kit is a roster member: every key rotation is sealed to it, so its secret opens the account until the kit leaves the roster. That is why the generation goes up. Each account's devices see their escrowed kit as stale on their next escrow check (`mq_sync::escrow::ensure`, which the app runs after its sync rounds). They then make a new kit, put it in escrow, and remove the old kit, which rotates the account key. An account none of whose devices syncs again keeps its old kit until one does: say so to anyone asking after a leak.
+
+The relay must be stopped (`rekey` refuses a database another process holds open). The command runs as the service user, the identity files coming in as credentials, as the preflight does:
+
+```sh
+ssh "$MQ_RELAY_SSH" 'sudo python3 -I /opt/<NAME>/identity.py escrow-key <NAME>'   # writes identity.json.next
+ssh "$MQ_RELAY_SSH" 'sudo systemctl stop <NAME>-relay && sudo systemd-run --wait --pipe --collect -p User=<NAME> -p Group=<NAME> \
+  -p LoadCredential=from.json:/etc/<NAME>/identity.json -p LoadCredential=to.json:/etc/<NAME>/identity.json.next \
+  -p ReadWritePaths=/var/lib/<NAME> sh -c '"'"'exec /opt/<NAME>/bin/mq-sync-server rekey --db /var/lib/<NAME>/relay.sqlite \
+  --identity "$CREDENTIALS_DIRECTORY/from.json" --to "$CREDENTIALS_DIRECTORY/to.json"'"'"' \
+  && sudo mv /etc/<NAME>/identity.json /etc/<NAME>/identity.json.prev && sudo mv /etc/<NAME>/identity.json.next /etc/<NAME>/identity.json'
+ssh "$MQ_RELAY_SSH" 'sudo systemctl start <NAME>-relay'
+```
+
+The second line swaps the files only when `rekey` printed `escrow_rekeyed`. The owner replaces the key in his password manager, then `identity.json.prev` is deleted. `rekey` refuses a database whose escrow key is not the `--identity` file's, and a relay started on the old file after it refuses to start. `identity.py escrow-key` prints the new key's fingerprint in the relay's form, the one the database's `meta` table keeps as `escrow_key`.
 
 ## Cloudflare
 
@@ -92,12 +129,16 @@ The web app signs in only from `http://127.0.0.1:<port>`: the relay sends broker
 ## Backups on the Mac
 
 ```sh
-mkdir -p ~/.local/share/momotus
-cp deploy/relay/pull-backup.sh ~/.local/share/momotus/pull-backup.sh
-sed -e "s|__SCRIPT__|$HOME/.local/share/momotus/pull-backup.sh|" -e "s|__SSH__|$MQ_RELAY_SSH|" \
-  deploy/relay/app.momotus.relay-backup.plist > ~/Library/LaunchAgents/app.momotus.relay-backup.plist
-launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/app.momotus.relay-backup.plist
+NAME=momotus HEALTH=https://momotus.normalisdead.mom/v1/relay   # another instance: its NAME and public host
+mkdir -p ~/.local/share/$NAME
+cp deploy/relay/pull-backup.sh ~/.local/share/$NAME/pull-backup.sh
+sed -e "s|__SCRIPT__|$HOME/.local/share/$NAME/pull-backup.sh|" -e "s|__SSH__|$MQ_RELAY_SSH|" \
+  -e "s|__NAME__|$NAME|" -e "s|__HEALTH__|$HEALTH|" \
+  deploy/relay/app.momotus.relay-backup.plist > ~/Library/LaunchAgents/app.$NAME.relay-backup.plist
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/app.$NAME.relay-backup.plist
 ```
+
+Each instance pulls its own backups (`/var/lib/<NAME>/backups`) into its own folder (`~/.local/share/<NAME>/relay-backups`), with the same 48-hour notification.
 
 A Mac that installed it before the rename runs it as `app.marquee.relay-backup`: `launchctl bootout "gui/$(id -u)/app.marquee.relay-backup"` and delete `~/Library/LaunchAgents/app.marquee.relay-backup.plist` first, or both pull each day.
 
@@ -106,6 +147,8 @@ The pull reads the server's backups with `sudo -n`. The narrowest rule for the a
 It writes `~/.local/share/momotus/relay-backups/pull.log` and shows a notification when the last good pull or the public health check is more than 48 hours old. The folder is excluded from Time Machine.
 
 ## Restore
+
+Momotus's instance below; another one has its own `<NAME>` in every path and unit name. An escrow instance (`--escrow`) needs its identity file restored too: without it the restored database opens no escrowed kit, and the relay refuses to start on another escrow key. After the restore, a signed-in device of each account checks its escrow (`escrow::ensure`): a kit the backup holds but the replayed roster dropped, or one put after the backup, shows as gone, and the device puts a new one. For the hour after the restart (`--new-generation`), a replay may drop the old escrowed kit (that history passed the rule once); after it, nothing a device sends may. Each such drop is logged as `escrow_dropped` with the account id (`journalctl -u <NAME>-relay | grep escrow_dropped`): the drill checks it, and one nobody expects is worth a look.
 
 1. `sudo systemctl stop momotus-relay`.
 2. Remove `/var/lib/momotus/relay.sqlite-wal` and `relay.sqlite-shm`: beside a restored database they corrupt it. Never copy `relay.sqlite` while the relay runs; restore only from `backup.py` sets (check them with `shasum -a 256 -c <stamp>.SHA256SUMS`).

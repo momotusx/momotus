@@ -1,8 +1,10 @@
-# Marquee's sync relay (plans/accounts-social-sync.md section 3). Installed as is into
-# /etc/systemd/system; the identity file comes in through LoadCredential, never readable by the
-# service user on disk.
+# A sync relay instance (plans/accounts-social-sync.md section 3). deploy.sh renders it from an
+# instance file (momotus.env) into /etc/systemd/system/@NAME@-relay.service: @NAME@, @TITLE@,
+# @PORT@, @HOST@ and @FLAGS@ come from it, and @CREDENTIALS@ becomes one LoadCredential line per
+# file it names. The identity file comes in through LoadCredential, never readable by the service
+# user on disk.
 [Unit]
-Description=Marquee sync relay
+Description=@TITLE@
 After=network-online.target
 Wants=network-online.target
 # Ten quick failures in a minute stop the restarts; the journal says why.
@@ -10,22 +12,22 @@ StartLimitIntervalSec=60
 StartLimitBurst=10
 
 [Service]
-User=momotus
-Group=momotus
-LoadCredential=identity.json:/etc/momotus/identity.json
-# Email sign-in's SES key (plans/accounts-email.md). Remove this line and `--mail` with the file:
+User=@NAME@
+Group=@NAME@
+LoadCredential=identity.json:/etc/@NAME@/identity.json
+# Further files the instance's flags read (Momotus: email sign-in's SES key, plans/accounts-email.md).
 # systemd may refuse to start a unit whose credential file is missing.
-LoadCredential=ses.json:/etc/momotus/ses.json
-# Error and crash reports (plans/error-reports.md 7, 8): their own database, 30 days, not backed up.
-# The privacy page's Error reports section must be live before a relay with this flag is.
-ExecStart=/opt/momotus/bin/mq-sync-server --db /var/lib/momotus/relay.sqlite --listen 127.0.0.1:8787 --trust-proxy --public-host momotus.normalisdead.mom --identity %d/identity.json --mail %d/ses.json --reports /var/lib/momotus/reports.sqlite
+@CREDENTIALS@
+# Flags no repository may hold (an invite code), as RELAY_FLAGS=... in a root-only file, if any.
+EnvironmentFile=-/etc/@NAME@/relay.env
+ExecStart=/opt/@NAME@/bin/mq-sync-server --db /var/lib/@NAME@/relay.sqlite --listen 127.0.0.1:@PORT@ --trust-proxy --public-host @HOST@ --identity %d/identity.json @FLAGS@ $RELAY_FLAGS
 Restart=always
 RestartSec=2
 # The relay's refusals (a bad identity file, a database of another schema) exit 2: no restart loop.
 RestartPreventExitStatus=2
 MemoryMax=256M
 TasksMax=64
-StateDirectory=momotus
+StateDirectory=@NAME@
 StateDirectoryMode=0700
 UMask=0077
 NoNewPrivileges=yes
