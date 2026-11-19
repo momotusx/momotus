@@ -130,13 +130,17 @@ test("desktop: the scope pill steps through the kinds the results hold", async (
   const scope = page.locator('[data-f="search:scope"]');
   const kinds = async () => [...new Set((await page.locator(".hit-meta").allInnerTexts()).map((t) => t.split("·")[0]?.trim()))];
   await expect(scope).toHaveText("All");
-  const all = await kinds();
-  expect(all.length).toBeGreaterThan(1);
-  await scope.click();
-  const first = (await scope.innerText()).trim();
-  expect(await kinds()).toEqual([first]);
-  for (let i = 1; i < all.length; i++) await scope.click();
-  await scope.click();
+  // The list builds its first screenful and more as it nears its end, so the kinds are read from the pill's steps: each
+  // one leaves only hits of its kind, and the pill comes back to All after the last.
+  const steps: string[] = [];
+  for (let i = 0; i < 5; i++) {
+    await scope.click();
+    const label = (await scope.innerText()).trim();
+    if (label === "All") break;
+    steps.push(label);
+    expect(await kinds()).toEqual([label]);
+  }
+  expect(steps.length).toBeGreaterThan(1);
   await expect(scope).toHaveText("All");
   await context.close();
 });

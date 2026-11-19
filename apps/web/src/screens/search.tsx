@@ -36,6 +36,7 @@ import { AllowSwitch, tileMenu } from "../components/kids";
 import { kidsKeys } from "../core/kids";
 import { kidsLine } from "../lib/words";
 import { RouteA } from "../components/route-link";
+import { glyph } from "../components/glyph";
 
 // The last query survives closing the palette, so reopening lands on the results.
 let lastQuery = "";
@@ -54,6 +55,11 @@ let opener: HTMLElement | null = null;
 let clearTyped: (() => boolean) | null = null;
 /** The most titles the empty state's shelf shows in the palette. */
 const START_TILES = 6;
+/** Search hits built with an answer, and again each time the list nears its end (a TV shows six, a phone about eight). */
+const HITS_FIRST = 12;
+// How many hits the last query built, kept across visits of the screen.
+let shownQuery: string | undefined;
+let shownCount = HITS_FIRST;
 
 // The palette is a history entry on the page's address, so the browser's
 // Back closes it instead of leaving the page under it. A result opens over
@@ -221,6 +227,28 @@ function Panel(props: { dialog?: boolean; add?: string; retry: () => void }) {
   };
   const scopeLabel = () => (current() ? kindLabel(current() as string) : "All");
   const count = () => rows().reduce((n, r) => n + scoped(r).length, 0);
+  // A query answers with up to hundreds of hits (141 for "bat"), and building them all in the task that brought the answer
+  // held the next key for 0.2 s at 6x CPU on Chromium 92 (0.8 s on 79). The first screenful is built with the answer, more
+  // as the list nears its end (`MoreHits`); a query keeps how far it got, so Back finds the hit it left from.
+  const [shown, setShown] = createSignal(shownQuery === lastQuery ? shownCount : HITS_FIRST);
+  createEffect(() => {
+    const query = s()?.query;
+    if (query !== undefined && query !== shownQuery) {
+      shownQuery = query;
+      setShown(HITS_FIRST);
+    }
+    shownCount = shown();
+  });
+  const showMore = () => shown() < count() && setShown((n) => n + HITS_FIRST);
+  // How many of a row's hits are built yet: what is left of `shown` after the rows above it.
+  const built = (row: HomeRow) => {
+    let left = shown();
+    for (const r of rows()) {
+      if (r === row) break;
+      left -= scoped(r).length;
+    }
+    return Math.max(0, left);
+  };
   // Why nothing came back: no addon can search, or none matched this query.
   // A kids profile searches its own list, never an addon (plans/m11-kids.md 6.4).
   const kids = () => kidsSession(profiles());
@@ -421,9 +449,10 @@ function Panel(props: { dialog?: boolean; add?: string; retry: () => void }) {
                 </div>
               </section>
             </Show>
+            {/* A row with hits none of which is built yet waits under the built ones. */}
             <For each={rows()}>
               {(row) => (
-                <Show when={!current() || scoped(row).length > 0}>
+                <Show when={(!current() || scoped(row).length > 0) && (scoped(row).length === 0 || built(row) > 0)}>
                   <section class="hits" classList={{ top: row.rowId === TOP }} aria-label={row.title}>
                     <h3 class="hits-head">
                       <span class="kicker">{row.title}</span>
@@ -452,7 +481,7 @@ function Panel(props: { dialog?: boolean; add?: string; retry: () => void }) {
                               row below shows, and one key on two hits sends the
                               remote back up to the first. The core keeps its rows
                               as first shown, so a hit never changes rows. */}
-                          <For each={scoped(row)}>{(t) => hit(t, `hit:${row.rowId}:${t.id}`, remember)}</For>
+                          <For each={scoped(row).slice(0, built(row))}>{(t) => hit(t, `hit:${row.rowId}:${t.id}`, remember)}</For>
                         </Match>
                       </Switch>
                     </div>
@@ -460,6 +489,9 @@ function Panel(props: { dialog?: boolean; add?: string; retry: () => void }) {
                 </Show>
               )}
             </For>
+            <Show when={shown() < count()}>
+              <MoreHits near={showMore} />
+            </Show>
           </Match>
         </Switch>
       </div>
@@ -471,13 +503,40 @@ function Panel(props: { dialog?: boolean; add?: string; retry: () => void }) {
 /** A result: a small poster, the name, then "Movie · 2021 · ★ 8.0". */
 /** A result opens over the palette's history entry: Back from the title
  * returns to the results. */
+/** Under the built hits: asks for more while it is within a screen of the list's view. An observer answers only when
+ * the line crosses that edge, so it observes again after each batch, which keeps building until the line is a screen
+ * away or every hit is built. */
+function MoreHits(props: { near: () => void }) {
+  let line!: HTMLDivElement;
+  onMount(() => {
+    const scroller = line.closest<HTMLElement>("[data-vscroll]");
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (!e?.isIntersecting) return;
+        props.near();
+        io.unobserve(line);
+        io.observe(line);
+      },
+      // The list's own scroller, unless it is as tall as its hits (the phone's page, where the document scrolls).
+      { root: scroller && scroller.clientHeight <= innerHeight ? scroller : null, rootMargin: "100% 0px" },
+    );
+    io.observe(line);
+    onCleanup(() => io.disconnect());
+  });
+  return <div ref={line} class="more-hits" aria-hidden="true" />;
+}
+
+// Drawn once and cloned: a search shows hundreds of hits.
+const FilmMark = glyph(Film);
+const HitChevron = glyph(ChevronRight);
+
 function Hit(props: { tile: Tile; fkey: string; onOpen: () => void }) {
   const t = () => props.tile;
   return (
     <RouteA class="hit" href={titlePath(t().kind, t().id)} data-f={props.fkey} onClick={() => props.onOpen()} {...tileMenu(t)}>
       {/* No poster, or not yet: a film mark on the surface, never squeezed words. */}
       <span class="hit-art" aria-hidden="true">
-        <Film class="hit-ph" />
+        <FilmMark class="hit-ph" />
         {/* The plain poster: at this size a cover's drawn scores cannot be read, and the line beside it says them. */}
         <Poster src={t().posterFallback ?? t().poster} fallback={t().posterFallback ? t().poster : null} name={t().name} w={64} h={96} nameCard={false} />
       </span>
@@ -495,7 +554,7 @@ function Hit(props: { tile: Tile; fkey: string; onOpen: () => void }) {
           <Ratings ratings={t().ratings} sep={() => <i aria-hidden="true">·</i>} />
         </span>
       </span>
-      <ChevronRight aria-hidden class="hit-chev" />
+      <HitChevron class="hit-chev" />
     </RouteA>
   );
 }
