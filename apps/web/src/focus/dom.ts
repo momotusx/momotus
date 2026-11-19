@@ -58,12 +58,14 @@ let backHandler: (() => void) | null = null;
 /** The app's one Back: in-app history first, else the screen's parent. */
 export const goBack = () => backHandler?.();
 const groupOf = (el: Element) => el.closest<HTMLElement>("[data-fgroup]")?.dataset.fgroup;
+// Out of reach: an inert region, or a kept screen waiting under another (`data-away`, screens/home.tsx).
+const OUT = "[inert], [data-away]";
 export const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function candidates(): HTMLElement[] {
   const out: HTMLElement[] = [];
   for (const el of document.querySelectorAll<HTMLElement>(SEL)) {
-    if (el.closest("[inert]") || (el as HTMLButtonElement).disabled) continue;
+    if (el.closest(OUT) || (el as HTMLButtonElement).disabled) continue;
     if (el.offsetWidth === 0 && el.offsetHeight === 0) continue;
     out.push(el);
   }
@@ -472,8 +474,10 @@ function replacement(): HTMLElement | null {
     if (near) return near;
   }
   // A screen whose first focus target is still coming (Home's hero, `data-focus-wait`) keeps nothing
-  // focused meanwhile; restore's late fallback still lands after its 4 s.
-  return initialIfMarked(!document.querySelector("[data-focus-wait]"));
+  // focused meanwhile; restore's late fallback still lands after its 4 s. A kept Home under a title is out of reach: its
+  // hero waits for nobody there.
+  const waiting = [...document.querySelectorAll("[data-focus-wait]")].some((el) => !el.closest(OUT));
+  return initialIfMarked(!waiting);
 }
 
 function nearest(els: HTMLElement[], x: number, y: number): HTMLElement | null {

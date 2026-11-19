@@ -9,7 +9,7 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import X from "lucide-solid/icons/x";
 import SearchIcon from "lucide-solid/icons/search";
 import Settings from "lucide-solid/icons/settings";
-import { type Component, createEffect, createMemo, createSignal, For, on, onCleanup, Show, untrack } from "solid-js";
+import { type Component, createEffect, createMemo, createRenderEffect, createSignal, For, on, onCleanup, Show, untrack } from "solid-js";
 import { ProfileMenu } from "./components/avatar";
 import Brand from "./components/brand";
 import { DownloadStatus, OfflineBanner } from "./components/download";
@@ -40,7 +40,7 @@ import Plugins from "./screens/plugins";
 import CalendarScreen from "./screens/calendar";
 import Debrid from "./screens/debrid";
 import Discover from "./screens/discover";
-import Home from "./screens/home";
+import Home, { setHomeHere } from "./screens/home";
 import HomeRows from "./screens/home-rows";
 import StreamChoice from "./screens/stream-choice";
 import Import from "./screens/import";
@@ -221,8 +221,27 @@ let focusInstalled = false;
 // The shell's Back: a router swap (Incognito) mounts a new shell, whose Back the keys then reach.
 let shellBack = () => {};
 
+// TV and desktop keep Home while a title, its Versions or the player is over it (`keepHome`): Back from a title
+// rebuilt every shelf, tile and the hero, the slowest press of the app (about 1.2 s at 4x CPU on Chromium 79, 0.1 s on
+// a current one). The phone's page scrolls the document, so its Home stays a route of its own.
+const keepHome = () => form() !== "phone";
+const HomeRoute = () => (
+  <Show when={!keepHome()}>
+    <Home />
+  </Show>
+);
+
 function Shell(props: RouteSectionProps) {
   const location = useLocation();
+  const [homeShown, setHomeShown] = createSignal(false);
+  createRenderEffect(() => {
+    const here = location.pathname === "/";
+    setHomeHere(here);
+    // Kept only under what opens from it (a title, its Versions, the player): any other place closes Home's views, as a
+    // profile switch needs (the core refuses one while a view is open).
+    if (here) setHomeShown(true);
+    else if (!/^\/(title|play)\//.test(location.pathname)) setHomeShown(false);
+  });
   // Off a video's Versions page and its player, every kind is listed again (plans/plugins-and-marketplace.md 4.2).
   createEffect(on(() => location.pathname, (path) => !/\/versions\/|^\/play\//.test(path) && listEveryKind()));
   // A new page under the finger: the second tap of a double tap presses nothing on it (focus/ghost-tap.ts).
@@ -319,8 +338,10 @@ function Shell(props: RouteSectionProps) {
       () => {
         const then = takeAfterBack();
         if (then && then !== location.pathname) return navigate(then, { replace: true });
-        // A new page starts at its top, but a phone's document may keep its scroll with no event to follow.
-        setScrolled(false);
+        // A new page starts at its top, but a phone's document may keep its scroll with no event to follow. A kept Home
+        // comes back where it was, with no scroll to say so.
+        const kept = location.pathname === "/" && keepHome() ? document.querySelector<HTMLElement>(".home > main[data-vscroll]") : null;
+        setScrolled(!!kept && kept.scrollTop > 0);
         setDocScrolled(window.scrollY > 0);
         // The tab and history name the screen; a title, Versions and the
         // player name their title themselves once it is known.
@@ -422,6 +443,9 @@ function Shell(props: RouteSectionProps) {
             </Show>
             <div class="screen" classList={{ barred: backPlace() === "bar" }} inert={searchOpen() || undefined}>
               <Show when={access() + 1} keyed>
+                <Show when={keepHome() && homeShown()}>
+                  <Home />
+                </Show>
                 <Show when={!barred()}>{props.children}</Show>
               </Show>
             </div>
@@ -494,7 +518,7 @@ export function App() {
 function routes() {
   return (
     <>
-      <Route path="/" component={Home} />
+      <Route path="/" component={HomeRoute} />
       <Route path="/title/:kind/:id" component={Title} />
       <Route path="/title/:kind/:id/versions/:videoId" component={Versions} />
       <Route path="/play/:kind/:id/:videoId" component={Player} />

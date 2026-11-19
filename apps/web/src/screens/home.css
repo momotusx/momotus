@@ -1,6 +1,13 @@
 /* Home: the full-bleed hero, then the shelves (design/DECISION.md, Home and Shelves). */
 
 .home .page { position: absolute; inset: 0; padding-bottom: var(--safe-bottom); }
+/* TV and desktop keep Home under a title, Versions or the player (app.tsx, keepHome). It fills the screen as its page
+ * does, so hiding it moves no layout: it is moved out of the viewport, where nothing paints it or points at it and the
+ * hero's own observer stops its clock and its trailer. Only the transform changes: an inherited property (visibility,
+ * pointer-events) restyled all 1,200 of its elements each way, 40 ms at 6x CPU on Chromium 92. Back shows it as it was,
+ * scroll and tiles in place. */
+[data-form="tv"] .home, [data-form="desktop"] .home { position: absolute; inset: 0; }
+.home.away { transform: translateX(-200vw); }
 
 /* Backdrops: art that fades in once decoded, under its ramps of the page color (components/ramps.ts). */
 .bd { position: absolute; overflow: hidden; pointer-events: none; }
