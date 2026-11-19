@@ -61,6 +61,10 @@ class DownloadKeeper(
     var anyDone: Boolean by mutableStateOf(false)
         private set
 
+    /** A download is moving now: the app updater does not install under it (plans/auto-update.md). */
+    var running = false
+        private set
+
     /** The failure notices up, so a profile change takes them down. */
     private val failures = mutableSetOf<Int>()
 
@@ -70,6 +74,7 @@ class DownloadKeeper(
             val view = session.downloads()
             snapshotFlow { view.snapshot }.filterNotNull().collect {
                 val facts = KeeperFacts.of(it)
+                running = facts.running > 0
                 // A locked view lists nothing: what the profile has stays as it last said.
                 if (!facts.locked) anyDone = facts.done.isNotEmpty()
                 on(KeeperEvent.Facts(facts))
