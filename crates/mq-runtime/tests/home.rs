@@ -2457,3 +2457,58 @@ async fn perf_home_and_a_play() {
         })
     );
 }
+
+/// A Home of many catalogs that all answer while its push waits (a warm
+/// cache, a busy core) sends each row's answer, never every row again as a
+/// reset: a reset of a hundred rows is most of a megabyte for the apps.
+#[tokio::test]
+async fn a_burst_of_row_answers_never_comes_back_as_a_reset() {
+    let core = Core::temporary("p").unwrap();
+    let mut addons = Vec::new();
+    for n in 0..40 {
+        addons.push(
+            named_catalog_addon(
+                &format!("a{n}"),
+                &format!("Row {n}"),
+                Duration::ZERO,
+                200,
+                METAS,
+            )
+            .await,
+        );
+    }
+    core.library()
+        .set_addons("p", &addons, &core.hlc())
+        .unwrap();
+    let view = HomeView::open(&core);
+    let (snapshot, mut updates) = view.subscribe();
+    assert_eq!(snapshot.rows.len(), 40);
+    // Nothing reads the pushes until every row has its answer.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    while view
+        .snapshot()
+        .rows
+        .iter()
+        .any(|r| r.state != RowState::Ready)
+    {
+        assert!(tokio::time::Instant::now() < deadline, "rows answer");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let mut mirror = snapshot.rows.clone();
+    while let Ok(Some(batch)) =
+        tokio::time::timeout(Duration::from_millis(300), updates.next()).await
+    {
+        for update in &batch {
+            if let HomeUpdate::Rows { diffs } = update {
+                assert!(
+                    !diffs
+                        .iter()
+                        .any(|d| matches!(d, mq_runtime::live::ListDiff::Reset { .. })),
+                    "no reset"
+                );
+            }
+        }
+        apply(&mut mirror, batch);
+    }
+    assert_eq!(mirror, view.snapshot().rows);
+}
