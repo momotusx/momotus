@@ -37,6 +37,11 @@ class UpdateFeedTest {
     }
 
     @Test
+    fun `the pinned key is the shared public key file`() {
+        assertEquals(File("../../shared/update-feed-key.pub.pem").readText(), UpdateFeed.KEY)
+    }
+
+    @Test
     fun `the release key is a P-256 key and refuses the test feed`() {
         val release = UpdateFeed.publicKey(UpdateFeed.KEY)
         assertEquals("EC", release.algorithm)
