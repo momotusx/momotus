@@ -310,7 +310,10 @@ impl HomeView {
         let access = core.library().subscribe();
         let slots = board(core);
         let ids = slots.iter().map(|s| s.row_id.clone()).collect();
-        let mut initial = ObservableVector::new();
+        // Room for every row's answer and a removal in one burst: a push
+        // that falls further behind than its buffer gets every row again
+        // as a reset (850 KB on a 118-catalog Home).
+        let mut initial = ObservableVector::with_capacity(16.max(slots.len() * 2 + 8));
         if kids {
             initial.push_back(kids_row(core));
         }
