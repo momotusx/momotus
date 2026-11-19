@@ -564,6 +564,21 @@ struct Deferred<Content: View>: View {
     var body: some View { make() }
 }
 
+/// Its children stacked over its whole frame, later ones on top, as a ZStack that fills. It takes its size from the
+/// proposal and never asks its children: a ZStack of whole places answered every minimum-size question (a safe-area
+/// inset's, the Mac window's) by measuring each place's pages and their scroll views, on every update.
+struct Fill: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        proposal.replacingUnspecifiedDimensions(by: .zero)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for subview in subviews {
+            subview.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
+        }
+    }
+}
+
 struct FlowRow: Layout {
     var spacing: CGFloat = 12
     /// Each line centered in the row (the iPhone title's secondaries), else from the leading edge.
