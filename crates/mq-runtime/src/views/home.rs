@@ -1037,16 +1037,25 @@ async fn load_catalogs(
 ) {
     let mut calls = JoinSet::new();
     let mine: Vec<String> = slots.iter().map(|s| s.row_id.clone()).collect();
+    // Answers are read off the core's workers, one per CPU at a time: read
+    // on the workers, a hundred catalogs from the cache kept every other
+    // task (this view's own push, the next request) waiting behind them.
+    let readers = Arc::new(tokio::sync::Semaphore::new(
+        std::thread::available_parallelism().map_or(2, std::num::NonZero::get),
+    ));
     for slot in slots {
-        let core = core.clone();
-        // Each answer is read in its own task, so a Home of a hundred
-        // catalogs from the cache reads them on every worker at once.
+        let (core, readers) = (core.clone(), readers.clone());
         calls.spawn(async move {
             let result = core
                 .addons()
                 .fetch(&slot.addon, &slot.path, HARD_DEADLINE)
                 .await;
-            (slot.row_id, catalog_tiles(&core, result))
+            let _turn = readers.acquire_owned().await;
+            let tiles = mq_rt::spawn_blocking(move || catalog_tiles(&core, result)).await;
+            (
+                slot.row_id,
+                tiles.unwrap_or_else(|_| Err(crate::core::UNREADABLE_LIST.to_owned())),
+            )
         });
     }
     let soft = mq_rt::sleep(SOFT_DEADLINE);
