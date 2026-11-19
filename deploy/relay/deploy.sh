@@ -14,7 +14,7 @@
 set -euo pipefail
 
 SSH=${MQ_RELAY_SSH:?set MQ_RELAY_SSH to the ssh target of the server}
-TRUNK=feat/protocol-wire
+TRUNK=origin/main
 ROOT=$(git rev-parse --show-toplevel)
 INSTANCE=$(cd "$(dirname "${1:-$ROOT/deploy/relay/momotus.env}")" && pwd)/$(basename "${1:-momotus.env}")
 cd "$ROOT"
@@ -24,6 +24,7 @@ NAME="" HOST=""
 PUBLIC=https://$HOST
 
 COMMIT=$(git rev-parse --short=8 HEAD)
+git fetch -q origin main
 git merge-base --is-ancestor HEAD "$TRUNK" || { echo "deploy: $COMMIT is not on $TRUNK" >&2; exit 1; }
 git diff --quiet HEAD -- crates Cargo.toml Cargo.lock deploy/relay || { echo "deploy: uncommitted changes under crates or deploy/relay" >&2; exit 1; }
 
