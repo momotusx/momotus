@@ -8,6 +8,7 @@
 use crate::engine::{
     Session, SyncConfig, SyncError, host, options, pinned, relay_info, require_secure,
 };
+use crate::store::Store;
 use crate::wire::{
     CancelDeletion, IdentityLink, LinkRequest, NativeToken, StartRequest, StartResponse,
     TakeRequest, Taken, UnlinkRequest, nonce_for,
@@ -15,7 +16,6 @@ use crate::wire::{
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64URL;
 use mq_http::{Body, HttpClient, HttpError, Method};
-use mq_library::Library;
 use mq_library::hlc::HlcClock;
 use sha2::{Digest, Sha256};
 
@@ -322,8 +322,8 @@ impl EmailFlow {
 /// device stuck on a fork can still make them. Only a token the relay does
 /// not know opens a session, which signs for a fresh one: then also the
 /// record to store.
-async fn with_token(
-    library: &Library,
+pub(crate) async fn with_token(
+    store: Store<'_>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
@@ -332,7 +332,7 @@ async fn with_token(
     body: Option<serde_json::Value>,
 ) -> Result<(mq_http::Response, Option<SyncConfig>), SyncError> {
     require_secure(&config.server)?;
-    pinned(library, config, &relay_info(http, &config.server).await?)?;
+    pinned(store, config, &relay_info(http, &config.server).await?)?;
     let call = |server: &str, token: &str| {
         let (url, options) = (format!("{server}{path}"), options(server, token));
         let (method, body) = (method.clone(), body.clone().map(Body::Json));
@@ -340,7 +340,7 @@ async fn with_token(
     };
     match call(&config.server, &config.device_token).await {
         Err(HttpError::Status { status: 401, .. }) => {
-            let session = Session::open(library, http, config, clock).await?;
+            let session = Session::open(store, http, config, clock).await?;
             let answer = call(session.server(), session.token()).await?;
             Ok((answer, session.changed()))
         }
@@ -349,18 +349,19 @@ async fn with_token(
 }
 
 /// The account's identity links: the provider and when, nothing else.
-pub async fn identities(
-    library: &Library,
+pub async fn identities<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
 ) -> Result<(Vec<IdentityLink>, Option<SyncConfig>), SyncError> {
+    let store = store.into();
     #[derive(serde::Deserialize)]
     struct Links {
         links: Vec<IdentityLink>,
     }
     let (answer, record) = with_token(
-        library,
+        store,
         http,
         config,
         clock,
@@ -374,21 +375,22 @@ pub async fn identities(
 
 /// Links a sign-in's identity to this account. Linked elsewhere:
 /// `linkedElsewhere`, unless `move_link` takes it over.
-pub async fn link_identity(
-    library: &Library,
+pub async fn link_identity<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     ticket: &str,
     move_link: bool,
 ) -> Result<Option<SyncConfig>, SyncError> {
+    let store = store.into();
     let body = serde_json::to_value(LinkRequest {
         ticket: ticket.to_owned(),
         move_link,
     })
     .expect("plain struct");
     let (_, record) = with_token(
-        library,
+        store,
         http,
         config,
         clock,
@@ -403,21 +405,22 @@ pub async fn link_identity(
 /// Unlinks by link id; `receipt`: an Apple revoke's, when it ran. A link
 /// already gone counts as unlinked (the relay answers so), so a retry after
 /// a lost answer succeeds.
-pub async fn unlink_identity(
-    library: &Library,
+pub async fn unlink_identity<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     link: i64,
     receipt: Option<&str>,
 ) -> Result<Option<SyncConfig>, SyncError> {
+    let store = store.into();
     let body = serde_json::to_value(UnlinkRequest {
         receipt: receipt.map(str::to_owned),
     })
     .expect("plain struct");
     let path = format!("/v1/identity/{link}");
     let (_, record) = with_token(
-        library,
+        store,
         http,
         config,
         clock,
@@ -431,16 +434,17 @@ pub async fn unlink_identity(
 
 /// Cancels a scheduled deletion; `unlink` also removes the identity that
 /// asked for it.
-pub async fn cancel_deletion(
-    library: &Library,
+pub async fn cancel_deletion<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     unlink: bool,
 ) -> Result<Option<SyncConfig>, SyncError> {
+    let store = store.into();
     let body = serde_json::to_value(CancelDeletion { unlink }).expect("plain struct");
     let (_, record) = with_token(
-        library,
+        store,
         http,
         config,
         clock,

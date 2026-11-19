@@ -104,6 +104,24 @@ pub struct IdentityFile {
     /// Sign-in by a code mailed through Amazon SES (plans/accounts-email.md).
     #[serde(default)]
     pub email: Option<email::EmailConfig>,
+    /// 32 bytes as hex: the escrow key (`--escrow`). Whoever holds it with a
+    /// copy of the database opens every escrowed kit, so every account.
+    #[serde(default)]
+    pub escrow_key: Option<String>,
+}
+
+impl IdentityFile {
+    /// The escrow key, if the file has one.
+    pub fn escrow(&self) -> Result<Option<mq_sync::escrow::EscrowKey>, String> {
+        let Some(key) = &self.escrow_key else {
+            return Ok(None);
+        };
+        let key: [u8; 32] = hex::decode(key)
+            .ok()
+            .and_then(|k| k.try_into().ok())
+            .ok_or("the escrow key must be 32 bytes of hex")?;
+        Ok(Some(mq_sync::escrow::EscrowKey::new(&key)))
+    }
 }
 
 impl std::fmt::Debug for IdentityFile {
@@ -261,6 +279,8 @@ struct Verified {
 /// The relay's sign-in state: the configuration and the provider caches.
 pub struct Identity {
     file: IdentityFile,
+    /// The escrow key, in escrow mode (`crate::escrow`).
+    pub(crate) escrow: Option<mq_sync::escrow::EscrowKey>,
     key: [u8; 32],
     apple_key: Option<Vec<u8>>,
     public_host: String,
@@ -333,6 +353,7 @@ impl Identity {
             http: HttpClient::new(Default::default()).map_err(|e| e.to_string())?,
             discovery: Mutex::default(),
             jwks: Mutex::default(),
+            escrow: None,
             file,
         })
     }
@@ -828,7 +849,7 @@ pub(crate) fn coded(status: StatusCode, code: &str, words: &str) -> Response {
 }
 
 /// A sign-in budget spent: the apps say to try again in a minute.
-fn busy() -> Response {
+pub(crate) fn busy() -> Response {
     coded(
         StatusCode::TOO_MANY_REQUESTS,
         "busy",
@@ -1679,6 +1700,7 @@ pub(crate) async fn link(
         Ok(auth) => auth,
         Err(refusal) => return *refusal,
     };
+    let escrow = crate::escrow::key(&state).is_some();
     let mine = hex::encode(auth.account.0);
     let done = (|| -> rusqlite::Result<Result<(), Response>> {
         let tx = db.transaction()?;
@@ -1688,7 +1710,10 @@ pub(crate) async fn link(
         match identity_link(&tx, &provider, &subject)? {
             Some((_, account)) if account == mine => {}
             Some(_) if !request.move_link => return Ok(Err(linked_elsewhere())),
-            Some((link, _)) => {
+            Some((link, from)) => {
+                if let Some(refused) = crate::escrow::first_link(&tx, escrow, &from, link)? {
+                    return Ok(Err(refused));
+                }
                 tx.execute(
                     "UPDATE identity SET account = ?2, created_ms = ?3 WHERE link = ?1",
                     params![link, mine, now as i64],
@@ -1728,6 +1753,7 @@ pub(crate) async fn unlink(
 ) -> Response {
     let receipt = body.and_then(|Json(b)| b.receipt);
     let now = state.now_ms();
+    let escrow = crate::escrow::key(&state).is_some();
     let mut db = lock(&state);
     let auth = match active(authorize(&db, &headers)) {
         Ok(auth) => auth,
@@ -1747,6 +1773,11 @@ pub(crate) async fn unlink(
         let Some(provider) = provider else {
             return Ok(Ok(()));
         };
+        if let Some(refused) =
+            crate::escrow::first_link(&tx, escrow, &hex::encode(auth.account.0), link)?
+        {
+            return Ok(Err(refused));
+        }
         if let Some(refused) = check_receipt(&tx, receipt.as_deref(), &[link], now)? {
             return Ok(Err(refused));
         }
@@ -1878,6 +1909,9 @@ pub(crate) async fn cancel_deletion(
     body: Option<Json<CancelDeletion>>,
 ) -> Response {
     let unlink = body.is_some_and(|Json(b)| b.unlink);
+    // Escrow mode: the account's first link stays (`escrow::first_link`); the
+    // deletion is still cancelled.
+    let escrow = crate::escrow::key(&state).is_some();
     let mut db = lock(&state);
     let auth = match active(authorize(&db, &headers)) {
         Ok(auth) => auth,
@@ -1900,9 +1934,13 @@ pub(crate) async fn cancel_deletion(
             return Ok(false);
         };
         tx.execute("DELETE FROM deletion WHERE account = ?1", params![account])?;
+        let kept = match link {
+            Some(link) => crate::escrow::first_link(&tx, escrow, &account, link)?.is_some(),
+            None => false,
+        };
         // Only this account's: a link id from a journal line can name
         // another account's link after a restore.
-        if let (true, Some(link)) = (unlink, link) {
+        if let (true, false, Some(link)) = (unlink, kept, link) {
             tx.execute(
                 "DELETE FROM identity WHERE link = ?1 AND account = ?2",
                 params![link, account],

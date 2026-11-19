@@ -430,6 +430,49 @@ pub struct AccountResponse {
     pub device_token: String,
 }
 
+/// An escrow relay's HPKE public key, at `GET /v1/escrow`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EscrowInfo {
+    pub public_key: crate::roster::Hex<32>,
+}
+
+/// A kit secret for escrow, sealed to the relay's escrow key.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EscrowPut {
+    pub sealed: String,
+}
+
+/// A completed sign-in's ticket, spent for the account's escrowed kit,
+/// sealed to `to` (an X25519 public key the taker holds the secret of).
+#[derive(Clone, Serialize, Deserialize)]
+pub struct EscrowTake {
+    pub ticket: String,
+    pub to: crate::roster::Hex<32>,
+}
+
+impl std::fmt::Debug for EscrowTake {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EscrowTake").finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EscrowTaken {
+    pub sealed: String,
+}
+
+/// What the relay holds in escrow for the token's account (`GET /v1/escrow/status`):
+/// the kit, whether it is still a kit of the roster, and whether it was put
+/// before the relay's last rekey (then every device should replace it).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EscrowStatus {
+    pub kit_id: Option<Id>,
+    pub current: bool,
+    pub stale: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use base64::Engine as _;

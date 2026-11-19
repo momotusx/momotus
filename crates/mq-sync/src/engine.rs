@@ -3,17 +3,19 @@
 //! never stop the pull, so one bad record cannot cut a device off from its
 //! other devices.
 //!
-//! State lives in the library's `sync_state`, outbox and roster store, so a
-//! crash at any point only repeats work: pushes are upserts, applies are
-//! idempotent, and taking a new key is repeatable from this device's own box
-//! in the roster. The keystore record (`SyncConfig`) is the app's: a round
-//! that changes it returns it and publishes nothing until the app stored it.
+//! State lives in the app's store (`Store`: its registers and outbox, and the
+//! engine's bookkeeping: cursors and the roster), so a crash at any point
+//! only repeats work: pushes are upserts, applies are idempotent, and taking
+//! a new key is repeatable from this device's own box in the roster. The
+//! keystore record (`SyncConfig`) is the app's: a round that changes it
+//! returns it and publishes nothing until the app stored it.
 
 use crate::roster::{
     Bundle, Digest32, Entry, Hex, Id, Kind, Member, MemberSecret, Role, Roster, RosterError,
     TokenRequest, open_form, open_name,
 };
 use crate::seal::{AccountKey, SealError};
+use crate::store::{Bookkeeping, Store};
 use crate::wire::{
     AccountRequest, AccountResponse, AppendRequest, MAX_CLOCK_AHEAD_MS, PAGE, PullResponse,
     PushRequest, PushResponse, Refusal, RelayInfo, ReplayRequest, RosterHead, RosterPage,
@@ -23,7 +25,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
 use mq_http::{HttpClient, HttpError, Priority, RequestOptions};
 use mq_library::hlc::{Hlc, HlcClock, MAX_WALL_MS};
-use mq_library::{Library, LibraryError, SignedEntry, SyncRecord};
+use mq_library::{LibraryError, SignedEntry, SyncRecord};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Duration;
@@ -49,8 +51,8 @@ const FORK: &str = "fork";
 /// Roster changes other members made, kept until a round reports them.
 const ANNOUNCE: &str = "announce";
 
-/// Shape version of register values this build writes; newer ones are
-/// skipped until the app updates.
+/// Shape version of the register values Momotus writes (`Store::shapes`);
+/// newer ones are skipped until the app updates.
 pub const SHAPES: u16 = 1;
 /// What this build can read. Raising it makes every device pull everything
 /// again once, to apply records an older build skipped.
@@ -281,8 +283,10 @@ fn announcements(
 }
 
 /// The roster changes not acknowledged yet.
-pub fn queued_announcements(library: &Library) -> Vec<Announcement> {
-    library
+pub fn queued_announcements<'s>(store: impl Into<Store<'s>>) -> Vec<Announcement> {
+    let store = store.into();
+    store
+        .book
         .sync_state(ANNOUNCE)
         .ok()
         .flatten()
@@ -290,10 +294,10 @@ pub fn queued_announcements(library: &Library) -> Vec<Announcement> {
         .unwrap_or_default()
 }
 
-fn keep_queued(library: &Library, mut queued: Vec<Announcement>) -> Result<(), SyncError> {
+fn keep_queued(store: Store<'_>, mut queued: Vec<Announcement>) -> Result<(), SyncError> {
     trim(&mut queued);
     let queued = serde_json::to_string(&queued).expect("announcements serialize");
-    library.set_sync_state(ANNOUNCE, &queued)?;
+    store.book.set_sync_state(ANNOUNCE, &queued)?;
     Ok(())
 }
 
@@ -348,12 +352,13 @@ fn trim(queued: &mut Vec<Announcement>) {
 
 /// The user saw these announcements: no round reports them again. Ids
 /// not queued (acknowledged before, or never made) are skipped.
-pub fn ack_announcements(library: &Library, ids: &[String]) -> Result<(), SyncError> {
-    let mut queued = queued_announcements(library);
+pub fn ack_announcements<'s>(store: impl Into<Store<'s>>, ids: &[String]) -> Result<(), SyncError> {
+    let store = store.into();
+    let mut queued = queued_announcements(store);
     let before = queued.len();
     queued.retain(|a| !ids.contains(&a.id));
     if queued.len() != before {
-        keep_queued(library, queued)?;
+        keep_queued(store, queued)?;
     }
     Ok(())
 }
@@ -485,6 +490,18 @@ pub enum SyncError {
     /// The pairing code ended (5 minutes) or never was.
     #[error("this pairing code expired")]
     CodeExpired,
+    /// Escrow relay: this would drop the kit kept in escrow; put another
+    /// kit in escrow first (`escrow::ensure` after a new kit, or `escrow::put`).
+    #[error(
+        "put another kit in escrow first: this removes the one a sign-in opens the account with"
+    )]
+    EscrowKit,
+    /// Escrow relay: the account's first sign-in cannot be unlinked or moved.
+    #[error("this sign-in is the account's first, which always opens it")]
+    LastLink,
+    /// Escrow relay: the account a sign-in found keeps no kit there.
+    #[error("this account keeps no kit for sign-in; sign in on a device that has it")]
+    NoEscrow,
 }
 
 /// The relay's coded answers map in one place. Only the relay's own 410
@@ -516,6 +533,9 @@ impl From<HttpError> for SyncError {
             (403, Some("wrongCode")) => SyncError::WrongCode,
             (409, Some("codeAnswered")) => SyncError::CodeAnswered,
             (410, Some("codeExpired")) => SyncError::CodeExpired,
+            (403, Some("escrowKit")) => SyncError::EscrowKit,
+            (403, Some("lastLink")) => SyncError::LastLink,
+            (404, Some("noEscrow")) => SyncError::NoEscrow,
             _ => SyncError::Http(e),
         }
     }
@@ -583,6 +603,9 @@ impl SyncError {
             SyncError::UnlockRequired => "unlockRequired",
             SyncError::CodeAnswered => "codeAnswered",
             SyncError::CodeExpired => "codeExpired",
+            SyncError::EscrowKit => "escrowKit",
+            SyncError::LastLink => "lastLink",
+            SyncError::NoEscrow => "noEscrow",
             _ => return None,
         })
     }
@@ -603,26 +626,28 @@ struct Payload {
     s: u16,
 }
 
-pub async fn sync_once(
-    library: &Library,
+pub async fn sync_once<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
 ) -> Result<SyncReport, SyncError> {
-    sync_from(library, http, config, clock, None).await
+    let store = store.into();
+    sync_from(store, http, config, clock, None).await
 }
 
 /// `sync_once` from a build whose own sync server is `home`: a record whose
 /// server is lost follows the relay it joined there (`reach`).
-pub async fn sync_from(
-    library: &Library,
+pub async fn sync_from<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     home: Option<&str>,
 ) -> Result<SyncReport, SyncError> {
+    let store = store.into();
     let mut report = SyncReport::default();
-    let mut session = Session::open_from(library, http, config, clock, home).await?;
+    let mut session = Session::open_from(store, http, config, clock, home).await?;
     session.upkeep(&mut report).await?;
     let pushed = match session.may_publish() {
         true => session.push(&mut report).await,
@@ -634,14 +659,15 @@ pub async fn sync_from(
 }
 
 /// Only the push half, for when the app goes to the background.
-pub async fn push_changes(
-    library: &Library,
+pub async fn push_changes<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
 ) -> Result<SyncReport, SyncError> {
+    let store = store.into();
     let mut report = SyncReport::default();
-    let mut session = Session::open(library, http, config, clock).await?;
+    let mut session = Session::open(store, http, config, clock).await?;
     session.upkeep(&mut report).await?;
     if session.may_publish() {
         session.push(&mut report).await?;
@@ -650,14 +676,15 @@ pub async fn push_changes(
 }
 
 /// Only the pull half, for when the relay says something changed.
-pub async fn pull_changes(
-    library: &Library,
+pub async fn pull_changes<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
 ) -> Result<SyncReport, SyncError> {
+    let store = store.into();
     let mut report = SyncReport::default();
-    let mut session = Session::open(library, http, config, clock).await?;
+    let mut session = Session::open(store, http, config, clock).await?;
     session.pull(&mut report).await?;
     Ok(session.finish(report))
 }
@@ -762,7 +789,7 @@ pub(crate) async fn relay_info(http: &HttpClient, server: &str) -> Result<RelayI
 /// record's member. One member, one host: a relay answering with another
 /// relay's id cannot borrow what this member signs or sends for that one.
 pub(crate) fn pinned(
-    library: &Library,
+    store: Store<'_>,
     config: &SyncConfig,
     info: &RelayInfo,
 ) -> Result<(), SyncError> {
@@ -770,7 +797,7 @@ pub(crate) fn pinned(
         return Err(SyncError::WrongRelay);
     }
     pin_host(
-        library,
+        store.book,
         info.relay_id,
         &host(&config.server),
         config.secret().id(),
@@ -785,13 +812,13 @@ pub(crate) fn pinned(
 /// relay is `RelayGone` when the record's host does not resolve or serves
 /// another relay; a host that is silent or refuses only gives no answer.
 async fn reach(
-    library: &Library,
+    store: Store<'_>,
     http: &HttpClient,
     config: &SyncConfig,
     home: Option<&str>,
 ) -> Result<(String, RelayInfo), SyncError> {
     let lost = match relay_info(http, &config.server).await {
-        Ok(info) => match pinned(library, config, &info) {
+        Ok(info) => match pinned(store, config, &info) {
             Ok(()) => return Ok((config.server.clone(), info)),
             Err(e) => e,
         },
@@ -817,7 +844,7 @@ async fn reach(
             _ => SyncError::RelayGone,
         });
     }
-    pin(library, info.relay_id, &host(home), config.secret().id())?;
+    pin(store.book, info.relay_id, &host(home), config.secret().id())?;
     Ok((home.to_owned(), info))
 }
 
@@ -828,22 +855,22 @@ async fn reach(
 /// pointed at another host by hand; joins themselves never read the pin. A
 /// pin from before members were named is a bare host, re-pinned by whichever
 /// member comes next.
-fn pin_host(library: &Library, relay_id: Id, host: &str, member: Id) -> Result<(), SyncError> {
+fn pin_host(book: &dyn Bookkeeping, relay_id: Id, host: &str, member: Id) -> Result<(), SyncError> {
     let pin = format!("{RELAY_PIN}{}", hex::encode(relay_id.0));
     let member = hex::encode(member.0);
-    match library.sync_state(&pin)? {
+    match book.sync_state(&pin)? {
         Some(pinned) if pinned.split_once(' ') == Some((host, member.as_str())) => Ok(()),
         Some(pinned) if pinned.split_once(' ').is_some_and(|(_, m)| m == member) => {
             Err(SyncError::WrongRelay)
         }
-        _ => Ok(library.set_sync_state(&pin, &format!("{host} {member}"))?),
+        _ => Ok(book.set_sync_state(&pin, &format!("{host} {member}"))?),
     }
 }
 
 /// Pins `relay_id` to `host` for `member`, whatever it held.
-fn pin(library: &Library, relay_id: Id, host: &str, member: Id) -> Result<(), SyncError> {
+fn pin(book: &dyn Bookkeeping, relay_id: Id, host: &str, member: Id) -> Result<(), SyncError> {
     let key = format!("{RELAY_PIN}{}", hex::encode(relay_id.0));
-    Ok(library.set_sync_state(&key, &format!("{host} {}", hex::encode(member.0)))?)
+    Ok(book.set_sync_state(&key, &format!("{host} {}", hex::encode(member.0)))?)
 }
 
 /// The relay's host, as relay pins and token requests name it (its port may
@@ -908,27 +935,27 @@ pub(crate) fn require_secure(server: &str) -> Result<(), SyncError> {
 /// starts over, queueing everything and pulling from the start. A new token
 /// for the same account keeps them. The roster store stays (it belongs to
 /// the account, not the relay).
-fn prepare(library: &Library, info: &RelayInfo, account: &Id) -> Result<(), SyncError> {
+fn prepare(store: Store<'_>, info: &RelayInfo, account: &Id) -> Result<(), SyncError> {
     let target = format!(
         "{}|{}",
         hex::encode(info.relay_id.0),
         hex::encode(account.0)
     );
-    if library.sync_state(TARGET)?.as_deref() != Some(target.as_str()) {
+    if store.book.sync_state(TARGET)?.as_deref() != Some(target.as_str()) {
         for key in [PULL_SEQ, READER_SEEN, GENERATION, EPOCH_PARK] {
-            library.set_sync_state(key, "")?;
+            store.book.set_sync_state(key, "")?;
         }
-        library.set_sync_state(TARGET, &target)?;
+        store.book.set_sync_state(TARGET, &target)?;
     }
     // First contact (registers written before are not queued), or a relay
     // restored from a backup (a new generation) that lost what came after
     // it: send and read everything, starting with this round's push.
-    if library.sync_state(GENERATION)?.as_deref() != Some(info.generation.as_str()) {
-        library.queue_all()?;
+    if store.book.sync_state(GENERATION)?.as_deref() != Some(info.generation.as_str()) {
+        store.registers.queue_all()?;
         for key in [PULL_SEQ, EPOCH_PARK] {
-            library.set_sync_state(key, "")?;
+            store.book.set_sync_state(key, "")?;
         }
-        library.set_sync_state(GENERATION, &info.generation)?;
+        store.book.set_sync_state(GENERATION, &info.generation)?;
     }
     Ok(())
 }
@@ -997,8 +1024,9 @@ pub(crate) fn rebuild(entries: &[Entry]) -> Result<Roster, RosterError> {
     Ok(roster)
 }
 
-fn stored_entries(library: &Library, genesis: &str) -> Result<Vec<Entry>, SyncError> {
-    Ok(library
+fn stored_entries(store: Store<'_>, genesis: &str) -> Result<Vec<Entry>, SyncError> {
+    Ok(store
+        .book
         .roster_entries(genesis)?
         .into_iter()
         .map(|(body, sig)| Entry {
@@ -1018,7 +1046,7 @@ fn signed(entries: &[Entry]) -> Vec<SignedEntry> {
 /// One device's view of its account during a call: its keystore record,
 /// its verified roster and the relay.
 pub(crate) struct Session<'a> {
-    pub(crate) library: &'a Library,
+    pub(crate) store: Store<'a>,
     pub(crate) http: &'a HttpClient,
     clock: &'a HlcClock,
     /// What the app passed in.
@@ -1041,39 +1069,39 @@ impl<'a> Session<'a> {
     /// Checks the relay, catches up on the roster, confirms this device is a
     /// member and takes the newest key it holds a box for.
     pub(crate) async fn open(
-        library: &'a Library,
+        store: Store<'a>,
         http: &'a HttpClient,
         config: &SyncConfig,
         clock: &'a HlcClock,
     ) -> Result<Session<'a>, SyncError> {
-        Session::open_from(library, http, config, clock, None).await
+        Session::open_from(store, http, config, clock, None).await
     }
 
     /// `open`, following a lost relay to `home` (`reach`).
     async fn open_from(
-        library: &'a Library,
+        store: Store<'a>,
         http: &'a HttpClient,
         config: &SyncConfig,
         clock: &'a HlcClock,
         home: Option<&str>,
     ) -> Result<Session<'a>, SyncError> {
         require_secure(&config.server)?;
-        if library.sync_state(FORK)?.is_some_and(|f| !f.is_empty()) {
+        if store.book.sync_state(FORK)?.is_some_and(|f| !f.is_empty()) {
             return Err(SyncError::Fork);
         }
         let genesis = genesis_key(&config.keys);
-        let stored = stored_entries(library, &genesis)?;
+        let stored = stored_entries(store, &genesis)?;
         let (entries, roster) = match rebuild(&stored) {
             Ok(roster) => (stored, roster),
             // A damaged local store: start over from the relay, guarded by
             // the keystore checkpoint.
             Err(_) => {
-                library.clear_roster(&genesis)?;
+                store.book.replace_roster(&genesis, &[])?;
                 (Vec::new(), Roster::default())
             }
         };
         let mut session =
-            Session::connect(library, http, config, clock, entries, roster, home).await?;
+            Session::connect(store, http, config, clock, entries, roster, home).await?;
         session.catch_up().await?;
         session.joined()?;
         session.adopt()?;
@@ -1084,7 +1112,7 @@ impl<'a> Session<'a> {
     /// `entries` (verified as `roster`). A relay followed to `home` moves
     /// the record there (`reach`).
     async fn connect(
-        library: &'a Library,
+        store: Store<'a>,
         http: &'a HttpClient,
         config: &SyncConfig,
         clock: &'a HlcClock,
@@ -1093,7 +1121,7 @@ impl<'a> Session<'a> {
         home: Option<&str>,
     ) -> Result<Session<'a>, SyncError> {
         require_secure(&config.server)?;
-        let (server, info) = reach(library, http, config, home).await?;
+        let (server, info) = reach(store, http, config, home).await?;
         let mut record = SyncConfig {
             server,
             ..config.clone()
@@ -1101,9 +1129,9 @@ impl<'a> Session<'a> {
         if record.relay_id == Id::default() {
             record.relay_id = info.relay_id;
         }
-        prepare(library, &info, &config.keys.account)?;
+        prepare(store, &info, &config.keys.account)?;
         Ok(Session {
-            library,
+            store,
             http,
             clock,
             stored: config.clone(),
@@ -1153,19 +1181,19 @@ impl<'a> Session<'a> {
         if fresh.is_empty() {
             return Ok(());
         }
-        let mut queued = queued_announcements(self.library);
+        let mut queued = queued_announcements(self.store);
         for a in fresh {
             if !queued.iter().any(|q| q.id == a.id) {
                 queued.push(a);
             }
         }
-        keep_queued(self.library, queued)
+        keep_queued(self.store, queued)
     }
 
     fn keep(&mut self, entry: Entry) -> Result<(), SyncError> {
         if self.persist {
             let seq = self.roster.head().map_or(0, |(seq, _)| seq);
-            self.library.add_roster_entry(
+            self.store.book.add_roster_entry(
                 &genesis_key(&self.record.keys),
                 seq,
                 &entry.body,
@@ -1194,9 +1222,10 @@ impl<'a> Session<'a> {
             .unwrap_or_default();
         let key = format!("{FORK}:{}", genesis_key(&self.record.keys));
         let kept = self
-            .library
+            .store
+            .book
             .replace_roster(&key, &signed(&theirs))
-            .and_then(|()| self.library.set_sync_state(FORK, "1"));
+            .and_then(|()| self.store.book.set_sync_state(FORK, "1"));
         match kept {
             Ok(()) => SyncError::Fork,
             Err(e) => e.into(),
@@ -1210,7 +1239,7 @@ impl<'a> Session<'a> {
     pub(crate) async fn catch_up(&mut self) -> Result<(), SyncError> {
         let caught = self.read_roster().await;
         if matches!(caught, Err(SyncError::AccountGone)) {
-            self.library.forget_sync()?;
+            self.store.forget()?;
         }
         caught
     }
@@ -1343,7 +1372,7 @@ impl<'a> Session<'a> {
             return Ok(());
         }
         if self.roster.admitted(&id) {
-            self.library.forget_sync()?;
+            self.store.forget()?;
             return Err(SyncError::Dropped);
         }
         Err(SyncError::NotJoined)
@@ -1370,7 +1399,7 @@ impl<'a> Session<'a> {
 
     pub(crate) fn finish(&self, mut report: SyncReport) -> SyncReport {
         report.fingerprint = self.roster.fingerprint();
-        report.announcements = queued_announcements(self.library);
+        report.announcements = queued_announcements(self.store);
         if self.roster.rotation_pending() {
             report.blocked.get_or_insert(Blocked::RotationPending);
         }
@@ -1469,7 +1498,7 @@ impl<'a> Session<'a> {
     pub(crate) async fn upkeep(&mut self, report: &mut SyncReport) -> Result<(), SyncError> {
         let now = self.info.server_ms;
         let own = self.clock.wall_now();
-        for (key, deadlines) in self.library.sync_states(APPROVAL)? {
+        for (key, deadlines) in self.store.book.sync_states(APPROVAL)? {
             let member = &key[APPROVAL.len()..];
             let joined = id_of(member).is_some_and(|id| self.roster.members().contains_key(&id));
             // Late by either clock, so neither a relay nor a device whose
@@ -1479,14 +1508,15 @@ impl<'a> Session<'a> {
                 .zip([now, own])
                 .any(|(deadline, now)| deadline.parse::<u64>().is_ok_and(|d| d <= now));
             if joined {
-                self.library.delete_sync_state(&key)?;
+                self.store.book.delete_sync_state(&key)?;
             } else if late {
                 let cancel = format!("{CANCEL}{member}");
-                self.library.move_sync_state(&key, &cancel, "1")?;
+                self.store.book.move_sync_state(&key, &cancel, "1")?;
             }
         }
         let cancels: Vec<(String, Id)> = self
-            .library
+            .store
+            .book
             .sync_states(CANCEL)?
             .into_iter()
             .filter_map(|(key, _)| id_of(&key[CANCEL.len()..]).map(|id| (key, id)))
@@ -1507,7 +1537,7 @@ impl<'a> Session<'a> {
         let ids: Vec<Id> = cancels.iter().map(|(_, id)| *id).collect();
         self.rotate(|_| ids.clone()).await?;
         for (key, _) in cancels {
-            self.library.delete_sync_state(&key)?;
+            self.store.book.delete_sync_state(&key)?;
         }
         Ok(())
     }
@@ -1516,15 +1546,17 @@ impl<'a> Session<'a> {
         // A device that just joined pulls first: what the account holds
         // decides about its untouched defaults before it sends any
         // (plans/accounts-social-sync.md 13).
-        if self.library.join_defaults_pending()? {
+        if self.store.registers.join_defaults_pending()? {
             self.pull(report).await?;
-            self.library.settle_join_defaults(self.clock.device())?;
+            self.store
+                .registers
+                .settle_join_defaults(self.clock.device())?;
         }
         let mut restamped = HashSet::new();
         let mut behind = 0;
         loop {
             let key = AccountKey::from_bundle(&self.record.keys);
-            let page = self.library.outbox(PAGE)?;
+            let page = self.store.registers.outbox(PAGE)?;
             let Some(last_id) = page.last_id else {
                 return Ok(());
             };
@@ -1534,7 +1566,7 @@ impl<'a> Session<'a> {
             let mut bytes = 0;
             let mut through = last_id;
             for (id, record) in &page.records {
-                let wire = seal(&key, self.record.keys.epoch, record);
+                let wire = seal(&key, self.record.keys.epoch, self.store.shapes, record);
                 if !records.is_empty() && bytes + wire.body.len() > PUSH_BYTES {
                     through = id - 1;
                     break;
@@ -1544,7 +1576,7 @@ impl<'a> Session<'a> {
                 sent.push(record);
             }
             if records.is_empty() {
-                self.library.outbox_done(last_id)?;
+                self.store.registers.outbox_done(last_id)?;
                 continue;
             }
             let pushed = self
@@ -1601,7 +1633,7 @@ impl<'a> Session<'a> {
             // The relay holds a newer version of these, which this device may
             // have passed already: read from just before the oldest of them.
             if let Some(oldest) = response.stale_at.iter().min() {
-                lower_cursor(self.library, oldest.saturating_sub(1))?;
+                lower_cursor(self.store, oldest.saturating_sub(1))?;
             }
             let mut waiting = false;
             for refusal in &response.rejected {
@@ -1623,7 +1655,7 @@ impl<'a> Session<'a> {
                     Refusal::ClockAhead
                         if Hlc::decode(&record.hlc).is_none_or(|h| h.device != clock.device()) =>
                     {
-                        self.library.requeue(record.coll, &record.key)?;
+                        self.store.registers.requeue(record.coll, &record.key)?;
                         report.waiting += 1;
                         waiting = true;
                     }
@@ -1644,12 +1676,13 @@ impl<'a> Session<'a> {
                             .map(|current| current.next_for(device));
                         let at = above.map_or(floor, |above| above.max(floor));
                         clock.observe(at, clock.wall_now());
-                        self.library
+                        self.store
+                            .registers
                             .restamp(record.coll, &record.key, &at.encode())?;
                     }
                     Refusal::ClockAhead => {
                         // Still ahead after a restamp: keep it queued for a later round.
-                        self.library.requeue(record.coll, &record.key)?;
+                        self.store.registers.requeue(record.coll, &record.key)?;
                         report.waiting += 1;
                         waiting = true;
                     }
@@ -1659,7 +1692,7 @@ impl<'a> Session<'a> {
                     }
                 }
             }
-            self.library.outbox_done(through)?;
+            self.store.registers.outbox_done(through)?;
             // What waits is at the tail of the outbox now: stop, so a round
             // never loops on it.
             if waiting {
@@ -1686,10 +1719,11 @@ impl<'a> Session<'a> {
     }
 
     async fn pull(&mut self, report: &mut SyncReport) -> Result<(), SyncError> {
-        let reader = format!("{READER}.{SHAPES}");
-        let mut after: u64 = match self.library.sync_state(READER_SEEN)? {
+        let reader = format!("{READER}.{}", self.store.shapes);
+        let mut after: u64 = match self.store.book.sync_state(READER_SEEN)? {
             Some(seen) if seen == reader => self
-                .library
+                .store
+                .book
                 .sync_state(PULL_SEQ)?
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0),
@@ -1698,12 +1732,12 @@ impl<'a> Session<'a> {
         // Records parked for a key this device now holds are read again: the
         // cursor goes back first, so a round that fails right after still
         // reads them next time.
-        if let Some((seq, epoch)) = parked(self.library)?
+        if let Some((seq, epoch)) = parked(self.store)?
             && epoch <= self.record.keys.epoch
         {
-            lower_cursor(self.library, seq)?;
+            lower_cursor(self.store, seq)?;
             after = after.min(seq);
-            self.library.set_sync_state(EPOCH_PARK, "")?;
+            self.store.book.set_sync_state(EPOCH_PARK, "")?;
         }
         let mut keys: HashMap<u32, AccountKey> = HashMap::new();
         let mut started_over = false;
@@ -1719,21 +1753,25 @@ impl<'a> Session<'a> {
             observe_server(self.clock, page.server_ms);
             report.clock_gap_ms = self.clock.wall_now() as i64 - page.server_ms as i64;
             report.deletion = page.deletion.clone();
-            let known = self.library.sync_state(GENERATION)?.unwrap_or_default();
+            let known = self.store.book.sync_state(GENERATION)?.unwrap_or_default();
             let restored = page.head < after || (!known.is_empty() && known != page.generation);
             if restored && !started_over {
                 // The relay lost records (restored from a backup): send it
                 // everything this device holds and read it all again. Once per
                 // round, so a relay that keeps saying so cannot loop us.
                 started_over = true;
-                self.library.queue_all()?;
-                self.library.set_sync_state(GENERATION, &page.generation)?;
-                self.library.set_sync_state(PULL_SEQ, "0")?;
-                self.library.set_sync_state(EPOCH_PARK, "")?;
+                self.store.registers.queue_all()?;
+                self.store
+                    .book
+                    .set_sync_state(GENERATION, &page.generation)?;
+                self.store.book.set_sync_state(PULL_SEQ, "0")?;
+                self.store.book.set_sync_state(EPOCH_PARK, "")?;
                 after = 0;
                 continue;
             }
-            self.library.set_sync_state(GENERATION, &page.generation)?;
+            self.store
+                .book
+                .set_sync_state(GENERATION, &page.generation)?;
             // The relay's roster conflicts with this device's: a fork.
             if page.roster.is_some_and(|relay| self.diverged(&relay)) {
                 return Err(self.forked().await);
@@ -1750,12 +1788,12 @@ impl<'a> Session<'a> {
                     keys.clear();
                 }
                 let Some(key) = self.key_for(wire.epoch, &mut keys) else {
-                    park(self.library, wire.seq, wire.epoch)?;
+                    park(self.store, wire.seq, wire.epoch)?;
                     report.parked += 1;
                     continue;
                 };
                 match open(&key, wire) {
-                    Ok((_, shape)) if shape > SHAPES => report.newer += 1,
+                    Ok((_, shape)) if shape > self.store.shapes => report.newer += 1,
                     Ok((record, _)) => {
                         self.watch_old_epoch(wire, &record, report);
                         records.push(record);
@@ -1763,7 +1801,7 @@ impl<'a> Session<'a> {
                     // Under the current key while the roster moved: maybe a
                     // key for the same epoch number on another branch.
                     Err(_) if wire.epoch == self.record.keys.epoch && moved => {
-                        park(self.library, wire.seq, wire.epoch + 1)?;
+                        park(self.store, wire.seq, wire.epoch + 1)?;
                         report.parked += 1;
                     }
                     Err(e) => {
@@ -1783,14 +1821,15 @@ impl<'a> Session<'a> {
                 self.clock.observe(capped, self.clock.wall_now());
             }
             report.pulled += page.records.len() as u32;
-            report.applied += self.library.apply(&records)? as u32;
-            self.library
+            report.applied += self.store.registers.apply(&records)? as u32;
+            self.store
+                .book
                 .set_sync_state(PULL_SEQ, &page.last.to_string())?;
             // A relay that says "more" without moving forward is not followed.
             let stalled = page.last <= after;
             after = page.last;
             if !page.more || stalled {
-                self.library.set_sync_state(READER_SEEN, &reader)?;
+                self.store.book.set_sync_state(READER_SEEN, &reader)?;
                 return Ok(());
             }
         }
@@ -1820,19 +1859,20 @@ fn id_of(text: &str) -> Option<Id> {
         .map(Hex)
 }
 
-fn lower_cursor(library: &Library, to: u64) -> Result<(), SyncError> {
-    let cursor: u64 = library
+fn lower_cursor(store: Store<'_>, to: u64) -> Result<(), SyncError> {
+    let cursor: u64 = store
+        .book
         .sync_state(PULL_SEQ)?
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
     if to < cursor {
-        library.set_sync_state(PULL_SEQ, &to.to_string())?;
+        store.book.set_sync_state(PULL_SEQ, &to.to_string())?;
     }
     Ok(())
 }
 
-fn parked(library: &Library) -> Result<Option<(u64, u32)>, SyncError> {
-    Ok(library.sync_state(EPOCH_PARK)?.and_then(|text| {
+fn parked(store: Store<'_>) -> Result<Option<(u64, u32)>, SyncError> {
+    Ok(store.book.sync_state(EPOCH_PARK)?.and_then(|text| {
         let (seq, epoch) = text.split_once(':')?;
         Some((seq.parse().ok()?, epoch.parse().ok()?))
     }))
@@ -1840,13 +1880,15 @@ fn parked(library: &Library) -> Result<Option<(u64, u32)>, SyncError> {
 
 /// Remembers to read again from just before `seq` once a key for `epoch`
 /// arrives, before the cursor moves past it.
-fn park(library: &Library, seq: u64, epoch: u32) -> Result<(), SyncError> {
+fn park(store: Store<'_>, seq: u64, epoch: u32) -> Result<(), SyncError> {
     let resume = seq.saturating_sub(1);
-    let (seq, epoch) = match parked(library)? {
+    let (seq, epoch) = match parked(store)? {
         Some((at, e)) => (at.min(resume), e.min(epoch)),
         None => (resume, epoch),
     };
-    library.set_sync_state(EPOCH_PARK, &format!("{seq}:{epoch}"))?;
+    store
+        .book
+        .set_sync_state(EPOCH_PARK, &format!("{seq}:{epoch}"))?;
     Ok(())
 }
 
@@ -1866,12 +1908,12 @@ fn observe_server(clock: &HlcClock, server_ms: u64) {
     );
 }
 
-fn seal(key: &AccountKey, epoch: u32, record: &SyncRecord) -> WireRecord {
+fn seal(key: &AccountKey, epoch: u32, shapes: u16, record: &SyncRecord) -> WireRecord {
     let key_id = key.key_id(record.coll, &record.key);
     let payload = serde_json::to_vec(&Payload {
         k: record.key.clone(),
         v: record.value.clone(),
-        s: SHAPES,
+        s: shapes,
     })
     .expect("json values serialize");
     WireRecord {
@@ -2006,11 +2048,12 @@ fn member_infos(roster: &Roster, keys: &Bundle, me: &Id) -> Vec<MemberInfo> {
 
 /// The account's devices as lowercase hex member ids, from the roster this
 /// device stored (no record, no relay call); `None` outside an account.
-pub fn stored_devices(library: &Library) -> Result<Option<Vec<String>>, SyncError> {
-    let Some(genesis) = library.roster_genesis()? else {
+pub fn stored_devices<'s>(store: impl Into<Store<'s>>) -> Result<Option<Vec<String>>, SyncError> {
+    let store = store.into();
+    let Some(genesis) = store.book.roster_genesis()? else {
         return Ok(None);
     };
-    let roster = rebuild(&stored_entries(library, &genesis)?).map_err(roster_error)?;
+    let roster = rebuild(&stored_entries(store, &genesis)?).map_err(roster_error)?;
     let devices = roster
         .members()
         .iter()
@@ -2020,13 +2063,14 @@ pub fn stored_devices(library: &Library) -> Result<Option<Vec<String>>, SyncErro
     Ok(Some(devices))
 }
 
-pub async fn devices(
-    library: &Library,
+pub async fn devices<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
 ) -> Result<Devices, SyncError> {
-    let session = Session::open(library, http, config, clock).await?;
+    let store = store.into();
+    let session = Session::open(store, http, config, clock).await?;
     Ok(Devices {
         members: member_infos(&session.roster, &session.record.keys, &session.member.id()),
         fingerprint: session.roster.fingerprint(),
@@ -2068,14 +2112,15 @@ pub struct LostPreview {
     pub device_kits: Vec<DeviceKits>,
 }
 
-pub async fn lost_preview(
-    library: &Library,
+pub async fn lost_preview<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     lost: Id,
 ) -> Result<LostPreview, SyncError> {
-    let session = Session::open(library, http, config, clock).await?;
+    let store = store.into();
+    let session = Session::open(store, http, config, clock).await?;
     let me = session.member.id();
     let passkey_joined: Vec<Id> = session
         .roster
@@ -2124,14 +2169,15 @@ pub async fn lost_preview(
 
 /// Removes devices (no cascade) and starts a new key epoch without them.
 /// Returns the record to store.
-pub async fn remove_devices(
-    library: &Library,
+pub async fn remove_devices<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     ids: Vec<Id>,
 ) -> Result<SyncConfig, SyncError> {
-    let mut session = Session::open(library, http, config, clock).await?;
+    let store = store.into();
+    let mut session = Session::open(store, http, config, clock).await?;
     if ids.contains(&session.member.id()) {
         return Err(SyncError::Roster("sign out to remove this device".into()));
     }
@@ -2144,15 +2190,16 @@ pub async fn remove_devices(
 /// those in `keep` (never this device), every kit any of them added, and
 /// every passkey kit, whoever added it: the lost device may hold any synced
 /// passkey (3.2).
-pub async fn report_lost(
-    library: &Library,
+pub async fn report_lost<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     lost: Id,
     keep: Vec<Id>,
 ) -> Result<SyncConfig, SyncError> {
-    let mut session = Session::open(library, http, config, clock).await?;
+    let store = store.into();
+    let mut session = Session::open(store, http, config, clock).await?;
     let me = session.member.id();
     if lost == me {
         return Err(SyncError::Roster("this device cannot report itself".into()));
@@ -2177,32 +2224,33 @@ pub async fn report_lost(
 
 /// Signs this device out: sends what is still queued (unless `force`),
 /// leaves the roster and forgets sync state; the library stays.
-pub async fn sign_out(
-    library: &Library,
+pub async fn sign_out<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     force: bool,
 ) -> Result<(), SyncError> {
+    let store = store.into();
     let mut config = config.clone();
     for _ in 0..5 {
-        let report = sync_once(library, http, &config, clock).await?;
+        let report = sync_once(store, http, &config, clock).await?;
         if let Some(record) = report.record {
             config = record;
         }
-        if library.outbox(1)?.last_id.is_none() {
+        if store.registers.outbox(1)?.last_id.is_none() {
             break;
         }
     }
-    if !force && library.outbox(1)?.last_id.is_some() {
+    if !force && store.registers.outbox(1)?.last_id.is_some() {
         return Err(SyncError::Unsent);
     }
-    let mut session = Session::open(library, http, &config, clock).await?;
+    let mut session = Session::open(store, http, &config, clock).await?;
     let at_ms = clock.tick(clock.wall_now()).wall_ms;
     session
         .propose(|s| Ok(s.roster.leave(&s.member, at_ms)))
         .await?;
-    library.forget_sync()?;
+    store.forget()?;
     Ok(())
 }
 
@@ -2220,16 +2268,17 @@ pub async fn sign_out(
 /// out, the relay must be the one this device joined (its id, pinned to the
 /// host), as for every other call. The request is signed by this device's
 /// key: a token alone deletes nothing. `receipt`: an Apple revoke's.
-pub async fn delete_account(
-    library: &Library,
+pub async fn delete_account<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     receipt: Option<&str>,
 ) -> Result<(), SyncError> {
+    let store = store.into();
     require_secure(&config.server)?;
     let info = relay_info(http, &config.server).await?;
-    pinned(library, config, &info)?;
+    pinned(store, config, &info)?;
     let member = config.secret();
     let delete = |token: String, at_ms: u64| {
         let request = TokenRequest::new(
@@ -2262,7 +2311,7 @@ pub async fn delete_account(
         deleted,
         Err(SyncError::Http(HttpError::Status { status: 401, .. }))
     ) {
-        deleted = match Session::open(library, http, config, clock).await {
+        deleted = match Session::open(store, http, config, clock).await {
             Ok(session) => delete(session.token().to_owned(), session.info.server_ms).await,
             Err(e) => Err(e),
         };
@@ -2271,7 +2320,7 @@ pub async fn delete_account(
         Ok(_) | Err(SyncError::AccountGone) => {}
         Err(e) => return Err(e),
     }
-    library.forget_sync()?;
+    store.forget()?;
     Ok(())
 }
 
@@ -2342,14 +2391,15 @@ pub struct DeviceKits {
 
 /// Reads both sides of a fork and writes nothing: this device's branch from
 /// its store, the relay's read and checked in memory with the record's token.
-pub async fn fork_preview(
-    library: &Library,
+pub async fn fork_preview<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
 ) -> Result<ForkPreview, SyncError> {
+    let store = store.into();
     require_secure(&config.server)?;
     let local =
-        rebuild(&stored_entries(library, &genesis_key(&config.keys))?).map_err(roster_error)?;
+        rebuild(&stored_entries(store, &genesis_key(&config.keys))?).map_err(roster_error)?;
     let (entries, _) = fetch_roster(http, &config.server, &config.device_token, 0).await?;
     if entries.first().map(Entry::hash) != Some(config.keys.genesis) {
         return Err(SyncError::Roster(
@@ -2393,20 +2443,21 @@ pub async fn fork_preview(
 /// page that can reach the core could otherwise send one). Each admission
 /// is read on its own, not through a rebuilt roster: a store whose history
 /// no longer verifies is the case this way out exists for.
-pub fn leave_here(library: &Library, config: &SyncConfig) -> Result<(), SyncError> {
+pub fn leave_here<'s>(store: impl Into<Store<'s>>, config: &SyncConfig) -> Result<(), SyncError> {
+    let store = store.into();
     let me = config.secret().id();
     let admits_me = |entry: &Entry| match entry.parse().map(|b| b.kind) {
         Ok(Kind::Genesis(g)) => g.keys.id() == me,
         Ok(Kind::AddDevice(a)) => a.keys.id() == me,
         _ => false,
     };
-    if !stored_entries(library, &genesis_key(&config.keys))?
+    if !stored_entries(store, &genesis_key(&config.keys))?
         .iter()
         .any(admits_me)
     {
         return Err(SyncError::WrongRecord);
     }
-    library.forget_sync()?;
+    store.forget()?;
     Ok(())
 }
 
@@ -2418,17 +2469,18 @@ pub fn leave_here(library: &Library, config: &SyncConfig) -> Result<(), SyncErro
 /// This device's own branch stays in its store (and the fork flag stays
 /// set) until that revoke has landed, so a call that fails anywhere before
 /// can simply be made again.
-pub async fn use_server_roster(
-    library: &Library,
+pub async fn use_server_roster<'s>(
+    store: impl Into<Store<'s>>,
     http: &HttpClient,
     config: &SyncConfig,
     clock: &HlcClock,
     also_drop: Vec<Id>,
     reviewed: Option<Digest32>,
 ) -> Result<SyncConfig, SyncError> {
+    let store = store.into();
     require_secure(&config.server)?;
     let genesis = genesis_key(&config.keys);
-    let mine = stored_entries(library, &genesis)?;
+    let mine = stored_entries(store, &genesis)?;
     let local = rebuild(&mine).map_err(roster_error)?;
     let member = config.secret();
     let me = member.id();
@@ -2444,7 +2496,7 @@ pub async fn use_server_roster(
         ..config.clone()
     };
     let mut session = Session::connect(
-        library,
+        store,
         http,
         &detached,
         clock,
@@ -2482,13 +2534,17 @@ pub async fn use_server_roster(
         .await?;
     // Landed: the store takes the relay's branch, then everything is sent
     // and read again under the new key. The fork flag goes last.
-    library.replace_roster(&genesis, &signed(&session.entries))?;
+    store
+        .book
+        .replace_roster(&genesis, &signed(&session.entries))?;
     for key in [PULL_SEQ, EPOCH_PARK] {
-        library.set_sync_state(key, "")?;
+        store.book.set_sync_state(key, "")?;
     }
-    library.queue_all()?;
-    library.clear_roster(&format!("{FORK}:{genesis}"))?;
-    library.delete_sync_state(FORK)?;
+    store.registers.queue_all()?;
+    store
+        .book
+        .replace_roster(&format!("{FORK}:{genesis}"), &[])?;
+    store.book.delete_sync_state(FORK)?;
     let mut record = session.record.clone();
     record.revision = config.revision + 1;
     Ok(record)
@@ -2497,6 +2553,7 @@ pub async fn use_server_roster(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mq_library::Library;
 
     #[test]
     fn a_seq_past_usize_is_past_every_entry() {
