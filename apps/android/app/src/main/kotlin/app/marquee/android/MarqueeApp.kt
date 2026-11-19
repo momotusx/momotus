@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.marquee.core.ProfileCopy
+import app.marquee.core.UpdateFeed
 import app.marquee.core.client.CoreLog
 import app.marquee.core.client.DeviceCapsParams
 import app.marquee.core.client.snapshotValues
@@ -82,6 +83,10 @@ class MarqueeApp :
 
     /** Keeps downloads running while the user is away (plans/offline-downloads.md 5). */
     lateinit var downloadKeeper: DownloadKeeper
+        private set
+
+    /** Updates from GitHub Releases (plans/auto-update.md); null in builds without a feed (debug, walks, benchmarks). */
+    var updater: Updater? = null
         private set
 
     /**
@@ -163,6 +168,10 @@ class MarqueeApp :
                 }
             }.also { it.register() }
         downloadKeeper = DownloadKeeper(this, session).also { it.start() }
+        updater =
+            BuildConfig.UPDATE_FEED.takeIf { it.isNotEmpty() }?.let { feed ->
+                Updater(this, feed, BuildConfig.UPDATE_KEY.ifEmpty { UpdateFeed.KEY }).also { it.start() }
+            }
         val scan = session.scope.async(Dispatchers.Default) { DeviceCaps.scanCodecs() }
         deviceCaps = {
             runCatching {
