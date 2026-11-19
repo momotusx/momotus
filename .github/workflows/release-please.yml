@@ -185,6 +185,12 @@ jobs:
     needs: [release-please, apks, ipk]
     if: ${{ always() && needs.apks.result == 'success' && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
+    # The feed key lives in the release environment (main only).
+    environment: release
+    # One feed writer at a time: a rebuild of an older tag and a new release both read and write latest.json.
+    concurrency:
+      group: update-feed
+      cancel-in-progress: false
     permissions:
       contents: write
     env:
@@ -199,3 +205,31 @@ jobs:
           cat SHA256SUMS
           gh release upload "$TAG" SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"
           gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"
+      # The apps' update feed (plans/auto-update.md): latest.json on the fixed `updates` release, this release merged
+      # in (never lowering a version) and signed with the feed key; the apps pin its public half. Written last, so an
+      # app never sees a version whose release is still a draft.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Update feed
+        env:
+          UPDATE_FEED_KEY: ${{ secrets.UPDATE_FEED_KEY }}
+        run: |
+          [ -n "$UPDATE_FEED_KEY" ] || { echo "::error::secret UPDATE_FEED_KEY is not set in the release environment"; exit 1; }
+          (umask 077 && printf '%s\n' "$UPDATE_FEED_KEY" >"$RUNNER_TEMP/feed-key.pem")
+          if ! gh release view updates --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create updates --repo "$GITHUB_REPOSITORY" --target main --prerelease --title "Update feed" \
+              --notes "The Momotus apps read their update check from this release. It is not a version of Momotus."
+          fi
+          # A feed that is there must download: merging into nothing would drop the platforms this release lacks.
+          old=
+          if gh release view updates --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -qx latest.json; then
+            gh release download updates --repo "$GITHUB_REPOSITORY" --pattern latest.json --dir "$RUNNER_TEMP/feed"
+            old=$RUNNER_TEMP/feed/latest.json
+          fi
+          bash .github/scripts/update-feed.sh "$TAG" "$RUNNER_TEMP/assets" "$old" "$RUNNER_TEMP/feed-key.pem" >"$RUNNER_TEMP/latest.json"
+          jq -r .signed "$RUNNER_TEMP/latest.json" | jq .
+          gh release upload updates "$RUNNER_TEMP/latest.json" --clobber --repo "$GITHUB_REPOSITORY"
+      - name: Remove the feed key
+        if: ${{ always() }}
+        run: rm -f "$RUNNER_TEMP/feed-key.pem"
