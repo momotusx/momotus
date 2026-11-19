@@ -1,5 +1,5 @@
 [Unit]
-Description=Marquee sync relay backup, nightly
+Description=@TITLE@ backup, nightly
 
 [Timer]
 OnCalendar=*-*-* 04:20

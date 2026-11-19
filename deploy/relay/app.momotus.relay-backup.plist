@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- The Mac's daily pull of the relay's backups (pull-backup.sh). Installed by README.md's
-     command, which fills __SCRIPT__ and __SSH__ into ~/Library/LaunchAgents; the copy here names
-     no server. -->
+     command, which fills __SCRIPT__, __SSH__, __NAME__ (the instance) and __HEALTH__ (its
+     /v1/relay) into ~/Library/LaunchAgents; the copy here names no server. -->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>app.momotus.relay-backup</string>
+  <string>app.__NAME__.relay-backup</string>
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
@@ -16,6 +16,10 @@
   <dict>
     <key>MQ_RELAY_SSH</key>
     <string>__SSH__</string>
+    <key>MQ_RELAY_INSTANCE</key>
+    <string>__NAME__</string>
+    <key>MQ_PULL_HEALTH</key>
+    <string>__HEALTH__</string>
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>

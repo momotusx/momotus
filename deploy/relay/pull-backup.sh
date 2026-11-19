@@ -5,21 +5,29 @@
 # H9), checks its sums, keeps 7, and shows a notification when the last good pull or the public
 # health check is older than 48 hours.
 #
-#   MQ_RELAY_SSH=<ssh target> deploy/relay/pull-backup.sh
+#   MQ_RELAY_SSH=<ssh target> [MQ_RELAY_INSTANCE=<NAME>] deploy/relay/pull-backup.sh
+#
+# MQ_RELAY_INSTANCE (momotus) is the instance's NAME (momotus.env): its backups on the server and
+# its folder here; another instance also sets MQ_PULL_HEALTH to its own /v1/relay.
 #
 # The dry mode the tests use: MQ_PULL_SOURCE (a local folder in place of the server's),
 # MQ_PULL_DEST, MQ_PULL_HEALTH, MQ_PULL_MIN_FREE_KB, MQ_PULL_NOW and MQ_PULL_NOTIFY (a file that
 # collects the notifications).
 set -euo pipefail
 
-DEST=${MQ_PULL_DEST:-$HOME/.local/share/momotus/relay-backups}
+NAME=${MQ_RELAY_INSTANCE:-momotus}
+# Another instance names its own health check: Momotus's answering says nothing about it.
+[ "$NAME" = momotus ] || : "${MQ_PULL_HEALTH:?set MQ_PULL_HEALTH to the /v1/relay of instance $NAME}"
+DEST=${MQ_PULL_DEST:-$HOME/.local/share/$NAME/relay-backups}
 HEALTH=${MQ_PULL_HEALTH:-https://momotus.normalisdead.mom/v1/relay}
 MIN_FREE_KB=${MQ_PULL_MIN_FREE_KB:-5242880}
 NOW=${MQ_PULL_NOW:-$(date +%s)}
 KEEP=7
 STALE_S=$((48 * 3600))
 FRESH_S=$((36 * 3600))
-REMOTE_DIR=/var/lib/momotus/backups
+REMOTE_DIR=/var/lib/$NAME/backups
+TITLE="Momotus relay backup"
+[ "$NAME" = momotus ] || TITLE="$NAME relay backup"
 
 mkdir -p "$DEST"
 log() { echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) $1" >>"$DEST/pull.log"; }
@@ -27,7 +35,7 @@ notify() {
   if [ -n "${MQ_PULL_NOTIFY:-}" ]; then
     echo "$1" >>"$MQ_PULL_NOTIFY"
   else
-    osascript -e "display notification \"$1\" with title \"Momotus relay backup\"" || true
+    osascript -e "display notification \"$1\" with title \"$TITLE\"" || true
   fi
 }
 

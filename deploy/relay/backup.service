@@ -1,13 +1,14 @@
-# The relay's nightly backup (backup.py), as the relay's own user, with no network.
+# The relay's nightly backup (backup.py), as the relay's own user, with no network. Rendered by
+# deploy.sh into @NAME@-backup.service, as relay.service is.
 [Unit]
-Description=Marquee sync relay backup
+Description=@TITLE@ backup
 
 [Service]
 Type=oneshot
-User=momotus
-Group=momotus
-ExecStart=/usr/bin/python3 -I /opt/momotus/backup.py /var/lib/momotus
-StateDirectory=momotus
+User=@NAME@
+Group=@NAME@
+ExecStart=/usr/bin/python3 -I /opt/@NAME@/backup.py /var/lib/@NAME@
+StateDirectory=@NAME@
 StateDirectoryMode=0700
 UMask=0077
 NoNewPrivileges=yes
