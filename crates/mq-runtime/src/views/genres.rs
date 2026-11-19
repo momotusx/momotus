@@ -11,7 +11,7 @@ use crate::views::home::home_changed;
 use eyeball::SharedObservable;
 use futures_util::{Stream, StreamExt};
 use mq_library::Table;
-use mq_protocol::{ResourcePath, ResourceResponse, decode_catalog};
+use mq_protocol::{ResourcePath, ResourceResponse, decode_catalog_head};
 use mq_rt::Instant;
 use mq_rt::JoinHandle;
 use serde::Serialize;
@@ -313,7 +313,7 @@ async fn first_backdrop(core: &Core, catalog: &Catalog, genre: &str) -> Result<O
         .fetch(&catalog.addon, &path, TIMEOUT)
         .await
         .map_err(|_| ())?;
-    match decode_catalog(&fetched.body).map_err(|_| ())? {
+    match decode_catalog_head(&fetched.body, 1).map_err(|_| ())? {
         ResourceResponse::Metas { metas } => Ok(metas
             .into_iter()
             .next()

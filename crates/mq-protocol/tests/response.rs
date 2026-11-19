@@ -1,4 +1,4 @@
-use mq_protocol::{ResourceResponse, decode_catalog, decode_meta};
+use mq_protocol::{ResourceResponse, decode_catalog, decode_catalog_head, decode_meta};
 
 fn ids(body: &[u8]) -> Vec<String> {
     match decode_catalog(body).expect("decodes") {
@@ -178,4 +178,47 @@ fn legacy_genres_are_decoded_too() {
     };
     let names: Vec<_> = meta.preview.links.iter().map(|l| l.name.as_str()).collect();
     assert!(names.contains(&"Sci-Fi & Horror"), "{names:?}");
+}
+
+/// The head of a catalog is `decode_catalog`'s first distinct ids: a broken
+/// item or a repeat in the first part is made up from the items after it,
+/// and every shape that is not a plain list reads as `decode_catalog` does.
+#[test]
+fn a_catalogs_head_is_its_first_distinct_titles() {
+    let item = |id: serde_json::Value| serde_json::json!({"id": id, "type": "series", "name": "X", "imdbRating": "7.1"});
+    let mut list: Vec<_> = (0..30).map(|n| item(format!("tt{n}").into())).collect();
+    list[1] = item(2.into());
+    list[3] = item("tt0".into());
+    list[5] = item("tt4".into());
+    let body = serde_json::json!({ "metas": list, "cacheMaxAge": 60 }).to_string();
+    let head = |body: &[u8], limit| match decode_catalog_head(body, limit) {
+        Ok(ResourceResponse::Metas { metas }) => Ok(metas),
+        Ok(other) => panic!("expected metas, got {other:?}"),
+        Err(e) => Err(e.to_string()),
+    };
+    let ResourceResponse::Metas { metas: all } = decode_catalog(body.as_bytes()).unwrap() else {
+        panic!("expected metas");
+    };
+    let mut seen = std::collections::HashSet::new();
+    let distinct: Vec<_> = all
+        .into_iter()
+        .filter(|m| seen.insert(m.id.clone()))
+        .collect();
+    for limit in [1, 4, 20, 40] {
+        let want: Vec<_> = distinct.iter().take(limit).cloned().collect();
+        assert_eq!(head(body.as_bytes(), limit).unwrap(), want, "limit {limit}");
+    }
+    for body in [
+        r#"{}"#,
+        r#"{"metas": null}"#,
+        r#"{"metas": {"id": "tt1"}}"#,
+        r#"{"error": "no user"}"#,
+        r#"{"metas": [], "streams": []}"#,
+        "[]",
+        "not json",
+    ] {
+        let old = decode_catalog(body.as_bytes()).map_err(|e| e.to_string());
+        let new = decode_catalog_head(body.as_bytes(), 20).map_err(|e| e.to_string());
+        assert_eq!(new, old, "{body}");
+    }
 }

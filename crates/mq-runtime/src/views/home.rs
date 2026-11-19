@@ -17,7 +17,7 @@ use eyeball_im::ObservableVector;
 use futures_util::{Stream, StreamExt};
 use mq_addons::InstalledAddon;
 use mq_library::{AllowedRow, ContinueItem, Policy, Table};
-use mq_protocol::{MetaItem, ResourcePath, ResourceResponse, decode_catalog};
+use mq_protocol::{MetaItem, ResourcePath, ResourceResponse, decode_catalog_head};
 use mq_rt::JoinSet;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -1035,10 +1035,15 @@ async fn load_catalogs(
     let mut calls = JoinSet::new();
     let mine: Vec<String> = slots.iter().map(|s| s.row_id.clone()).collect();
     for slot in slots {
-        let client = core.addons().clone();
+        let core = core.clone();
+        // Each answer is read in its own task, so a Home of a hundred
+        // catalogs from the cache reads them on every worker at once.
         calls.spawn(async move {
-            let result = client.fetch(&slot.addon, &slot.path, HARD_DEADLINE).await;
-            (slot.row_id, result)
+            let result = core
+                .addons()
+                .fetch(&slot.addon, &slot.path, HARD_DEADLINE)
+                .await;
+            (slot.row_id, catalog_tiles(&core, result))
         });
     }
     let soft = mq_rt::sleep(SOFT_DEADLINE);
@@ -1048,8 +1053,8 @@ async fn load_catalogs(
         tokio::select! {
             joined = calls.join_next() => {
                 let Some(joined) = joined else { break };
-                let Ok((row_id, result)) = joined else { continue };
-                apply_catalog(&core, &rows, &row_id, result);
+                let Ok((row_id, outcome)) = joined else { continue };
+                apply_tiles(&rows, &row_id, outcome);
                 maybe_pick_hero(&rows, &header);
             }
             _ = &mut soft, if !soft_fired => {
@@ -1076,22 +1081,24 @@ fn apply_catalog(
     row_id: &str,
     result: Result<mq_addons::Fetched, mq_addons::AddonError>,
 ) {
-    let outcome = result
+    apply_tiles(rows, row_id, catalog_tiles(core, result));
+}
+
+/// A catalog's answer as a row's tiles, or why the row failed.
+fn catalog_tiles(
+    core: &Core,
+    result: Result<mq_addons::Fetched, mq_addons::AddonError>,
+) -> Result<Vec<Tile>, String> {
+    result
         .map_err(|e| crate::core::list_failure(&e))
         .and_then(|f| {
             core.learn_imdb_ids(&f.body);
-            decode_catalog(&f.body).map_err(crate::core::unreadable_list)
+            // Each title once, where it first shows: a history catalog lists a
+            // series once per episode watched (Trakt History Series, DARK five times).
+            decode_catalog_head(&f.body, ROW_TILES).map_err(crate::core::unreadable_list)
         })
         .and_then(|response| match response {
             ResourceResponse::Metas { metas } => {
-                // Each title once, where it first shows: a history catalog lists a
-                // series once per episode watched (Trakt History Series, DARK five times).
-                let mut seen = HashSet::new();
-                let metas: Vec<_> = metas
-                    .into_iter()
-                    .filter(|m| seen.insert(m.id.clone()))
-                    .take(ROW_TILES)
-                    .collect();
                 let covers = core.covers(metas.iter().map(|m| m.id.as_str()));
                 Ok(metas
                     .into_iter()
@@ -1099,7 +1106,15 @@ fn apply_catalog(
                     .collect::<Vec<Tile>>())
             }
             _ => Err(crate::core::UNREADABLE_LIST.to_owned()),
-        });
+        })
+}
+
+/// Fills the row with a catalog's tiles or its failure.
+fn apply_tiles(
+    rows: &Mutex<ObservableVector<HomeRow>>,
+    row_id: &str,
+    outcome: Result<Vec<Tile>, String>,
+) {
     let mut rows = lock(rows);
     let Some(index) = find_row(&rows, row_id) else {
         return;

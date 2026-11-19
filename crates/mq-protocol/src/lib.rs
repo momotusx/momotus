@@ -37,7 +37,47 @@ pub fn is_empty_answer(answer: &serde_json::Value) -> bool {
 /// Each item's `imdbRating` reads as its IMDb rating (`imdb_rating_link`), and its
 /// text has its HTML entities decoded (`decode_meta_text`).
 pub fn decode_catalog(body: &[u8]) -> Result<ResourceResponse, serde_json::Error> {
-    let mut root: serde_json::Value = serde_json::from_slice(body)?;
+    catalog_from(serde_json::from_slice(body)?)
+}
+
+/// `decode_catalog`'s first `limit` titles, each id once (the first that
+/// decodes), reading no further than that: a Home row shows 20 tiles of a
+/// catalog that often lists 100, and reading the rest took three quarters of
+/// a Home open from the cache (bench/perf-nav/core.jsonl, 2026-11-19).
+pub fn decode_catalog_head(
+    body: &[u8],
+    limit: usize,
+) -> Result<ResourceResponse, serde_json::Error> {
+    use serde_json::{Value, json};
+    let mut root: Value = serde_json::from_slice(body)?;
+    // Only a plain `metas` list is read in parts; any other shape (an empty
+    // answer, a second resource key, an error) reads as `decode_catalog`.
+    let others = ["metasDetailed", "meta", "streams", "subtitles", "addons"];
+    let items = match root.as_object_mut() {
+        Some(keys) if !others.iter().any(|k| keys.contains_key(*k)) => {
+            match keys.get_mut("metas") {
+                Some(Value::Array(items)) => std::mem::take(items),
+                _ => return catalog_from(root),
+            }
+        }
+        _ => return catalog_from(root),
+    };
+    let mut items = items.into_iter();
+    let mut seen = std::collections::HashSet::new();
+    let mut metas = Vec::new();
+    while metas.len() < limit {
+        let part: Vec<Value> = items.by_ref().take(limit - metas.len()).collect();
+        if part.is_empty() {
+            break;
+        }
+        if let ResourceResponse::Metas { metas: read } = catalog_from(json!({ "metas": part }))? {
+            metas.extend(read.into_iter().filter(|m| seen.insert(m.id.clone())));
+        }
+    }
+    Ok(ResourceResponse::Metas { metas })
+}
+
+fn catalog_from(mut root: serde_json::Value) -> Result<ResourceResponse, serde_json::Error> {
     if is_empty_answer(&root) {
         return Ok(ResourceResponse::Metas { metas: Vec::new() });
     }
