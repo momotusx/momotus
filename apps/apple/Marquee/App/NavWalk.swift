@@ -62,6 +62,8 @@ import UIKit
         #if os(macOS)
         guard let window = NSApp.windows.max(by: { $0.frame.height < $1.frame.height }) else { return }
         let visible = await ScrollWalk.showOnSomeScreen(window)
+        // A window out of sight gets no frames: nothing to measure, and the scroll step would wait for ever.
+        guard visible else { return report("metric nav done rounds=0 visible=0") }
         report("metric nav window min=\(Int(window.contentMinSize.width))x\(Int(window.contentMinSize.height)) size=\(Int(window.frame.width))x\(Int(window.frame.height))")
         let link = window.displayLink(target: walk, selector: #selector(tick))
         #else
