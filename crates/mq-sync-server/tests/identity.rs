@@ -1671,6 +1671,47 @@ async fn returns_are_allowlisted_and_open_flows_capped() {
     assert_eq!(capped.code(), Some("busy"));
 }
 
+/// An identity file's `returns` replaces the built-in returns: only its
+/// exact URLs, never loopback or the app schemes unless listed, and never
+/// with a query or a fragment (the callback adds its own fragment).
+#[tokio::test]
+async fn a_returns_list_replaces_the_built_in_returns() {
+    let listed = [
+        "https://link.example/auth-done",
+        "https://link.example/delete",
+    ];
+    let relay = Relay::with(|config| {
+        config.identity.as_mut().unwrap().returns = Some(listed.map(String::from).to_vec());
+    })
+    .await;
+    for to in listed {
+        start_brokered(&http(), &relay.url, "mock", to, false)
+            .await
+            .unwrap();
+    }
+    for to in [
+        "http://127.0.0.1:5173/auth",
+        "momotus://auth",
+        "marquee://auth",
+        "https://link.example/auth-done?x=1",
+        "https://link.example/auth-done#x",
+        "https://link.example/auth-done/",
+        "https://link.example:8443/auth-done",
+        "https://evil.example/auth-done",
+    ] {
+        let refused = start_brokered(&http(), &relay.url, "mock", to, false)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(
+                refused,
+                SyncError::Http(HttpError::Status { status: 400, .. })
+            ),
+            "{to}: {refused:?}"
+        );
+    }
+}
+
 /// Deleting needs the device key's signature, not the token alone.
 #[tokio::test]
 async fn a_token_alone_deletes_nothing() {

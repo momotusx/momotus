@@ -5,7 +5,8 @@
                                      key, for a relay run with --escrow), never printed
     sudo python3 -I identity.py merge [NAME] < env-file
                                      the provider blocks from KEY=VALUE lines on stdin, the keys,
-                                     publicUrl and linkHost kept
+                                     publicUrl and linkHost kept; RETURNS=url,url sets `returns`
+                                     (the only brokered returns; README.md, Another instance)
     sudo python3 -I identity.py escrow-key [NAME]
                                      identity.json.next: the file with a new escrow key, for
                                      `mq-sync-server rekey --to` (README.md, Rekey)
@@ -93,8 +94,10 @@ def providers(env_text: str) -> dict:
         }
         if env.get("FACEBOOK_APP_SECRET"):
             blocks["facebook"]["appSecret"] = env["FACEBOOK_APP_SECRET"]
+    if env.get("RETURNS"):
+        blocks["returns"] = [url.strip() for url in env["RETURNS"].split(",") if url.strip()]
     if not blocks:
-        raise SystemExit("no provider values on stdin")
+        raise SystemExit("no provider or RETURNS values on stdin")
     return blocks
 
 
@@ -105,8 +108,11 @@ def merge(path: Path, env_text: str) -> str:
         raise SystemExit(f"{path} has no key: refusing to make a new one")
     before = fingerprint(key)
     # Every other entry (an Apple or OpenID provider set by hand) stays; the
-    # file's Google and Facebook blocks are the ones the env file names.
-    merged = {k: v for k, v in current.items() if k not in ("google", "facebook")} | providers(env_text)
+    # file's Google and Facebook blocks are the ones the env file names, when
+    # it names any; its returns, when it has RETURNS.
+    new = providers(env_text)
+    drop = (("google", "facebook") if set(new) - {"returns"} else ()) + (("returns",) if "returns" in new else ())
+    merged = {k: v for k, v in current.items() if k not in drop} | new
     write(path.with_name(f"{path.name}.prev"), current)
     write(path, merged)
     after = fingerprint(json.loads(path.read_text())["key"])
@@ -135,6 +141,12 @@ def self_test() -> None:
         # Facebook with no secret (the relay's PKCE flow): no appSecret entry.
         assert merge(path, "FACEBOOK_APP_ID=3\n") == first
         assert "appSecret" not in json.loads(path.read_text())["facebook"]
+        # RETURNS alone sets the returns and keeps the providers; a provider merge keeps the returns.
+        assert merge(path, "RETURNS=https://x/auth-done, https://x/delete\n") == first
+        data = json.loads(path.read_text())
+        assert data["returns"] == ["https://x/auth-done", "https://x/delete"] and data["facebook"]["appId"] == "3"
+        assert merge(path, "FACEBOOK_APP_ID=4\n") == first
+        assert json.loads(path.read_text())["returns"] == ["https://x/auth-done", "https://x/delete"]
         # No key, no merge; an existing file is never created over.
         write(path, {"publicUrl": "https://x", "linkHost": "x"})
         for action in (lambda: merge(path, env), lambda: create(path)):
