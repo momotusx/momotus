@@ -46,6 +46,8 @@ MQ_RELAY_SSH=... deploy/relay/deploy.sh <path to the instance file>
 
 `--escrow` makes the relay keep one recovery kit secret per account (`crates/mq-sync-server/src/escrow.rs`), so its operator can open every account: the app's privacy page must say so. The escrow key in the identity file opens every kit in the database and in every backup of it; it never leaves the server and the password manager.
 
+Brokered sign-in returns: by default the app schemes, a loopback `/auth` page and the link host's `/delete`. An instance whose apps take their return through the OS (an Android App Link, an https callback of `ASWebAuthenticationSession`) lists its own exact URLs instead, and so leaves loopback out: on a phone any app can listen on loopback and start a flow with its own port. `identity.py merge` takes them as one line, `RETURNS=https://<HOST>/auth-done,https://<HOST>/delete` (no query or fragment), then a restart. A relay older than this rule refuses an identity file with `returns`: merge it after the deploy, and remove it before rolling back past it.
+
 ## Rekey
 
 For the day the escrow key, or a copy of the database, may have leaked.

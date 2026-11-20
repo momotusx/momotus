@@ -108,6 +108,12 @@ pub struct IdentityFile {
     /// copy of the database opens every escrowed kit, so every account.
     #[serde(default)]
     pub escrow_key: Option<String>,
+    /// Exact URLs a brokered sign-in may return to. When set, only these
+    /// (loopback and the app schemes too, only if listed): an app whose
+    /// returns are bound to it by the OS (an App Link, an https callback)
+    /// lists those and leaves loopback out. Absent: the built-in set.
+    #[serde(default)]
+    pub returns: Option<Vec<String>>,
 }
 
 impl IdentityFile {
@@ -982,8 +988,14 @@ fn pkce_challenge(verifier: &str) -> String {
 /// Momotus app ids, until no device runs one: plans/rename-momotus.md phase 3),
 /// a loopback `/auth` page (RFC 8252 7.3: the
 /// web app in development, e2e and the desktop shells) and the link host's
-/// deletion page take a brokered result.
+/// deletion page take a brokered result; the identity file's `returns`,
+/// when set, replaces that set with its own exact URLs.
 fn allowed_return(identity: &Identity, to: &str) -> bool {
+    // Exact matches only. List URLs without a query or fragment: the
+    // callback adds its own fragment.
+    if let Some(returns) = &identity.file.returns {
+        return returns.iter().any(|listed| listed == to);
+    }
     if to == "momotus://auth" || to == "marquee://auth" {
         return true;
     }
