@@ -110,7 +110,8 @@ const SLOW = 2000;
 const WALK: [action: string, key: string, wait?: number][] = [
   ["home down", "ArrowDown"], ["home down", "ArrowDown"], ["home down", "ArrowDown"],
   ["home right", "ArrowRight"], ["home right", "ArrowRight"], ["home right", "ArrowRight"], ["home right", "ArrowRight"], ["home right", "ArrowRight"],
-  ["open title", "Enter", SLOW], ["title right", "ArrowRight"], ["open versions", "Enter", SLOW],
+  // The action right of Play opens: Versions or the Trailer, by title (the row names its focus).
+  ["open title", "Enter", SLOW], ["title right", "ArrowRight"], ["open title action", "Enter", SLOW],
   ["back to title", "Back", SLOW], ["back to home", "Back", SLOW],
   ["home up", "ArrowUp"], ["home up", "ArrowUp"], ["home up", "ArrowUp"], ["home up", "ArrowUp"],
   ["bar to discover", "ArrowRight", SLOW], ["discover down", "ArrowDown"], ["discover down", "ArrowDown"],
