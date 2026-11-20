@@ -39,6 +39,7 @@ class UpdateFeedTest {
     @Test
     fun `the words are the shared update words`() {
         val words = Json.parseToJsonElement(File("../../shared/update-words.json").readText()).jsonObject
+
         fun word(
             key: String,
             percent: Int? = null,
