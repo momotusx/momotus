@@ -158,9 +158,12 @@ class PhoneHeroCarouselTest {
         }
     }
 
-    /** Only [name]'s page is on screen: no slide is under way. */
+    /**
+     * Only [name]'s page is on screen: no slide is under way. [name] itself must be there: a name outside the list
+     * ("The Series") once settled on a screen with no hero at all, before the core's snapshot drew (CI, 2026-11-20).
+     */
     private fun settledOn(name: String) =
-        listOf("Page One", "Page Two", "Page Three").all {
+        (listOf("Page One", "Page Two", "Page Three") + name).distinct().all {
             (it == name) ==
                 onScreen(it)
         }
