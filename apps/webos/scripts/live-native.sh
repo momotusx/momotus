@@ -19,6 +19,27 @@ rm -rf "${work:?}"
 mkdir -p "$work/seed"
 
 pids=()
+# Waits until "$@" succeeds, for 60 s at most, while the process <pid> (started with sudo) runs; otherwise stops the
+# check with <what>'s log. A fixed wait let the first request reach the fixture host before it listened (CI).
+ready() {
+  local what=$1 pid=$2 log=$3
+  shift 3
+  for _ in $(seq 600); do
+    "$@" 2>/dev/null && return 0
+    if ! sudo kill -0 "$pid" 2>/dev/null; then
+      echo "live-native: the $what exited before it was ready; its log:" >&2
+      cat "$log" >&2
+      exit 1
+    fi
+    sleep 0.1
+  done
+  echo "live-native: the $what was not ready after 60 s; its log:" >&2
+  cat "$log" >&2
+  exit 1
+}
+# Whether something accepts TCP connections on <ip> <port>.
+# shellcheck disable=SC2016,SC2329 # $0 and $1 are the inner shell's; ready runs it
+listening() { timeout 1 bash -c 'exec 3<>"/dev/tcp/$0/$1"' "$1" "$2"; }
 # shellcheck disable=SC2329 # run by the trap
 cleanup() {
   for p in "${pids[@]}"; do sudo kill "$p" 2>/dev/null || true; done
@@ -54,16 +75,15 @@ node="$(command -v node)"
 sudo ip netns exec "$ns" env FIXTURE_CERT="$work/cert.pem" FIXTURE_KEY="$work/key.pem" \
   "$node" "$tests/fixture-host.js" "$fx_ip" 8000 "$work/seed" >"$work/host.log" 2>&1 &
 pids+=("$!")
-for _ in $(seq 100); do
-  grep -q fixtureHost "$work/host.log" 2>/dev/null && break
-  sleep 0.1
-done
+# Its ready line comes once the http and the https server both listen.
+ready "fixture host" "$!" "$work/host.log" grep -q fixtureHost "$work/host.log"
 cat "$work/host.log"
 # shellcheck disable=SC2024
 sudo ip netns exec "$ns" aria2c --enable-dht=false --enable-dht6=false --bt-enable-lpd=false \
   --enable-peer-exchange=false --seed-ratio=0.0 --listen-port=6881 --check-integrity=true \
   -d "$work/seed" "$work/seed/film.torrent" >"$work/seed.log" 2>&1 &
 pids+=("$!")
+ready "aria2 seeder" "$!" "$work/seed.log" listening "$fx_ip" 6881
 curl -fsS "http://$fx_ip:8000/info" >/dev/null
 curl -fsS --cacert "$work/ca.pem" "https://$fx_ip:8001/repo/manifest.json" >/dev/null
 
