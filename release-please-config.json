@@ -12,7 +12,8 @@
       "extra-files": [
         { "type": "generic", "path": "apps/android/app/build.gradle.kts" },
         { "type": "generic", "path": "apps/apple/project.yml" },
-        { "type": "json", "path": "apps/webos/app/appinfo.json", "jsonpath": "$.version" }
+        { "type": "json", "path": "apps/webos/app/appinfo.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "apps/web/package.json", "jsonpath": "$.version" }
       ]
     }
   }

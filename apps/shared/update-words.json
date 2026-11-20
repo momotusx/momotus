@@ -1,0 +1,15 @@
+{
+  "about": "App updates (plans/auto-update.md section 5): Settings, About's update row and Home's quiet line, the same words on web (webOS), Android and Apple. {version} and {percent} are filled in. Each platform's reader test checks the keys it uses.",
+  "check": "Check for updates",
+  "checking": "Checking",
+  "current": "Up to date",
+  "failed": "Could not check. Try again later.",
+  "install": "Install",
+  "installNow": "Install now",
+  "downloading": "Downloading {version}",
+  "downloadingPercent": "Downloading {version}, {percent}%",
+  "leaving": "{version} installs when you leave Momotus.",
+  "ready": "Version {version} is ready. Momotus closes to install it.",
+  "installing": "Installing {version}. Momotus opens again when it is done.",
+  "home": "Version {version} is ready to install in Settings."
+}

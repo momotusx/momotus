@@ -28,7 +28,9 @@ class NoSpaceWordsTest {
             "free some storage",
         )
 
-    private val literal = Regex("\"((?:[^\"\\\\]|\\\\.)*)\"")
+    // The unrolled form: runs of plain characters, then one escape at a time. A choice repeated per character
+    // recursed once per character and overflowed the stack on long path data (Marks.kt).
+    private val literal = Regex("\"([^\"\\\\]*(?:\\\\.[^\"\\\\]*)*)\"")
 
     /** The string literals of [source], comment lines left out. */
     private fun literals(source: String): List<String> =
@@ -55,5 +57,7 @@ class NoSpaceWordsTest {
     @Test
     fun `the scanner finds a literal and leaves a comment alone`() {
         assertEquals(listOf("free space"), literals("val a = \"free space\"\n// \"no room\"\n * \"nearly full\""))
+        assertEquals(listOf("say \\\"no room\\\" here", "b"), literals("f(\"say \\\"no room\\\" here\", \"b\")"))
+        assertEquals(listOf("x".repeat(100_000)), literals("\"" + "x".repeat(100_000) + "\""))
     }
 }

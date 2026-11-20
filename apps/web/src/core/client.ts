@@ -29,6 +29,7 @@ import type { Network } from "./generated/Network";
 import { webosDeviceCaps } from "./webos-caps";
 import { keepsAv1, probeAv1 } from "./av1-probe";
 import { webosTransport } from "./webos-transport";
+import { startUpdates } from "./webos-update";
 import { isWebOS, nativeCore } from "../lib/webos";
 import type { ProbeAnswer } from "../lib/failover";
 
@@ -49,6 +50,8 @@ const transport = shellHandler
     ? webosTransport(webosSocket)
     : webSocketTransport(bridgeUrl);
 export const bridge = new Bridge(transport);
+// The TV app updates from GitHub Releases through its service (plans/auto-update.md section 2).
+if (!shellHandler && isWebOS()) startUpdates();
 /** Whether the sync record may travel this link: the shell's IPC, or a socket that is encrypted or stays on this machine. */
 export const privateLink = shellHandler !== null || isPrivateLink(isWebOS() ? webosSocket : bridgeUrl);
 

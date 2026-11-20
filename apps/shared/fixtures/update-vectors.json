@@ -1,0 +1,67 @@
+{
+  "about": "Update feed envelopes (plans/auto-update.md), made by .github/scripts/update-feed.sh with a throwaway test key whose public half is below; the apps verify, then pick. installed is the running versionCode, (MAJOR*1000000 + MINOR*1000 + PATCH)*10 + ABI digit (2 arm64, 1 armv7); pick is null when nothing is offered.",
+  "publicKey": "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERxDkUBWjzjv/4xgpy5Am/7R7s8/h\nwqkcnJOBfNUhZOOMs6BwOpJl7sW+0ueZO6I3lrmNrd0e1XBaTXTPg5uLJg==\n-----END PUBLIC KEY-----\n",
+  "feeds": {
+    "good": "{\"signed\":\"{\\\"android-arm64\\\":{\\\"sha256\\\":\\\"6cb1a4dd12fede26902182142c3b1f5d0237c2b9467302a109b97962bcf48e94\\\",\\\"size\\\":37,\\\"url\\\":\\\"https://github.com/momotusx/momotus/releases/download/v0.5.0/momotus-android-arm64-phone.apk\\\",\\\"version\\\":\\\"0.5.0\\\"},\\\"android-armv7\\\":{\\\"sha256\\\":\\\"64394a4484db1e96c854b30d64fd157742dcfacebb16ee53eb561b5baae3ae73\\\",\\\"size\\\":38,\\\"url\\\":\\\"https://github.com/momotusx/momotus/releases/download/v0.5.0/momotus-android-armv7-firetv.apk\\\",\\\"version\\\":\\\"0.5.0\\\"},\\\"webos\\\":{\\\"sha256\\\":\\\"64f66abe787cc7e06c8201dc5902a76e594df0d31fc4475281a7a4210f88b086\\\",\\\"size\\\":29,\\\"url\\\":\\\"https://github.com/momotusx/momotus/releases/download/v0.5.0/momotus-webos-0.5.0.ipk\\\",\\\"version\\\":\\\"0.5.0\\\"}}\",\"sig\":\"MEUCIG/a59EadfFHZtEKeDsqNeIWQhgW494miwXSCfH9MWM0AiEA5v18fpQiU6scFHSSJtD9J8U4rO8Bq+2CCtn2XKIzeIk=\"}",
+    "later": "{\"signed\":\"{\\\"android-arm64\\\":{\\\"sha256\\\":\\\"75498da3eb0db8e84c73744537e2ee7799c304d28bcd9a9028399e11471c82d9\\\",\\\"size\\\":38,\\\"url\\\":\\\"https://github.com/momotusx/momotus/releases/download/v0.10.1/momotus-android-arm64-phone.apk\\\",\\\"version\\\":\\\"0.10.1\\\"},\\\"android-armv7\\\":{\\\"sha256\\\":\\\"64394a4484db1e96c854b30d64fd157742dcfacebb16ee53eb561b5baae3ae73\\\",\\\"size\\\":38,\\\"url\\\":\\\"https://github.com/momotusx/momotus/releases/download/v0.5.0/momotus-android-armv7-firetv.apk\\\",\\\"version\\\":\\\"0.5.0\\\"},\\\"webos\\\":{\\\"sha256\\\":\\\"64f66abe787cc7e06c8201dc5902a76e594df0d31fc4475281a7a4210f88b086\\\",\\\"size\\\":29,\\\"url\\\":\\\"https://github.com/momotusx/momotus/releases/download/v0.5.0/momotus-webos-0.5.0.ipk\\\",\\\"version\\\":\\\"0.5.0\\\"}}\",\"sig\":\"MEUCIQCkA1LWvlrFsUIuAbH63285k+xvKHlh8Oj8QMB8Q7W/kQIgCKzpvv+B01RK4jEe1DR9d8WHEqv68qsEsssbMk1Wcb0=\"}",
+    "changedBody": "{\"signed\":\"{\\\"android-arm64\\\":{\\\"sha256\\\":\\\"6cb1a4dd12fede26902182142c3b1f5d0237c2b9467302a109b97962bcf48e94\\\",\\\"size\\\":37,\\\"url\\\":\\\"https://github.com/momotusx/momotus/releases/download/v0.9.0/momotus-android-arm64-phone.apk\\\",\\\"version\\\":\\\"0.5.0\\\"},\\\"android-armv7\\\":{\\\"sha256\\\":\\\"64394a4484db1e96c854b30d64fd157742dcfacebb16ee53eb561b5baae3ae73\\\",\\\"size\\\":38,\\\"url\\\":\\\"https://github.com/momotusx/momotus/releases/download/v0.5.0/momotus-android-armv7-firetv.apk\\\",\\\"version\\\":\\\"0.5.0\\\"},\\\"webos\\\":{\\\"sha256\\\":\\\"64f66abe787cc7e06c8201dc5902a76e594df0d31fc4475281a7a4210f88b086\\\",\\\"size\\\":29,\\\"url\\\":\\\"https://github.com/momotusx/momotus/releases/download/v0.5.0/momotus-webos-0.5.0.ipk\\\",\\\"version\\\":\\\"0.5.0\\\"}}\",\"sig\":\"MEUCIG/a59EadfFHZtEKeDsqNeIWQhgW494miwXSCfH9MWM0AiEA5v18fpQiU6scFHSSJtD9J8U4rO8Bq+2CCtn2XKIzeIk=\"}",
+    "otherSignature": "{\"signed\":\"{\\\"android-arm64\\\":{\\\"sha256\\\":\\\"6cb1a4dd12fede26902182142c3b1f5d0237c2b9467302a109b97962bcf48e94\\\",\\\"size\\\":37,\\\"url\\\":\\\"https://github.com/momotusx/momotus/releases/download/v0.5.0/momotus-android-arm64-phone.apk\\\",\\\"version\\\":\\\"0.5.0\\\"},\\\"android-armv7\\\":{\\\"sha256\\\":\\\"64394a4484db1e96c854b30d64fd157742dcfacebb16ee53eb561b5baae3ae73\\\",\\\"size\\\":38,\\\"url\\\":\\\"https://github.com/momotusx/momotus/releases/download/v0.5.0/momotus-android-armv7-firetv.apk\\\",\\\"version\\\":\\\"0.5.0\\\"},\\\"webos\\\":{\\\"sha256\\\":\\\"64f66abe787cc7e06c8201dc5902a76e594df0d31fc4475281a7a4210f88b086\\\",\\\"size\\\":29,\\\"url\\\":\\\"https://github.com/momotusx/momotus/releases/download/v0.5.0/momotus-webos-0.5.0.ipk\\\",\\\"version\\\":\\\"0.5.0\\\"}}\",\"sig\":\"MEUCIQCkA1LWvlrFsUIuAbH63285k+xvKHlh8Oj8QMB8Q7W/kQIgCKzpvv+B01RK4jEe1DR9d8WHEqv68qsEsssbMk1Wcb0=\"}",
+    "notJson": "{\"signed\": "
+  },
+  "verifies": {
+    "good": true,
+    "later": true,
+    "changedBody": false,
+    "otherSignature": false,
+    "notJson": false
+  },
+  "picks": [
+    {
+      "feed": "good",
+      "installed": 40002,
+      "pick": {
+        "role": "android-arm64",
+        "version": "0.5.0",
+        "versionCode": 50002
+      }
+    },
+    {
+      "feed": "good",
+      "installed": 40001,
+      "pick": {
+        "role": "android-armv7",
+        "version": "0.5.0",
+        "versionCode": 50001
+      }
+    },
+    {
+      "feed": "good",
+      "installed": 50002,
+      "pick": null
+    },
+    {
+      "feed": "good",
+      "installed": 60001,
+      "pick": null
+    },
+    {
+      "feed": "good",
+      "installed": 40003,
+      "pick": null
+    },
+    {
+      "feed": "later",
+      "installed": 50002,
+      "pick": {
+        "role": "android-arm64",
+        "version": "0.10.1",
+        "versionCode": 100012
+      }
+    },
+    {
+      "feed": "later",
+      "installed": 50001,
+      "pick": null
+    }
+  ]
+}
