@@ -5,7 +5,7 @@ import Wrench from "lucide-solid/icons/wrench";
 import RefreshCw from "lucide-solid/icons/refresh-cw";
 import Sparkle from "lucide-solid/icons/sparkle";
 import ShieldAlert from "lucide-solid/icons/shield-alert";
-import { createEffect, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js";
+import { createEffect, createRenderEffect, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { HeroCarousel } from "../components/hero";
 import { CONTINUE_ROW, leftOut, RemovalNote, Row, settleRemovals } from "../components/row";
 import { homeView, liveView, op, prefsView, retryHomeRow } from "../core/client";
@@ -306,8 +306,23 @@ export default function Home() {
     pageScroll.attach(el);
   };
 
+  // The focus leaves a Home that goes away. Native inert takes it out; where inert is a fallback (webOS), the tile or the
+  // hero's Play kept the DOM focus under the title, and a second OK before the title's first focus opened it again.
+  let root: HTMLDivElement | undefined;
+  createRenderEffect(
+    on(
+      homeHere,
+      (here) => {
+        const at = document.activeElement;
+        if (!here && at instanceof HTMLElement && root?.contains(at)) at.blur();
+      },
+      { defer: true },
+    ),
+  );
+
   return (
     <div
+      ref={root}
       class="home"
       classList={{ away: !homeHere() }}
       data-away={homeHere() ? undefined : ""}
