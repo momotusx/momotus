@@ -106,5 +106,11 @@ function answer(req, res) {
     res.writeHead(404);
     res.end();
 }
-http.createServer(answer).listen(port, host, () => console.log(JSON.stringify({ fixtureHost: BASE, tls: TLS_BASE, infoHash, size: film.length, pieces: hashes.length })));
-if (TLS) https.createServer(TLS, answer).listen(port + 1, host);
+// The JSON line is the ready line live-native.sh waits for: printed once every server listens, the TLS one too.
+const servers = [http.createServer(answer)].concat(TLS ? [https.createServer(TLS, answer)] : []);
+let listening = 0;
+servers.forEach((server, i) => {
+  server.listen(port + i, host, () => {
+    if (++listening === servers.length) console.log(JSON.stringify({ fixtureHost: BASE, tls: TLS_BASE, infoHash, size: film.length, pieces: hashes.length }));
+  });
+});
