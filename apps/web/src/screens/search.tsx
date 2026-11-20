@@ -12,7 +12,7 @@ import RefreshCw from "lucide-solid/icons/refresh-cw";
 import History from "lucide-solid/icons/rotate-ccw-clock";
 import SearchIcon from "lucide-solid/icons/search";
 import X from "lucide-solid/icons/x";
-import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
+import { createComputed, createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { Poster } from "../components/art";
 import { Ratings } from "../components/ratings";
 import { Why } from "../components/why";
@@ -231,14 +231,16 @@ function Panel(props: { dialog?: boolean; add?: string; retry: () => void }) {
   // held the next key for 0.2 s at 6x CPU on Chromium 92 (0.8 s on 79). The first screenful is built with the answer, more
   // as the list nears its end (`MoreHits`); a query keeps how far it got, so Back finds the hit it left from.
   const [shown, setShown] = createSignal(shownQuery === lastQuery ? shownCount : HITS_FIRST);
-  createEffect(() => {
+  // A computation, not an effect: a new query's rows must render with the count already reset, not build the old count
+  // of hits first.
+  createComputed(() => {
     const query = s()?.query;
     if (query !== undefined && query !== shownQuery) {
       shownQuery = query;
       setShown(HITS_FIRST);
     }
-    shownCount = shown();
   });
+  createEffect(() => (shownCount = shown()));
   const showMore = () => shown() < count() && setShown((n) => n + HITS_FIRST);
   // How many of a row's hits are built yet: what is left of `shown` after the rows above it.
   const built = (row: HomeRow) => {
