@@ -245,7 +245,13 @@ test('Install starts the child once, detached, with the staged file', async () =
   const s = await site({ '/feed': sign(key, { webos: entry(bytes) }), '/ipk': bytes });
   const argsFile = path.join(dir, 'args');
   const recorder = path.join(dir, 'recorder.js');
-  fs.writeFileSync(recorder, 'require("fs").writeFileSync(' + JSON.stringify(argsFile) + ', JSON.stringify(process.argv.slice(2)));\n');
+  // The child writes its arguments whole or not at all (a temp file, then a rename): the test polls the file, and a
+  // read between create and write saw an empty file (CI, 2026-11-20).
+  fs.writeFileSync(
+    recorder,
+    'const fs = require("fs"); fs.writeFileSync(' + JSON.stringify(argsFile + '.tmp') + ', JSON.stringify(process.argv.slice(2))); ' +
+      'fs.renameSync(' + JSON.stringify(argsFile + '.tmp') + ', ' + JSON.stringify(argsFile) + ');\n',
+  );
   const { u } = updater({ dir, keyPem: key.pub, get: s.get, installer: [process.execPath, recorder] });
   await u.check(true);
   s.close();
@@ -256,8 +262,9 @@ test('Install starts the child once, detached, with the staged file', async () =
   assert.strictEqual(path.basename(args[0]), 'momotus.ipk');
   // A second Install while installing starts nothing new.
   fs.unlinkSync(argsFile);
-  await u.handle(JSON.stringify({ host: 'update', id: 8, op: 'install' }));
-  await h.sleep(300);
+  const again = JSON.parse(await u.handle(JSON.stringify({ host: 'update', id: 8, op: 'install' })));
+  assert.strictEqual(again.state.kind, 'installing');
+  await h.sleep(1000);
   assert.ok(!fs.existsSync(argsFile));
 });
 
