@@ -956,6 +956,14 @@ pub(crate) async fn run(
             msg = msgs.recv() => match msg {
                 Some(msg) => {
                     let mut out = tr.tick(now());
+                    // What the torrent did before the message was sent is
+                    // known before it is answered: a keeper round's evictions
+                    // are queued here by the time it asks again, and a
+                    // `Written` that missed them grew the window back for a
+                    // moment, so the same pieces came and left twice.
+                    while let Ok(ev) = ext.try_recv() {
+                        out.extend(tr.on_ext(ev));
+                    }
                     out.extend(tr.on_msg(msg));
                     out
                 }
