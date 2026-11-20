@@ -161,3 +161,30 @@ test("the profile switcher shows Back, the start picker does not", async ({ brow
     c.close();
   }
 });
+
+// webOS 6 and 22 have no native inert: the app's fallback runs (lib/compat.ts), and a kept Home under a title is marked
+// data-away instead. Its tile must not keep the DOM focus there: a second OK before the title's first focus would open
+// that title again behind it, and Back would then need two presses.
+test("TV without native inert: a second OK right after opening a title opens nothing again, one Back returns Home", async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 1920, height: 1080 }, reducedMotion: "reduce" });
+  await context.addInitScript(() => delete (HTMLElement.prototype as { inert?: boolean }).inert);
+  const page = await context.newPage();
+  const focused = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.f ?? "");
+  await page.goto("/?form=tv");
+  await expect.poll(focused, { timeout: 30_000 }).toBe("hero:play");
+  await page.keyboard.press("ArrowDown");
+  await expect.poll(focused).toMatch(/^tile:/);
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/title\//);
+  const home = page.locator(".home");
+  await expect(home).toHaveAttribute("data-away", "");
+  // The fallback path: the region is out of the D-pad's reach without the inert attribute and its `[inert] *` restyle.
+  await expect(home).not.toHaveAttribute("inert", /.*/);
+  expect(await page.evaluate(() => !document.activeElement?.closest(".home"))).toBe(true);
+  await page.waitForTimeout(500);
+  await page.keyboard.press("Escape");
+  await expect.poll(() => path(page)).toBe("/");
+  await expect.poll(focused).toMatch(/^tile:/);
+  await context.close();
+});
