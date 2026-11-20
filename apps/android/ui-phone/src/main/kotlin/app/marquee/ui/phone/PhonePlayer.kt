@@ -39,7 +39,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.ZapCopy
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.SubtitleBackground
@@ -261,7 +261,7 @@ fun PhonePlayer(
     // An open strip keeps them up; each shift tick wakes them, so a held shift never loses them.
     LaunchedEffect(osd, stage, picker, strip, showNext, exploring, panel) {
         if (osd && stage == Stage.Playing && !picker && strip == null && !exploring && !panel) {
-            snapshotFlow { wake }.collectLatest {
+            snapshotValues { wake }.collectLatest {
                 kotlinx.coroutines.delay(HIDE_MS)
                 osd = false
             }

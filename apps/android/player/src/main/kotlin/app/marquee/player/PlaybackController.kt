@@ -8,7 +8,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.core.net.toUri
 import androidx.media3.common.C
 import androidx.media3.common.Format
@@ -28,6 +27,7 @@ import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.TraktCopy
 import app.marquee.core.ZapCopy
 import app.marquee.core.client.CoreLog
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.model.Attempt
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
@@ -462,7 +462,7 @@ class PlaybackController(
         player.addListener(listener)
         ticker = scope.launch { tickLoop() }
         // A start kept going in the background ([StartService]) is let go once it is over: Ready, a failure or the end.
-        scope.launch { snapshotFlow { starting }.collect { if (!it) StartService.release() } }
+        scope.launch { snapshotValues { starting }.collect { if (!it) StartService.release() } }
     }
 
     /** The core's playback view is open: follow it. */
@@ -470,11 +470,11 @@ class PlaybackController(
         view = playback
         resumeSeen = null
         mark("playback open")
-        scope.launch { snapshotFlow { playback.snapshot }.filterNotNull().collect(::snapshotChanged) }
+        scope.launch { snapshotValues { playback.snapshot }.filterNotNull().collect(::snapshotChanged) }
         // The core going away takes the view with it (a restart subscribes again with ids that no longer
         // mean anything): say so instead of leaving a spinner or a player that nobody is listening to.
         scope.launch {
-            snapshotFlow { playback.status }.collect { status ->
+            snapshotValues { playback.status }.collect { status ->
                 if (status is ViewStatus.Failed && stage != Stage.Failed) {
                     player.stop()
                     player.clearMediaItems()

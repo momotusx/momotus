@@ -9,7 +9,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -24,6 +23,7 @@ import app.marquee.core.PlayPick
 import app.marquee.core.VersionsCopy
 import app.marquee.core.ZapCopy
 import app.marquee.core.client.CoreLog
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.model.Dial
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
@@ -237,13 +237,13 @@ class PlayerHolder(
         if (route.zapAt != null) Format.parseVideo(route.videoId)?.let { art.selectSeason(it.season) }
         // Subtitles show at the profile's size, and follow it when Settings change it.
         viewModelScope.launch {
-            snapshotFlow {
+            snapshotValues {
                 prefs.snapshot?.subtitleSize
             }.collect { sizes.fromProfile(it ?: SubtitleSize.Medium) }
         }
         // The second line's settings, followed when Settings change them.
         viewModelScope.launch {
-            snapshotFlow { prefs.snapshot }.collect { p ->
+            snapshotValues { prefs.snapshot }.collect { p ->
                 positions.fromProfile(p?.subtitlePosition ?: DEFAULT_POSITION)
                 backgrounds.fromProfile(p?.subtitleBackground ?: SubtitleBackground.Box)
                 layouts.fromProfile(p?.subtitleLayout ?: SubtitleLayout.Stacked)
@@ -252,7 +252,7 @@ class PlayerHolder(
             }
         }
         viewModelScope.launch {
-            snapshotFlow { art.header?.details }.collect {
+            snapshotValues { art.header?.details }.collect {
                 controller.backdrop = it?.background
                 controller.logo = it?.logo
             }
@@ -262,7 +262,7 @@ class PlayerHolder(
         // The Versions button names the quality of what plays, also after a failover.
         viewModelScope.launch {
             val key = keyFor(route.kind, route.id, route.videoId, route.title, route.binge)
-            snapshotFlow {
+            snapshotValues {
                 val playing = controller.playingKey
                 val snapshot = versions.view(key)?.snapshot
                 (listOfNotNull(snapshot?.recommended) + snapshot?.rows.orEmpty())
@@ -275,7 +275,7 @@ class PlayerHolder(
     private suspend fun start() {
         val key = keyFor(route.kind, route.id, route.videoId, route.title, route.binge)
         versions.use(key)
-        val view = snapshotFlow { versions.view(key) }.filterNotNull().first()
+        val view = snapshotValues { versions.view(key) }.filterNotNull().first()
         // After an episode the next one should start by itself: if no pick shows up in time, say so.
         val waiting = route.binge != null && route.key == null
         val choice = if (waiting) withTimeoutOrNull(BINGE_WAIT_MS) { choose(view) } else choose(view)
@@ -328,7 +328,7 @@ class PlayerHolder(
         val chosen = CompletableDeferred<Choice?>()
         val watcher =
             viewModelScope.launch {
-                snapshotFlow { view.snapshot to view.status }.collectLatest { (snapshot, status) ->
+                snapshotValues { view.snapshot to view.status }.collectLatest { (snapshot, status) ->
                     if (status is ViewStatus.Failed) {
                         controller.fail(status.reason)
                         chosen.complete(null)
@@ -454,7 +454,7 @@ fun PlayerScreen(
     // A zap that did not play zaps on by itself, one more try (plans/zap.md 2.3).
     if (route.zapAt != null) {
         LaunchedEffect(controller) {
-            snapshotFlow {
+            snapshotValues {
                 zapMissed(controller.stage == Stage.Failed, controller.firstFrameMs != null)
             }.first { it }
             holder.shutdown()

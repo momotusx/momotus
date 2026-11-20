@@ -1,8 +1,8 @@
 package app.marquee.android
 
 import android.content.Context
-import androidx.compose.runtime.snapshotFlow
 import androidx.core.content.edit
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
 import app.marquee.core.sync.SecretRecordStore
@@ -28,7 +28,7 @@ class SyncController(
         session.ops,
         SecretRecordStore(session.secrets),
         session.scope,
-        running = { snapshotFlow { session.health }.first { it == CoreHealth.Running } },
+        running = { snapshotValues { session.health }.first { it == CoreHealth.Running } },
         recoveredAtStart = context.prefs().getBoolean(RECOVERED, false),
         saveRecovered = { context.prefs().edit { putBoolean(RECOVERED, it) } },
         pendingKitsAtStart =
@@ -49,7 +49,7 @@ class SyncController(
     fun start() {
         startRounds()
         session.scope.launch {
-            snapshotFlow { session.health }.filter { it == CoreHealth.Running }.collect { request() }
+            snapshotValues { session.health }.filter { it == CoreHealth.Running }.collect { request() }
         }
     }
 

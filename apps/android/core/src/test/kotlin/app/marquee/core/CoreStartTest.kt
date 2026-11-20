@@ -1,7 +1,7 @@
 package app.marquee.core
 
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.Snapshot
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
 import kotlinx.coroutines.CoroutineScope
@@ -60,7 +60,7 @@ class CoreStartTest {
             val session = CoreSession(RuntimeEnvironment.getApplication())
             val waiting =
                 CoroutineScope(Dispatchers.Default).launch {
-                    snapshotFlow { session.health }.first { it == CoreHealth.Running }
+                    snapshotValues { session.health }.first { it == CoreHealth.Running }
                 }
             delay(200)
             thread { session.opened(running = true) }.join()

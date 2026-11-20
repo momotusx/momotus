@@ -244,7 +244,7 @@ open class RecordView<S>(
      * The snapshot as a screen reads it in composition: the latest one, read again once the screen is attached. A
      * snapshot written while the window's first composition runs reaches no recomposer yet, so a screen that read
      * [snapshot] alone stayed empty until the next change. [snapshot] stays right outside composition (callbacks,
-     * effects, `snapshotFlow`).
+     * effects, `snapshotValues`).
      */
     @Composable
     fun current(): S? = latest.collectAsState().value

@@ -26,7 +26,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -52,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.ZapCopy
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.NextEpisode
 import app.marquee.core.model.SubtitleBackground
@@ -254,7 +254,7 @@ fun TvPlayer(
         if (osd && stage == Stage.Playing && !picker && strip == null && !adjusting && !showNext && !exploring &&
             !panel
         ) {
-            snapshotFlow { wake }.collectLatest {
+            snapshotValues { wake }.collectLatest {
                 kotlinx.coroutines.delay(HIDE_MS)
                 osd = false
             }

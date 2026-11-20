@@ -36,7 +36,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,6 +72,7 @@ import app.marquee.core.SyncCopy.Action
 import app.marquee.core.SyncRules
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.model.ForkPreview
 import app.marquee.core.model.LostPreview
 import app.marquee.core.model.MemberInfo
@@ -2130,7 +2130,7 @@ class PairingHolder(
         view = next
         watch =
             viewModelScope.launch {
-                snapshotFlow { next.snapshot }.filterIsInstance<PairingSnapshot.Joined>().first()
+                snapshotValues { next.snapshot }.filterIsInstance<PairingSnapshot.Joined>().first()
                 hand()
             }
     }

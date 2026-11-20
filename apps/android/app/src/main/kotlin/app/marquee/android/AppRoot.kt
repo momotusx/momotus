@@ -27,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +56,7 @@ import app.marquee.core.PendingRemoval
 import app.marquee.core.ProfileCopy
 import app.marquee.core.TileCopy
 import app.marquee.core.ZapCopy
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.model.HomeCatalog
 import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.model.Tile
@@ -499,7 +499,7 @@ private fun AppNav(
             // A problem from before the join (an earlier unreachable try) is not this pull's answer.
             val before = sync.problem
             withTimeoutOrNull(PULL_WAIT_MS) {
-                snapshotFlow {
+                snapshotValues {
                     sync.lastSynced != null || (sync.problem != null && sync.problem !== before)
                 }.first { it }
             }

@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 /**
  * A screen reads a view with `view.current()`, never `view.snapshot` in composition: a snapshot that came while the
  * window drew for the first time reached no recomposer, and the page stayed empty until the next change. The reads
- * of `snapshot` left are outside composition: a `snapshotFlow`, and the ViewModel and callback reads named here.
+ * of `snapshot` left are outside composition: a `snapshotValues`, and the ViewModel and callback reads named here.
  * The profile gate's own `snapshot` is not a view's and is left out.
  */
 class SnapshotReadsTest {
@@ -31,7 +31,7 @@ class SnapshotReadsTest {
             listOf("src/main/kotlin", "../ui-phone/src/main/kotlin", "../ui-tv/src/main/kotlin")
                 .flatMap { File(it).walk().filter { f -> f.extension == "kt" } }
                 .flatMap { file -> file.readLines().map { it.trim() } }
-                .filter { read.containsMatchIn(it) && "snapshotFlow {" !in it }
+                .filter { read.containsMatchIn(it) && "snapshotValues {" !in it }
         assertEquals(emptyList(), found.filter { it !in outside }, "read these with current() in composition")
     }
 }
