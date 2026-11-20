@@ -28,6 +28,12 @@ pub fn background(f: impl FnOnce() + Send + 'static) {
     std::thread::spawn(f);
 }
 
+/// How many CPU-bound jobs run at once to good effect: the device's CPUs
+/// (1 when it cannot tell).
+pub fn parallelism() -> usize {
+    std::thread::available_parallelism().map_or(1, std::num::NonZero::get)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

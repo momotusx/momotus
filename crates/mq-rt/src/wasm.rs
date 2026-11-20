@@ -138,6 +138,11 @@ pub fn background(f: impl FnOnce() + Send + 'static) {
     drop(f);
 }
 
+/// One on wasm: no threads, so CPU-bound jobs run one after another.
+pub fn parallelism() -> usize {
+    1
+}
+
 // ---- timers ----
 
 enum Slot {
