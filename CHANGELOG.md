@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.5.1](https://github.com/momotusx/momotus/compare/v0.5.0...v0.5.1) (2026-11-20)
+
+
+### Bug Fixes
+
+* **android:** a fire-and-forget core request cut short by shutdown is not a failure ([e282a8d](https://github.com/momotusx/momotus/commit/e282a8dbad6ff62c4d56411bc8479c2e8fe47762))
+* **android:** state flows never miss a change made while they first read ([2b7a6c3](https://github.com/momotusx/momotus/commit/2b7a6c3eb708c3e6edcf343f79d1dbe35769234a))
+* **engine:** a window that holds its budget is never stopped as growing ([b43cf12](https://github.com/momotusx/momotus/commit/b43cf120e558f793574eeed3bbd85b2e60f8c6d9))
+* **turkcealtyazi:** a request cut short spaces the next from its end ([ce451fd](https://github.com/momotusx/momotus/commit/ce451fde265f6b6d34f6302e272d7369b566aa0c))
+
 ## [0.5.0](https://github.com/momotusx/momotus/compare/v0.4.0...v0.5.0) (2026-11-20)
 
 

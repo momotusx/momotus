@@ -10,7 +10,7 @@ plugins {
 }
 
 /** The app's version, bumped by release-please (release-please-config.json). */
-val appVersion = "0.5.0" // x-release-please-version
+val appVersion = "0.5.1" // x-release-please-version
 
 /** The last digit of a split APK's versionCode, by its ABI. */
 val abiCodes = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2)
