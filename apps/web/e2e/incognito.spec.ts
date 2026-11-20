@@ -253,9 +253,25 @@ test("desktop: in Incognito the address, the title and history name nothing, and
   // A title link says "/" and carries its route; a click opens the title, not Home.
   const tile = page.locator('.row a.tile[data-route^="/title/"]').first();
   await expect(tile).toHaveAttribute("href", "/");
-  // A middle click opens "/" in a new tab, which shows the chooser: a new session behind a live scope starts locked.
-  const [tab] = await Promise.all([context.waitForEvent("page", { timeout: 10_000 }), tile.click({ button: "middle" })]);
-  await tab.waitForLoadState();
+  // A middle click opens the link's "/" in a new tab, which shows the chooser: a new session behind a live scope starts
+  // locked. Nothing in the page cancels a middle click on the link (a last listener on the window reads it, then keeps
+  // the browser from acting on this one), so the browser opens the href; the test opens that tab itself. The headless
+  // browser's own background tab for a real middle click sometimes never comes (Playwright #42142, Chromium 543471700,
+  // fixed upstream for Playwright 1.66): this test failed on CI with no "page" event in 10 s (2026-11-20).
+  const cancelled = await tile.evaluate((a) => {
+    const seen: boolean[] = [];
+    const read = (e: Event) => {
+      seen.push(e.defaultPrevented);
+      e.preventDefault();
+    };
+    window.addEventListener("auxclick", read);
+    a.dispatchEvent(new MouseEvent("auxclick", { button: 1, bubbles: true, cancelable: true }));
+    window.removeEventListener("auxclick", read);
+    return seen;
+  });
+  expect(cancelled, "the page lets a middle click on the link through").toEqual([false]);
+  const tab = await context.newPage();
+  await tab.goto(new URL((await tile.getAttribute("href")) as string, page.url()).href);
   expect(new URL(tab.url()).pathname).toBe("/");
   await expect(tab.locator(".picker h1")).toHaveText("Who's watching?", { timeout: 30_000 });
   await tab.close();
