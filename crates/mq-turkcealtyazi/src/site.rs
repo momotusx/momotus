@@ -439,7 +439,7 @@ impl Site {
         max_bytes: usize,
         flying: Option<&AtomicBool>,
     ) -> Result<Response, Failed> {
-        let mut last = self.gate.lock().await;
+        let last = self.gate.lock().await;
         if let Some(at) = *last {
             mq_rt::sleep_until(at + self.limits.spacing).await;
         }
@@ -459,13 +459,16 @@ impl Site {
             headers,
             ..Default::default()
         };
-        // Set before it goes too: a request cut short still spaces the next.
-        *last = Some(Instant::now());
+        // The next one waits from when this one ended, or was cut short: a
+        // cut request may still be at the site, so a mark set before it went
+        // spaced the next from its start, and its own way to the site made
+        // the gap the site saw short of the spacing (482 of 500 ms).
+        let ended = Ended(last);
         let flag = |on| flying.inspect(|f| f.store(on, Ordering::SeqCst));
         flag(true);
         let answer = self.http.request(method, url.as_str(), body, &opts).await;
         flag(false);
-        *last = Some(Instant::now());
+        drop(ended);
         answer.map_err(Failed::Http)
     }
 
@@ -738,6 +741,16 @@ fn challenge_body(body: &[u8]) -> bool {
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// The request gate's mark, set to the moment the request ends: when it
+/// answers, and when its future is dropped while it is out.
+struct Ended<'a>(tokio::sync::MutexGuard<'a, Option<Instant>>);
+
+impl Drop for Ended<'_> {
+    fn drop(&mut self) {
+        *self.0 = Some(Instant::now());
+    }
 }
 
 #[cfg(test)]
