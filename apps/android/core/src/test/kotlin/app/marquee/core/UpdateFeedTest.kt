@@ -37,6 +37,30 @@ class UpdateFeedTest {
     }
 
     @Test
+    fun `the words are the shared update words`() {
+        val words = Json.parseToJsonElement(File("../../shared/update-words.json").readText()).jsonObject
+        fun word(
+            key: String,
+            percent: Int? = null,
+        ) = words
+            .getValue(key)
+            .jsonPrimitive.content
+            .replace("{version}", "0.5.0")
+            .replace("{percent}", percent.toString())
+        assertEquals(word("check"), UpdateCopy.CHECK)
+        assertEquals(word("checking"), UpdateCopy.CHECKING)
+        assertEquals(word("current"), UpdateCopy.CURRENT)
+        assertEquals(word("failed"), UpdateCopy.FAILED)
+        assertEquals(word("install"), UpdateCopy.INSTALL)
+        assertEquals(word("installNow"), UpdateCopy.INSTALL_NOW)
+        assertEquals(word("downloading"), UpdateCopy.downloading("0.5.0", null))
+        assertEquals(word("downloadingPercent", 40), UpdateCopy.downloading("0.5.0", 40))
+        assertEquals(word("leaving"), UpdateCopy.leaving("0.5.0"))
+        assertEquals(word("ready"), UpdateCopy.ready("0.5.0"))
+        assertEquals(word("home"), UpdateCopy.home("0.5.0"))
+    }
+
+    @Test
     fun `the pinned key is the shared public key file`() {
         assertEquals(File("../../shared/update-feed-key.pub.pem").readText(), UpdateFeed.KEY)
     }
