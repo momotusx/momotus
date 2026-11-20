@@ -25,8 +25,6 @@ TIMEOUT=$(command -v timeout || command -v gtimeout || true)
 # Tests that fail on the trunk today, skipped until fixed. One line per test: "<run>|<test>", then the plan line
 # that shows it fails on the trunk. Fixing a test removes its line; a new failure is never added here.
 SKIP=(
-  # plans/github-ci.md, Phase 1 "Tests that fail on trunk today": mq-runtime --test playback (without test-hooks)
-  "-p mq-runtime --test playback|labels_that_name_a_file_read_as_the_file"
 )
 
 # Every test target of every workspace package, default features: lib, bins, each integration test, doc tests.
@@ -60,7 +58,8 @@ esac
 # The --skip arguments of one run.
 skips_for() {
   local s
-  for s in "${SKIP[@]}"; do
+  # An empty list is unset to bash 3.2 under `set -u`.
+  for s in ${SKIP[@]+"${SKIP[@]}"}; do
     [ "${s%%|*}" = "$1" ] && printf ' --skip %s' "${s#*|}"
   done
 }
