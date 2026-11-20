@@ -27,8 +27,6 @@ TIMEOUT=$(command -v timeout || command -v gtimeout || true)
 SKIP=(
   # plans/github-ci.md, Phase 1 "Tests that fail on trunk today": mq-runtime --test playback (without test-hooks)
   "-p mq-runtime --test playback|labels_that_name_a_file_read_as_the_file"
-  # plans/github-ci.md, same list: mq-server a_cursor_reads_ahead_only_so_far (3 of 3 on trunk)
-  "-p mq-server --test server|a_cursor_reads_ahead_only_so_far"
 )
 
 # Every test target of every workspace package, default features: lib, bins, each integration test, doc tests.
