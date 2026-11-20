@@ -30,7 +30,6 @@ SKIP=(
   # plans/github-ci.md, same list: mq-server a_cursor_reads_ahead_only_so_far (3 of 3 on trunk)
   "-p mq-server --test server|a_cursor_reads_ahead_only_so_far"
   # plans/github-ci.md, same list: mq-engine --features test-hooks --test keeper, the live-torrent and full-ring tests
-  "-p mq-engine --features test-hooks --test keeper|the_next_file_of_a_live_torrent_gets_its_round_and_ends_the_window"
   "-p mq-engine --features test-hooks --test keeper|a_full_ring_plays_on_with_free_held_at_the_stop"
   "-p mq-engine --features test-hooks --test keeper|at_the_hard_stop_even_a_full_ring_stops"
   # plans/github-ci.md, same list: mq-turkcealtyazi a_request_cut_short_still_spaces_the_next (482 vs 490 ms)
