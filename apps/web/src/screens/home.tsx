@@ -394,7 +394,8 @@ export default function Home() {
                       {/* Home opens at its top, where the hero leaves room for a row or two: the rows past those start far. */}
                       <Row row={shown(row)} root={page} onRetry={retryHomeRow} startNear={i() < 3} />
                     </Show>
-                    <Show when={i() === 0 && row.rowId === CONTINUE_ROW}>
+                    {/* Shown Home only: under a title the title page has its own, and two Undo buttons are one too many. */}
+                    <Show when={i() === 0 && row.rowId === CONTINUE_ROW && homeHere()}>
                       <RemovalNote />
                     </Show>
                     {/* The account's notices and the defaults card come after the first row, never over the

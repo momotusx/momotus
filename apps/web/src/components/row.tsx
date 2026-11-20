@@ -22,6 +22,7 @@ import { pct, posterLabel, titlePath } from "../lib/format";
 import { caption } from "../lib/words";
 import { wordFit } from "../lib/word-fit";
 import { visibleRange } from "../lib/range";
+import { reachable } from "../focus/dom";
 import { rowWords } from "../lib/rows";
 import { tileMenu } from "./kids";
 import { RouteA } from "./route-link";
@@ -318,14 +319,14 @@ export function removeSoon(tile: { id: string; name: string }) {
   setRemoval(tile);
   waiting = setTimeout(() => send(tile), UNDO_MS);
   // The pressed control leaves with its tile: Undo takes the focus.
-  requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-f="continue:undo"]')?.focus());
+  requestAnimationFrame(() => reachable('[data-f="continue:undo"]')?.focus());
 }
 
 /** Undo: nothing goes to the core, and the title is back, its control with the focus. */
 function undoRemoval() {
   const r = removal();
   dropRemoval();
-  if (r) requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-f="title:uncontinue"], [data-f$=":continue-watching:${CSS.escape(r.id)}"]`)?.focus());
+  if (r) requestAnimationFrame(() => reachable(`[data-f="title:uncontinue"], [data-f$=":continue-watching:${CSS.escape(r.id)}"]`)?.focus());
 }
 
 /** A title that plays is wanted: its removal waiting for Undo is dropped, never sent while it plays. */

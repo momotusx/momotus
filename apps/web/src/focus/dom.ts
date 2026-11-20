@@ -60,6 +60,10 @@ export const goBack = () => backHandler?.();
 const groupOf = (el: Element) => el.closest<HTMLElement>("[data-fgroup]")?.dataset.fgroup;
 // Out of reach: an inert region, or a kept screen waiting under another (`data-away`, screens/home.tsx).
 const OUT = "[inert], [data-away]";
+/** The first element `selector` matches that the viewer can reach: a kept screen waiting under another holds the same keys
+ * (a Continue Watching tile under its title page). */
+export const reachable = (selector: string) =>
+  [...document.querySelectorAll<HTMLElement>(selector)].find((el) => !el.closest(OUT)) ?? null;
 export const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function candidates(): HTMLElement[] {
