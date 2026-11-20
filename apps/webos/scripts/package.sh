@@ -69,7 +69,11 @@ stage="$OUT/stage"
 rm -rf "${stage:?}"
 mkdir -p "$stage/app" "$stage/service/core"
 cp "$here"/app/{appinfo.json,index.html,icon.png,largeIcon.png,splash.png} "$stage/app/"
-cp "$here"/service/{index.js,core-worker.js,host.js,keystore.js,native.js,services.json,package.json} "$stage/service/"
+cp "$here"/service/{index.js,core-worker.js,host.js,keystore.js,native.js,update.js,update-install.js,services.json,package.json} "$stage/service/"
+# Updates (plans/auto-update.md): the feed key every app pins, and the version the service compares, taken from
+# appinfo.json (the one release-please bumps).
+cp "$here/../shared/update-feed-key.pub.pem" "$stage/service/"
+"${node_run[@]}" -e 'const fs = require("fs"); const [app, svc] = process.argv.slice(1); const p = JSON.parse(fs.readFileSync(svc, "utf8")); p.version = JSON.parse(fs.readFileSync(app, "utf8")).version; fs.writeFileSync(svc, JSON.stringify(p) + "\n");' "$stage/app/appinfo.json" "$stage/service/package.json"
 cp -R "$ui" "$stage/service/ui"
 cp "$CORE_DIR/mq_wasm.js" "$CORE_DIR/mq_wasm_bg.wasm" "$stage/service/core/"
 if [ "${NO_NATIVE:-}" != 1 ]; then

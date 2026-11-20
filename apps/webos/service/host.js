@@ -356,6 +356,7 @@ let onDied = null;
 
 module.exports = {
   install,
+  caList,
   StrictDecoder,
   setOnDied(f) {
     onDied = f;
