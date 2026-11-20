@@ -107,10 +107,13 @@ where
 /// A whole-snapshot view's pushes: at most one per `window`, carrying the
 /// newest snapshot only. Every app keeps only the last snapshot of a push,
 /// so older ones would be written and read for nothing (batch 13 perf C3).
+/// A snapshot equal to the last one pushed is not pushed again: Search sent
+/// four unchanged copies of 30 KB per typed letter, each one rebuilt by the
+/// app (bench/perf-nav/core.jsonl, 2026-11-19).
 pub fn snapshots<S, T>(updates: S, window: Duration) -> Pin<Box<dyn Stream<Item = Vec<T>> + Send>>
 where
     S: Stream<Item = T> + Unpin + Send + 'static,
-    T: Send + 'static,
+    T: Clone + PartialEq + Send + 'static,
 {
     paced(updates, move |_| window)
 }
@@ -122,24 +125,29 @@ pub fn paced<S, T>(
 ) -> Pin<Box<dyn Stream<Item = Vec<T>> + Send>>
 where
     S: Stream<Item = T> + Unpin + Send + 'static,
-    T: Send + 'static,
+    T: Clone + PartialEq + Send + 'static,
 {
     Box::pin(futures_util::stream::unfold(
-        (updates, window),
-        |(mut updates, window)| async move {
-            let mut newest = updates.next().await?;
-            let deadline = mq_rt::sleep(window(&newest));
-            tokio::pin!(deadline);
+        (updates, window, None::<T>),
+        |(mut updates, window, mut last)| async move {
             loop {
-                tokio::select! {
-                    _ = &mut deadline => break,
-                    next = updates.next() => match next {
-                        Some(snapshot) => newest = snapshot,
-                        None => break,
-                    },
+                let mut newest = updates.next().await?;
+                let deadline = mq_rt::sleep(window(&newest));
+                tokio::pin!(deadline);
+                loop {
+                    tokio::select! {
+                        _ = &mut deadline => break,
+                        next = updates.next() => match next {
+                            Some(snapshot) => newest = snapshot,
+                            None => break,
+                        },
+                    }
+                }
+                if last.as_ref() != Some(&newest) {
+                    last = Some(newest.clone());
+                    return Some((vec![newest], (updates, window, last)));
                 }
             }
-            Some((vec![newest], (updates, window)))
         },
     ))
 }
@@ -202,5 +210,28 @@ mod tests {
         };
         let (push, ()) = tokio::join!(pushes.next(), later);
         assert_eq!(push, Some(vec![11]), "the slow window took both");
+    }
+
+    #[tokio::test]
+    async fn a_snapshot_equal_to_the_last_push_is_not_pushed() {
+        let source = eyeball::SharedObservable::new(0);
+        let pushes = snapshots(source.subscribe(), FRAME);
+        // 1, then 1 again, then a burst that ends where it began, then 3.
+        let sets = async {
+            for burst in [&[1][..], &[1], &[2, 1], &[3]] {
+                for &n in burst {
+                    source.set(n);
+                    mq_rt::sleep(Duration::from_millis(2)).await;
+                }
+                mq_rt::sleep(FRAME * 3).await;
+            }
+            drop(source);
+        };
+        let (got, ()) = tokio::join!(pushes.collect::<Vec<_>>(), sets);
+        assert_eq!(
+            got,
+            [vec![1], vec![3]],
+            "nothing on screen changed before 3"
+        );
     }
 }
