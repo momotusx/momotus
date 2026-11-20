@@ -719,8 +719,15 @@ async fn the_next_file_of_a_live_torrent_gets_its_round_and_ends_the_window() {
     drop((r, reader));
     let inputs = w.engine.window_inputs(w.t, 1, 0, RATE, 0).await.unwrap();
     assert_eq!(inputs.boundary, 2 * u64::from(PIECE));
-    // Free space a byte short of the next episode plus the reserve.
-    test_hooks::set_free(&w.engine, Some((8 << 20) + RESERVE_BYTES - 1));
+    // Free space a byte short of what the next episode needs whole: its
+    // size and the reserve, less what of it is on disk already (the round
+    // counts that, and a volume can hold some of a file nothing has read:
+    // 48 KiB of it on APFS).
+    let held = {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::metadata(w.dir().join("e02.mkv")).map_or(0, |m| m.blocks() * 512)
+    };
+    test_hooks::set_free(&w.engine, Some((8 << 20) + RESERVE_BYTES - held - 1));
     let next = w
         .engine
         .select_file(w.t, "default", &FileHint::Name("e02.mkv".into()))
