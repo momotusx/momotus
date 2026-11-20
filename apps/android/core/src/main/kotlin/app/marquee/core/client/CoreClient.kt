@@ -4,6 +4,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import androidx.compose.runtime.snapshots.Snapshot
 import app.marquee.core.ErrorCopy
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -263,6 +264,9 @@ class CoreClient(
         scope.launch {
             try {
                 request(op, fields)
+            } catch (e: CancellationException) {
+                // The client's scope ended (the app or a test closing it): nothing failed.
+                throw e
             } catch (e: Exception) {
                 CoreLog.w("$op failed: ${CoreLog.describe(e)}")
             }
