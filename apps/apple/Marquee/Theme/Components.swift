@@ -165,7 +165,13 @@ private struct Interactive<S: InsettableShape>: View {
             .animation(Theme.Motion.focus, value: lifted)
             .animation(Theme.Motion.focus, value: hovered)
             .animation(Theme.Motion.focus, value: configuration.isPressed)
-            #if !os(tvOS)
+            #if os(macOS)
+            .onHover { inside in
+                // A card that a scroll carries under a resting pointer does not light up, only one the pointer moves
+                // onto: a trackpad scroll under the pointer lit and faded a card on every step.
+                if !inside || PointerRest.moved() { hovered = inside }
+            }
+            #elseif os(iOS)
             .onHover { hovered = $0 }
             #endif
     }
@@ -176,6 +182,19 @@ private struct Interactive<S: InsettableShape>: View {
         return hovered && !card ? 1.03 : 1
     }
 }
+
+#if os(macOS)
+/// Whether the pointer moved since the last card that lit asked: a card entered under a pointer that stayed put came
+/// under it by scrolling.
+@MainActor enum PointerRest {
+    private static var last: NSPoint?
+
+    static func moved(to now: NSPoint = NSEvent.mouseLocation) -> Bool {
+        defer { last = now }
+        return now != last
+    }
+}
+#endif
 
 /// Poster, still and settings cards.
 struct CardButtonStyle: ButtonStyle {

@@ -102,3 +102,12 @@ private struct Shell: View {
     #expect(cards.asked == asked, "the strip measured its cards \(cards.asked - asked) more times at the same width")
     #expect(try source("Theme/Components.swift").contains("        .scrollClipDisabled()\n        .knownHeight()\n"))
 }
+
+@MainActor @Test func aCardAScrollCarriesUnderAStillPointerDoesNotLight() throws {
+    // A trackpad scroll moves the page under a resting pointer: each card it carries there used to light and fade,
+    // a state change and an animation on every step.
+    _ = PointerRest.moved(to: NSPoint(x: 10, y: 10))
+    #expect(!PointerRest.moved(to: NSPoint(x: 10, y: 10)))
+    #expect(PointerRest.moved(to: NSPoint(x: 11, y: 10)))
+    #expect(try source("Theme/Components.swift").contains("if !inside || PointerRest.moved() { hovered = inside }"))
+}
