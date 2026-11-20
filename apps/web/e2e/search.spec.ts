@@ -411,3 +411,34 @@ test("tv: the remote reaches the shelf, with focus on a title, and Back closes",
   await expect(page.locator(".palette-layer")).toHaveCount(0);
   await context.close();
 });
+
+test("tv: a new query builds its first screenful of hits, not as many as the last query reached", async ({ browser }) => {
+  const { context, page } = await open(browser, "tv", "/search");
+  const input = page.locator('[data-f="search:input"]');
+  await input.fill("thrones");
+  await expect(page.locator(".hit").first()).toBeVisible({ timeout: 30_000 });
+  // Scrolled to its end, the list builds its later hits.
+  const body = page.locator(".palette-body");
+  await expect
+    .poll(async () => {
+      await body.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+      return page.locator(".hit").count();
+    })
+    .toBeGreaterThan(12);
+  await body.evaluate((el) => el.scrollTo(0, 0));
+  await page.evaluate(() => {
+    const w = window as unknown as { added: number };
+    w.added = 0;
+    new MutationObserver((records) => {
+      for (const r of records)
+        for (const n of r.addedNodes) if (n instanceof Element) w.added += (n.matches(".hit") ? 1 : 0) + n.querySelectorAll(".hit").length;
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  await input.fill("Game of Thrones");
+  await expect(page.locator(".palette-count")).not.toHaveText("21 results", { timeout: 30_000 });
+  await page.waitForTimeout(1500);
+  const results = Number((await page.locator(".palette-count").textContent())?.match(/\d+/)?.[0]);
+  expect(results, "the second query needs more hits than one screenful").toBeGreaterThan(12);
+  expect(await page.evaluate(() => (window as unknown as { added: number }).added)).toBeLessThanOrEqual(12);
+  await context.close();
+});
