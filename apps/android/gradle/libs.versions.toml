@@ -18,6 +18,8 @@ jna = "5.19.1"
 rustlsVerifier = "0.2.0"
 junit = "4.13.2"
 robolectric = "4.17"
+# The Android 16 (SDK 36) runtime Robolectric 4.17 runs the tests on; it changes with Robolectric.
+robolectricAndroidAll = "16-robolectric-13921718-i7"
 coil = "3.6.3"
 zxing = "3.5.3"
 camerax = "1.6.2"
@@ -69,6 +71,7 @@ coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version
 junit = { module = "junit:junit", version.ref = "junit" }
 kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+robolectric-android-all = { module = "org.robolectric:android-all-instrumented", version.ref = "robolectricAndroidAll" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 rustls-platform-verifier = { module = "org.rustls:rustls-platform-verifier", version.ref = "rustlsVerifier" }
 
