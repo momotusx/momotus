@@ -8,6 +8,7 @@ import ShieldAlert from "lucide-solid/icons/shield-alert";
 import { createEffect, createRenderEffect, createSignal, For, Match, on, onCleanup, Show, Switch } from "solid-js";
 import { HeroCarousel } from "../components/hero";
 import { CONTINUE_ROW, leftOut, RemovalNote, Row, settleRemovals } from "../components/row";
+import { UpdateNote } from "../components/update-row";
 import { homeView, liveView, op, prefsView, retryHomeRow } from "../core/client";
 import type { AddonsSnapshot } from "../core/generated/AddonsSnapshot";
 import type { HomeRow } from "../core/generated/HomeRow";
@@ -402,6 +403,7 @@ export default function Home() {
                         hero's art or between it and the row that rises into it (as Android's TV Home). */}
                     <Show when={i() === 0}>
                       <AccountCard />
+                      <UpdateNote />
                     </Show>
                     <Show when={i() === 0 && row.rowId === CONTINUE_ROW}>
                       <DefaultsCard />
