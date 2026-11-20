@@ -6,7 +6,10 @@
 
 import { type Browser, type BrowserContext, expect, type Page, type WebSocketRoute, test } from "./fixture";
 import { BBB_ID } from "./source";
-import { Client, startIfPaused } from "./core";
+import { Client, PORTS, startIfPaused, until } from "./core";
+import { applyDiffs } from "../src/core/diff";
+import type { HomeRow } from "../src/core/generated/HomeRow";
+import type { HomeUpdate } from "../src/core/generated/HomeUpdate";
 import { fakeYouTube, ytLog } from "./yt-fake";
 
 const FORMS = { tv: [1920, 1080, 1], desktop: [1440, 900, 1], phone: [390, 844, 2] } as const;
@@ -206,21 +209,40 @@ test("desktop: in Incognito the address, the title and history name nothing, and
   const { page, context } = await open(browser, "desktop", { trailers: true });
   // What the host holds before: Continue Watching, recent searches and its addons, read from the core.
   await expect(page.locator(".row").first()).toHaveAttribute("aria-label", "Continue Watching", { timeout: 30_000 });
+  // Home's rows as the core builds them: a new subscription's first snapshot may come before its Continue Watching row,
+  // which then arrives as a row update, so the rows are followed until that row is there (or 15 s pass).
+  const hostRows = async () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${PORTS.bridge}/ws`);
+    await new Promise((ok) => ws.addEventListener("open", ok));
+    let rows: HomeRow[] = [];
+    ws.addEventListener("message", (e) => {
+      const m = JSON.parse(String(e.data));
+      if (m.id === 1 && m.ok) rows = m.result.snapshot.rows;
+      else if ("updates" in m) for (const u of m.updates as HomeUpdate[]) if (u.kind === "rows") rows = applyDiffs(rows, u.diffs);
+    });
+    ws.send(JSON.stringify({ id: 1, op: "subscribe", view: "home", params: {} }));
+    try {
+      await until("the host's Continue Watching", () => rows.some((r) => r.rowId === "continue-watching"), 15_000).catch(() => undefined);
+      return rows;
+    } finally {
+      ws.close();
+    }
+  };
   const hostHolds = async () => {
     const c = new Client();
     await c.ready;
     try {
-      type Row = { rowId: string; tiles: { id: string; progress: number | null; videoId: string | null }[] };
-      const home = (await c.subscribe<{ rows: Row[] }>("home")).now();
+      const rows = await hostRows();
       const search = (await c.subscribe<{ recent: string[] }>("search")).now();
       const addons = (await c.subscribe<{ addons: unknown[] }>("addons")).now();
-      const cw = home.rows.find((r) => r.rowId === "continue-watching")?.tiles.map((t) => [t.id, t.progress, t.videoId]);
+      const cw = rows.find((r) => r.rowId === "continue-watching")?.tiles.map((t) => [t.id, t.progress, t.videoId]);
       return JSON.stringify({ cw, recent: search.recent, addons: addons.addons });
     } finally {
       c.close();
     }
   };
   const before = await hostHolds();
+  expect(before).toContain('"cw":');
   await enterFromMenu(page);
   // Home holds no Continue Watching row, and its hero plays no trailer.
   await expect(page.locator(".row").first()).toBeVisible({ timeout: 30_000 });
