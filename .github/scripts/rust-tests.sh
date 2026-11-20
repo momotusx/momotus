@@ -29,8 +29,6 @@ SKIP=(
   "-p mq-runtime --test playback|labels_that_name_a_file_read_as_the_file"
   # plans/github-ci.md, same list: mq-server a_cursor_reads_ahead_only_so_far (3 of 3 on trunk)
   "-p mq-server --test server|a_cursor_reads_ahead_only_so_far"
-  # plans/github-ci.md, same list: mq-engine --features test-hooks --test keeper, the live-torrent and full-ring tests
-  "-p mq-engine --features test-hooks --test keeper|at_the_hard_stop_even_a_full_ring_stops"
   # plans/github-ci.md, same list: mq-turkcealtyazi a_request_cut_short_still_spaces_the_next (482 vs 490 ms)
   "-p mq-turkcealtyazi --test site|a_request_cut_short_still_spaces_the_next"
 )
