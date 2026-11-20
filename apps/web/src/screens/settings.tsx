@@ -45,6 +45,7 @@ import { headerOnTvNow, previewsOn, setPreviewsOn } from "../lib/trailers";
 import { defaultsWords } from "../lib/defaults";
 import { audioTrackList, isWebOS, wasmCore } from "../lib/webos";
 import reportWords from "../../../shared/report-words.json";
+import { UpdateRow } from "../components/update-row";
 import { addonsSummary, choiceSummary, choiceWords, findAddons, languageName, syncSummary, syncWords, tmdbCredit } from "../lib/words";
 import * as sync from "../core/sync";
 import { traktLink, traktLockedHere, traktStatus, traktStorage } from "../core/trakt";
@@ -836,6 +837,8 @@ export default function SettingsScreen() {
                 </p>
                 <Show when={privacyUrl()}>{(url) => <PrivacyLink url={url()} />}</Show>
               </div>
+              {/* webOS only: the app's updates (plans/auto-update.md 5); nothing elsewhere. */}
+              <UpdateRow />
             </section>
           </Show>
         </div>
