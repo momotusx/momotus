@@ -8,7 +8,8 @@
 // The MQ_* variables are for tests and simulators: MQ_DATA, MQ_CORE, MQ_UI,
 // MQ_PORT, MQ_GRACE_MS, MQ_LUNA (a stand-in for webos-service), MQ_SIM,
 // MQ_NATIVE (another native binary, or empty for none), MQ_NATIVE_QUIET_MS and
-// MQ_NATIVE_CAP_MS (its start's silence and total limits).
+// MQ_NATIVE_CAP_MS (its start's silence and total limits), MQ_UPDATE_FEED and
+// MQ_UPDATE_KEY (another update feed and the path of its public key).
 const crypto = require('crypto');
 const fs = require('fs');
 const http = require('http');
@@ -17,6 +18,7 @@ const { execFile, fork } = require('child_process');
 const WebSocket = require('ws');
 const keystore = require('./keystore.js');
 const native = require('./native.js');
+const update = require('./update.js');
 
 const APP = 'app.momotus.webos';
 const PORT = Number(process.env.MQ_PORT) || 47801;
@@ -41,6 +43,29 @@ const bridgeToken = crypto.randomBytes(32).toString('hex');
 const dataDir = process.env.MQ_DATA || '/media/internal/' + APP;
 const uiDir = process.env.MQ_UI || path.join(__dirname, 'ui');
 const pidFile = path.join(dataDir, 'core.pid');
+
+// Updates (plans/auto-update.md section 2), on the key package.sh ships beside
+// this file; a tree without it (a dev run) has none. The state goes to every
+// page, which shows it in About.
+const updater = (() => {
+  let keyPem;
+  try {
+    keyPem = fs.readFileSync(process.env.MQ_UPDATE_KEY || path.join(__dirname, 'update-feed-key.pub.pem'), 'utf8');
+  } catch (e) {
+    return null;
+  }
+  return update.create({
+    app: APP,
+    version: require('./package.json').version,
+    dataDir,
+    keyPem,
+    feed: process.env.MQ_UPDATE_FEED,
+    onState: (state) => {
+      const text = JSON.stringify({ host: 'update', id: null, state });
+      sockets.forEach((ws) => ws.readyState === WebSocket.OPEN && ws.send(text));
+    },
+  });
+})();
 
 const sockets = new Set(); // authenticated
 // Each authenticated socket has its own Session in the core, as a socket to
@@ -548,10 +573,16 @@ function sameToken(text) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-// A keystore request is answered here and never forwarded.
+// A keystore or update request is answered here and never forwarded.
 function onSocketText(ws, text) {
   if (text.indexOf(keystore.PREFIX) === 0) {
     return store.handle(text).then((reply) => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(reply);
+    });
+  }
+  if (text.indexOf(update.PREFIX) === 0) {
+    const answer = updater ? updater.handle(text) : Promise.resolve(JSON.stringify({ host: 'update', id: null, state: null }));
+    return answer.then((reply) => {
       if (ws.readyState === WebSocket.OPEN) ws.send(reply);
     });
   }
