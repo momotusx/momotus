@@ -1190,6 +1190,55 @@ pub(crate) fn year_line(raw: Option<&str>) -> Option<String> {
     })
 }
 
+/// TMDB's image links, sizes and all.
+const TMDB_IMAGES: &str = "https://image.tmdb.org/t/p/";
+/// metahub's backdrops: `medium` and `large` are 1920x1080.
+const METAHUB_BACKDROPS: &str = "https://images.metahub.space/background/";
+
+/// A TMDB poster at a tile's size: addons link `original` (1365x2048,
+/// 315 KB), decoded whole by every app while it scrolls; `w500` (500x750,
+/// 81 KB) covers the largest tile drawn (a phone's 447 px, a desktop
+/// retina shelf, a TV's 326 px). Any other link stays.
+fn tile_poster(url: &str) -> String {
+    match url
+        .strip_prefix(TMDB_IMAGES)
+        .and_then(|rest| rest.split_once('/'))
+    {
+        Some(("original" | "w780", path)) => format!("{TMDB_IMAGES}w500/{path}"),
+        _ => url.to_owned(),
+    }
+}
+
+/// A Continue Watching card's TMDB backdrop past w780 at w780 (780x439,
+/// enough for a phone's 717 px card, where `original` runs to 3840 px).
+/// Any other link stays.
+fn card_backdrop(url: &str) -> String {
+    match url
+        .strip_prefix(TMDB_IMAGES)
+        .and_then(|rest| rest.split_once('/'))
+    {
+        Some(("original" | "w1280", path)) => format!("{TMDB_IMAGES}w780/{path}"),
+        _ => url.to_owned(),
+    }
+}
+
+/// A card on metahub's 1920x1080 backdrop (783 KB, for a card 410 px wide
+/// on a TV and 717 px on a phone) takes TMDB's frame of its title at w780
+/// when TMDB knows it (the hero's frames, kept a day); otherwise it keeps
+/// metahub's, sharp everywhere. An IMDb title only.
+async fn card_frame(core: &Core, tile: &mut Tile) {
+    let metahub = tile
+        .background
+        .as_deref()
+        .is_some_and(|b| b.starts_with(METAHUB_BACKDROPS));
+    if !metahub || !tile.id.starts_with("tt") {
+        return;
+    }
+    if let Some(frame) = core.tmdb_textless_backdrop(&tile.kind, &tile.id).await {
+        tile.background = Some(card_backdrop(&frame));
+    }
+}
+
 pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview, covers: &Covers) -> Tile {
     let links = |category: &str| -> Vec<String> {
         m.links
@@ -1214,7 +1263,7 @@ pub(crate) fn tile_from_preview(m: mq_protocol::MetaItemPreview, covers: &Covers
         id: m.id,
         kind: m.r#type,
         name: m.name,
-        poster: m.poster.map(|u| u.to_string()),
+        poster: m.poster.map(|u| tile_poster(u.as_str())),
         background: m.background.map(|u| u.to_string()),
         logo: m.logo.map(|u| u.to_string()),
         poster_shape: serde_json::to_value(&m.poster_shape)
@@ -1763,6 +1812,7 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
             // After the meta: its answer may have given an anime its IMDb id.
             let covers = core.covers_with(key.clone(), [item.item_id.as_str()]);
             let mut tile = tile_from_continue(item, meta.ok().as_ref().map(|m| &m.0), &covers);
+            card_frame(core, &mut tile).await;
             if kept {
                 let words = crate::views::playback::ON_DEVICE;
                 tile.release_info = tile.release_info.map(|c| format!("{c} \u{b7} {words}"));
@@ -1775,7 +1825,9 @@ async fn refresh_continue(core: &Core, rows: &Mutex<ObservableVector<HomeRow>>) 
         let (meta, _) = core.fetch_meta(&done.kind, &done.item_id).await.ok()?;
         let next = next_after(&meta, &done.video_id)?;
         let covers = core.covers_with(key.clone(), [done.item_id.as_str()]);
-        Some((done.updated_ms, tile_for_next(&meta, next, &covers)))
+        let mut tile = tile_for_next(&meta, next, &covers);
+        card_frame(core, &mut tile).await;
+        Some((done.updated_ms, tile))
     }))
     .await;
     items.extend(next_up.into_iter().flatten());
@@ -1854,7 +1906,7 @@ fn tile_for_next(meta: &mq_protocol::MetaItem, next: NextEpisode, covers: &Cover
         background: next
             .thumbnail
             .clone()
-            .or_else(|| p.background.as_ref().map(|u| u.to_string())),
+            .or_else(|| p.background.as_ref().map(|u| card_backdrop(u.as_str()))),
         logo: p.logo.as_ref().map(|u| u.to_string()),
         poster_shape: "poster".into(),
         release_info: Some(format!("Next: S{}:E{}", next.season, next.episode)),
@@ -1925,7 +1977,7 @@ fn tile_from_continue(
         background: still.or_else(|| {
             preview
                 .and_then(|p| p.background.as_ref())
-                .map(|u| u.to_string())
+                .map(|u| card_backdrop(u.as_str()))
         }),
         logo: preview.and_then(|p| p.logo.as_ref()).map(|u| u.to_string()),
         poster_shape: "poster".into(),
@@ -2035,6 +2087,45 @@ mod tests {
             (heroes[0].tile.id.as_str(), heroes[0].reason.as_str()),
             ("c", "#5 in Popular Movies")
         );
+    }
+
+    /// Tiles get images at least as wide as they are drawn and no wider than
+    /// that needs: a TMDB poster at w500, a Continue Watching card a TMDB
+    /// backdrop at w780; any other link stays.
+    #[test]
+    fn tiles_get_images_at_their_size() {
+        use super::{card_backdrop, tile_poster};
+        let tmdb = "https://image.tmdb.org/t/p";
+        for size in ["original", "w780"] {
+            assert_eq!(
+                tile_poster(&format!("{tmdb}/{size}/a.jpg")),
+                format!("{tmdb}/w500/a.jpg")
+            );
+        }
+        for kept in [
+            format!("{tmdb}/w185/a.jpg"),
+            format!("{tmdb}/w342/a.jpg"),
+            format!("{tmdb}/w500/a.jpg"),
+            "https://images.metahub.space/poster/small/tt1/img".to_owned(),
+            "https://image.tmdb.org.evil.example/t/p/original/a.jpg".to_owned(),
+        ] {
+            assert_eq!(tile_poster(&kept), kept);
+        }
+        let bg = "https://images.metahub.space/background";
+        for size in ["original", "w1280"] {
+            assert_eq!(
+                card_backdrop(&format!("{tmdb}/{size}/b.jpg")),
+                format!("{tmdb}/w780/b.jpg")
+            );
+        }
+        for kept in [
+            format!("{bg}/medium/tt1/img"),
+            format!("{tmdb}/w780/b.jpg"),
+            "https://episodes.metahub.space/tt1/1/1/w780.jpg".to_owned(),
+            "https://images.metahub.space/poster/medium/tt1/img".to_owned(),
+        ] {
+            assert_eq!(card_backdrop(&kept), kept);
+        }
     }
 
     /// Core backlog C37: the year line never carries a dash.
