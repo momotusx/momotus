@@ -19,9 +19,10 @@ const SLOW = 1500;
 const WALK: Step[] = [
   ["home down", "ArrowDown"], ["home down", "ArrowDown"], ["home down", "ArrowDown"],
   ["home right", "ArrowRight"], ["home right", "ArrowRight"], ["home right", "ArrowRight"], ["home right", "ArrowRight"], ["home right", "ArrowRight"],
-  // Up to Continue Watching: its title (the suite's sample film) opens with its versions, offline too.
+  // Up to Continue Watching: its title (the suite's sample film) opens with its versions, offline too. Versions, not Play:
+  // a play moves the film's resume point, which later specs on the shared core read.
   ["home up", "ArrowUp"], ["home up", "ArrowUp"],
-  ["open title", "Enter", SLOW, "route"], ["title right", "ArrowRight"], ["play", "Enter", SLOW, "route"],
+  ["open title", "Enter", SLOW, "route"], ["title down", "ArrowDown"], ["title left", "ArrowLeft"], ["open versions", "Enter", SLOW, "route"],
   ["back to title", "Escape", SLOW, "route"], ["back to home", "Escape", SLOW, "route"],
   ["home up", "ArrowUp"], ["home up", "ArrowUp"],
   ["bar to discover", "ArrowRight", SLOW], ["discover down", "ArrowDown"], ["discover down", "ArrowDown"],
