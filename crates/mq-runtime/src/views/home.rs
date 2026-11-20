@@ -1040,9 +1040,7 @@ async fn load_catalogs(
     // Answers are read off the core's workers, one per CPU at a time: read
     // on the workers, a hundred catalogs from the cache kept every other
     // task (this view's own push, the next request) waiting behind them.
-    let readers = Arc::new(tokio::sync::Semaphore::new(
-        std::thread::available_parallelism().map_or(2, std::num::NonZero::get),
-    ));
+    let readers = Arc::new(tokio::sync::Semaphore::new(mq_rt::parallelism()));
     for slot in slots {
         let (core, readers) = (core.clone(), readers.clone());
         calls.spawn(async move {
