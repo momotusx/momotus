@@ -44,6 +44,9 @@ pub struct AddonClient {
     http: HttpClient,
     cache: Arc<ResponseCache>,
     health: Arc<HealthBook>,
+    /// Cache lookups off the core's workers, a few at a time (the store has
+    /// three readers): more would only wait there, each on a thread.
+    lookups: Arc<tokio::sync::Semaphore>,
     /// A larger response is refused while it is read, never kept.
     max_bytes: usize,
 }
@@ -58,6 +61,7 @@ impl AddonClient {
             http,
             cache: Arc::new(cache),
             health: Arc::new(HealthBook::default()),
+            lookups: Arc::new(tokio::sync::Semaphore::new(4)),
             max_bytes: RequestOptions::default().max_bytes,
         }
     }
@@ -125,7 +129,16 @@ impl AddonClient {
         // Taken before the network: an answer that a profile removal
         // overtakes is not cached.
         let generation = self.cache.generation();
-        if let Some(hit) = self.cache.get(&url) {
+        // Off the core's workers: a cold cache reads SQLite, and a Home of a
+        // hundred catalogs queued its own push behind those reads.
+        let (cache, key) = (self.cache.clone(), url.clone());
+        let turn = self.lookups.acquire().await;
+        let hit = mq_rt::spawn_blocking(move || cache.get(&key))
+            .await
+            .ok()
+            .flatten();
+        drop(turn);
+        if let Some(hit) = hit {
             if hit.is_stale_but_usable() {
                 self.spawn_refresh(addon.clone(), url.clone(), timeout, generation);
             }
