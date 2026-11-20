@@ -992,6 +992,9 @@ impl Scheduler {
     /// When the playback ends (2.4): every piece held but the windowed
     /// file's pinned head and index and `[pos - B, pos + ahead)` around the
     /// last read position, verified or partly written with no request out.
+    /// Never what a play resumed at that position fetches at once (its
+    /// playback window and readahead): trimmed, it was fetched again by the
+    /// next play there.
     pub fn trimmable(&self, ahead: u64) -> Vec<PieceIdx> {
         let Some(win) = self.window else {
             return Vec::new();
@@ -1015,7 +1018,9 @@ impl Scheduler {
             .map(|(_, pos)| pos);
         if let Some(pos) = at {
             let from = f.offset + pos.saturating_sub(win.behind);
-            set(g.pieces_in(from, f.offset + pos.saturating_add(ahead).min(f.len)));
+            let resumed = self.windows(win.file, pos, None, None).readahead_end;
+            let to = (f.offset + pos.saturating_add(ahead).min(f.len)).max(resumed);
+            set(g.pieces_in(from, to));
         }
         (0..g.num_pieces())
             .filter(|&p| !keep.get(p))
