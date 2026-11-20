@@ -4,7 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.model.DefaultAddons
 import app.marquee.core.model.DefaultInstalled
 import app.marquee.core.route.DefaultsMode
@@ -144,7 +144,7 @@ class DefaultsCard(
 suspend fun startsFresh(addons: AddonsView): Boolean =
     try {
         addons.opened.await()
-        snapshotFlow { addons.status }.first { it !is ViewStatus.Opening }
+        snapshotValues { addons.status }.first { it !is ViewStatus.Opening }
         addons.snapshot?.fresh == true
     } finally {
         addons.close()

@@ -36,7 +36,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -65,6 +64,7 @@ import app.marquee.core.PluginCopy
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.VersionsCopy
 import app.marquee.core.VersionsCopy.EmptyStep
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.model.EmptyKind
 import app.marquee.core.model.EmptyVersions
 import app.marquee.core.model.LearnedNote
@@ -197,7 +197,7 @@ fun PhoneVersions(
     // card empty while sources stream in. The flag comes from the core, so a restarted core is pinned again.
     LaunchedEffect(versions, snapshot?.frozen) {
         if (versions != null && snapshot?.frozen != true) {
-            snapshotFlow { listState.isScrollInProgress && versions.snapshot?.recommended != null }.first { it }
+            snapshotValues { listState.isScrollInProgress && versions.snapshot?.recommended != null }.first { it }
             versions.freeze()
         }
     }

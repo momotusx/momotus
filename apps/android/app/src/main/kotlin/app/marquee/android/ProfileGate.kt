@@ -5,10 +5,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import app.marquee.core.ProfileCopy
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.session.CoreHealth
 import app.marquee.core.session.CoreSession
@@ -108,7 +108,7 @@ class ProfileGate(
     /** Opens the view once the core runs, decides the start picker on the first snapshot, and follows restarts and locks. */
     fun start() {
         session.scope.launch(Dispatchers.Main) {
-            snapshotFlow { session.health }.first { it == CoreHealth.Running }
+            snapshotValues { session.health }.first { it == CoreHealth.Running }
             val v = session.profiles()
             view = v
             awaitSnapshot(v, 0)
@@ -121,7 +121,7 @@ class ProfileGate(
             // this collector hears that it runs.
             var mark = v.opens
             launch {
-                snapshotFlow { session.health == CoreHealth.Running }.collect { running ->
+                snapshotValues { session.health == CoreHealth.Running }.collect { running ->
                     if (!running && current) {
                         mark = v.opens
                         current = false
@@ -135,7 +135,7 @@ class ProfileGate(
             // A lock while open (another device removed this profile, or a lock asked for).
             launch {
                 var was = first.locked
-                snapshotFlow { v.snapshot?.locked }.filterNotNull().collect { locked ->
+                snapshotValues { v.snapshot?.locked }.filterNotNull().collect { locked ->
                     if (locked && !was) shut()
                     was = locked
                 }
@@ -152,7 +152,7 @@ class ProfileGate(
         mark: Int,
     ) {
         while (true) {
-            snapshotFlow { v.opens > mark || v.status is ViewStatus.Failed }.first { it }
+            snapshotValues { v.opens > mark || v.status is ViewStatus.Failed }.first { it }
             if (v.opens > mark) break
             problem = (v.status as? ViewStatus.Failed)?.reason
             CoreLog.w("profiles view failed, trying again: $problem")
@@ -262,7 +262,7 @@ class ProfileGate(
             // only with the picker open). A frame clock paused in the background runs no reset:
             // the wait then lasts until the app is in front again and its root answers. Elapsed
             // time is never taken for an answer.
-            snapshotFlow { resetCount }.first { it >= count }
+            snapshotValues { resetCount }.first { it >= count }
             // A Trakt record already on its way reaches the core before the switch (TraktAccount.quiet).
             beforeSwitch()
             switchProblem = whileViewsClose(op)

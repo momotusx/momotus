@@ -22,7 +22,6 @@ import androidx.annotation.RequiresApi
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
@@ -35,6 +34,7 @@ import app.marquee.core.KeeperEffect
 import app.marquee.core.KeeperEvent
 import app.marquee.core.KeeperFacts
 import app.marquee.core.client.CoreLog
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.session.CoreSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -68,7 +68,7 @@ class DownloadKeeper(
         createChannel()
         session.scope.launch(Dispatchers.Main) {
             val view = session.downloads()
-            snapshotFlow { view.snapshot }.filterNotNull().collect {
+            snapshotValues { view.snapshot }.filterNotNull().collect {
                 val facts = KeeperFacts.of(it)
                 // A locked view lists nothing: what the profile has stays as it last said.
                 if (!facts.locked) anyDone = facts.done.isNotEmpty()

@@ -47,7 +47,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -87,6 +86,7 @@ import app.marquee.core.LanguagePicks
 import app.marquee.core.ProfileCopy
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.client.CoreLog
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.model.DefaultAddonInfo
 import app.marquee.core.model.DefaultAddons
 import app.marquee.core.model.DefaultInstalled
@@ -1200,7 +1200,7 @@ internal suspend fun defaultsSeen(session: CoreSession): Int? = prefsNow(session
 private suspend fun prefsNow(session: CoreSession): Prefs? {
     val view = session.settings()
     return try {
-        withTimeoutOrNull(OFFER_WAIT_MS) { snapshotFlow { view.snapshot }.filterNotNull().first() }
+        withTimeoutOrNull(OFFER_WAIT_MS) { snapshotValues { view.snapshot }.filterNotNull().first() }
     } finally {
         view.close()
     }

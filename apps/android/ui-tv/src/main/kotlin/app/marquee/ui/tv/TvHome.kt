@@ -35,7 +35,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -70,6 +69,7 @@ import app.marquee.core.KidsCopy
 import app.marquee.core.PendingRemoval
 import app.marquee.core.TileCopy
 import app.marquee.core.client.CoreLog
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.RowNotice
@@ -237,7 +237,7 @@ fun TvHome(
     var keyAt by remember { mutableLongStateOf(0L) }
     var keyHeld by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        snapshotFlow { keyAt }.collectLatest {
+        snapshotValues { keyAt }.collectLatest {
             if (it == 0L) return@collectLatest
             keyHeld = true
             delay(KEY_HOLD_MS)
@@ -298,7 +298,7 @@ fun TvHome(
             val seen = state.focus.interactions
             val first =
                 withTimeoutOrNull(FOCUS_WAIT_MS) {
-                    snapshotFlow {
+                    snapshotValues {
                         home.rows
                             .toList()
                             .firstOrNull { it.rowId == rowId }
@@ -324,7 +324,7 @@ fun TvHome(
     // Read from the snapshot, not in a SideEffect: lanes arrive without recomposing this function,
     // and a stale start row would make every Back refocus the same tile.
     LaunchedEffect(state) {
-        snapshotFlow { startRow(home.rows.toList(), state.shownHero(home)) }.collect {
+        snapshotValues { startRow(home.rows.toList(), state.shownHero(home)) }.collect {
             state.focus.firstRow = it
             state.focus.refresh()
         }
@@ -349,7 +349,7 @@ fun TvHome(
             state.page.scrollToItem(0)
         }
         // The one scroll of this move: the page's anchor holds while focus is on the first row.
-        snapshotFlow { state.focus.onFirstRow.value }.collectLatest { onFirst ->
+        snapshotValues { state.focus.onFirstRow.value }.collectLatest { onFirst ->
             if (onFirst) state.page.animateScrollToItem(state.heroItem)
         }
     }

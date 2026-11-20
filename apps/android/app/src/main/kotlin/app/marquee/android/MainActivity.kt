@@ -13,13 +13,13 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.core.graphics.drawable.toDrawable
 import androidx.lifecycle.lifecycleScope
 import app.marquee.core.ProfileCopy
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.route.Route
 import app.marquee.design.MarqueeTheme
 import app.marquee.design.formPalette
@@ -74,7 +74,7 @@ class MainActivity : ComponentActivity() {
         // switch, before that by FLAG_SECURE, which also blocks screenshots there.
         val gate = (application as MarqueeApp).profiles
         lifecycleScope.launch {
-            snapshotFlow { ProfileCopy.inIncognito(gate.snapshot) }.collect { on ->
+            snapshotValues { ProfileCopy.inIncognito(gate.snapshot) }.collect { on ->
                 recentsFrame(Build.VERSION.SDK_INT, on, ::recents, ::secure)
             }
         }

@@ -17,7 +17,6 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,6 +36,7 @@ import app.marquee.core.KidsCopy
 import app.marquee.core.StreamChoiceCopy
 import app.marquee.core.TitleCopy
 import app.marquee.core.client.TitleFacts
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.model.Episode
 import app.marquee.core.model.LearnedNote
 import app.marquee.core.model.Tile
@@ -79,9 +79,9 @@ class TitleHolder(
     init {
         val want = saved.get<Int>(SEASON) ?: season
         viewModelScope.launch {
-            val header = snapshotFlow { view.header }.first { !it?.seasons.isNullOrEmpty() } ?: return@launch
+            val header = snapshotValues { view.header }.first { !it?.seasons.isNullOrEmpty() } ?: return@launch
             if (want != null && want in header.seasons && header.selectedSeason != want) view.selectSeason(want)
-            snapshotFlow { view.header?.selectedSeason }.collect { if (it != null) saved[SEASON] = it }
+            snapshotValues { view.header?.selectedSeason }.collect { if (it != null) saved[SEASON] = it }
         }
     }
 

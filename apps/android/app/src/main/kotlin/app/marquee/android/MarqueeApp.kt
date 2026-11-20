@@ -8,10 +8,10 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import app.marquee.core.ProfileCopy
 import app.marquee.core.client.CoreLog
 import app.marquee.core.client.DeviceCapsParams
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.session.CoreSession
 import app.marquee.core.trakt.SecretTraktRecords
 import app.marquee.core.trakt.TraktAccount
@@ -151,7 +151,7 @@ class MarqueeApp :
         // Each time a profile's content may show (the core opened, unlocked, switched), its record goes to
         // the core and its `trakt` view opens; a shut gate (a switch, a lock, a core that stopped) closes it.
         session.scope.launch(Dispatchers.Main) {
-            snapshotFlow { profiles.snapshot?.active?.takeIf { profiles.open } }.collect { active ->
+            snapshotValues { profiles.snapshot?.active?.takeIf { profiles.open } }.collect { active ->
                 if (active == null) trakt.end() else trakt.begin(active)
             }
         }

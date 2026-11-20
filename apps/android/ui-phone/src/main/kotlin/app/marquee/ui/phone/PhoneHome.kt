@@ -39,7 +39,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -63,6 +62,7 @@ import androidx.lifecycle.compose.currentStateAsState
 import app.marquee.core.KidsCopy
 import app.marquee.core.TileCopy
 import app.marquee.core.ZapCopy
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.model.Hero
 import app.marquee.core.model.HomeRow
 import app.marquee.core.model.RowNotice
@@ -401,7 +401,7 @@ private fun PhoneHeroCarousel(
             )
         }
     }
-    LaunchedEffect(trailer) { snapshotFlow { trailer.fraction }.collect { if (trailer.playing) clock.trailer(it) } }
+    LaunchedEffect(trailer) { snapshotValues { trailer.fraction }.collect { if (trailer.playing) clock.trailer(it) } }
     // The settled page's trailer, once it is due and every condition holds (decision 5).
     val settledId = heroes.getOrNull(pager.settledPage % n.coerceAtLeast(1))?.tile?.id
     LaunchedEffect(settledId, active, visible()) {

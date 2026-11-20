@@ -42,7 +42,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -73,6 +72,7 @@ import app.marquee.core.ProfileCopy
 import app.marquee.core.SearchCopy
 import app.marquee.core.TileCopy
 import app.marquee.core.ZapCopy
+import app.marquee.core.client.snapshotValues
 import app.marquee.core.model.DiscoverSnapshot
 import app.marquee.core.model.DiscoverState
 import app.marquee.core.model.HomeRow
@@ -684,7 +684,7 @@ internal fun DiscoverContent(
     val current by rememberUpdatedState(snapshot)
     val more by rememberUpdatedState(loadMore)
     LaunchedEffect(grid) {
-        snapshotFlow {
+        snapshotValues {
             grid.layoutInfo.visibleItemsInfo
                 .lastOrNull()
                 ?.index to grid.layoutInfo.totalItemsCount
