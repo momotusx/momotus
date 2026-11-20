@@ -620,14 +620,20 @@ async fn keep_windows(engine: &Weak<Inner>, h: TorrentHandle, t: &Arc<Torrent>) 
         }
         // The stop is for growth only (review r2 N2, r3): past what the
         // window held when the free space first fell to the resume mark, by
-        // more than its slack. A ring that plays on writes a piece for each
-        // one it frees, within that. Reset over the resume mark only, so a
-        // stopped window keeps the 64 MiB band (review r2 N11).
+        // more than its slack, and never while it holds its budget (written
+        // plus its slack at or over it, plans/no-space-warnings.md 5): a
+        // window at its budget swings by more than its slack between the
+        // keeper's rounds (a full ring between 17 and 29 MB of 30), so a mark
+        // taken at a low point read its next fill as growth. A ring that
+        // plays on writes a piece for each one it frees, within that. Reset
+        // over the resume mark only, so a stopped window keeps the 64 MiB
+        // band (review r2 N11).
         if free > RESUME_BYTES {
             at_stop = None;
         }
         let base = *at_stop.get_or_insert(written);
-        let growing = written > base + state.plan.slack;
+        let holds = written + state.plan.slack >= state.budget();
+        let growing = !holds && written > base + state.plan.slack;
         engine.space_stop(t, free, growing).await;
     }
 }
