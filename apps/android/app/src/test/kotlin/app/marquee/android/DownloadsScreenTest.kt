@@ -203,15 +203,18 @@ class DownloadsScreenTest {
         until("the rows showed") { shows("Sintel") }
     }
 
-    /** Sends the held subscribe answer and waits until [view] holds the snapshot. */
+    /**
+     * Sends the held subscribe answer and waits until [view] holds the snapshot. The hold ends only once the subscribe
+     * is held: ended first, a subscribe that left its thread late was answered at once and never held (CI, 2026-11-20).
+     */
     private fun answerNow(view: DownloadsView) {
-        holdSubscribe = false
         val deadline = System.currentTimeMillis() + 10_000
         while (held ==
             null
         ) {
             check(System.currentTimeMillis() < deadline) { "no subscribe; ${threadReport().take(3000)}" }
         }
+        holdSubscribe = false
         held?.invoke()
         while (view.latest.value == null) check(System.currentTimeMillis() < deadline) { "no snapshot" }
     }
