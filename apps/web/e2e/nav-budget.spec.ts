@@ -1,27 +1,31 @@
 /** Navigation speed budget (plans/perf-nav.md): the shared walk on the TV form, every D-pad press timed from the key to
  * the end of the first frame that shows its change (the focus, the page or the field moved), at the browser's own CPU
  * and at 4x CDP throttle. The budgets are a CI runner's (about half an Apple Silicon core); the Mac gate sets
- * NAV_BUDGET_1X and NAV_BUDGET_4X to the targets (16 and 33 ms p90). NAV_BENCH=1 prints the rows for
- * bench/webos/*.jsonl. The webOS bundle on Chromium 79 and 92 is walked by apps/webos/scripts/nav-walk.ts.
+ * NAV_BUDGET_1X and NAV_BUDGET_4X to the targets (16 and 33 ms p90). A press that opens or leaves a page has its own,
+ * looser budget for its slowest press (NAV_ROUTE_BUDGET_1X, _4X): a page's build varies more on a shared runner. Every
+ * press must show its change: one that never does within its wait counts as over budget. NAV_BENCH=1 prints the rows
+ * for bench/webos/*.jsonl. The webOS bundle on Chromium 79 and 92 is walked by apps/webos/scripts/nav-walk.ts.
  * Two structural guards ride along, as they hold on any machine: Back to Home shows the Home it left (nothing is
  * rebuilt), and a search answer builds the hits in and near its list's view, not all of them. */
 
 import { type CDPSession, expect, type Page, test } from "./fixture";
 
 const BUDGETS: Record<number, number> = { 1: Number(process.env.NAV_BUDGET_1X) || 50, 4: Number(process.env.NAV_BUDGET_4X) || 100 };
+const ROUTE_BUDGETS: Record<number, number> = { 1: Number(process.env.NAV_ROUTE_BUDGET_1X) || 150, 4: Number(process.env.NAV_ROUTE_BUDGET_4X) || 300 };
 
-type Step = [action: string, key: string, wait?: number];
+/** `route`: the press opens or leaves a page. */
+type Step = [action: string, key: string, wait?: number, route?: "route"];
 const SLOW = 1500;
 const WALK: Step[] = [
   ["home down", "ArrowDown"], ["home down", "ArrowDown"], ["home down", "ArrowDown"],
   ["home right", "ArrowRight"], ["home right", "ArrowRight"], ["home right", "ArrowRight"], ["home right", "ArrowRight"], ["home right", "ArrowRight"],
   // Up to Continue Watching: its title (the suite's sample film) opens with its versions, offline too.
   ["home up", "ArrowUp"], ["home up", "ArrowUp"],
-  ["open title", "Enter", SLOW], ["title right", "ArrowRight"], ["play", "Enter", SLOW],
-  ["back to title", "Escape", SLOW], ["back to home", "Escape", SLOW],
+  ["open title", "Enter", SLOW, "route"], ["title right", "ArrowRight"], ["play", "Enter", SLOW, "route"],
+  ["back to title", "Escape", SLOW, "route"], ["back to home", "Escape", SLOW, "route"],
   ["home up", "ArrowUp"], ["home up", "ArrowUp"],
   ["bar to discover", "ArrowRight", SLOW], ["discover down", "ArrowDown"], ["discover down", "ArrowDown"],
-  ["discover right", "ArrowRight"], ["discover right", "ArrowRight"], ["discover right", "ArrowRight"],
+  ["discover right", "ArrowRight"],
 ];
 
 // Per key: the key's time, and the end of the first frame whose animation frame saw a new focus, path or field value
@@ -71,12 +75,14 @@ for (const rate of [1, 4]) {
     }
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
     const rows = await page.evaluate(() => (window as unknown as { __nav: { change: number | null }[] }).__nav.map((r) => r.change));
-    const walked = WALK.map(([action], i) => ({ action, ms: rows[i] }));
+    // A press whose change never showed is over any budget.
+    const walked = WALK.map(([action, , , route], i) => ({ action, route: !!route, ms: rows[i] ?? Number.POSITIVE_INFINITY }));
     if (process.env.NAV_BENCH) for (const w of walked) console.log(`nav-budget ${JSON.stringify({ date: new Date().toISOString().slice(0, 10), cpuThrottle: rate, ...w })}`);
-    const changed = walked.filter((w): w is { action: string; ms: number } => typeof w.ms === "number");
-    // A press that changes nothing (Right on a row's last chip) is not timed; most of the walk must be.
-    expect(changed.length, JSON.stringify(walked)).toBeGreaterThan(WALK.length * 0.7);
-    expect(p90(changed.map((w) => w.ms)), JSON.stringify(walked)).toBeLessThanOrEqual(BUDGETS[rate] as number);
+    expect(walked.filter((w) => w.ms === Number.POSITIVE_INFINITY).map((w) => w.action), "presses that showed no change").toEqual([]);
+    const presses = walked.filter((w) => !w.route).map((w) => w.ms);
+    const routes = walked.filter((w) => w.route).map((w) => w.ms);
+    expect(p90(presses), JSON.stringify(walked)).toBeLessThanOrEqual(BUDGETS[rate] as number);
+    expect(Math.max(...routes), JSON.stringify(walked)).toBeLessThanOrEqual(ROUTE_BUDGETS[rate] as number);
     expect(keptHome, "Back from a title rebuilt Home").toBe(true);
     // A search answer builds its first screenful of hits; the rest wait until the list nears them.
     await page.goto("/search?form=tv");
@@ -86,7 +92,8 @@ for (const rate of [1, 4]) {
     const results = Number((await page.locator(".palette-count").textContent({ timeout: 1000 }).catch(() => ""))?.match(/\d+/)?.[0] ?? 0);
     const hits = await page.locator(".hit").count();
     if (process.env.NAV_BENCH) console.log(`nav-budget search ${hits} of ${results} hits built`);
-    if (results > 12) expect(hits, `${hits} of ${results} hits built at once`).toBeLessThan(results);
+    expect(results, "the query needs more hits than one screenful").toBeGreaterThan(12);
+    expect(hits, `${hits} of ${results} hits built at once`).toBeLessThan(results);
     await context.close();
   });
 }
