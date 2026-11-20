@@ -646,7 +646,19 @@ async fn a_window_set_during_the_trim_stays_and_is_kept() {
     assert!(w.read(16 * MIB, len).await == w.movie(16 * MIB, len));
     let s = w.stats().await;
     assert!(s.evict_rounds > rounds, "the new window's keeper: {s:?}");
-    assert!(s.held_bytes.unwrap() <= W, "{s:?}");
+    // The read's last blocking windows may start up to one blocking span
+    // past `W` (the scheduler's hard ceiling, 2.4); the keeper's next round
+    // brings the window back under it.
+    let span =
+        w.engine.blocking_bytes().div_ceil(u64::from(PIECE)) * u64::from(PIECE) + u64::from(PIECE);
+    assert!(
+        s.held_bytes.unwrap() <= W + span,
+        "past the hard ceiling: {s:?}"
+    );
+    until("the new window's keeper brings it under W", || async {
+        w.stats().await.held_bytes.unwrap() <= W
+    })
+    .await;
     drop(claim);
 }
 
