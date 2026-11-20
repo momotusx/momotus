@@ -28,9 +28,16 @@ git fetch -q origin main
 git merge-base --is-ancestor HEAD "$TRUNK" || { echo "deploy: $COMMIT is not on $TRUNK" >&2; exit 1; }
 git diff --quiet HEAD -- crates Cargo.toml Cargo.lock deploy/relay || { echo "deploy: uncommitted changes under crates or deploy/relay" >&2; exit 1; }
 
-TARGET=${CARGO_TARGET_DIR:-$HOME/.cargo-targets/marquee-relay-deploy}
-CARGO_TARGET_DIR=$TARGET CARGO_INCREMENTAL=0 cargo zigbuild --release -j 4 -p mq-sync-server --target x86_64-unknown-linux-musl
-BIN_DIR=$TARGET/x86_64-unknown-linux-musl/release
+# MQ_RELAY_BIN: a static x86_64 musl mq-sync-server built elsewhere from this same commit (a build
+# box, when this Mac has no disk for the build); without it the binary is built here.
+if [ -n "${MQ_RELAY_BIN:-}" ]; then
+  [ "$(basename "$MQ_RELAY_BIN")" = mq-sync-server ] && [ -x "$MQ_RELAY_BIN" ] || { echo "deploy: MQ_RELAY_BIN must be an executable named mq-sync-server" >&2; exit 1; }
+  BIN_DIR=$(cd "$(dirname "$MQ_RELAY_BIN")" && pwd)
+else
+  TARGET=${CARGO_TARGET_DIR:-$HOME/.cargo-targets/marquee-relay-deploy}
+  CARGO_TARGET_DIR=$TARGET CARGO_INCREMENTAL=0 cargo zigbuild --release -j 4 -p mq-sync-server --target x86_64-unknown-linux-musl
+  BIN_DIR=$TARGET/x86_64-unknown-linux-musl/release
+fi
 HASH=$(shasum -a 256 "$BIN_DIR/mq-sync-server" | cut -d' ' -f1)
 echo "deploy: mq-sync-server $COMMIT sha256 $HASH, instance $NAME"
 UNITS=$(mktemp -d)
