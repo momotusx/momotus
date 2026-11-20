@@ -33,6 +33,7 @@ pub fn golden_torrent(name: &str, snapshot: &impl Serialize) {
 fn pin(name: &str, snapshot: &impl Serialize) {
     let mut value = serde_json::to_value(snapshot).unwrap();
     steady(&mut value);
+    number_subtitles(&mut value, &mut Vec::new());
     let text = serde_json::to_string_pretty(&value).unwrap() + "\n";
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../apps/shared/fixtures")
@@ -107,4 +108,35 @@ fn steady_text(text: &str) -> String {
         }
     }
     steady
+}
+
+/// A subtitle's id in its served link (`/sub/<token>/<id>/`) is the order
+/// its addon answered in, which two addons answering at once change run to
+/// run; it reads as its place in the snapshot instead, the same id the same
+/// number wherever it shows.
+fn number_subtitles(value: &mut Value, seen: &mut Vec<String>) {
+    const SUB: &str = "/sub/0000000000000000000000000000000000000000000000000000000000000000/";
+    match value {
+        Value::String(s) => {
+            let Some(at) = s.find(SUB).map(|at| at + SUB.len()) else {
+                return;
+            };
+            let digits = s[at..].len()
+                - s[at..]
+                    .trim_start_matches(|c: char| c.is_ascii_digit())
+                    .len();
+            if digits == 0 {
+                return;
+            }
+            let id = s[at..at + digits].to_owned();
+            let n = seen.iter().position(|x| *x == id).unwrap_or_else(|| {
+                seen.push(id);
+                seen.len() - 1
+            });
+            s.replace_range(at..at + digits, &n.to_string());
+        }
+        Value::Array(items) => items.iter_mut().for_each(|v| number_subtitles(v, seen)),
+        Value::Object(fields) => fields.values_mut().for_each(|v| number_subtitles(v, seen)),
+        _ => {}
+    }
 }
