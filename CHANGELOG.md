@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.5.0](https://github.com/momotusx/momotus/compare/v0.4.0...v0.5.0) (2026-11-20)
+
+
+### Features
+
+* **deploy:** deploy.sh ships a relay binary built elsewhere ([e6e33cd](https://github.com/momotusx/momotus/commit/e6e33cd8674ba22314ab545fdf4d8d8d5ed708aa))
+* **deploy:** relay units, deploy and backups take an instance file ([fc703ff](https://github.com/momotusx/momotus/commit/fc703ffe54da97a74f722aa4198a16e07b581995))
+* **relay:** an identity file may list its own brokered sign-in returns ([b56e637](https://github.com/momotusx/momotus/commit/b56e6379c248f303bc9c0e37ded7755522ed082c))
+* **sync:** app registers behind traits and an escrow mode for the relay ([c52a4ef](https://github.com/momotusx/momotus/commit/c52a4ef3d444174372e1b84e5d191daf43889dfb))
+* **web:** webOS title pages start no trailer by themselves ([06c18d2](https://github.com/momotusx/momotus/commit/06c18d259b3299510b317b93b428f94a89d27516))
+
+
+### Bug Fixes
+
+* **deploy:** the relay deploy checks the published main, not the old trunk ([e96b2e6](https://github.com/momotusx/momotus/commit/e96b2e69dee71cba7f77579d2021cfc00ba647d2))
+* **engine:** a message is answered after the events queued before it ([6091d6a](https://github.com/momotusx/momotus/commit/6091d6ada75b0882016e26cd03ce47588158817b))
+* **engine:** the trim keeps what a play resumed there fetches at once ([0f1c2ce](https://github.com/momotusx/momotus/commit/0f1c2ce32286b18794ea48602d151c526496c5a3))
+* **runtime:** Home's decode limit comes from mq_rt::parallelism ([15a99b6](https://github.com/momotusx/momotus/commit/15a99b66cca4832a0253dee7fe06d3f7166ebc1b))
+* **web:** a kept Home gives up the focus when a title opens ([aec5634](https://github.com/momotusx/momotus/commit/aec563414502f9f0c4ae5ca6ad3313a159b66601))
+* **web:** a kept Home shows no Undo of its own under a title ([d469fa6](https://github.com/momotusx/momotus/commit/d469fa64686838e3179e4c28a582c38383941392))
+* **web:** a new search query renders with its first screenful only ([cb284e8](https://github.com/momotusx/momotus/commit/cb284e8dc6825ef1f84937a76876659b31988be4))
+
+
+### Performance Improvements
+
+* **addons:** cache lookups run off the core's workers ([37a6801](https://github.com/momotusx/momotus/commit/37a6801a1178fc66b10c5ea2cc804df338836f55))
+* **runtime:** a snapshot equal to the last push is not pushed again ([1774c39](https://github.com/momotusx/momotus/commit/1774c396d681d9a50a1e3fa7a7bdd3cf9e2fc29b))
+* **runtime:** Home reads its catalogs off the core's workers ([3099c27](https://github.com/momotusx/momotus/commit/3099c278dac88c615f1b648ad15b903cfbf9bc90))
+* **runtime:** Home reads only the titles a row shows, on every worker ([498efea](https://github.com/momotusx/momotus/commit/498efeab28eacd14af67e51493280851f2e6a05d))
+* **runtime:** Home's row answers never come back as a reset ([89e30c0](https://github.com/momotusx/momotus/commit/89e30c089ce9d4b9c0a98e94e9bc998348d853cd))
+* **runtime:** tile images at the size they are drawn, not the largest ([e49657f](https://github.com/momotusx/momotus/commit/e49657f6cab0cbf4027607f700a218ebd10b3968))
+* **web:** Home waits under a title instead of being rebuilt on Back ([16b69e4](https://github.com/momotusx/momotus/commit/16b69e4e8013c512a724b595c975a294559f1722))
+* **web:** row scrollers stack their own tiles ([3c6c722](https://github.com/momotusx/momotus/commit/3c6c7220ca6067afab9b87af155f03df428acb63))
+* **web:** search builds its hits as the list nears them ([2a21651](https://github.com/momotusx/momotus/commit/2a21651fbe2e76df419fe087d605f6bfc8e523e6))
+* **web:** title links render a plain anchor ([345034d](https://github.com/momotusx/momotus/commit/345034d405779e8f7a264cf13dddcf9dac661257))
+
 ## [0.4.0](https://github.com/momotusx/momotus/compare/v0.3.0...v0.4.0) (2026-11-18)
 
 
