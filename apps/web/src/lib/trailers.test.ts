@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { coverSize, heldStep, seekTarget, skippedLine, type TrailerSignals, trailerAllowed, trailerName, youtubeId } from "./trailers";
+import { coverSize, headerOnTvNow, heldStep, seekTarget, skippedLine, type TrailerSignals, trailerAllowed, trailerName, youtubeId } from "./trailers";
 
 const ok: TrailerSignals = { enabled: true, visible: true, reducedMotion: false, metered: false, walk: false, layout: "cover", capable: true, hasTrailer: true, incognito: false };
 
@@ -58,4 +58,23 @@ test("a trailer the layer moved past is named, never a silent swap", () => {
   expect(skippedLine(3)).toBe("Main trailer, Trailer 2 and Trailer 3 can't play here.");
   expect(trailerName(0)).toBe("Main trailer");
   expect(trailerName(2)).toBe("Trailer 3");
+});
+
+test("a TV's title header plays a trailer by itself above its memory floor, never on LG webOS", () => {
+  const was = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const as = (userAgent: string, deviceMemory?: number) =>
+    Object.defineProperty(globalThis, "navigator", { value: { userAgent, deviceMemory }, configurable: true });
+  try {
+    as("Mozilla/5.0 (Linux; Android 12; BRAVIA) Chrome/120.0", 8);
+    expect(headerOnTvNow()).toBe(true);
+    as("Mozilla/5.0 (Linux; Android 12; BRAVIA) Chrome/120.0", 2);
+    expect(headerOnTvNow()).toBe(false);
+    as("Mozilla/5.0 (Linux; Android 12; BRAVIA) Chrome/120.0");
+    expect(headerOnTvNow()).toBe(false);
+    as("Mozilla/5.0 (Web0S; Linux/SmartTV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.79 Safari/537.36", 8);
+    expect(headerOnTvNow()).toBe(false);
+  } finally {
+    if (was) Object.defineProperty(globalThis, "navigator", was);
+    else delete (globalThis as { navigator?: unknown }).navigator;
+  }
 });

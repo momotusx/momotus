@@ -1,6 +1,7 @@
 /** Home's trailer previews (plans/appletv-polish.md decisions 5, 13, 15): when one may play, where it
  * plays, and the device's own switch. */
 import type { Form } from "../form";
+import { isWebOS } from "./webos";
 
 /** Where the hero's trailer plays, per form (the owner's pick, 2026-10-24, plans/appletv-polish.md 4.2):
  * "cover" fills the hero's own frame where the key art sits, cropped to fill, with no YouTube look. */
@@ -107,8 +108,11 @@ export function walkNow(): boolean {
 export const TV_HEADER_GB = 4;
 
 /** A TV browser plays a title header's trailer only where it says it has the floor: one that does not tell, as many TV
- * browsers do not, is taken as unable (the Trailer action still plays full screen). */
+ * browsers do not, is taken as unable (the Trailer action still plays full screen). LG webOS never starts one by
+ * itself: YouTube's player runs on the app's own thread there (no site isolation), and opening it held that thread for
+ * 120 to 150 ms at a time at 6x CPU on Chromium 92 (plans/perf-nav.md); the Trailer action plays it. */
 export function headerOnTvNow(): boolean {
+  if (isWebOS()) return false;
   const gb = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
   return gb !== undefined && gb >= TV_HEADER_GB;
 }
