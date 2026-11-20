@@ -132,10 +132,17 @@ export const bridgeBinary = () => binary("mq-bridge", "MQ_BRIDGE_BIN");
  * proxy that is not there and fails, instead of reaching the internet. */
 const NO_NETWORK = { HTTP_PROXY: "http://127.0.0.1:9", HTTPS_PROXY: "http://127.0.0.1:9", ALL_PROXY: "http://127.0.0.1:9", NO_PROXY: "127.0.0.1,localhost" };
 
+/** Bridges stopped by `cleanup`, by port: the next core on a port starts once the last one there has exited. A
+ * stopped core is only signalled, and one that still held its port failed the next spec's bind ("Address already
+ * in use", web-e2e on 2026-11-19 and 2026-11-20). */
+const exiting = new Map<number, Promise<void>>();
+const portOf = new WeakMap<ChildProcess, number>();
+
 /** A core on `port` with a data directory of its own; `env` adds variables such as MQ_DEV_TRAKT. Skip
  * segments come from the source server's synthetic answers, and every request to a host off this
  * machine from its recorder (e2e/replay.ts), never a live service once recorded. */
-export function startBridge(port = PORTS.bridge, env: Record<string, string> = {}): Promise<{ proc: ChildProcess; data: string }> {
+export async function startBridge(port = PORTS.bridge, env: Record<string, string> = {}): Promise<{ proc: ChildProcess; data: string }> {
+  await exiting.get(port);
   const data = mkdtempSync(join(tmpdir(), "mq-e2e-"));
   const local = `http://127.0.0.1:${PORTS.source}`;
   const offline = process.env.MQ_E2E_OFFLINE === "1" ? NO_NETWORK : {};
@@ -150,6 +157,7 @@ export function startBridge(port = PORTS.bridge, env: Record<string, string> = {
     env: { ...process.env, ...hooks, ...env, MQ_DATA: data, MQ_BRIDGE_PORT: String(port) },
     stdio: ["ignore", "pipe", "inherit"],
   });
+  portOf.set(proc, port);
   return ready(proc, "bridge_ready", data);
 }
 
@@ -178,6 +186,13 @@ function ready(proc: ChildProcess, word: string, data: string): Promise<{ proc: 
 }
 
 export function cleanup(proc: ChildProcess, data: string) {
+  const port = portOf.get(proc);
+  if (port !== undefined && proc.exitCode === null && proc.signalCode === null) {
+    const gone = new Promise<void>((ok) => proc.once("exit", () => ok()));
+    // One that ignores the signal is killed outright after 5 s.
+    const hard = setTimeout(() => proc.kill("SIGKILL"), 5_000);
+    exiting.set(port, gone.finally(() => clearTimeout(hard)));
+  }
   proc.kill();
   rmSync(data, { recursive: true, force: true });
 }
