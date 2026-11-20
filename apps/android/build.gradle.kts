@@ -21,6 +21,27 @@ plugins {
     alias(libs.plugins.spotless)
 }
 
+// Robolectric's Android runtime is a Gradle dependency, so it comes from Gradle's cache like the rest. Left to
+// itself Robolectric downloads it from Maven Central inside the first test of every run, and one failed download
+// (a 404 there) failed every Robolectric test of the run (CI, 2026-11-20). Offline mode reads the jar from the
+// cache folder Gradle keeps it in.
+val robolectricRuntime: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isTransitive = false
+}
+dependencies { robolectricRuntime(libs.robolectric.android.all) }
+subprojects {
+    tasks.withType<Test>().configureEach {
+        val runtime = robolectricRuntime.incoming.files
+        inputs.files(runtime).withPropertyName("robolectricRuntime").withPathSensitivity(PathSensitivity.NAME_ONLY)
+        jvmArgumentProviders.add(
+            CommandLineArgumentProvider {
+                listOf("-Drobolectric.offline=true", "-Drobolectric.dependency.dir=${runtime.singleFile.parent}")
+            },
+        )
+    }
+}
+
 // Format and lint: ktlint through Spotless. Generated sources are left alone. ktlint's no-unused-imports
 // does not run here unless it is named: without this line spotlessCheck passed 19 files with dead imports.
 val ktlintRules = mapOf("ktlint_standard_no-unused-imports" to "enabled")
