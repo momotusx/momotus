@@ -73,3 +73,21 @@ private func source(_ path: String) throws -> String {
     // A guard beside the behaviour tests (the full screen keeps its own `loud`): no mutation is counted by it.
     #expect(!(try source("Title/FullTrailer.swift")).contains("TrailerState.shared"))
 }
+
+@MainActor @Test func aLetGoTrailerWebViewIsTheNextPlayersSpare() async throws {
+    // A new web view starts a web content process, which held a frame on every trailer: the next player takes the
+    // loaded one a player let go, unless its process died.
+    let first = TrailerPlayer()
+    first.play("abcdefghijk", into: TrailerState()) { _ in }
+    let web = first.web
+    for _ in 0..<100 where !first.loaded { try await Task.sleep(for: .milliseconds(50)) }
+    #expect(first.loaded)
+    first.release()
+    let next = TrailerPlayer()
+    #expect(next.web === web)
+    #expect(next.loaded)
+    next.release(why: "lost")
+    let fresh = TrailerPlayer()
+    #expect(fresh.web !== web)
+    fresh.release()
+}

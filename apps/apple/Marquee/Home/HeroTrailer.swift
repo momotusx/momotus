@@ -132,7 +132,8 @@ extension TrailerSignals {
 final class TrailerPlayer: NSObject {
     static let shared = TrailerPlayer()
 
-    /// The web view lives only while a trailer may play: made on the first `play`, released with `release()`.
+    /// The web view lives only while a trailer may play: made on the first `play`, released with `release()`, then
+    /// kept as the next player's `spare`.
     private(set) var webView: WKWebView?
     var web: WKWebView {
         if let webView { return webView }
@@ -141,13 +142,19 @@ final class TrailerPlayer: NSObject {
         return made
     }
     private var generation = 0
+    /// Shared by every player, so a spare web view never carries a message another player would take for its own.
+    private static var generations = 0
+    /// One loaded web view let go by a player, taken by the next: a new one starts a web content process, whose start
+    /// (every font registered on the main thread) held a frame for 15 to 40 ms each time Home, a title or Discover
+    /// played a trailer again.
+    private static var spare: WKWebView?
     private var state: TrailerState?
     private var onEnd: ((String) -> Void)?
     private var reveal: Task<Void, Never>?
     /// The player's page has loaded: until then calls wait, in order (a Sound press while it loads must not drop the
     /// play itself), since a call that reached the page before its script would run nothing, or worse, the browser's
     /// own `stop()`, which cancels the page's load.
-    private var loaded = false
+    private(set) var loaded = false
     private var waiting: [String] = []
 
     private func run(_ js: String) {
@@ -156,6 +163,13 @@ final class TrailerPlayer: NSObject {
     }
 
     private func makeWeb() -> WKWebView {
+        if let spare = Self.spare {
+            Self.spare = nil
+            spare.configuration.userContentController.add(WeakHandler(self), name: "trailer")
+            spare.navigationDelegate = self
+            loaded = true
+            return spare
+        }
         let config = WKWebViewConfiguration()
         #if os(iOS)
         config.allowsInlineMediaPlayback = true
@@ -187,7 +201,8 @@ final class TrailerPlayer: NSObject {
         // No trailer in Incognito, whoever asks (the hero, a title's header, the full screen).
         guard !incognito else { return onEnd("incognito") }
         guard let id = HeroTrailers.checkedId(id) else { return onEnd("error") }
-        generation += 1
+        Self.generations += 1
+        generation = Self.generations
         self.state = state
         self.onEnd = onEnd
         state.loading = true
@@ -244,6 +259,10 @@ final class TrailerPlayer: NSObject {
         guard let webView else { return }
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "trailer")
         webView.removeFromSuperview()
+        if why != "lost", loaded, Self.spare == nil {
+            webView.navigationDelegate = SpareWatch.shared
+            Self.spare = webView
+        }
         self.webView = nil
         loaded = false
         waiting = []
@@ -363,6 +382,21 @@ extension TrailerPlayer: WKNavigationDelegate {
     /// Nothing navigates inside it: a link in YouTube's frame (its logo) goes nowhere; it takes no input anyway.
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction) async -> WKNavigationActionPolicy {
         action.navigationType == .linkActivated ? .cancel : .allow
+    }
+}
+
+/// The spare web view's delegate: a spare whose content process died is dropped, never handed out.
+@MainActor private final class SpareWatch: NSObject, WKNavigationDelegate {
+    static let shared = SpareWatch()
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        TrailerPlayer.dropSpare(webView)
+    }
+}
+
+extension TrailerPlayer {
+    static func dropSpare(_ webView: WKWebView) {
+        if spare === webView { spare = nil }
     }
 }
 
