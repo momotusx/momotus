@@ -1397,6 +1397,29 @@ fn the_budget_bounds_what_starts_and_the_keeper_brings_it_down() {
     assert!(h.s.held_bytes() <= 20 * P, "{}", h.s.held_bytes() / P);
 }
 
+/// The trim never takes what a play resumed at the last position fetches at
+/// once: its playback window and the readahead past it, even past the trim's
+/// own `ahead` (kids_play's resume fetched those 5 to 6 MiB again).
+#[test]
+fn the_trim_keeps_what_a_resume_there_fetches() {
+    const P: u64 = 64 * KIB;
+    let g = Geometry::new(P as u32, &[16 * MIB]).unwrap();
+    let mut h = Harness::new(g, small_cfg());
+    h.s.set_window(Some(window(0)));
+    h.s.set_readahead(0, MIB);
+    let pos = 4 * MIB;
+    h.s.seed_anchor(0, pos);
+    for piece in 0..256 {
+        h.send(Event::PieceVerified { piece });
+    }
+    // A playback window of 320 KiB (64 KiB blocking, 128 KiB critical, 4 s
+    // at 32 KiB/s), then 1 MiB of readahead.
+    let resumed = h.geo.pieces_in(pos, pos + 320 * KIB + MIB);
+    let trim = h.s.trimmable(256 * KIB);
+    assert!(resumed.clone().all(|p| !trim.contains(&p)), "{trim:?}");
+    assert!(trim.contains(&(resumed.end + 1)), "past it, the trim takes");
+}
+
 /// The hard ceiling (2.4, review r3): with nothing evicted (a round that
 /// waits on its sync), seek after seek starts only blocking-window pieces
 /// past the budget, and those only within one blocking span over it; the
