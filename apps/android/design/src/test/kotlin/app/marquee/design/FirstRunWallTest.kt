@@ -5,7 +5,7 @@ import android.graphics.Bitmap
 import android.provider.Settings
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
