@@ -482,9 +482,15 @@ async fn a_dropped_upstream_resumes_where_it_stopped() {
     assert!(seen.ranges().len() > 1, "{:?}", seen.ranges());
 }
 
+/// One chunk read through the proxy pulls from the origin the cursor's 4 MiB
+/// read-ahead and what the sockets of both its connections buffer, never
+/// the file. That buffering is the kernel's and differs by system (7 to
+/// 13 MB in all on a Mac; Linux grows a socket's receive buffer to 6 MB by
+/// default, and a 16 MiB bound failed 3 of 3 on the trunk's Linux box), so
+/// the file is large and the bound a quarter of it.
 #[tokio::test]
 async fn a_cursor_reads_ahead_only_so_far() {
-    let data = file(64 << 20);
+    let data = file(256 << 20);
     let (_server, lease, seen, http) = serve(&data, Behaviour::default()).await;
     let url = lease.url.clone();
     let mut resp = http
@@ -497,7 +503,7 @@ async fn a_cursor_reads_ahead_only_so_far() {
     let sent = seen.sent.load(Ordering::Relaxed);
     println!("origin sent {sent} bytes");
     assert!(
-        sent < 16 << 20,
+        sent < 64 << 20,
         "the origin sent {sent} bytes for one chunk"
     );
 }
