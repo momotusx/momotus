@@ -4,6 +4,7 @@
 import { createEffect, createRoot, on } from "solid-js";
 import { op } from "./core/client";
 import { endsSoon, incognito, setEndsSoon } from "./core/profiles";
+import { placingFocus } from "./focus/dom";
 import { form } from "./form";
 
 // The one delegated handler for Incognito's links (components/route-link.tsx): for a plain click or Enter, the anchor
@@ -69,6 +70,9 @@ const input = (e: Event) => {
   // The warning's own button acts by its click; reaching it by Tab, or Tab on from it, is not yet a return.
   if (e.target instanceof Node && notice()?.contains(e.target)) return;
   if (e instanceof FocusEvent && e.relatedTarget && e.relatedTarget === notice()) return;
+  // The app's own focus moves are no return: a focus that fell to the page (Tab on past the warning's button) goes back
+  // to the screen's target on the page's next change, and that took the warning away under the viewer (CI's idle test).
+  if (e.type === "focusin" && placingFocus()) return;
   stayIncognito();
 };
 for (const type of ["pointermove", "pointerdown", "touchstart", "wheel", "focusin"]) window.addEventListener(type, input, { capture: true, passive: true });

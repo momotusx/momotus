@@ -378,13 +378,13 @@ test("the chooser enters Incognito, and Leave goes back to it without a lock lin
 
 test("desktop: a minute idle sends idle; the warning's button is one Tab away and keeps Incognito; left alone it ends", async ({ browser }) => {
   const { page, line } = await open(browser, "desktop", { clock: true });
-  // Where the pointer last moved: the menu's clicks leave it resting there, before Incognito begins, and Continue is
-  // pressed from the keyboard, so no move comes after.
+  // Where the pointer last moved: the menu's clicks leave it resting there, before Incognito begins. Continue is pressed
+  // with a click event alone, so no move comes after it (a key would make the focus follow the keyboard).
   await page.evaluate(() => addEventListener("pointermove", (e: PointerEvent) => ((window as unknown as { rest: number[] }).rest = [e.clientX, e.clientY]), true));
   await menuButton(page).click();
   await page.locator('[data-f="pmenu:incognito"]').click();
   await expect(page.locator(".incog-intro h1")).toHaveText("You're Incognito");
-  await page.locator('[data-f="incognito:continue"]').press("Enter");
+  await page.locator('[data-f="incognito:continue"]').dispatchEvent("click");
   await expect(menuButton(page)).toHaveAttribute("aria-label", "Profile: Incognito");
   const idles = () => line.sent.filter((m) => m.op === "lifecycle" && m.event === "idle").length;
   const actives = () => line.sent.filter((m) => m.op === "lifecycle" && m.event === "active").length;
@@ -412,6 +412,16 @@ test("desktop: a minute idle sends idle; the warning's button is one Tab away an
   // Tab on from the button moves on and the warning stays; the next Tab reaches it again.
   await page.keyboard.press("Tab");
   await expect(stay).not.toBeFocused();
+  await expect(alert).toHaveCount(1);
+  expect(actives()).toBe(before);
+  // Past the button the focus falls to the page, and the page's next change puts it back on the screen's own target:
+  // the app's move, no return (CI: the hero's Play took the focus that way and the warning went).
+  await page.evaluate(() => {
+    const node = document.createElement("i");
+    document.body.append(node);
+    queueMicrotask(() => node.remove());
+  });
+  await expect.poll(() => focused(page)).not.toBe(null);
   await expect(alert).toHaveCount(1);
   expect(actives()).toBe(before);
   await page.keyboard.press("Tab");

@@ -252,6 +252,8 @@ window.addEventListener(
   { capture: true },
 );
 let placed: Element | null = null;
+/** The app is placing the focus now ([focusEl]): the focusin it causes is the app's move, not the viewer's. */
+export const placingFocus = () => placing > 0;
 
 export function focusEl(el: HTMLElement) {
   // A depth, not a flag: a focus handler that places focus in turn keeps the outer move the app's own.
