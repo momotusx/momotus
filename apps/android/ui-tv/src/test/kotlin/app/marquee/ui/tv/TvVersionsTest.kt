@@ -1040,7 +1040,7 @@ class TvVersionsTest {
 
     /**
      * A press on Versions recomposes only what it changes (plans/perf-nav.md: a budget, so later work cannot slide back
-     * unseen). Down through eight rows: each press may run at most [KEY_BUDGET] composable bodies of the app's own.
+     * unseen). Down three of eight rows: each press runs some bodies of the app's own, and at most [KEY_BUDGET].
      */
     @OptIn(InternalComposeTracingApi::class)
     @Test
@@ -1072,13 +1072,14 @@ class TvVersionsTest {
         )
         try {
             val counts =
-                (1..5).map {
+                (1..3).map {
                     bodies = 0
                     press(Key.DirectionDown)
                     bodies
                 }
             println("BENCH versions-down bodies=$counts")
-            counts.forEachIndexed { i, n -> assertTrue(n <= KEY_BUDGET, "Down ${i + 1} ran $n bodies: $counts") }
+            // Each Down moves the focus ring, so it runs some bodies: none would mean the tracer heard nothing.
+            counts.forEachIndexed { i, n -> assertTrue(n in 1..KEY_BUDGET, "Down ${i + 1} ran $n bodies: $counts") }
         } finally {
             Composer.setTracer(null)
         }
