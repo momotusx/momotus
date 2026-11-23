@@ -1,5 +1,6 @@
 package app.marquee.design
 
+import android.content.res.Resources
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -20,7 +22,11 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -38,8 +44,20 @@ fun BrandMark(
     size: Dp,
     modifier: Modifier = Modifier,
 ) {
-    Image(painterResource(R.drawable.brand_mark), contentDescription = null, modifier = modifier.size(size))
+    val resources = LocalContext.current.resources
+    val mark = remember { BitmapPainter(markBitmap(resources)) }
+    Image(mark, contentDescription = null, modifier = modifier.size(size))
 }
+
+/**
+ * The bird's 512 px bitmap, decoded once for the process: painterResource decodes a raster again each time it enters
+ * composition, and the TV bar brings its mark back on every return to a place (15 ms of the Back to Home frame on the
+ * Pixel, 2026-11-23). It is about 1 MB, held as the app's icon would be.
+ */
+private var decodedMark: ImageBitmap? = null
+
+private fun markBitmap(resources: Resources): ImageBitmap =
+    decodedMark ?: ImageBitmap.imageResource(resources, R.drawable.brand_mark).also { decodedMark = it }
 
 /**
  * B: the bird, then the name, its letters 0.45 of the bird's height. Spoken once, as the name, unless `spoken` is
