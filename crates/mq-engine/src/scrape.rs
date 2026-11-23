@@ -595,6 +595,10 @@ async fn connect(
     addrs: &[SocketAddr],
 ) -> Option<(UdpSocket, SocketAddr, u64)> {
     for (i, &to) in addrs.iter().enumerate() {
+        // Windows' IPv6 sockets are v6-only: an IPv4-mapped tracker address
+        // is reached as the IPv4 address it is.
+        #[cfg(windows)]
+        let to = SocketAddr::new(to.ip().to_canonical(), to.port());
         let Some(socket) = bind(to).await else {
             continue;
         };

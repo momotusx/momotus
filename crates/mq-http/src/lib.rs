@@ -1517,6 +1517,14 @@ impl HttpClient {
         let mut hops = 0;
         loop {
             self.check_hops(&req.url)?;
+            // Windows' IPv6 sockets are v6-only: an IPv4-mapped literal is
+            // asked for as the IPv4 address it is (the scope judges both alike).
+            #[cfg(windows)]
+            if let Some(IpAddr::V6(v6)) = literal(&req.url)
+                && let Some(v4) = v6.to_ipv4_mapped()
+            {
+                let _ = req.url.set_ip_host(IpAddr::V4(v4));
+            }
             let host = req.url.host_str().unwrap_or_default();
             let acquire = self.budget.acquire(host, opts.priority);
             let permit = match deadline {
