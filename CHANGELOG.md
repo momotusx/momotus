@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.6.0](https://github.com/momotusx/momotus/compare/v0.5.0...v0.6.0) (2026-11-23)
+
+
+### Features
+
+* **android:** the app updates itself from GitHub Releases ([b3a16a4](https://github.com/momotusx/momotus/commit/b3a16a409c22032a2fe326ce35d1075bcb41c88d))
+* **android:** verify the update feed and pick this device's APK ([7e2656b](https://github.com/momotusx/momotus/commit/7e2656b38b61b57b9bfff029670fdf4ec9bed0b6))
+* **webos:** About shows the app's update and Install, Home a quiet line ([79f8878](https://github.com/momotusx/momotus/commit/79f887848fbaf4a1050073a5cfcd26863347d4eb))
+* **webos:** the service checks for updates and installs the new IPK ([62f2503](https://github.com/momotusx/momotus/commit/62f2503924acf2ec54313deb609f2c101f631d2c))
+
+
+### Bug Fixes
+
+* **android:** a benchmark build is always silent ([c66d033](https://github.com/momotusx/momotus/commit/c66d03379fa4cee8fd9d30400d26efe5fa30cfcd))
+* **android:** a benchmark build plays silent when a walk asks ([46f65eb](https://github.com/momotusx/momotus/commit/46f65eb7ad35838a3e6b39bf1baeb28c51a89b8b))
+* **android:** a fire-and-forget core request cut short by shutdown is not a failure ([e282a8d](https://github.com/momotusx/momotus/commit/e282a8dbad6ff62c4d56411bc8479c2e8fe47762))
+* **android:** state flows never miss a change made while they first read ([2b7a6c3](https://github.com/momotusx/momotus/commit/2b7a6c3eb708c3e6edcf343f79d1dbe35769234a))
+* **apple:** a card a scroll brought under the pointer lights on a move ([e3d8209](https://github.com/momotusx/momotus/commit/e3d8209fcaaeed630173a9db3a3df1f9f5a32a88))
+* **apple:** a shelf is asked its height at its width alone ([91dbba5](https://github.com/momotusx/momotus/commit/91dbba5fad5f7e69e6527599d453b1eceb8f2baf))
+* **apple:** art draws the current url's picture after a change ([a5678b8](https://github.com/momotusx/momotus/commit/a5678b8390c2d0d1fd0eaa08de6f53f2e4128c6f))
+* **apple:** the spare trailer web view goes with playback and low memory ([1ff4e96](https://github.com/momotusx/momotus/commit/1ff4e9679cf5e8bd5b53fe25e07ce78ec4208e4c))
+* **design:** the brand mark is decoded once per process ([f3adb9d](https://github.com/momotusx/momotus/commit/f3adb9d0d82b3006566c81bad57e9313cfda3276))
+* **engine:** a window that holds its budget is never stopped as growing ([b43cf12](https://github.com/momotusx/momotus/commit/b43cf120e558f793574eeed3bbd85b2e60f8c6d9))
+* **turkcealtyazi:** a request cut short spaces the next from its end ([ce451fd](https://github.com/momotusx/momotus/commit/ce451fde265f6b6d34f6302e272d7369b566aa0c))
+* **web:** About and error reports follow the release version ([30242a3](https://github.com/momotusx/momotus/commit/30242a3bca5abfc1fbafb6c2fd5d7d10f7309489))
+
+
+### Performance Improvements
+
+* **android:** a drag or fling keeps a preview waiting until it ends ([04bdfed](https://github.com/momotusx/momotus/commit/04bdfed31c493b8fbaa798c97faf99d9a32a7cd0))
+* **android:** previews start only once input has rested ([2dd1e67](https://github.com/momotusx/momotus/commit/2dd1e67ac008a88ff832b4fb79ba1ec347538111))
+* **apple:** a card a scroll carries under a still pointer stays unlit ([9e839e3](https://github.com/momotusx/momotus/commit/9e839e3db807271b3ff7075ee599b86aaefdf02c))
+* **apple:** a let-go trailer web view is the next player's spare ([fb6a5cb](https://github.com/momotusx/momotus/commit/fb6a5cb4e945dee4c4c9348771a04f14a6b0f1d3))
+* **apple:** art already in memory draws in its first frame ([24d6029](https://github.com/momotusx/momotus/commit/24d60294f5c00080cd9a17978664ab815b63abd6))
+* **apple:** places fill their frame without measuring every page ([b1aa9b3](https://github.com/momotusx/momotus/commit/b1aa9b3a96f6fbcfba40c2cb03da19d39715ad14))
+* **apple:** shelves measure their cards once per width ([25eea3b](https://github.com/momotusx/momotus/commit/25eea3bddb7cb3e500bb39c786381a8862704b89))
+
 ## [0.5.0](https://github.com/momotusx/momotus/compare/v0.4.0...v0.5.0) (2026-11-20)
 
 
