@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.6.1](https://github.com/momotusx/momotus/compare/v0.6.0...v0.6.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **web:** a resting pointer's repeated place keeps the Incognito warning ([7bab550](https://github.com/momotusx/momotus/commit/7bab550e6392a148038d79d272544a45e90b3d34))
+* **web:** the app's own focus moves keep the Incognito warning ([1099b17](https://github.com/momotusx/momotus/commit/1099b17b731d3e6fb3552e3e1af7aa8aad1eaac5))
+
+
+### Performance Improvements
+
+* **plugins:** a provider out of CPU twice stops, and passes yield to the app ([999b428](https://github.com/momotusx/momotus/commit/999b428f696d8a75db28bca06f0d83cf323df7a7))
+* **plugins:** a provider's runs out of CPU are kept with its script ([b4a729b](https://github.com/momotusx/momotus/commit/b4a729bae5dfe1560d457b2c67031cb0b9e828bb))
+* **plugins:** each provider script is parsed once, kept as bytecode ([bc48798](https://github.com/momotusx/momotus/commit/bc48798cfc2897193e335e06ed12e0b0fe512e62))
+* **plugins:** kept bytecode carries the source, one run per call ([d33b0f2](https://github.com/momotusx/momotus/commit/d33b0f2f64e27f33d23dffe3715b63741271a2df))
+
 ## [0.6.0](https://github.com/momotusx/momotus/compare/v0.5.0...v0.6.0) (2026-11-23)
 
 

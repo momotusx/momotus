@@ -10,7 +10,7 @@ plugins {
 }
 
 /** The app's version, bumped by release-please (release-please-config.json). */
-val appVersion = "0.6.0" // x-release-please-version
+val appVersion = "0.6.1" // x-release-please-version
 
 /** The version this build says it is: a walk build may set an older or newer one (marquee.version) to test updates. */
 val buildVersion = property("marquee.version").toString().ifEmpty { appVersion }
