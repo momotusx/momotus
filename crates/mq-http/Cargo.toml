@@ -39,6 +39,10 @@ wasm-bindgen = "=0.2.129"
 # getifaddrs: the device's own addresses and on-link prefixes.
 libc = "0.2"
 
+[target.'cfg(windows)'.dependencies]
+# GetAdaptersAddresses: the same list on Windows.
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock"] }
+
 [dev-dependencies]
 mq-http = { path = ".", features = ["test-dns"] }
 

@@ -175,14 +175,38 @@ pub fn allocated(path: &Path) -> u64 {
         Ok(m) if m.is_dir() => std::fs::read_dir(path).map_or(0, |entries| {
             entries
                 .flatten()
-                .map(|e| e.metadata().map_or(0, |m| blocks(&m)))
+                .map(|e| e.metadata().map_or(0, |m| on_disk(&e.path(), &m)))
                 .sum()
         }),
-        Ok(m) => blocks(&m),
+        Ok(m) => on_disk(path, &m),
         Err(_) => 0,
     }
 }
 
+#[cfg(not(windows))]
+fn on_disk(_path: &Path, m: &std::fs::Metadata) -> u64 {
+    blocks(m)
+}
+
+/// What NTFS has allocated for the file at `path` (`GetCompressedFileSizeW`:
+/// a sparse file counts its allocated ranges, not its length); its length
+/// when the call fails.
+#[cfg(windows)]
+fn on_disk(path: &Path, m: &std::fs::Metadata) -> u64 {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::{Win32::Storage::FileSystem::GetCompressedFileSizeW, core::PCWSTR};
+    const INVALID_FILE_SIZE: u32 = u32::MAX;
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+    let mut high = 0u32;
+    // SAFETY: a NUL-terminated wide path and a writable high word.
+    let low = unsafe { GetCompressedFileSizeW(PCWSTR(wide.as_ptr()), Some(&mut high)) };
+    if low == INVALID_FILE_SIZE && io::Error::last_os_error().raw_os_error() != Some(0) {
+        return m.len();
+    }
+    (u64::from(high) << 32) | u64::from(low)
+}
+
+#[cfg(not(windows))]
 fn blocks(m: &std::fs::Metadata) -> u64 {
     #[cfg(unix)]
     {

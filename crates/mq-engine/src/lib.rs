@@ -2826,13 +2826,20 @@ fn ready_on_disk(
     *rx.borrow()
 }
 
-/// A torrent's files, paths `/` separated.
+/// A torrent's files, paths `/` separated, each component as librqbit
+/// stores it on this platform (`local_name`), so a path here names the file
+/// on disk.
 fn file_infos<B: AsRef<[u8]>>(info: &librqbit::ValidatedTorrentMetaV1Info<B>) -> Vec<FileInfo> {
     info.iter_file_details()
         .enumerate()
         .map(|(idx, fd)| FileInfo {
             idx,
-            path: fd.filename.iter_components().collect::<Vec<_>>().join("/"),
+            path: fd
+                .filename
+                .iter_components()
+                .map(|c| librqbit::file_info::local_name(&c).into_owned())
+                .collect::<Vec<_>>()
+                .join("/"),
             len: fd.len,
         })
         .collect()
@@ -3052,7 +3059,10 @@ fn allocated(dir: &Path) -> u64 {
             Ok(m) if m.is_dir() => allocated(&e.path()),
             #[cfg(unix)]
             Ok(m) => std::os::unix::fs::MetadataExt::blocks(&m) * 512,
-            #[cfg(not(unix))]
+            // A sparse file's allocated ranges, not its length.
+            #[cfg(windows)]
+            Ok(_) => librqbit::storage::filesystem::allocated(&e.path()),
+            #[cfg(not(any(unix, windows)))]
             Ok(m) => m.len(),
             Err(_) => 0,
         })
@@ -3123,6 +3133,27 @@ fn percent_encode(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn windows_names_stay_inside_the_folder() {
+        for (raw, want) in [
+            ("01 Title.flac", "01 Title.flac"),
+            ("01: Title.flac", "01_ Title.flac"),
+            ("C:", "C_"),
+            ("a<b>c\"d|e?f*g", "a_b_c_d_e_f_g"),
+            ("tab\there", "tab_here"),
+            ("CON", "CON_"),
+            ("nul.txt", "nul_.txt"),
+            ("Com1.flac", "Com1_.flac"),
+            ("COM10.flac", "COM10.flac"),
+            ("CONSOLE.flac", "CONSOLE.flac"),
+            ("Album.", "Album_"),
+            ("Album. . ", "Album____"),
+            ("AUX .flac", "AUX_ .flac"),
+        ] {
+            assert_eq!(librqbit::file_info::windows_name(raw), want, "{raw}");
+        }
+    }
+
     use super::*;
 
     /// A file that fits keeps 120 s of itself ahead off a metered network

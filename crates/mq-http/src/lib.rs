@@ -603,6 +603,14 @@ impl AddressScope {
         self.scopes.refresh();
     }
 
+    /// Whether the device's interfaces can be read now, the way `refresh`
+    /// reads them: a host that refuses connections until one snapshot exists
+    /// asks this after `refresh` (a failed read keeps the last snapshot and
+    /// says nothing).
+    pub fn interfaces_readable(&self) -> bool {
+        self.scopes.interfaces().is_ok()
+    }
+
     pub fn refused(&self) -> u64 {
         self.allowed.refused.load(Ordering::Relaxed)
     }

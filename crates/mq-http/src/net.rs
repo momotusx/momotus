@@ -256,8 +256,100 @@ pub(crate) fn from_node(json: &str) -> std::io::Result<Vec<Interface>> {
         .collect())
 }
 
-// ponytail: no Windows build ships; read GetAdaptersAddresses if one does.
-#[cfg(all(not(unix), not(target_arch = "wasm32")))]
+/// Every unicast address of every adapter, with its on-link prefix as a
+/// netmask (`GetAdaptersAddresses`).
+#[cfg(windows)]
+pub(crate) fn interfaces() -> std::io::Result<Vec<Interface>> {
+    use windows_sys::Win32::Foundation::{ERROR_BUFFER_OVERFLOW, ERROR_SUCCESS};
+    use windows_sys::Win32::NetworkManagement::IpHelper::{
+        GAA_FLAG_SKIP_ANYCAST, GAA_FLAG_SKIP_DNS_SERVER, GAA_FLAG_SKIP_MULTICAST,
+        GetAdaptersAddresses, IF_TYPE_PPP, IF_TYPE_SOFTWARE_LOOPBACK, IF_TYPE_TUNNEL,
+        IP_ADAPTER_ADDRESSES_LH,
+    };
+    use windows_sys::Win32::Networking::WinSock::{
+        AF_INET, AF_INET6, AF_UNSPEC, SOCKADDR_IN, SOCKADDR_IN6,
+    };
+    let flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
+    // 15 KB first, as Microsoft advises; a list that grew in between asks again.
+    let mut size: u32 = 15 << 10;
+    let mut buf: Vec<u64>;
+    loop {
+        // u64 words keep the list aligned for its structs.
+        buf = vec![0; (size as usize).div_ceil(8)];
+        // SAFETY: `buf` holds `size` writable bytes; the call writes at most that and says
+        // how much it needs when it is short.
+        let r = unsafe {
+            GetAdaptersAddresses(
+                u32::from(AF_UNSPEC),
+                flags,
+                std::ptr::null(),
+                buf.as_mut_ptr().cast(),
+                &mut size,
+            )
+        };
+        match r {
+            ERROR_SUCCESS => break,
+            ERROR_BUFFER_OVERFLOW => continue,
+            e => return Err(std::io::Error::from_raw_os_error(e as i32)),
+        }
+    }
+    let mut list = Vec::new();
+    let mut at = buf.as_ptr().cast::<IP_ADAPTER_ADDRESSES_LH>();
+    // SAFETY (every dereference below): the nodes and the sockaddrs they point
+    // to live in `buf`, which outlives the loop.
+    while let Some(adapter) = unsafe { at.as_ref() } {
+        at = adapter.Next;
+        let loopback = adapter.IfType == IF_TYPE_SOFTWARE_LOOPBACK;
+        let point_to_point = matches!(adapter.IfType, IF_TYPE_TUNNEL | IF_TYPE_PPP);
+        let mut unicast = adapter.FirstUnicastAddress;
+        while let Some(u) = unsafe { unicast.as_ref() } {
+            unicast = u.Next;
+            let sa = u.Address.lpSockaddr;
+            if sa.is_null() {
+                continue;
+            }
+            let addr = match unsafe { (*sa).sa_family } {
+                AF_INET => {
+                    let sin = unsafe { &*sa.cast::<SOCKADDR_IN>() };
+                    IpAddr::V4(Ipv4Addr::from(u32::from_be(unsafe {
+                        sin.sin_addr.S_un.S_addr
+                    })))
+                }
+                AF_INET6 => {
+                    let sin6 = unsafe { &*sa.cast::<SOCKADDR_IN6>() };
+                    IpAddr::V6(Ipv6Addr::from(unsafe { sin6.sin6_addr.u.Byte }))
+                }
+                _ => continue,
+            };
+            list.push(Interface {
+                addr,
+                mask: Some(prefix_mask(addr, u.OnLinkPrefixLength)),
+                loopback,
+                point_to_point,
+            });
+        }
+    }
+    Ok(list)
+}
+
+/// The netmask of a `len`-bit prefix in `addr`'s family.
+#[cfg(any(windows, test))]
+fn prefix_mask(addr: IpAddr, len: u8) -> IpAddr {
+    match addr {
+        IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::from(
+            u32::MAX
+                .checked_shl(32 - u32::from(len.min(32)))
+                .unwrap_or(0),
+        )),
+        IpAddr::V6(_) => IpAddr::V6(Ipv6Addr::from(
+            u128::MAX
+                .checked_shl(128 - u32::from(len.min(128)))
+                .unwrap_or(0),
+        )),
+    }
+}
+
+#[cfg(all(not(unix), not(windows), not(target_arch = "wasm32")))]
 pub(crate) fn interfaces() -> std::io::Result<Vec<Interface>> {
     Err(std::io::ErrorKind::Unsupported.into())
 }
@@ -626,5 +718,27 @@ mod tests {
         ] {
             assert_eq!(redact_url(&Url::parse(raw).unwrap()), want, "{raw}");
         }
+    }
+
+    #[test]
+    fn a_prefix_length_is_a_netmask() {
+        let v4 = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 7));
+        assert_eq!(
+            prefix_mask(v4, 24),
+            IpAddr::V4(Ipv4Addr::new(255, 255, 255, 0))
+        );
+        assert_eq!(prefix_mask(v4, 0), IpAddr::V4(Ipv4Addr::UNSPECIFIED));
+        assert_eq!(prefix_mask(v4, 32), IpAddr::V4(Ipv4Addr::BROADCAST));
+        let v6 = IpAddr::V6(Ipv6Addr::LOCALHOST);
+        assert_eq!(
+            prefix_mask(v6, 64),
+            "ffff:ffff:ffff:ffff::".parse::<IpAddr>().unwrap()
+        );
+        assert_eq!(prefix_mask(v6, 128), IpAddr::V6(Ipv6Addr::from(u128::MAX)));
+        assert_eq!(
+            prefix_mask(v6, 200),
+            IpAddr::V6(Ipv6Addr::from(u128::MAX)),
+            "a length past the family is the whole address"
+        );
     }
 }
