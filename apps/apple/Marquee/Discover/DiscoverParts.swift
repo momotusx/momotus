@@ -370,6 +370,9 @@ struct DiscoverGrid: View {
         .onKeyPress(.rightArrow) { move(.right, keys: keyed.map(\.key)) }
         .onKeyPress(.upArrow) { move(.up, keys: keyed.map(\.key)) }
         .onKeyPress(.downArrow) { move(.down, keys: keyed.map(\.key)) }
+        #if MARQUEE_WALK
+        .onReceive(NotificationCenter.default.publisher(for: NavWalk.discoverRight)) { _ in _ = move(.right, keys: keyed.map(\.key)) }
+        #endif
         #endif
         .onKeyPress(.return) {
             guard selects, let key = selection.key, let tile = keyed.first(where: { $0.key == key })?.tile else { return .ignored }

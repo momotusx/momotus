@@ -161,7 +161,14 @@ final class CoreClient {
             // (including any that arrived early) follow the snapshot in order.
             router.route(sub: opened.sub) { data in
                 do {
+                    #if MARQUEE_WALK
+                    let began = DispatchTime.now().uptimeNanoseconds
+                    let decoded = try JSONDecoder().decode(Push<U>.self, from: data).updates
+                    NavWalk.pushed(view, seconds: Double(DispatchTime.now().uptimeNanoseconds - began) / 1e9)
+                    sink.yield(.updates(decoded))
+                    #else
                     sink.yield(.updates(try JSONDecoder().decode(Push<U>.self, from: data).updates))
+                    #endif
                 } catch {
                     // A lost batch would leave the view out of step with the core.
                     coreLog.named { $0.error("undecodable \(view, privacy: .public) update: \(error, privacy: .public)") }
