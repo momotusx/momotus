@@ -3,7 +3,10 @@ package app.marquee.ui.tv
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.runtime.Composer
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.CompositionTracer
+import androidx.compose.runtime.InternalComposeTracingApi
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -106,6 +109,11 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w960dp-h540dp")
 class TvVersionsTest {
+    private companion object {
+        /** Bodies one Down may run: 51 to 82 measured on 2026-11-23, and room for half as many again. */
+        const val KEY_BUDGET = 120
+    }
+
     @get:Rule
     val compose = createComposeRule()
 
@@ -1028,6 +1036,52 @@ class TvVersionsTest {
         compose.waitForIdle()
         Thread.sleep(200)
         assertEquals(2, subscribes)
+    }
+
+    /**
+     * A press on Versions recomposes only what it changes (plans/perf-nav.md: a budget, so later work cannot slide back
+     * unseen). Down through eight rows: each press may run at most [KEY_BUDGET] composable bodies of the app's own.
+     */
+    @OptIn(InternalComposeTracingApi::class)
+    @Test
+    fun `a Down on Versions stays within its recomposition budget`() {
+        val rows = (1..8).map { row("r$it", ReasonLine.Quick(1204, 2 * gib)) }
+        show(snapshot(rows.first(), rows.drop(1)))
+        compose
+            .onAllNodesWithContentDescription(
+                "1080p, HDR, 2 GB, shared by 1,204 people, starts quickly",
+            )[0]
+            .requestFocus()
+        compose.waitForIdle()
+        var bodies = 0
+        Composer.setTracer(
+            object : CompositionTracer {
+                override fun isTraceInProgress() = true
+
+                override fun traceEventEnd() {}
+
+                override fun traceEventStart(
+                    key: Int,
+                    dirty1: Int,
+                    dirty2: Int,
+                    info: String,
+                ) {
+                    if (info.startsWith("app.marquee")) bodies++
+                }
+            },
+        )
+        try {
+            val counts =
+                (1..5).map {
+                    bodies = 0
+                    press(Key.DirectionDown)
+                    bodies
+                }
+            println("BENCH versions-down bodies=$counts")
+            counts.forEachIndexed { i, n -> assertTrue(n <= KEY_BUDGET, "Down ${i + 1} ran $n bodies: $counts") }
+        } finally {
+            Composer.setTracer(null)
+        }
     }
 }
 
