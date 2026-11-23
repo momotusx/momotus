@@ -59,9 +59,12 @@ class MainActivity : ComponentActivity() {
                 .toDrawable(),
         )
 
-        if (debuggable) {
+        // A benchmark build walks too: it plays silent when told (`--ez mute true`), as a debug walk does.
+        if (debuggable || BuildConfig.BENCHMARK) {
             WalkMute.read(this, intent)
             app.marquee.design.HeroTrailers.walk = WalkMute.on
+        }
+        if (debuggable) {
             app.marquee.design.HeroTrailers.walkSwitch = intent.getBooleanExtra("soundSwitch", false)
             WalkLog.read(this, intent)
             // A walk's reduced motion (plans/first-screens.md 10): the device's own setting stays as it is.
@@ -109,9 +112,12 @@ class MainActivity : ComponentActivity() {
     // One activity (singleTask): a link opened while the app runs comes here.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0) {
+        val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        if (debuggable || BuildConfig.BENCHMARK) {
             WalkMute.read(this, intent)
             app.marquee.design.HeroTrailers.walk = WalkMute.on
+        }
+        if (debuggable) {
             app.marquee.design.HeroTrailers.walkSwitch = intent.getBooleanExtra("soundSwitch", false)
             WalkLog.read(this, intent)
         }
