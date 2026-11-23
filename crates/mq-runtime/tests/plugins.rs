@@ -455,25 +455,55 @@ async fn play_stops_waiting_for_the_plugins_at_its_bound() {
 }
 
 /// A provider that runs out of its CPU time twice in a row is not asked
-/// again: a script that never ends would burn its 3 s on every title
-/// opened and answer nothing.
+/// again, after a new launch too: a script that never ends would burn its
+/// 3 s on every title opened and answer nothing. A week later it gets one
+/// fresh try, and stops again when it runs out again.
 #[tokio::test]
 async fn a_provider_out_of_cpu_twice_is_not_asked_again() {
     let fixture = Fixture::start();
-    let core = core();
-    core.add_plugin_repo(&format!("{}/repo/spin.json", fixture.base))
-        .await
+    let dir = std::env::temp_dir().join(format!("mq-plugin-spent-{}", std::process::id()));
+    let open = || {
+        let core = Core::open(mq_runtime::CoreConfig {
+            data_dir: dir.clone(),
+            profile_id: OWNER.into(),
+            device_id: 0,
+        })
         .unwrap();
+        core.use_plugin_defaults(Vec::new());
+        core
+    };
     let spins = || {
         (fixture.asked().iter())
             .filter(|p| p.starts_with("/spin/"))
             .count()
     };
+    let core = open();
+    core.add_plugin_repo(&format!("{}/repo/spin.json", fixture.base))
+        .await
+        .unwrap();
     for (n, film_id) in [(1, "tt0000011"), (2, "tt0000012"), (2, "tt0000013")] {
         let view = settled(&core, film(film_id)).await;
         assert_eq!(plugin_rows(&view), 0);
         assert_eq!(spins(), n, "after {film_id}");
     }
+    drop(core);
+    // A new launch keeps it stopped.
+    let core = open();
+    settled(&core, film("tt0000014")).await;
+    assert_eq!(spins(), 2, "after a new launch");
+    // Eight days on: one fresh try, then stopped again.
+    let db = rusqlite::Connection::open(dir.join("library.sqlite")).unwrap();
+    db.execute(
+        "UPDATE plugin_code SET spent_at = spent_at - 8 * 86400000",
+        [],
+    )
+    .unwrap();
+    for (n, film_id) in [(3, "tt0000015"), (3, "tt0000016")] {
+        settled(&core, film(film_id)).await;
+        assert_eq!(spins(), n, "after {film_id}");
+    }
+    drop(core);
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A provider turned off runs nothing; turned on again it runs.
