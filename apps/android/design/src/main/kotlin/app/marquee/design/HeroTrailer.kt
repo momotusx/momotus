@@ -10,6 +10,7 @@ import android.net.ConnectivityManager
 import android.os.Looper
 import android.os.MessageQueue
 import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 import android.view.MotionEvent
 import android.view.ViewGroup
@@ -80,6 +81,28 @@ object HeroTrailers {
     fun checkedId(raw: String?): String? = raw?.takeIf { ID.matches(it) }
 
     private val ID = Regex("^[A-Za-z0-9_-]{11}$")
+}
+
+/**
+ * When the viewer last pressed a key or touched the screen, in [SystemClock.uptimeMillis], set by the activity. A preview
+ * starts only once input has rested for [IDLE_MS]: its video's first frames hold the window 150 to 230 ms on the Pixel
+ * (the WebView's GPU thread and its shader compiles, plans/perf-nav.md 2026-11-23), and a press made while the viewer
+ * moves through a page would wait for them.
+ */
+object ViewerInput {
+    @Volatile
+    var at = 0L
+
+    const val IDLE_MS = 1_500L
+
+    /** Returns once no key or touch came for [IDLE_MS]; at once when none came that recently. */
+    suspend fun awaitIdle(now: () -> Long = SystemClock::uptimeMillis) {
+        while (true) {
+            val wait = at + IDLE_MS - now()
+            if (wait <= 0) return
+            delay(wait)
+        }
+    }
 }
 
 /** What the device and the moment allow (decision 5); every one false blocks a preview. */
@@ -249,6 +272,7 @@ fun TitleHeaderTrailer(
         }
         if (id == null || !active || !playing || titleId in TitleTrailers.spent) return@LaunchedEffect
         delay(TitleTrailers.DELAY_MS)
+        ViewerInput.awaitIdle()
         val floor = if (tv) TitleTrailers.TV_FLOOR else TrailerPreviews.SIX_GB
         val signals = TrailerPreviews.signals(context, true, reduced, tv = false, hasTrailer = true, minMemory = floor)
         if (!trailerAllowedLogged(signals)) return@LaunchedEffect
