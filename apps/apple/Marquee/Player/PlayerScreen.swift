@@ -395,6 +395,10 @@ struct PlayerScreen: View {
         .accessibilityAction(.escape) { escape() }
         .onAppear {
             immersion.enter()
+            #if !os(tvOS)
+            // No trailer plays under the film: its spare web view and content process go.
+            TrailerPlayer.dropSpare()
+            #endif
             #if os(iOS)
             #if DEBUG
             if DebugHooks.playUpright, model.lastAcross == nil { model.lastAcross = false }

@@ -15,7 +15,13 @@ final class SystemEvents {
     init(core: CoreClient) {
         self.core = core
         memory.setEventHandler {
-            MainActor.assumeIsolated { core.lifecycle("memoryPressure") }
+            MainActor.assumeIsolated {
+                core.lifecycle("memoryPressure")
+                #if !os(tvOS)
+                // A spare trailer web view holds a content process: low memory lets it go.
+                TrailerPlayer.dropSpare()
+                #endif
+            }
         }
         memory.resume()
         network.pathUpdateHandler = { [weak self] path in
@@ -92,6 +98,8 @@ struct ScenePhaseForward: ViewModifier {
                 if sync.joined { sync.request() }
             case .background:
                 #if !os(tvOS)
+                // Nothing plays a trailer in the background: the spare web view and its content process go.
+                TrailerPlayer.dropSpare()
                 // Below iOS 26 the downloads wait (`app`) before the system suspends the app: when the last window
                 // leaves, never while another iPad window is in front (review r1 m7).
                 #if DEBUG
