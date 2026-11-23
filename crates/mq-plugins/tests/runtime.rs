@@ -674,9 +674,11 @@ fn a_plugin_needing_the_apps_tmdb_key_gets_none() {
 /// bytecode that does not read (another build's, damaged) is compiled anew.
 #[test]
 fn a_script_runs_from_the_bytecode_it_handed_over() {
-    let first = plugin("const n = [1, 2, 3].map((x) => x * 2); return say(n);");
+    const SAY: &str = "(v) => [{ url: 'u', name: JSON.stringify(v) }]";
+    // It reads its own source too, which the bytecode keeps.
+    let first = plugin("const n = [1, 2, 3].map((x) => x * 2); return say([n, String(say)]);");
     let (out, seen) = run_with(first.clone(), ok(""));
-    assert_eq!(said(&out), serde_json::json!([2, 4, 6]));
+    assert_eq!(said(&out), serde_json::json!([[2, 4, 6], SAY]));
     assert_eq!(seen.compiled.len(), 1, "compiled once");
     let bytecode = seen.compiled[0].clone();
     assert!(!bytecode.is_empty());
@@ -687,7 +689,7 @@ fn a_script_runs_from_the_bytecode_it_handed_over() {
         },
         ok(""),
     );
-    assert_eq!(said(&out), serde_json::json!([2, 4, 6]));
+    assert_eq!(said(&out), serde_json::json!([[2, 4, 6], SAY]));
     assert!(seen.compiled.is_empty(), "read, not compiled");
     let mut damaged = bytecode;
     damaged.truncate(damaged.len() / 2);
@@ -698,6 +700,13 @@ fn a_script_runs_from_the_bytecode_it_handed_over() {
         },
         ok(""),
     );
-    assert_eq!(said(&out), serde_json::json!([2, 4, 6]));
+    assert_eq!(said(&out), serde_json::json!([[2, 4, 6], SAY]));
     assert_eq!(seen.compiled.len(), 1, "compiled anew");
+}
+
+/// A NUL byte in a script is read as text, as anywhere else in it.
+#[test]
+fn a_script_with_a_nul_byte_runs() {
+    let (out, _) = run_with(plugin("return say('a\0b'.length);"), ok(""));
+    assert_eq!(said(&out), serde_json::json!(3));
 }
