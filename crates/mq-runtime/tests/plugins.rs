@@ -18,6 +18,18 @@ use std::time::Duration;
 const MANIFEST: &str = include_str!("../../mq-plugins/tests/fixtures/plugin-repo/manifest.json");
 const SCRIPT: &str = include_str!("../../mq-plugins/tests/fixtures/plugin-repo/test-film.js");
 const HOST: &str = "plugins.c-plugins.test";
+/// A provider that answers only when its `getStreams` can read its own
+/// source, and says each run's kind on its host (`/ran/source`, `/ran/bytecode`).
+const SELF_READING: &str = r#"const BASE = "{{BASE}}";
+async function getStreams() {
+  // self-check-source
+  const fromSource = getStreams.toString().includes("self-check-source");
+  await fetch(`${BASE}/ran/${fromSource ? "source" : "bytecode"}`);
+  if (!fromSource) return [];
+  return [{ name: "Self", title: "Self film", url: `${BASE}/media/test-film.webm`, quality: "240p" }];
+}
+module.exports = { getStreams };
+"#;
 
 /// The repository on loopback, with every path it was asked; while `held`
 /// its provider's lookups wait (a slow provider).
@@ -105,6 +117,19 @@ impl Fixture {
                     &format!(
                         "async function getStreams(id) {{ await fetch(\"{base}/spin/\" + id); for (;;) {{}} }}\nmodule.exports = {{ getStreams }};"
                     ),
+                ),
+                // A provider that reads its own function's source (`toString`),
+                // which bytecode with the source left out does not give.
+                "/repo/self.json" => {
+                    let mut m: serde_json::Value = serde_json::from_str(MANIFEST).unwrap();
+                    m["scrapers"][0]["id"] = "self-film".into();
+                    m["scrapers"][0]["filename"] = "self.js".into();
+                    reply(200, "application/json", &m.to_string())
+                }
+                "/repo/self.js" => reply(
+                    200,
+                    "text/javascript",
+                    &SELF_READING.replace("{{BASE}}", &base),
                 ),
                 "/repo/test-film.js" => {
                     reply(200, "text/javascript", &SCRIPT.replace("{{BASE}}", &base))
@@ -504,6 +529,31 @@ async fn a_provider_out_of_cpu_twice_is_not_asked_again() {
     }
     drop(core);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A provider is kept as bytecode after its first run, and one that reads
+/// its own source (`toString`), which the bytecode leaves out, still
+/// answers: run from bytecode it answers nothing where its source answered,
+/// so it runs once more from source, and from source only from then on.
+#[tokio::test]
+async fn a_provider_that_needs_its_source_runs_from_source() {
+    let fixture = Fixture::start();
+    let core = core();
+    core.add_plugin_repo(&format!("{}/repo/self.json", fixture.base))
+        .await
+        .unwrap();
+    let ran = |kind: &str| {
+        let path = format!("/ran/{kind}");
+        fixture.asked().iter().filter(|p| **p == path).count()
+    };
+    let mut seen = Vec::new();
+    for film_id in ["tt0000021", "tt0000022", "tt0000023"] {
+        let view = settled(&core, film(film_id)).await;
+        assert_eq!(plugin_rows(&view), 1, "{film_id} answers");
+        seen.push((ran("source"), ran("bytecode")));
+    }
+    // Source; then bytecode, empty, and source again; then source only.
+    assert_eq!(seen, [(1, 0), (2, 1), (3, 1)]);
 }
 
 /// A provider turned off runs nothing; turned on again it runs.

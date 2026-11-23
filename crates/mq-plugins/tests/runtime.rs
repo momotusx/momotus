@@ -21,6 +21,7 @@ fn limits() -> Limits {
 
 fn movie(script: &str) -> Call {
     Call {
+        bytecode: None,
         script: script.into(),
         plugin_id: "test.plugin".into(),
         tmdb_id: "603".into(),
@@ -59,6 +60,7 @@ fn said(out: &Outcome) -> serde_json::Value {
 struct Seen {
     fetches: Vec<FetchRequest>,
     logs: Vec<(LogLevel, String)>,
+    compiled: Vec<Vec<u8>>,
 }
 
 /// Runs `call` with `answer` as the host; every log and fetch is kept.
@@ -77,6 +79,7 @@ fn run_with(
                     kept.lock().unwrap().fetches.push(request);
                 }
                 HostCall::Log { level, text } => kept.lock().unwrap().logs.push((level, text)),
+                HostCall::Compiled(code) => kept.lock().unwrap().compiled.push(code),
             }
         }
     });
@@ -562,7 +565,14 @@ fn cancel_closes_pending_replies() {
         tx,
     )
     .unwrap();
-    let held = [rx.blocking_recv().unwrap(), rx.blocking_recv().unwrap()];
+    // The two fetches, past the bytecode the script hands over first.
+    let mut fetch = || loop {
+        let r = rx.blocking_recv().unwrap();
+        if matches!(r.call, HostCall::Fetch(_)) {
+            return r;
+        }
+    };
+    let held = [fetch(), fetch()];
     assert!(held.iter().all(|r| !r.reply.is_closed()));
     cancel.store(true, std::sync::atomic::Ordering::Relaxed);
     assert_eq!(thread.join().unwrap(), Outcome::Cancelled);
@@ -657,4 +667,37 @@ fn a_plugin_needing_the_apps_tmdb_key_gets_none() {
     let (out, seen) = run_with(movie(script), ok("{\"id\": 603}"));
     assert_eq!(out, Outcome::Done(Vec::new()));
     assert!(seen.fetches.is_empty());
+}
+
+/// A script runs once from its source and hands its bytecode to the host;
+/// run from that bytecode it answers the same and is not compiled again. A
+/// bytecode that does not read (another build's, damaged) is compiled anew.
+#[test]
+fn a_script_runs_from_the_bytecode_it_handed_over() {
+    let first = plugin("const n = [1, 2, 3].map((x) => x * 2); return say(n);");
+    let (out, seen) = run_with(first.clone(), ok(""));
+    assert_eq!(said(&out), serde_json::json!([2, 4, 6]));
+    assert_eq!(seen.compiled.len(), 1, "compiled once");
+    let bytecode = seen.compiled[0].clone();
+    assert!(!bytecode.is_empty());
+    let (out, seen) = run_with(
+        Call {
+            bytecode: Some(bytecode.clone()),
+            ..first.clone()
+        },
+        ok(""),
+    );
+    assert_eq!(said(&out), serde_json::json!([2, 4, 6]));
+    assert!(seen.compiled.is_empty(), "read, not compiled");
+    let mut damaged = bytecode;
+    damaged.truncate(damaged.len() / 2);
+    let (out, seen) = run_with(
+        Call {
+            bytecode: Some(damaged),
+            ..first
+        },
+        ok(""),
+    );
+    assert_eq!(said(&out), serde_json::json!([2, 4, 6]));
+    assert_eq!(seen.compiled.len(), 1, "compiled anew");
 }

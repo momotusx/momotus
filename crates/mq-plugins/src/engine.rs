@@ -15,7 +15,7 @@ use crate::natives;
 use crate::streams::Reader;
 use rquickjs::promise::MaybePromise;
 use rquickjs::{
-    AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Function, Object, Value,
+    AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Function, Object, Value, qjs,
 };
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -62,6 +62,10 @@ pub struct Call {
     pub episode: Option<u32>,
     /// Our additive fifth argument.
     pub info: Info,
+    /// The script's bytecode as this engine wrote it for an earlier call
+    /// (`HostCall::Compiled`), run instead of parsing the script again; one
+    /// that does not read is ignored.
+    pub bytecode: Option<Vec<u8>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -85,6 +89,9 @@ pub enum HostCall {
     /// One `console` line, within the call's 4 KiB; needs no answer (the
     /// reply's receiver is dropped).
     Log { level: LogLevel, text: String },
+    /// The script's bytecode, compiled for this call, for the host to keep
+    /// and hand back as `Call::bytecode`; needs no answer.
+    Compiled(Vec<u8>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -395,8 +402,7 @@ async fn evaluate<'js>(ctx: &Ctx<'js>, call: &Call) -> Result<Vec<PluginStream>,
         .catch(ctx)
         .map_err(words)?;
     // Nuvio's wrapper: the script's own declarations stay in its function.
-    let wrapped = format!("(function () {{\n{}\n}})();", call.script);
-    ctx.eval::<(), _>(wrapped).catch(ctx).map_err(words)?;
+    script(ctx, call).catch(ctx).map_err(words)?;
     let entry = entry(ctx).catch(ctx).map_err(words)?;
     let Some(entry) = entry else {
         return Err("no getStreams".into());
@@ -471,4 +477,99 @@ fn background() {
     unsafe {
         libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_UTILITY, 0);
     }
+}
+
+/// What `Call::bytecode` must have been written by: this QuickJS build. A
+/// host keeps it beside the bytecode and drops bytecode of another.
+pub fn engine_version() -> String {
+    // SAFETY: a static NUL-terminated string.
+    let version = unsafe { std::ffi::CStr::from_ptr(qjs::JS_GetVersion()) };
+    format!(
+        "quickjs-ng {} {}",
+        version.to_string_lossy(),
+        std::mem::size_of::<usize>()
+    )
+}
+
+/// The script as Nuvio wraps it, run from the bytecode the host kept when
+/// there is one; else compiled here and its bytecode handed to the host
+/// (`HostCall::Compiled`), so a provider is parsed once, not on every title
+/// (a 400 KB script: 20 ms to compile, 1 ms to read, plans/perf-nav.md).
+/// The bytecode leaves the source out (functions' `toString` shows none);
+/// line numbers stay for errors.
+fn script(ctx: &Ctx<'_>, call: &Call) -> rquickjs::Result<()> {
+    let raw = ctx.as_raw().as_ptr();
+    let kept = call.bytecode.as_deref().and_then(|code| {
+        // SAFETY: `code` outlives the call; QuickJS copies what it reads.
+        let f = unsafe {
+            qjs::JS_ReadObject(
+                raw,
+                code.as_ptr(),
+                code.len() as _,
+                qjs::JS_READ_OBJ_BYTECODE as i32,
+            )
+        };
+        // SAFETY: a value QuickJS returned.
+        if unsafe { qjs::JS_IsException(f) } {
+            // Not this build's, or damaged: compiled again below.
+            drop(ctx.catch());
+            None
+        } else {
+            Some(f)
+        }
+    });
+    let function = match kept {
+        Some(f) => f,
+        None => {
+            let wrapped =
+                std::ffi::CString::new(format!("(function () {{\n{}\n}})();", call.script))
+                    .map_err(rquickjs::Error::InvalidString)?;
+            // SAFETY: a NUL-terminated input of the given length, as JS_Eval asks.
+            let f = unsafe {
+                qjs::JS_Eval(
+                    raw,
+                    wrapped.as_ptr(),
+                    wrapped.as_bytes().len() as _,
+                    c"eval_script".as_ptr(),
+                    (qjs::JS_EVAL_TYPE_GLOBAL | qjs::JS_EVAL_FLAG_COMPILE_ONLY) as i32,
+                )
+            };
+            // SAFETY: a value QuickJS returned.
+            if unsafe { qjs::JS_IsException(f) } {
+                return Err(rquickjs::Error::Exception);
+            }
+            let mut size = 0;
+            // SAFETY: `f` is a compiled function; the buffer is freed below.
+            let bytes = unsafe {
+                qjs::JS_WriteObject(
+                    raw,
+                    &mut size,
+                    f,
+                    (qjs::JS_WRITE_OBJ_BYTECODE | qjs::JS_WRITE_OBJ_STRIP_SOURCE) as i32,
+                )
+            };
+            if !bytes.is_null() {
+                // SAFETY: QuickJS wrote `size` bytes there.
+                let code = unsafe { std::slice::from_raw_parts(bytes, size as usize) }.to_vec();
+                // SAFETY: allocated by this context.
+                unsafe { qjs::js_free(raw, bytes.cast()) };
+                let (reply, _) = oneshot::channel();
+                let _ = host(HostRequest {
+                    call: HostCall::Compiled(code),
+                    reply,
+                });
+            }
+            f
+        }
+    };
+    // SAFETY: takes `function` over and frees it.
+    let done = unsafe { qjs::JS_EvalFunction(raw, function) };
+    // SAFETY: a value QuickJS returned, freed once.
+    unsafe {
+        if qjs::JS_IsException(done) {
+            return Err(rquickjs::Error::Exception);
+        }
+        qjs::JS_FreeValue(raw, done);
+    }
+    Ok(())
 }

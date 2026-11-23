@@ -24,6 +24,7 @@ fn quick() -> Limits {
 /// A call of `script` as written, for The Matrix.
 fn raw(script: &str) -> Call {
     Call {
+        bytecode: None,
         script: script.into(),
         plugin_id: "test".into(),
         tmdb_id: "603".into(),

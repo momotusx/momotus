@@ -77,6 +77,7 @@ fn run(script: &str) -> Outcome {
         }
     });
     let call = Call {
+        bytecode: None,
         script: format!("{script}\nmodule.exports = {{ getStreams }};"),
         plugin_id: String::new(),
         tmdb_id: String::new(),
