@@ -56,18 +56,19 @@ export function stayIncognito() {
 }
 
 const notice = () => document.querySelector<HTMLElement>(".incog-stay");
-// A pointer resting still sends no input: a move must change its place (a page moving under it can send moves).
+// A pointer resting still sends no input: a move must change its place (a page moving under it can send moves). Its place
+// is kept from every move, Incognito or not: the browser repeats the last place when the page changes under a resting
+// pointer (the warning showing, a scroll), and a place last kept before Incognito began made that repeat a return, which
+// took the warning away under the viewer (CI's idle test, its Tab on from the button).
 let at = "";
 const input = (e: Event) => {
-  if (!watching()) return;
+  const here = e instanceof PointerEvent && e.type === "pointermove" ? `${e.clientX},${e.clientY}` : null;
+  const still = here !== null && here === at;
+  if (here !== null) at = here;
+  if (!watching() || still) return;
   // The warning's own button acts by its click; reaching it by Tab, or Tab on from it, is not yet a return.
   if (e.target instanceof Node && notice()?.contains(e.target)) return;
   if (e instanceof FocusEvent && e.relatedTarget && e.relatedTarget === notice()) return;
-  if (e instanceof PointerEvent && e.type === "pointermove") {
-    const here = `${e.clientX},${e.clientY}`;
-    if (here === at) return;
-    at = here;
-  }
   stayIncognito();
 };
 for (const type of ["pointermove", "pointerdown", "touchstart", "wheel", "focusin"]) window.addEventListener(type, input, { capture: true, passive: true });

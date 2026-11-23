@@ -378,7 +378,14 @@ test("the chooser enters Incognito, and Leave goes back to it without a lock lin
 
 test("desktop: a minute idle sends idle; the warning's button is one Tab away and keeps Incognito; left alone it ends", async ({ browser }) => {
   const { page, line } = await open(browser, "desktop", { clock: true });
-  await enterFromMenu(page);
+  // Where the pointer last moved: the menu's clicks leave it resting there, before Incognito begins, and Continue is
+  // pressed from the keyboard, so no move comes after.
+  await page.evaluate(() => addEventListener("pointermove", (e) => ((window as unknown as { rest: number[] }).rest = [e.clientX, e.clientY]), true));
+  await menuButton(page).click();
+  await page.locator('[data-f="pmenu:incognito"]').click();
+  await expect(page.locator(".incog-intro h1")).toHaveText("You're Incognito");
+  await page.locator('[data-f="incognito:continue"]').press("Enter");
+  await expect(menuButton(page)).toHaveAttribute("aria-label", "Profile: Incognito");
   const idles = () => line.sent.filter((m) => m.op === "lifecycle" && m.event === "idle").length;
   const actives = () => line.sent.filter((m) => m.op === "lifecycle" && m.event === "active").length;
   // 1. A minute without input sends idle, once.
@@ -392,6 +399,13 @@ test("desktop: a minute idle sends idle; the warning's button is one Tab away an
   await expect(page.getByRole("alert")).toHaveCount(1);
   const stay = page.getByRole("button", { name: "Stay in Incognito" });
   await expect(stay).not.toBeFocused();
+  // The browser repeats a resting pointer's place when the page changes under it (the warning coming in, a scroll): no
+  // return, though the pointer last moved before Incognito began (CI: such a repeat took the warning away on a Tab).
+  await page.evaluate(() => {
+    const [x, y] = (window as unknown as { rest: number[] }).rest;
+    dispatchEvent(new PointerEvent("pointermove", { clientX: x, clientY: y }));
+  });
+  await expect(alert).toHaveCount(1);
   await page.keyboard.press("Tab");
   await expect(stay).toBeFocused();
   expect(actives()).toBe(before);
