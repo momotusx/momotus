@@ -112,13 +112,17 @@ private struct Shell: View {
     #expect(shelfCards.asked == shelfAsked, "a shelf measured its cards \(shelfCards.asked - shelfAsked) more times")
 }
 
-@MainActor @Test func aCardAScrollCarriesUnderAStillPointerDoesNotLight() throws {
+@MainActor @Test func aCardAScrollCarriesUnderAStillPointerDoesNotLight() {
     // A trackpad scroll moves the page under a resting pointer: each card it carries there used to light and fade,
     // a state change and an animation on every step.
     _ = PointerRest.moved(to: NSPoint(x: 10, y: 10))
     #expect(!PointerRest.moved(to: NSPoint(x: 10, y: 10)))
     #expect(PointerRest.moved(to: NSPoint(x: 11, y: 10)))
-    #expect(try source("Theme/Components.swift").contains("if !inside || PointerRest.moved() { hovered = inside }"))
+    // Carried under a still pointer: stays unlit; the pointer then moves inside it: lights; leaves: goes out.
+    #expect(!CardHover.next(hovered: false, inside: true, pointerMoved: false))
+    #expect(CardHover.next(hovered: false, inside: true, pointerMoved: true))
+    #expect(CardHover.next(hovered: true, inside: true, pointerMoved: false))
+    #expect(!CardHover.next(hovered: true, inside: false, pointerMoved: true))
 }
 
 @MainActor @Observable private final class Shown {
