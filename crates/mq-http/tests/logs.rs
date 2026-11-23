@@ -41,7 +41,10 @@ fn interface_reads_log_counts_and_one_failure() {
     test_dns::set_interfaces(&http, Ok(list));
     // The second read finds the same list: no new info line.
     let _ = (http.scoped(&[]), http.scoped(&[]));
+    let scope = http.torrent_scope(&[]);
+    assert!(scope.interfaces_readable(), "a readable list");
     test_dns::set_interfaces(&http, Err(()));
+    assert!(!scope.interfaces_readable(), "an unreadable list");
     let _ = (http.scoped(&[]), http.scoped(&[]), http.scoped(&[]));
     let logs = String::from_utf8(logs.lock().unwrap().clone()).unwrap();
     // Counts only: two own addresses, one prefix (the TUN's is not one), one

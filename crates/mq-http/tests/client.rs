@@ -441,11 +441,15 @@ async fn mapped_literals_match_the_scope() {
     // connecting.
     refused(&scoped(&[]), &mapped).await;
     assert!(origin.heads().is_empty());
-    // In scope, it is the same address.
-    let ok = within("mapped", scoped(&[LOOPBACK]).get(&mapped, &playback()))
-        .await
-        .expect("::ffff:127.0.0.1 is 127.0.0.1");
-    assert_eq!(&ok.body[..], b"ok");
+    // In scope, it is the same address. Not on Windows, whose IPv6 sockets
+    // are v6-only by default, so a mapped literal never connects there.
+    #[cfg(not(windows))]
+    {
+        let ok = within("mapped", scoped(&[LOOPBACK]).get(&mapped, &playback()))
+            .await
+            .expect("::ffff:127.0.0.1 is 127.0.0.1");
+        assert_eq!(&ok.body[..], b"ok");
+    }
     let canary = Canary::default_tcp(0);
     if let IpAddr::V4(v4) = canary.addr().ip() {
         let url = format!("http://[::ffff:{v4}]:{}/", canary.addr().port());

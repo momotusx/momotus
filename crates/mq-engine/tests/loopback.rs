@@ -340,8 +340,9 @@ async fn a_relaunch_fetches_a_piece_the_disk_lost() {
     first.remove(t, true).await.unwrap();
     drop(first);
     let file = find(&dir.path().join(&s.info_hash), "movie.mkv").expect("the movie file");
-    let lost = std::fs::OpenOptions::new().write(true).open(&file).unwrap();
-    std::os::unix::fs::FileExt::write_all_at(&lost, &vec![0u8; head], 0).unwrap();
+    let mut lost = std::fs::OpenOptions::new().write(true).open(&file).unwrap();
+    // At offset 0, where a file just opened writes.
+    std::io::Write::write_all(&mut lost, &vec![0u8; head]).unwrap();
     drop(lost);
     let again = engine_on(dir.path()).await;
     let t = again
@@ -717,8 +718,8 @@ async fn a_contradicted_have_bitfield_is_cleared_at_once() {
     // Dense enough that the start runs the full check (a sparse folder
     // with no bitfield would store an empty one at once).
     let data = find(dir.path(), "big.mkv").expect("the data file");
-    let file = std::fs::OpenOptions::new().write(true).open(&data).unwrap();
-    std::os::unix::fs::FileExt::write_all_at(&file, &vec![0xab; 40 << 20], 0).unwrap();
+    let mut file = std::fs::OpenOptions::new().write(true).open(&data).unwrap();
+    std::io::Write::write_all(&mut file, &vec![0xab; 40 << 20]).unwrap();
     drop(file);
     let engine = engine_on(dir.path()).await;
     let t = engine.add_torrent_bytes(torrent, &[]).await.unwrap();
@@ -883,7 +884,7 @@ async fn a_full_check_syncs_what_it_claims_before_storing_it() {
 /// writable handle, so a read-only one failed every sync and no bitfield
 /// was written there (engine review r5, P3-4). A file this process may
 /// write but not read stands in for it on Unix.
-#[cfg(feature = "test-hooks")]
+#[cfg(all(unix, feature = "test-hooks"))]
 #[tokio::test(flavor = "current_thread")]
 async fn a_data_sync_opens_the_file_for_writing() {
     use std::os::unix::fs::PermissionsExt;

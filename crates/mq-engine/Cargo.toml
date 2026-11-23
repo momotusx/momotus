@@ -30,6 +30,10 @@ tracing.workspace = true
 # statvfs for the window's space guard (plans/streaming-window.md 2.4).
 libc = "0.2"
 
+[target.'cfg(windows)'.dependencies]
+# Free space and a sparse file's allocated ranges (window.rs).
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Ioctl"] }
+
 [dev-dependencies]
 tempfile = "3"
 mq-http = { path = "../mq-http", features = ["test-dns"] }

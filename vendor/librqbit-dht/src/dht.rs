@@ -1197,7 +1197,18 @@ impl DhtWorker {
         let reader = async {
             let mut buf = vec![0u8; 16384];
             loop {
-                let (size, addr) = socket.recv_from(&mut buf).await.map_err(Error::Recv)?;
+                let (size, addr) = match socket.recv_from(&mut buf).await {
+                    Ok(got) => got,
+                    // Marquee fork (plans/desktop-release.md 3.2): Windows reports a datagram
+                    // larger than the buffer (WSAEMSGSIZE) and an ICMP "port unreachable" from a
+                    // node sent to earlier (WSAECONNRESET) as receive errors; one of them must not
+                    // end the DHT, so the datagram is dropped.
+                    Err(e) if cfg!(windows) && matches!(e.raw_os_error(), Some(10040 | 10054)) => {
+                        debug!("dropped a datagram: {e:#}");
+                        continue;
+                    }
+                    Err(e) => return Err(Error::Recv(e)),
+                };
                 match bprotocol::deserialize_message::<ByteBufOwned>(&buf[..size]) {
                     Ok(msg) => match output_tx.send((msg, addr)).await {
                         Ok(_) => {}

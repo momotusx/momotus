@@ -131,7 +131,26 @@ pub fn free_space(dir: &Path) -> Option<u64> {
     Some(stat.f_bavail as u64 * stat.f_frsize as u64)
 }
 
-#[cfg(not(unix))]
+/// The bytes the caller may still write on the volume holding `dir`.
+#[cfg(windows)]
+pub fn free_space(dir: &Path) -> Option<u64> {
+    use std::os::windows::ffi::OsStrExt;
+    let wide: Vec<u16> = dir.as_os_str().encode_wide().chain([0]).collect();
+    let mut free = 0u64;
+    // SAFETY: a NUL-terminated wide path and a writable u64; the other
+    // outputs are optional.
+    let ok = unsafe {
+        windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW(
+            wide.as_ptr(),
+            &mut free,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+        )
+    };
+    (ok != 0).then_some(free)
+}
+
+#[cfg(not(any(unix, windows)))]
 pub fn free_space(_dir: &Path) -> Option<u64> {
     None
 }
@@ -404,6 +423,9 @@ impl Engine {
         let offset: u64 = t.files[..w.file].iter().map(|f| f.len).sum();
         let piece_len = u64::from(t.piece_len);
         let found = tokio::task::spawn_blocking(move || {
+            #[cfg(windows)]
+            let allocated = librqbit::storage::filesystem::allocated(&path);
+            #[cfg(not(windows))]
             let allocated = std::fs::metadata(&path).map_or(0, |m| {
                 #[cfg(unix)]
                 {
@@ -494,7 +516,82 @@ fn seek(fd: std::os::fd::RawFd, at: i64, whence: libc::c_int) -> i64 {
     to
 }
 
-#[cfg(not(unix))]
+/// [`data_pieces`] on NTFS: the allocated ranges of a sparse file
+/// (`FSCTL_QUERY_ALLOCATED_RANGES`), asked again from the last range while
+/// the answer is cut short.
+#[cfg(windows)]
+fn data_pieces(path: &Path, offset: u64, piece_len: u64) -> Vec<u32> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::{
+        Foundation::{ERROR_MORE_DATA, GetLastError},
+        System::{
+            IO::DeviceIoControl,
+            Ioctl::{FILE_ALLOCATED_RANGE_BUFFER, FSCTL_QUERY_ALLOCATED_RANGES},
+        },
+    };
+    let Ok(f) = std::fs::File::open(path) else {
+        return Vec::new();
+    };
+    let len = match f.metadata() {
+        Ok(m) if m.is_file() => m.len(),
+        _ => return Vec::new(),
+    };
+    let Ok(len) = i64::try_from(len) else {
+        return Vec::new();
+    };
+    let (mut pieces, mut from) = (Vec::new(), 0i64);
+    let mut out = [FILE_ALLOCATED_RANGE_BUFFER {
+        FileOffset: 0,
+        Length: 0,
+    }; 64];
+    while from < len {
+        let ask = FILE_ALLOCATED_RANGE_BUFFER {
+            FileOffset: from,
+            Length: len - from,
+        };
+        let mut got = 0u32;
+        // SAFETY: a valid handle, one input range and an output array of the
+        // size given; `got` says how many bytes of it were written.
+        let ok = unsafe {
+            DeviceIoControl(
+                f.as_raw_handle(),
+                FSCTL_QUERY_ALLOCATED_RANGES,
+                (&raw const ask).cast(),
+                size_of::<FILE_ALLOCATED_RANGE_BUFFER>() as u32,
+                out.as_mut_ptr().cast(),
+                size_of_val(&out) as u32,
+                &mut got,
+                std::ptr::null_mut(),
+            )
+        };
+        // SAFETY: reads this thread's last error, right after the call.
+        let more = ok == 0 && unsafe { GetLastError() } == ERROR_MORE_DATA;
+        if ok == 0 && !more {
+            break;
+        }
+        let n = got as usize / size_of::<FILE_ALLOCATED_RANGE_BUFFER>();
+        if n == 0 {
+            break;
+        }
+        for r in &out[..n] {
+            let (start, end) = (r.FileOffset as u64, (r.FileOffset + r.Length) as u64);
+            if end > start {
+                pieces.extend(
+                    ((offset + start) / piece_len..=(offset + end - 1) / piece_len)
+                        .filter_map(|p| u32::try_from(p).ok()),
+                );
+            }
+        }
+        if !more {
+            break;
+        }
+        from = out[n - 1].FileOffset + out[n - 1].Length;
+    }
+    pieces.dedup();
+    pieces
+}
+
+#[cfg(not(any(unix, windows)))]
 fn data_pieces(_path: &Path, _offset: u64, _piece_len: u64) -> Vec<u32> {
     Vec::new()
 }

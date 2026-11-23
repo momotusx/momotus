@@ -152,7 +152,13 @@ impl TorrentMetadata {
             .iter_file_details_ext()
             .map(|fd| {
                 Ok::<_, anyhow::Error>(FileInfo {
-                    relative_filename: fd.details.filename.to_pathbuf(),
+                    // Marquee fork: each component as this platform stores it.
+                    relative_filename: fd
+                        .details
+                        .filename
+                        .iter_components()
+                        .map(|c| crate::file_info::local_name(&c).into_owned())
+                        .collect(),
                     offset_in_torrent: fd.offset,
                     piece_range: fd.pieces,
                     len: fd.details.len,
@@ -160,6 +166,19 @@ impl TorrentMetadata {
                 })
             })
             .collect::<anyhow::Result<Vec<FileInfo>>>()?;
+        // Marquee fork: two names that become one on Windows (after
+        // `local_name`, or by case, which NTFS ignores) would share a file.
+        if cfg!(windows) {
+            let mut seen = std::collections::HashSet::new();
+            for f in file_infos.iter().filter(|f| !f.attrs.padding) {
+                let key = f.relative_filename.to_string_lossy().to_lowercase();
+                anyhow::ensure!(
+                    seen.insert(key),
+                    "two files of this torrent share the name {:?} here",
+                    f.relative_filename
+                );
+            }
+        }
 
         Ok(Self {
             info,

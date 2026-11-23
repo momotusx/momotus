@@ -412,6 +412,7 @@ features = [
     "Win32_System",
     "Win32_System_IO",
     "Win32_System_Ioctl",
+    "Win32_Storage_FileSystem",
 ]
 
 # Marquee fork: a build of this crate on its own (its tests on a 32-bit device) takes the same

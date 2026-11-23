@@ -10,7 +10,6 @@
 mod support;
 
 use std::future::Future;
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -690,7 +689,7 @@ fn a_leftover_folder_of_one_file_counts_that_file() {
     std::fs::write(pack.join("e01.mkv"), vec![1u8; 1 << 20]).unwrap();
     std::fs::write(pack.join("e02.mkv"), vec![1u8; 1 << 20]).unwrap();
     let counted = mq_engine::counted_on_disk(dir.path());
-    let on_disk = std::fs::metadata(&film).unwrap().blocks() * 512;
+    let on_disk = librqbit::storage::filesystem::allocated(&film);
     assert_eq!(counted.held[&"a".repeat(40)].files, [on_disk]);
     assert!(counted.held[&"b".repeat(40)].files.is_empty());
 }
@@ -784,7 +783,7 @@ async fn a_shared_block_is_punched_only_with_both_pieces_gated() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn allocated_falls_by_the_punched_blocks() {
     let l = leeched().await;
-    let allocated = || std::fs::metadata(l.movie_path()).unwrap().blocks() * 512;
+    let allocated = || librqbit::storage::filesystem::allocated(&l.movie_path());
     let before = allocated();
     let r = l.evict(&[4, 5, 6, 12]).await;
     assert!(r.punched_bytes > 3 * PIECE);
@@ -895,10 +894,11 @@ async fn a_sparse_folder_starts_with_nothing_claimed() {
     let folder = dir.path().join(&s.info_hash);
     std::fs::create_dir_all(&folder).unwrap();
     std::fs::write(folder.join("a.nfo"), vec![b'n'; NFO as usize]).unwrap();
-    let movie = std::fs::File::create(folder.join("movie.mkv")).unwrap();
+    let mut movie = std::fs::File::create(folder.join("movie.mkv")).unwrap();
     movie.set_len(s.movie.len() as u64).unwrap();
     let (a, b) = (128 * PIECE - NFO, 129 * PIECE - NFO);
-    std::os::unix::fs::FileExt::write_all_at(&movie, &s.movie[a as usize..b as usize], a).unwrap();
+    std::io::Seek::seek(&mut movie, std::io::SeekFrom::Start(a)).unwrap();
+    std::io::Write::write_all(&mut movie, &s.movie[a as usize..b as usize]).unwrap();
     drop(movie);
     let engine = engine_on(dir.path()).await;
     let t = engine
@@ -914,10 +914,7 @@ async fn a_sparse_folder_starts_with_nothing_claimed() {
         std::fs::metadata(&have).is_ok_and(|m| m.len() > 0)
     })
     .await;
-    let held = std::fs::metadata(folder.join("movie.mkv"))
-        .unwrap()
-        .blocks()
-        * 512;
+    let held = librqbit::storage::filesystem::allocated(&folder.join("movie.mkv"));
     assert!(held < 8 << 20, "the video is sparse: {held} bytes held");
     let bits = std::fs::read(&have).unwrap();
     assert!(!claims(&bits, 128), "piece 128 claimed: a full check ran");

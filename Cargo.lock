@@ -2763,6 +2763,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2812,6 +2813,7 @@ dependencies = [
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

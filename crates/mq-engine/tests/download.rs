@@ -230,10 +230,7 @@ async fn a_delete_in_a_pack_keeps_the_other_file() {
     let dir = root.path().join(&s.info_hash);
     let before = read(root.path(), &s.info_hash, "e02.mkv");
     assert!(before == s.others[0]);
-    let size = |p: &Path| {
-        let m = std::fs::metadata(p).unwrap();
-        std::os::unix::fs::MetadataExt::blocks(&m) * 512
-    };
+    let size = |p: &Path| librqbit::storage::filesystem::allocated(p);
     let e01_before = size(&dir.join("e01.mkv"));
     let kept = vec![(s.info_hash.clone(), e01), (s.info_hash.clone(), e02)];
     let e = engine(root.path(), kept, u64::MAX).await;
@@ -519,7 +516,7 @@ async fn a_delete_under_its_own_playback_evicts_nothing() {
     let (_, _, second) = download(&e, &s, "e02.mkv").await;
     second.stop().await;
     let path = root.path().join(&s.info_hash).join("e01.mkv");
-    let size = || std::os::unix::fs::MetadataExt::blocks(&std::fs::metadata(&path).unwrap()) * 512;
+    let size = || librqbit::storage::filesystem::allocated(&path);
     let before = size();
     let claim = e.claim(t, "default").unwrap();
     let reader = e.open_reader(t, "default", e01).await.unwrap();

@@ -6,6 +6,9 @@
 //! - Linux and Android: `fallocate(PUNCH_HOLE | KEEP_SIZE)`, which zeroes
 //!   partial blocks, so the range is rounded inward to whole blocks on
 //!   every platform. vfat and exfat answer EOPNOTSUPP.
+//! - Windows (NTFS): `FSCTL_SET_ZERO_DATA` on a file marked sparse, which
+//!   frees whole 64 KiB sparse units (16 clusters of 4 KiB) and zeroes the
+//!   rest; FAT and exFAT refuse it.
 //! - Elsewhere: unsupported.
 
 use std::fs::File;
@@ -65,7 +68,15 @@ fn block_size(file: &File) -> io::Result<u64> {
         .unwrap_or(4096))
 }
 
-#[cfg(not(unix))]
+// ponytail: NTFS frees sparse units of 16 clusters, 64 KiB at the default 4 KiB
+// cluster; a volume with larger clusters frees less per punch, and the probe
+// and the allocated-size reads keep the accounting true.
+#[cfg(windows)]
+fn block_size(_file: &File) -> io::Result<u64> {
+    Ok(64 << 10)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn block_size(_file: &File) -> io::Result<u64> {
     Err(io::Error::from(io::ErrorKind::Unsupported))
 }
@@ -119,7 +130,47 @@ fn punch_once(file: &File, offset: u64, len: u64) -> io::Result<()> {
     Ok(())
 }
 
-#[cfg(not(any(target_vendor = "apple", target_os = "linux", target_os = "android")))]
+#[cfg(windows)]
+fn punch_once(file: &File, offset: u64, len: u64) -> io::Result<()> {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::{
+        Foundation::HANDLE,
+        System::{
+            IO::DeviceIoControl,
+            Ioctl::{FILE_ZERO_DATA_INFORMATION, FSCTL_SET_ZERO_DATA},
+        },
+    };
+    // Zeroing only frees blocks of a sparse file; marking twice is harmless.
+    if !super::sparse::mark_file_sparse(file) {
+        return Err(io::Error::from(io::ErrorKind::Unsupported));
+    }
+    let end = offset.checked_add(len).ok_or(io::ErrorKind::InvalidInput)?;
+    let range = FILE_ZERO_DATA_INFORMATION {
+        FileOffset: off(offset)?,
+        BeyondFinalZero: off(end)?,
+    };
+    // SAFETY: a valid handle and an input struct of the size given; no output.
+    unsafe {
+        DeviceIoControl(
+            HANDLE(file.as_raw_handle()),
+            FSCTL_SET_ZERO_DATA,
+            Some((&raw const range).cast()),
+            size_of::<FILE_ZERO_DATA_INFORMATION>() as u32,
+            None,
+            0,
+            None,
+            None,
+        )
+    }
+    .map_err(io::Error::from)
+}
+
+#[cfg(not(any(
+    target_vendor = "apple",
+    target_os = "linux",
+    target_os = "android",
+    windows
+)))]
 fn punch_once(_file: &File, _offset: u64, _len: u64) -> io::Result<()> {
     Err(io::Error::from(io::ErrorKind::Unsupported))
 }
@@ -181,7 +232,51 @@ fn probe(path: &Path) -> io::Result<bool> {
     Ok(freed == (EXTENT..2 * EXTENT) && before.saturating_sub(after) >= EXTENT)
 }
 
-#[cfg(not(unix))]
+/// A punch the volume refuses before any work: FAT and exFAT answer
+/// `ERROR_INVALID_FUNCTION` to the sparse calls.
+#[cfg(windows)]
+fn refused(e: &io::Error) -> bool {
+    const ERROR_INVALID_FUNCTION: i32 = 1;
+    const ERROR_NOT_SUPPORTED: i32 = 50;
+    const ERROR_INVALID_PARAMETER: i32 = 87;
+    e.kind() == io::ErrorKind::Unsupported
+        || matches!(
+            e.raw_os_error(),
+            Some(ERROR_INVALID_FUNCTION | ERROR_NOT_SUPPORTED | ERROR_INVALID_PARAMETER)
+        )
+}
+
+/// The Unix probe's steps, with the allocated size read as
+/// [`super::allocated`] reads it.
+#[cfg(windows)]
+fn probe(path: &Path) -> io::Result<bool> {
+    use std::os::windows::fs::FileExt;
+    const EXTENT: u64 = 64 << 10;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .read(true)
+        .write(true)
+        .open(path)?;
+    let block = [0xa5; EXTENT as usize];
+    for i in 0..4 {
+        let mut done = 0;
+        while done < block.len() {
+            done += file.seek_write(&block[done..], i * EXTENT + done as u64)?;
+        }
+    }
+    file.sync_all()?;
+    let before = super::allocated(path);
+    let freed = match punch_file(&file, path, EXTENT, EXTENT) {
+        Err(e) if refused(&e) => return Ok(false),
+        r => r?,
+    };
+    file.sync_all()?;
+    let after = super::allocated(path);
+    Ok(freed == (EXTENT..2 * EXTENT) && before.saturating_sub(after) >= EXTENT)
+}
+
+#[cfg(not(any(unix, windows)))]
 fn probe(_path: &Path) -> io::Result<bool> {
     Ok(false)
 }

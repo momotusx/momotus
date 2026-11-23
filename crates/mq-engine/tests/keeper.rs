@@ -723,10 +723,7 @@ async fn the_next_file_of_a_live_torrent_gets_its_round_and_ends_the_window() {
     // size and the reserve, less what of it is on disk already (the round
     // counts that, and a volume can hold some of a file nothing has read:
     // 48 KiB of it on APFS).
-    let held = {
-        use std::os::unix::fs::MetadataExt;
-        std::fs::metadata(w.dir().join("e02.mkv")).map_or(0, |m| m.blocks() * 512)
-    };
+    let held = librqbit::storage::filesystem::allocated(&w.dir().join("e02.mkv"));
     test_hooks::set_free(&w.engine, Some((8 << 20) + RESERVE_BYTES - held - 1));
     let next = w
         .engine
@@ -1660,7 +1657,6 @@ async fn engine_on(dir: &Path) -> Engine {
 
 /// Allocated bytes under `dir`.
 fn allocated(dir: &Path) -> u64 {
-    use std::os::unix::fs::MetadataExt;
     let Ok(entries) = std::fs::read_dir(dir) else {
         return 0;
     };
@@ -1668,7 +1664,7 @@ fn allocated(dir: &Path) -> u64 {
         .flatten()
         .map(|e| match e.metadata() {
             Ok(m) if m.is_dir() => allocated(&e.path()),
-            Ok(m) => m.blocks() * 512,
+            Ok(_) => librqbit::storage::filesystem::allocated(&e.path()),
             Err(_) => 0,
         })
         .sum()

@@ -385,6 +385,16 @@ impl<T: Transport, E: UtpEnvironment> Dispatcher<T, E> {
                 self.on_control(control).await;
             },
             recv = self.socket.transport.recv_from(read_buf) => {
+                // Marquee fork (plans/desktop-release.md 3.2): on Windows an oversized datagram
+                // (WSAEMSGSIZE) or an ICMP "port unreachable" (WSAECONNRESET) arrives as a
+                // receive error; the datagram is dropped, the socket goes on.
+                if let Err(e) = &recv
+                    && cfg!(windows)
+                    && matches!(e.raw_os_error(), Some(10040 | 10054))
+                {
+                    trace!("dropped a datagram: {e:#}");
+                    return Ok(());
+                }
                 let (len, addr) = recv.map_err(Error::Recv)?;
                 let message = match UtpMessage::deserialize(&read_buf[..len]) {
                     Some(msg) => msg,
