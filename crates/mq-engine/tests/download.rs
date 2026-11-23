@@ -306,8 +306,35 @@ async fn complete_on_disk_needs_every_piece_and_its_data() {
     let path = root.path().join(&s.info_hash).join("movie.mkv");
     let f = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
     let len = f.metadata().unwrap().len();
-    f.set_len(len - 4 * MIB).unwrap();
-    f.set_len(len).unwrap();
+    #[cfg(unix)]
+    {
+        f.set_len(len - 4 * MIB).unwrap();
+        f.set_len(len).unwrap();
+    }
+    // NTFS fills a file grown back with allocated zeros: the hole is made as
+    // the engine makes one there, a sparse range.
+    #[cfg(windows)]
+    drop(f);
+    #[cfg(windows)]
+    for args in [
+        vec![
+            "sparse".to_owned(),
+            "setflag".to_owned(),
+            path.display().to_string(),
+        ],
+        vec![
+            "sparse".to_owned(),
+            "setrange".to_owned(),
+            path.display().to_string(),
+            (len - 4 * MIB).to_string(),
+            (4 * MIB).to_string(),
+        ],
+    ] {
+        let ok = std::process::Command::new("fsutil").args(&args).status();
+        assert!(ok.is_ok_and(|s| s.success()), "fsutil {args:?}");
+    }
+    #[cfg(unix)]
+    drop(f);
     assert!(!complete_on_disk(root.path(), &s.info_hash, file));
 }
 

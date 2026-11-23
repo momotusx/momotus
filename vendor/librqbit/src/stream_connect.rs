@@ -323,6 +323,11 @@ impl StreamConnector {
                 addr
             )));
         }
+        // Marquee fork (plans/desktop-release.md W4): Windows' IPv6 sockets
+        // are v6-only, so an IPv4-mapped peer (one heard on the dual-stack
+        // listener) is dialed as the IPv4 address it is.
+        #[cfg(windows)]
+        let addr = SocketAddr::new(addr.ip().to_canonical(), addr.port());
 
         if self.ipv4_only && addr.is_ipv6() {
             return Err(Error::Anyhow(anyhow::anyhow!(

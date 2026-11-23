@@ -343,6 +343,15 @@ impl TrackerComms {
         };
 
         let mut url = tracker_url.clone();
+        // Marquee fork (plans/desktop-release.md W4): Windows' IPv6 sockets
+        // are v6-only, so an IPv4-mapped literal is asked for as the IPv4
+        // address it is (the policy judges both alike).
+        #[cfg(windows)]
+        if let Some(url::Host::Ipv6(ip)) = url.host()
+            && let Some(v4) = ip.to_ipv4_mapped()
+        {
+            let _ = url.set_ip_host(IpAddr::V4(v4));
+        }
 
         let mut queries = request.as_querystring();
         if let Some(url_query) = url.query() {
