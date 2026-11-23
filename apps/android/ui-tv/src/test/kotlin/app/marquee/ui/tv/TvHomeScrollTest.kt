@@ -223,8 +223,19 @@ class TvHomeScrollTest {
             .setInt(attach, View.VISIBLE)
         home.open()
         val deadline = System.currentTimeMillis() + 60_000
-        while (compose.onAllNodesWithText("Continue Watching").fetchSemanticsNodes().isEmpty()) {
-            check(System.currentTimeMillis() < deadline) { "Home never drew its rows" }
+        // The rows and the control the walk starts on: drawn rows say nothing of [start] (the hero's Play was missing
+        // once right after Continue Watching drew, CI), so the wait is for the control it focuses too.
+        val drawn = {
+            compose.onAllNodesWithText("Continue Watching").fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodes(hasContentDescription(start, substring = true)).fetchSemanticsNodes().size == 1
+        }
+        while (!drawn()) {
+            check(System.currentTimeMillis() < deadline) {
+                val items =
+                    state.page.layoutInfo.visibleItemsInfo
+                        .map { it.key }
+                "Home never drew its rows and $start: items $items, first ${state.page.firstVisibleItemIndex}"
+            }
             Snapshot.sendApplyNotifications()
             if (!compose.mainClock.autoAdvance) compose.mainClock.advanceTimeBy(50)
             compose.waitForIdle()
