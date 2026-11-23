@@ -18,14 +18,15 @@ use std::time::Duration;
 const MANIFEST: &str = include_str!("../../mq-plugins/tests/fixtures/plugin-repo/manifest.json");
 const SCRIPT: &str = include_str!("../../mq-plugins/tests/fixtures/plugin-repo/test-film.js");
 const HOST: &str = "plugins.c-plugins.test";
-/// A provider that answers only when its `getStreams` can read its own
-/// source, and says each run's kind on its host (`/ran/source`, `/ran/bytecode`).
+/// A provider that answers only when its `getStreams` reads its own source
+/// (`toString`), and says on its host whether the text it read has the mark
+/// (`/read/yes`, `/read/no`).
 const SELF_READING: &str = r#"const BASE = "{{BASE}}";
 async function getStreams() {
   // self-check-source
-  const fromSource = getStreams.toString().includes("self-check-source");
-  await fetch(`${BASE}/ran/${fromSource ? "source" : "bytecode"}`);
-  if (!fromSource) return [];
+  const read = getStreams.toString().includes("self-check-" + "source");
+  await fetch(`${BASE}/read/${read ? "yes" : "no"}`);
+  if (!read) return [];
   return [{ name: "Self", title: "Self film", url: `${BASE}/media/test-film.webm`, quality: "240p" }];
 }
 module.exports = { getStreams };
@@ -531,29 +532,55 @@ async fn a_provider_out_of_cpu_twice_is_not_asked_again() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// A provider is kept as bytecode after its first run, and one that reads
-/// its own source (`toString`), which the bytecode leaves out, still
-/// answers: run from bytecode it answers nothing where its source answered,
-/// so it runs once more from source, and from source only from then on.
+/// A provider is kept as bytecode after its first run and runs from it from
+/// then on, its source kept in it: one that reads its own source answers.
 #[tokio::test]
-async fn a_provider_that_needs_its_source_runs_from_source() {
+async fn a_provider_that_reads_its_source_answers_from_bytecode() {
     let fixture = Fixture::start();
-    let core = core();
+    let dir = std::env::temp_dir().join(format!("mq-plugin-bytecode-{}", std::process::id()));
+    let core = Core::open(mq_runtime::CoreConfig {
+        data_dir: dir.clone(),
+        profile_id: OWNER.into(),
+        device_id: 0,
+    })
+    .unwrap();
+    core.use_plugin_defaults(Vec::new());
     core.add_plugin_repo(&format!("{}/repo/self.json", fixture.base))
         .await
         .unwrap();
-    let ran = |kind: &str| {
-        let path = format!("/ran/{kind}");
+    let read = |what: &str| {
+        let path = format!("/read/{what}");
         fixture.asked().iter().filter(|p| **p == path).count()
     };
-    let mut seen = Vec::new();
-    for film_id in ["tt0000021", "tt0000022", "tt0000023"] {
+    let view = settled(&core, film("tt0000021")).await;
+    assert_eq!(plugin_rows(&view), 1, "from source");
+    // Every bytecode written from here on is counted: one per compile.
+    let db = rusqlite::Connection::open(dir.join("library.sqlite")).unwrap();
+    db.execute_batch(
+        "CREATE TABLE compiled (url TEXT);
+         CREATE TRIGGER compiled AFTER UPDATE OF bytecode ON plugin_code
+         WHEN NEW.bytecode IS NOT NULL BEGIN INSERT INTO compiled VALUES (NEW.url); END;",
+    )
+    .unwrap();
+    let kept: i64 = db
+        .query_row("SELECT COUNT(bytecode) FROM plugin_code", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(kept, 1, "its bytecode kept");
+    for film_id in ["tt0000022", "tt0000023"] {
         let view = settled(&core, film(film_id)).await;
-        assert_eq!(plugin_rows(&view), 1, "{film_id} answers");
-        seen.push((ran("source"), ran("bytecode")));
+        assert_eq!(plugin_rows(&view), 1, "{film_id} from bytecode");
     }
-    // Source; then bytecode, empty, and source again; then source only.
-    assert_eq!(seen, [(1, 0), (2, 1), (3, 1)]);
+    let compiled: i64 = db
+        .query_row("SELECT COUNT(*) FROM compiled", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(compiled, 0, "run from the bytecode, not compiled again");
+    assert_eq!(
+        (read("yes"), read("no")),
+        (3, 0),
+        "read its own source each time"
+    );
+    drop(core);
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A provider turned off runs nothing; turned on again it runs.

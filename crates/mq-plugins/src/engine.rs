@@ -479,15 +479,24 @@ fn background() {
     }
 }
 
-/// What `Call::bytecode` must have been written by: this QuickJS build. A
-/// host keeps it beside the bytecode and drops bytecode of another.
+/// How Nuvio wraps a provider's script, and how it is compiled and written:
+/// part of `engine_version`, so bytecode from other text or flags is not read.
+const WRAP: (&str, &str) = ("(function () {\n", "\n})();");
+const COMPILE: i32 = (qjs::JS_EVAL_TYPE_GLOBAL | qjs::JS_EVAL_FLAG_COMPILE_ONLY) as i32;
+const WRITE: i32 = qjs::JS_WRITE_OBJ_BYTECODE as i32;
+const READ: i32 = qjs::JS_READ_OBJ_BYTECODE as i32;
+
+/// What `Call::bytecode` must have been written by: this QuickJS build,
+/// wrapper and flags, and this release (a host recompiles once per release).
 pub fn engine_version() -> String {
     // SAFETY: a static NUL-terminated string.
     let version = unsafe { std::ffi::CStr::from_ptr(qjs::JS_GetVersion()) };
     format!(
-        "quickjs-ng {} {}",
+        "quickjs-ng {} {} {:?} {COMPILE} {WRITE} {READ} {}",
         version.to_string_lossy(),
-        std::mem::size_of::<usize>()
+        std::mem::size_of::<usize>(),
+        WRAP,
+        include_str!("../../../.release-please-manifest.json").trim(),
     )
 }
 
@@ -495,20 +504,12 @@ pub fn engine_version() -> String {
 /// there is one; else compiled here and its bytecode handed to the host
 /// (`HostCall::Compiled`), so a provider is parsed once, not on every title
 /// (a 400 KB script: 20 ms to compile, 1 ms to read, plans/perf-nav.md).
-/// The bytecode leaves the source out (functions' `toString` shows none);
-/// line numbers stay for errors.
+/// The bytecode keeps the source, so `toString` and errors read as from source.
 fn script(ctx: &Ctx<'_>, call: &Call) -> rquickjs::Result<()> {
     let raw = ctx.as_raw().as_ptr();
     let kept = call.bytecode.as_deref().and_then(|code| {
         // SAFETY: `code` outlives the call; QuickJS copies what it reads.
-        let f = unsafe {
-            qjs::JS_ReadObject(
-                raw,
-                code.as_ptr(),
-                code.len() as _,
-                qjs::JS_READ_OBJ_BYTECODE as i32,
-            )
-        };
+        let f = unsafe { qjs::JS_ReadObject(raw, code.as_ptr(), code.len() as _, READ) };
         // SAFETY: a value QuickJS returned.
         if unsafe { qjs::JS_IsException(f) } {
             // Not this build's, or damaged: compiled again below.
@@ -521,17 +522,22 @@ fn script(ctx: &Ctx<'_>, call: &Call) -> rquickjs::Result<()> {
     let function = match kept {
         Some(f) => f,
         None => {
-            let wrapped =
-                std::ffi::CString::new(format!("(function () {{\n{}\n}})();", call.script))
-                    .map_err(rquickjs::Error::InvalidString)?;
-            // SAFETY: a NUL-terminated input of the given length, as JS_Eval asks.
+            let mut wrapped =
+                Vec::with_capacity(WRAP.0.len() + call.script.len() + WRAP.1.len() + 1);
+            wrapped.extend_from_slice(WRAP.0.as_bytes());
+            wrapped.extend_from_slice(call.script.as_bytes());
+            wrapped.extend_from_slice(WRAP.1.as_bytes());
+            let len = wrapped.len();
+            wrapped.push(0);
+            // SAFETY: a NUL-terminated input of `len` bytes before the NUL, as
+            // JS_Eval asks; a NUL inside the script is read as text.
             let f = unsafe {
                 qjs::JS_Eval(
                     raw,
-                    wrapped.as_ptr(),
-                    wrapped.as_bytes().len() as _,
+                    wrapped.as_ptr().cast(),
+                    len as _,
                     c"eval_script".as_ptr(),
-                    (qjs::JS_EVAL_TYPE_GLOBAL | qjs::JS_EVAL_FLAG_COMPILE_ONLY) as i32,
+                    COMPILE,
                 )
             };
             // SAFETY: a value QuickJS returned.
@@ -540,15 +546,11 @@ fn script(ctx: &Ctx<'_>, call: &Call) -> rquickjs::Result<()> {
             }
             let mut size = 0;
             // SAFETY: `f` is a compiled function; the buffer is freed below.
-            let bytes = unsafe {
-                qjs::JS_WriteObject(
-                    raw,
-                    &mut size,
-                    f,
-                    (qjs::JS_WRITE_OBJ_BYTECODE | qjs::JS_WRITE_OBJ_STRIP_SOURCE) as i32,
-                )
-            };
-            if !bytes.is_null() {
+            let bytes = unsafe { qjs::JS_WriteObject(raw, &mut size, f, WRITE) };
+            if bytes.is_null() {
+                // Out of memory under the limit: run without keeping it.
+                drop(ctx.catch());
+            } else {
                 // SAFETY: QuickJS wrote `size` bytes there.
                 let code = unsafe { std::slice::from_raw_parts(bytes, size as usize) }.to_vec();
                 // SAFETY: allocated by this context.

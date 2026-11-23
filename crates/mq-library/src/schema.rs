@@ -512,15 +512,9 @@ ALTER TABLE plugin_code ADD COLUMN spent_at INTEGER NOT NULL DEFAULT 0;
 /// A script's QuickJS bytecode, so a provider is parsed once (plans/perf-nav.md),
 /// under the key it was written with (the engine's build and the script's
 /// hash): read back only under the same key, dropped with its script's body.
-/// `source_only`: run from its bytecode the script failed where its source
-/// answered (a function's `toString`, which the bytecode leaves out), so it
-/// always runs from source; `source_answered`: its last run from source
-/// answered with streams. Both clear with a new version.
 const V19: &str = r#"
 ALTER TABLE plugin_code ADD COLUMN bytecode BLOB;
 ALTER TABLE plugin_code ADD COLUMN bytecode_key TEXT;
-ALTER TABLE plugin_code ADD COLUMN source_only INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE plugin_code ADD COLUMN source_answered INTEGER NOT NULL DEFAULT 0;
 "#;
 
 #[cfg(test)]

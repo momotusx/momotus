@@ -1186,12 +1186,8 @@ mod engine {
         }
     }
 
-    /// One call, from the script's kept bytecode when it has one. Run from
-    /// bytecode, a script that throws, or answers nothing where its last run
-    /// from source answered, runs once more from source: the bytecode leaves
-    /// the source out, which a script reading a function's `toString` needs.
-    /// If the source answers, the script runs from source from then on (until
-    /// a new version): every provider works, the bytecode only saves time.
+    /// One call, from the script's kept bytecode when it has one; else from
+    /// source, keeping the bytecode the engine hands over.
     pub(super) async fn call(
         core: &Core,
         code: &str,
@@ -1206,56 +1202,7 @@ mod engine {
             fnv1a(code.as_bytes())
         );
         let url = p.script.as_str();
-        let kept = core.known(|l| l.plugin_bytecode(url, &key).ok().flatten());
-        let answered = |o: &Outcome| matches!(o, Outcome::Done(found) if !found.is_empty());
-        let Some(bytecode) = kept else {
-            let outcome = once(core, code, p, ask, id, &key, None).await;
-            note_source(core, p, &outcome);
-            return outcome;
-        };
-        let outcome = once(core, code, p, ask, id.clone(), &key, Some(bytecode)).await;
-        let suspect = match &outcome {
-            Outcome::Threw(_) => true,
-            Outcome::Done(found) => {
-                found.is_empty()
-                    && core.known(|l| l.plugin_source_answered(url, &p.version).ok()) == Some(true)
-            }
-            _ => false,
-        };
-        if !suspect {
-            return outcome;
-        }
-        let again = once(core, code, p, ask, id, &key, None).await;
-        note_source(core, p, &again);
-        if answered(&again) {
-            let _ = core.library().set_plugin_source_only(url, &p.version);
-        }
-        again
-    }
-
-    /// What a run from source answered, for the next run from bytecode.
-    fn note_source(core: &Core, p: &Provider, outcome: &Outcome) {
-        let answered = match outcome {
-            Outcome::Done(found) => !found.is_empty(),
-            Outcome::Threw(_) => false,
-            // A run cut short says nothing of the script.
-            _ => return,
-        };
-        let _ = core
-            .library()
-            .note_plugin_source_run(p.script.as_str(), &p.version, answered);
-    }
-
-    /// One run on the engine, from `bytecode` when given, else from source.
-    async fn once(
-        core: &Core,
-        code: &str,
-        p: &Provider,
-        ask: &Ask,
-        id: String,
-        key: &str,
-        bytecode: Option<Vec<u8>>,
-    ) -> Outcome {
+        let bytecode = core.known(|l| l.plugin_bytecode(url, &key).ok().flatten());
         let call = Call {
             script: code.to_owned(),
             plugin_id: p.id.clone(),
@@ -1287,8 +1234,7 @@ mod engine {
             let req = match call {
                 HostCall::Fetch(req) => req,
                 HostCall::Compiled(bytecode) => {
-                    let url = p.script.as_str();
-                    let _ = core.library().put_plugin_bytecode(url, key, &bytecode);
+                    let _ = core.library().put_plugin_bytecode(url, &key, &bytecode);
                     continue;
                 }
                 HostCall::Log { .. } => continue,

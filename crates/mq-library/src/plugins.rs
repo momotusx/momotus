@@ -7,6 +7,11 @@ use rusqlite::{OptionalExtension, params};
 
 /// Repositories a profile keeps at most, removed ones aside.
 pub const MAX_REPOS: i64 = 20;
+/// All providers' bytecode together: QuickJS writes about 3.6 bytes for
+/// each byte of script, the source kept in it, so the 51 providers a
+/// Manitux and NiakVIO profile ran took 56 MiB (plans/perf-nav.md); past
+/// the budget a script is parsed on each call.
+const BYTECODE_BUDGET: i64 = 64 << 20;
 
 /// One repository of a profile.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -186,8 +191,6 @@ impl Library {
                    spent_at = CASE WHEN version = excluded.version THEN spent_at ELSE 0 END,
                    bytecode = CASE WHEN body = excluded.body THEN bytecode END,
                    bytecode_key = CASE WHEN body = excluded.body THEN bytecode_key END,
-                   source_only = CASE WHEN version = excluded.version THEN source_only ELSE 0 END,
-                   source_answered = CASE WHEN version = excluded.version THEN source_answered ELSE 0 END,
                    version = excluded.version, body = excluded.body, fetched_at = excluded.fetched_at",
                 params![url, code.version, code.body, code.fetched_at],
             )
@@ -195,12 +198,11 @@ impl Library {
         })
     }
 
-    /// The bytecode kept for the script at `url` under `key`; none for one
-    /// marked source only (`set_plugin_source_only`).
+    /// The bytecode kept for the script at `url` under `key`.
     pub fn plugin_bytecode(&self, url: &str, key: &str) -> Result<Option<Vec<u8>>, LibraryError> {
         self.read(|c| {
             c.query_row(
-                "SELECT bytecode FROM plugin_code WHERE url = ?1 AND bytecode_key = ?2 AND source_only = 0",
+                "SELECT bytecode FROM plugin_code WHERE url = ?1 AND bytecode_key = ?2",
                 params![url, key],
                 |r| r.get(0),
             )
@@ -209,61 +211,31 @@ impl Library {
         })
     }
 
-    /// Keeps `bytecode` for the script at `url` under `key`.
+    /// Keeps `bytecode` for the script at `url` under `key`, while all the
+    /// bytecode kept stays within `BYTECODE_BUDGET`; past it the script is
+    /// parsed on each call, as before.
     pub fn put_plugin_bytecode(
         &self,
         url: &str,
         key: &str,
         bytecode: &[u8],
     ) -> Result<(), LibraryError> {
-        self.write(|c| {
-            c.execute(
-                "UPDATE plugin_code SET bytecode = ?3, bytecode_key = ?2 WHERE url = ?1 AND source_only = 0",
-                params![url, key, bytecode],
-            )
-            .map(drop)
-        })
+        self.keep_bytecode(url, key, bytecode, BYTECODE_BUDGET)
     }
 
-    /// Whether the last run of the script at `url`, at `version`, from its
-    /// source answered with streams.
-    pub fn plugin_source_answered(&self, url: &str, version: &str) -> Result<bool, LibraryError> {
-        self.read(|c| {
-            c.query_row(
-                "SELECT source_answered FROM plugin_code WHERE url = ?1 AND version = ?2",
-                params![url, version],
-                |r| r.get(0),
-            )
-            .optional()
-            .map(|answered| answered.unwrap_or(false))
-        })
-    }
-
-    /// A run of the script at `url`, at `version`, from its source: whether
-    /// it answered with streams.
-    pub fn note_plugin_source_run(
+    fn keep_bytecode(
         &self,
         url: &str,
-        version: &str,
-        answered: bool,
+        key: &str,
+        bytecode: &[u8],
+        budget: i64,
     ) -> Result<(), LibraryError> {
         self.write(|c| {
             c.execute(
-                "UPDATE plugin_code SET source_answered = ?3 WHERE url = ?1 AND version = ?2",
-                params![url, version, answered],
-            )
-            .map(drop)
-        })
-    }
-
-    /// The script at `url`, at `version`, runs from its source from now on:
-    /// its bytecode failed where its source answered. A new version clears it.
-    pub fn set_plugin_source_only(&self, url: &str, version: &str) -> Result<(), LibraryError> {
-        self.write(|c| {
-            c.execute(
-                "UPDATE plugin_code SET source_only = 1, bytecode = NULL, bytecode_key = NULL
-                 WHERE url = ?1 AND version = ?2",
-                params![url, version],
+                "UPDATE plugin_code SET bytecode = ?3, bytecode_key = ?2 WHERE url = ?1
+                 AND (SELECT COALESCE(SUM(LENGTH(bytecode)), 0) FROM plugin_code WHERE url != ?1)
+                     + LENGTH(?3) <= ?4",
+                params![url, key, bytecode, budget],
             )
             .map(drop)
         })
@@ -415,32 +387,37 @@ mod tests {
     }
 
     #[test]
-    fn a_script_marked_source_only_keeps_no_bytecode_until_a_new_version() {
+    fn bytecode_is_kept_within_its_budget() {
         let lib = Library::temporary().unwrap();
-        let code = |version: &str| crate::PluginCode {
-            version: version.into(),
+        let code = crate::PluginCode {
+            version: "1".into(),
             body: "a".into(),
             fetched_at: 1,
         };
-        let url = "https://a/p.js";
-        lib.put_plugin_code(url, &code("1")).unwrap();
-        assert!(!lib.plugin_source_answered(url, "1").unwrap());
-        lib.note_plugin_source_run(url, "1", true).unwrap();
-        assert!(lib.plugin_source_answered(url, "1").unwrap());
-        lib.put_plugin_bytecode(url, "k", &[1]).unwrap();
-        lib.set_plugin_source_only(url, "1").unwrap();
-        assert_eq!(lib.plugin_bytecode(url, "k").unwrap(), None);
-        lib.put_plugin_bytecode(url, "k", &[1]).unwrap();
-        assert_eq!(
-            lib.plugin_bytecode(url, "k").unwrap(),
-            None,
-            "not kept again"
+        for url in ["https://a/1.js", "https://a/2.js"] {
+            lib.put_plugin_code(url, &code).unwrap();
+        }
+        lib.keep_bytecode("https://a/1.js", "k", &[0; 6], 10)
+            .unwrap();
+        lib.keep_bytecode("https://a/2.js", "k", &[0; 6], 10)
+            .unwrap();
+        assert!(
+            lib.plugin_bytecode("https://a/1.js", "k")
+                .unwrap()
+                .is_some()
         );
-        // A new version: bytecode again, and its source has not answered yet.
-        lib.put_plugin_code(url, &code("2")).unwrap();
-        lib.put_plugin_bytecode(url, "k", &[2]).unwrap();
-        assert_eq!(lib.plugin_bytecode(url, "k").unwrap(), Some(vec![2]));
-        assert!(!lib.plugin_source_answered(url, "2").unwrap());
+        assert_eq!(
+            lib.plugin_bytecode("https://a/2.js", "k").unwrap(),
+            None,
+            "over the budget"
+        );
+        // Its own old bytecode does not count against its new one.
+        lib.keep_bytecode("https://a/1.js", "k", &[0; 9], 10)
+            .unwrap();
+        assert_eq!(
+            lib.plugin_bytecode("https://a/1.js", "k").unwrap(),
+            Some(vec![0; 9])
+        );
     }
 
     #[test]
