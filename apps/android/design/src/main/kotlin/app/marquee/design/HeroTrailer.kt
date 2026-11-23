@@ -12,6 +12,7 @@ import android.os.MessageQueue
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
+import android.view.InputEvent
 import android.view.MotionEvent
 import android.view.ViewGroup
 import android.view.accessibility.AccessibilityManager
@@ -94,6 +95,15 @@ object ViewerInput {
     var at = 0L
 
     const val IDLE_MS = 1_500L
+
+    /**
+     * A key or a touch, each move and lift included: a drag or a fling held for longer than [IDLE_MS] keeps the
+     * preview waiting until the finger leaves. Input in a dialog's own window does not come here; a dialog covers the
+     * page, and the preview waits for the page to be on screen anyway.
+     */
+    fun saw(event: InputEvent) {
+        at = maxOf(at, event.eventTime)
+    }
 
     /** Returns once no key or touch came for [IDLE_MS]; at once when none came that recently. */
     suspend fun awaitIdle(now: () -> Long = SystemClock::uptimeMillis) {
