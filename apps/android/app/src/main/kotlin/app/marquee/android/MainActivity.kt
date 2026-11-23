@@ -61,9 +61,9 @@ class MainActivity : ComponentActivity() {
                 .toDrawable(),
         )
 
-        // A benchmark build walks too: it plays silent when told (`--ez mute true`), as a debug walk does.
+        // A benchmark build is always silent (WalkMute); a debug walk when told (`--ez mute true`).
         if (debuggable || BuildConfig.BENCHMARK) {
-            WalkMute.read(this, intent)
+            WalkMute.read(this, intent, always = BuildConfig.BENCHMARK)
             app.marquee.design.HeroTrailers.walk = WalkMute.on
         }
         if (debuggable) {
@@ -116,7 +116,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         if (debuggable || BuildConfig.BENCHMARK) {
-            WalkMute.read(this, intent)
+            WalkMute.read(this, intent, always = BuildConfig.BENCHMARK)
             app.marquee.design.HeroTrailers.walk = WalkMute.on
         }
         if (debuggable) {

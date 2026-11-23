@@ -4,11 +4,13 @@ import android.content.Context
 import android.content.Intent
 
 /**
- * Debug builds only (the activity reads it for those): walks on the owner's devices never make sound
+ * Debug and benchmark builds only (the activity reads it for those): walks on the owner's devices never make sound
  * (the repository rules), as Apple's `-MQMute YES`. A launch with `--ez mute true` mutes every player of this
  * install until a launch says `false`, the app is opened from the launcher, or the walk deletes the app's
  * data; the device's volume is not touched. The launcher clears it because the owner opens the same walk
  * build from the icon afterwards and must hear it (2026-10-21: a kept mute played a film without sound).
+ * A benchmark build is always silent ([always]): only a runner or a walk ever starts it, and Macrobenchmark starts it
+ * with the launcher's intent, which would clear a kept mute.
  */
 object WalkMute {
     @Volatile
@@ -18,6 +20,7 @@ object WalkMute {
     fun read(
         context: Context,
         intent: Intent?,
+        always: Boolean = false,
     ) {
         val kept = context.getSharedPreferences("walk", Context.MODE_PRIVATE)
         when {
@@ -29,6 +32,6 @@ object WalkMute {
                 kept.edit().remove("mute").apply()
             }
         }
-        on = kept.getBoolean("mute", false)
+        on = always || kept.getBoolean("mute", false)
     }
 }
