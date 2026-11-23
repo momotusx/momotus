@@ -380,7 +380,7 @@ test("desktop: a minute idle sends idle; the warning's button is one Tab away an
   const { page, line } = await open(browser, "desktop", { clock: true });
   // Where the pointer last moved: the menu's clicks leave it resting there, before Incognito begins, and Continue is
   // pressed from the keyboard, so no move comes after.
-  await page.evaluate(() => addEventListener("pointermove", (e) => ((window as unknown as { rest: number[] }).rest = [e.clientX, e.clientY]), true));
+  await page.evaluate(() => addEventListener("pointermove", (e: PointerEvent) => ((window as unknown as { rest: number[] }).rest = [e.clientX, e.clientY]), true));
   await menuButton(page).click();
   await page.locator('[data-f="pmenu:incognito"]').click();
   await expect(page.locator(".incog-intro h1")).toHaveText("You're Incognito");
