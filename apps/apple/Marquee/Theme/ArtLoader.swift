@@ -50,19 +50,29 @@ actor ArtLoader {
         }
         return nil
     }
-    private let memory: NSCache<NSString, DecodedArt> = {
-        let cache = NSCache<NSString, DecodedArt>()
-        cache.totalCostLimit = 192 << 20
-        return cache
-    }()
+    /// Decoded art by URL and size. NSCache is safe from any thread, so a view reads it as it draws (`cached`).
+    private final class Memory: @unchecked Sendable {
+        let cache: NSCache<NSString, DecodedArt> = {
+            let cache = NSCache<NSString, DecodedArt>()
+            cache.totalCostLimit = 192 << 20
+            return cache
+        }()
+    }
+    private nonisolated let memory = Memory()
     private var inFlight: [String: Task<DecodedArt?, Never>] = [:]
+
+    /// The decoded image already in memory, read without waiting on the loader: a card back on screen draws its
+    /// art in its first frame, with no load, no state change and no fade.
+    nonisolated func cached(_ given: URL, maxPixels: Int) -> DecodedArt? {
+        memory.cache.object(forKey: "\(Self.secure(given).absoluteString)#\(maxPixels)" as NSString)
+    }
 
     /// The image at `url`, its longest side at most `maxPixels`, or nil when it
     /// cannot be loaded.
     func image(_ given: URL, maxPixels: Int) async -> DecodedArt? {
         let url = Self.secure(given)
         let key = "\(url.absoluteString)#\(maxPixels)"
-        if let hit = memory.object(forKey: key as NSString) { return hit }
+        if let hit = memory.cache.object(forKey: key as NSString) { return hit }
         if let running = inFlight[key] { return await running.value }
         let session = Self.session(incognito: Incognito.on)
         let task = Task.detached(priority: .userInitiated) {
@@ -72,7 +82,7 @@ actor ArtLoader {
         let art = await task.value
         inFlight[key] = nil
         if let art {
-            memory.setObject(art, forKey: key as NSString, cost: art.image.bytesPerRow * art.image.height)
+            memory.cache.setObject(art, forKey: key as NSString, cost: art.image.bytesPerRow * art.image.height)
         }
         return art
     }
