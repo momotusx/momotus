@@ -64,7 +64,16 @@ actor ArtLoader {
     /// The decoded image already in memory, read without waiting on the loader: a card back on screen draws its
     /// art in its first frame, with no load, no state change and no fade.
     nonisolated func cached(_ given: URL, maxPixels: Int) -> DecodedArt? {
-        memory.cache.object(forKey: "\(Self.secure(given).absoluteString)#\(maxPixels)" as NSString)
+        memory.cache.object(forKey: Self.key(given, maxPixels))
+    }
+
+    private static func key(_ given: URL, _ maxPixels: Int) -> NSString {
+        "\(secure(given).absoluteString)#\(maxPixels)" as NSString
+    }
+
+    /// Puts decoded art in memory as a load does (tests).
+    nonisolated func remember(_ art: DecodedArt, for given: URL, maxPixels: Int) {
+        memory.cache.setObject(art, forKey: Self.key(given, maxPixels), cost: art.image.bytesPerRow * art.image.height)
     }
 
     /// The image at `url`, its longest side at most `maxPixels`, or nil when it

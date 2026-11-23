@@ -19,11 +19,12 @@ struct ArtImage: View {
     @State private var art: DecodedArt?
     @State private var underArt: DecodedArt?
     @State private var missing = false
-    /// Decoded art this view drew from memory, held so a later eviction never blanks it. Not state: holding it redraws
-    /// nothing.
+    /// Decoded art this view drew from memory for `url`, held so a later eviction never blanks it. Not state: holding
+    /// it redraws nothing; it counts only while `url` is still the one it was drawn for.
     @State private var held = Held()
 
     final class Held {
+        var url: String?
         var art: DecodedArt?
     }
 
@@ -38,7 +39,8 @@ struct ArtImage: View {
         // the title page grow without end.
         Theme.Palette.surface
             .overlay(alignment: alignment) {
-                if let art = art ?? held.art ?? cached {
+                // The current url's picture first: a cached one, or the one this view held for it; else the last load.
+                if let art = cached ?? (held.url == url ? held.art : nil) ?? art {
                     Image(decorative: art.image, scale: 1)
                         .resizable()
                         .aspectRatio(contentMode: mode)
@@ -69,7 +71,7 @@ struct ArtImage: View {
                 // Already decoded: drawn from the first frame, with nothing to set (a scroll back used to load, set and
                 // fade every card again, one update each).
                 if let hit = cached {
-                    held.art = hit
+                    (held.url, held.art) = (url, hit)
                     if art != nil, art !== hit { art = nil }
                     if missing { missing = false }
                     return
@@ -77,7 +79,7 @@ struct ArtImage: View {
                 #if MARQUEE_WALK
                 if NavWalk.off(.art) { return }
                 #endif
-                held.art = nil
+                (held.url, held.art) = (nil, nil)
                 missing = false
                 let start = ContinuousClock.now
                 let maxPixels = maxPixels

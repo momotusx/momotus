@@ -111,3 +111,59 @@ private struct Shell: View {
     #expect(PointerRest.moved(to: NSPoint(x: 11, y: 10)))
     #expect(try source("Theme/Components.swift").contains("if !inside || PointerRest.moved() { hovered = inside }"))
 }
+
+@MainActor @Observable private final class Shown {
+    var url: String?
+}
+
+/// One art view whose url changes, as the hero's backdrop does on each rotation.
+private struct Rotating: View {
+    let shown: Shown
+
+    var body: some View {
+        ArtImage(url: shown.url).frame(width: 20, height: 20)
+    }
+}
+
+private func solid(red: CGFloat, green: CGFloat, blue: CGFloat) throws -> DecodedArt {
+    let space = try #require(CGColorSpace(name: CGColorSpace.sRGB))
+    let context = try #require(CGContext(
+        data: nil, width: 8, height: 8, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+        bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue))
+    context.setFillColor(CGColor(red: red, green: green, blue: blue, alpha: 1))
+    context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+    return DecodedArt(try #require(context.makeImage()))
+}
+
+@MainActor private func centre(of view: NSView) throws -> NSColor {
+    view.layoutSubtreeIfNeeded()
+    let rep = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+    view.cacheDisplay(in: view.bounds, to: rep)
+    return try #require(rep.colorAt(x: rep.pixelsWide / 2, y: rep.pixelsHigh / 2)?.usingColorSpace(.sRGB))
+}
+
+@MainActor @Test func artDrawsTheCurrentURLsCachedPictureOnEveryChange() async throws {
+    // A view that drew cached art for one url and is handed another (the hero's third rotation) draws the new url's
+    // picture, never the one it held for the last.
+    let pictures = [("red", try solid(red: 1, green: 0, blue: 0)), ("green", try solid(red: 0, green: 1, blue: 0)),
+                    ("blue", try solid(red: 0, green: 0, blue: 1))]
+    for (name, art) in pictures {
+        let url = try #require(URL(string: "https://art.test/\(name).jpg"))
+        ArtLoader.shared.remember(art, for: url, maxPixels: ArtSize.poster)
+    }
+    let shown = Shown()
+    let window = NSWindow(
+        contentRect: CGRect(x: 0, y: 0, width: 20, height: 20), styleMask: .borderless, backing: .buffered, defer: false)
+    let host = NSHostingView(rootView: Rotating(shown: shown))
+    window.contentView = host
+    for name in ["red", "green", "blue", "red", "blue"] {
+        shown.url = "https://art.test/\(name).jpg"
+        for _ in 0..<5 {
+            try await Task.sleep(for: .milliseconds(20))
+            host.layoutSubtreeIfNeeded()
+        }
+        let colour = try centre(of: host)
+        let channels = ["red": colour.redComponent, "green": colour.greenComponent, "blue": colour.blueComponent]
+        #expect(channels.max { $0.value < $1.value }?.key == name, "\(name)'s url drew \(colour)")
+    }
+}
