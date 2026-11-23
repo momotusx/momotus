@@ -20,8 +20,9 @@ use tokio::io::AsyncReadExt;
 const PIECE: u64 = 256 * 1024;
 const NFO: u64 = 37_000;
 const BLOCK: u64 = 16 * 1024;
-/// The filesystem block of APFS and ext4.
-const FS_BLOCK: u64 = 4096;
+/// The punch unit: the filesystem block of APFS and ext4, and on NTFS the 64 KiB sparse unit librqbit
+/// rounds to there (`punch.rs` `block_size`).
+const FS_BLOCK: u64 = if cfg!(windows) { 64 << 10 } else { 4096 };
 
 struct Leech {
     s: support::Swarm,
@@ -895,6 +896,15 @@ async fn a_sparse_folder_starts_with_nothing_claimed() {
     std::fs::create_dir_all(&folder).unwrap();
     std::fs::write(folder.join("a.nfo"), vec![b'n'; NFO as usize]).unwrap();
     let mut movie = std::fs::File::create(folder.join("movie.mkv")).unwrap();
+    // NTFS gives a file its whole length unless it is sparse first (the engine marks its own files).
+    #[cfg(windows)]
+    assert!(
+        std::process::Command::new("fsutil")
+            .args(["sparse", "setflag"])
+            .arg(folder.join("movie.mkv"))
+            .status()
+            .is_ok_and(|s| s.success())
+    );
     movie.set_len(s.movie.len() as u64).unwrap();
     let (a, b) = (128 * PIECE - NFO, 129 * PIECE - NFO);
     std::io::Seek::seek(&mut movie, std::io::SeekFrom::Start(a)).unwrap();

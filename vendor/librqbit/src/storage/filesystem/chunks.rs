@@ -188,22 +188,72 @@ fn on_disk(_path: &Path, m: &std::fs::Metadata) -> u64 {
     blocks(m)
 }
 
-/// What NTFS has allocated for the file at `path` (`GetCompressedFileSizeW`:
-/// a sparse file counts its allocated ranges, not its length); its length
-/// when the call fails.
+/// What NTFS has allocated for the file at `path`: the sum of its allocated
+/// ranges; its length when they cannot be read. Measured on NTFS (a Windows
+/// 11 VM, plans/desktop-release.md W4): `GetCompressedFileSizeW` and the
+/// standard info's allocation size keep the size from before a punch until
+/// every handle closes, while the allocated ranges change at once, and the
+/// storage keeps its files open.
 #[cfg(windows)]
 fn on_disk(path: &Path, m: &std::fs::Metadata) -> u64 {
-    use std::os::windows::ffi::OsStrExt;
-    use windows::{Win32::Storage::FileSystem::GetCompressedFileSizeW, core::PCWSTR};
-    const INVALID_FILE_SIZE: u32 = u32::MAX;
-    let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
-    let mut high = 0u32;
-    // SAFETY: a NUL-terminated wide path and a writable high word.
-    let low = unsafe { GetCompressedFileSizeW(PCWSTR(wide.as_ptr()), Some(&mut high)) };
-    if low == INVALID_FILE_SIZE && io::Error::last_os_error().raw_os_error() != Some(0) {
-        return m.len();
+    allocated_ranges(path).map_or(m.len(), |r| r.iter().map(|r| r.end - r.start).sum())
+}
+
+/// The ranges of the file at `path` that hold allocated blocks
+/// (`FSCTL_QUERY_ALLOCATED_RANGES`, asked again from the last range while
+/// the answer is cut short). A file that is not sparse is one range.
+#[cfg(windows)]
+pub fn allocated_ranges(path: &Path) -> io::Result<Vec<Range<u64>>> {
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::{
+        Foundation::{ERROR_MORE_DATA, HANDLE},
+        System::{
+            IO::DeviceIoControl,
+            Ioctl::{FILE_ALLOCATED_RANGE_BUFFER, FSCTL_QUERY_ALLOCATED_RANGES},
+        },
+    };
+    let file = File::open(path)?;
+    let len = i64::try_from(file.metadata()?.len()).map_err(|_| io::ErrorKind::InvalidData)?;
+    let mut out = [FILE_ALLOCATED_RANGE_BUFFER::default(); 64];
+    let (mut ranges, mut from) = (Vec::new(), 0i64);
+    while from < len {
+        let ask = FILE_ALLOCATED_RANGE_BUFFER {
+            FileOffset: from,
+            Length: len - from,
+        };
+        let mut got = 0u32;
+        // SAFETY: a valid handle, one input range, an output array of the
+        // size given and a byte count.
+        let asked = unsafe {
+            DeviceIoControl(
+                HANDLE(file.as_raw_handle()),
+                FSCTL_QUERY_ALLOCATED_RANGES,
+                Some((&raw const ask).cast()),
+                size_of::<FILE_ALLOCATED_RANGE_BUFFER>() as u32,
+                Some(out.as_mut_ptr().cast()),
+                size_of_val(&out) as u32,
+                Some(&mut got),
+                None,
+            )
+        };
+        let more = match asked {
+            Ok(()) => false,
+            Err(e) if e.code() == ERROR_MORE_DATA.to_hresult() => true,
+            Err(e) => return Err(e.into()),
+        };
+        let n = got as usize / size_of::<FILE_ALLOCATED_RANGE_BUFFER>();
+        ranges.extend(
+            out[..n]
+                .iter()
+                .filter(|r| r.Length > 0)
+                .map(|r| r.FileOffset as u64..(r.FileOffset + r.Length) as u64),
+        );
+        match (more, out[..n].last()) {
+            (true, Some(last)) => from = last.FileOffset + last.Length,
+            _ => break,
+        }
     }
-    (u64::from(high) << 32) | u64::from(low)
+    Ok(ranges)
 }
 
 #[cfg(not(windows))]
