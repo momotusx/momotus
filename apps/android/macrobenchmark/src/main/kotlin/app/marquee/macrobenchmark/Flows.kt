@@ -84,7 +84,7 @@ fun MacrobenchmarkScope.startPlayback() {
 
 /** A start in the TV tree (`form=tv`, read by debug and benchmark builds), on a phone as on a TV, past onboarding. */
 fun MacrobenchmarkScope.startTv() {
-    startActivityAndWait { it.putExtra("form", "tv") }
+    startActivityAndWait { it.putExtra("form", "tv").putExtra("mute", true) }
     onboardIfAsked()
 }
 

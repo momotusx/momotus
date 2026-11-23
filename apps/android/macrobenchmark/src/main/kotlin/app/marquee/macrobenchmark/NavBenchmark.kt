@@ -46,7 +46,7 @@ class NavBenchmark {
             compilationMode = CompilationMode.Partial(),
             setupBlock = {
                 killProcess()
-                startActivityAndWait()
+                startActivityAndWait { it.putExtra("mute", true) }
                 onboardIfAsked()
                 openHome()
             },

@@ -30,4 +30,14 @@ class WalkMuteTest {
         WalkMute.read(context, Intent())
         assertFalse(WalkMute.on)
     }
+
+    @Test
+    fun `a benchmark build stays silent, launcher start included`() {
+        WalkMute.read(context, Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), always = true)
+        assertTrue(WalkMute.on)
+        WalkMute.read(context, Intent().putExtra("mute", false), always = true)
+        assertTrue(WalkMute.on)
+        WalkMute.read(context, Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER))
+        assertFalse(WalkMute.on)
+    }
 }
