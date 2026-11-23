@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -161,10 +162,16 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
     }
 
-    // Every key and every touch down says the viewer is busy: Home's and the title page's previews wait until input rests.
+    // Every key says the viewer is busy: Home's and the title page's previews wait until input rests.
     override fun onUserInteraction() {
         super.onUserInteraction()
         ViewerInput.at = SystemClock.uptimeMillis()
+    }
+
+    // Every touch too, each move and lift as well as the first touch (onUserInteraction hears only that).
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        ViewerInput.saw(event)
+        return super.dispatchTouchEvent(event)
     }
 
     // Before Android 12 the activity enters picture-in-picture itself when the viewer leaves while
