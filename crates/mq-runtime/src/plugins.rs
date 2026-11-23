@@ -110,10 +110,14 @@ const ASK_WAIT: Duration = Duration::from_secs(10);
 /// fewer than its CPUs, so a pass never takes every core from the app.
 const POOL: usize = 3;
 /// A provider that runs out of its CPU time this many times in a row is
-/// not asked again until the app starts anew or its version changes: a
-/// script that never finishes in its 3 s burns them on every title opened
-/// and answers nothing (NiakVIO's MeowTV: 3 of the 6 to 7 s a pass took).
-const SPENT_RUNS: u8 = 2;
+/// not asked again for `SPENT_REST` or until its version changes: a script
+/// that never finishes in its 3 s burns them on every title opened and
+/// answers nothing (NiakVIO's MeowTV: 3 of the 6 to 7 s a pass took). Kept
+/// with its script, so a new launch does not pay twice again.
+const SPENT_RUNS: u32 = 2;
+/// Then it gets one fresh try: a slow device, or a script fixed upstream
+/// at the same version.
+const SPENT_REST_MS: i64 = 7 * 24 * 3_600_000;
 /// How long Play waits for the plugins when no addon lists a version, from
 /// the moment Versions opens: twice an addon's request timeout (10 s) and
 /// two full rounds of the pool at each provider's own `ASK_WAIT`, so quick
@@ -131,9 +135,6 @@ pub(crate) struct Plugins {
     #[cfg_attr(not(feature = "plugins"), allow(dead_code))]
     pool: tokio::sync::Semaphore,
     results: Mutex<HashMap<String, (Instant, Vec<ParsedStream>)>>,
-    /// Providers that ran out of CPU time, by script and version: runs in a row.
-    #[cfg_attr(not(feature = "plugins"), allow(dead_code))]
-    spent: Mutex<HashMap<String, u8>>,
     defaults: Vec<PluginDefault>,
     /// The directory page's links and the manifests read from it, each kept a day (`directory`).
     pub(crate) listed: crate::plugin_directory::Kept,
@@ -153,7 +154,6 @@ impl Plugins {
                 POOL.min(mq_rt::parallelism().saturating_sub(1)).max(1),
             ),
             results: Mutex::default(),
-            spent: Mutex::default(),
             listed: crate::plugin_directory::Kept::default(),
             play_wait_ms: AtomicU64::new(PLAY_WAIT.as_millis() as u64),
             defaults: defaults
@@ -857,8 +857,10 @@ async fn run(
     tmdb: Option<u64>,
 ) -> Option<Vec<PluginStream>> {
     use mq_plugins::engine::Outcome;
-    let spent_key = format!("{}|{}", p.script, p.version);
-    if lock(&core.plugins().spent).get(&spent_key) >= Some(&SPENT_RUNS) {
+    let url = p.script.as_str();
+    let now = mq_library::hlc::now_ms() as i64;
+    let spent = core.known(|l| l.plugin_spent(url, &p.version).ok().flatten());
+    if spent.is_some_and(|(runs, at)| runs >= SPENT_RUNS && now - at < SPENT_REST_MS) {
         return None;
     }
     let ids: Vec<String> = (tmdb.map(|id| id.to_string()).into_iter())
@@ -870,15 +872,16 @@ async fn run(
             let _permit = core.plugins().pool.acquire().await.ok()?;
             engine::call(core, code, p, ask, id).await
         };
-        {
-            // Only an answer clears it: a cancel or a slow network says nothing
-            // of the script's CPU.
-            let mut runs = lock(&core.plugins().spent);
-            match outcome {
-                Outcome::Cpu => *runs.entry(spent_key.clone()).or_default() += 1,
-                Outcome::Done(_) | Outcome::Threw(_) => drop(runs.remove(&spent_key)),
-                _ => {}
-            }
+        // Only an answer clears it: a cancel or a slow network says nothing of
+        // the script's CPU.
+        let cpu = match outcome {
+            Outcome::Cpu => Some(true),
+            Outcome::Done(_) | Outcome::Threw(_) => Some(false),
+            _ => None,
+        };
+        if let Some(cpu) = cpu {
+            let ended = mq_library::hlc::now_ms() as i64;
+            let _ = core.library().note_plugin_run(url, &p.version, cpu, ended);
         }
         match outcome {
             Outcome::Done(found) if !found.is_empty() => return Some(found),

@@ -19,6 +19,7 @@ pub(crate) fn migrations() -> Migrations<'static> {
         M::up(V15),
         M::up(V16),
         M::up(V17),
+        M::up(V18),
     ])
 }
 
@@ -497,6 +498,14 @@ CREATE TABLE plugin_code (
     body        TEXT NOT NULL,
     fetched_at  INTEGER NOT NULL
 ) WITHOUT ROWID;
+"#;
+
+/// A provider's runs out of CPU time in a row and when the last ended so
+/// (plans/perf-nav.md): kept with its script, cleared by an answer or a
+/// new version, so a script that never ends is not run on every title.
+const V18: &str = r#"
+ALTER TABLE plugin_code ADD COLUMN spent_runs INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE plugin_code ADD COLUMN spent_at INTEGER NOT NULL DEFAULT 0;
 "#;
 
 #[cfg(test)]

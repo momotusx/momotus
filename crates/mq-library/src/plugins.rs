@@ -176,11 +176,55 @@ impl Library {
         })
     }
 
+    /// Keeps `code` for `url`; a new version clears its CPU record (`note_plugin_run`).
     pub fn put_plugin_code(&self, url: &str, code: &PluginCode) -> Result<(), LibraryError> {
         self.write(|c| {
             c.execute(
-                "INSERT OR REPLACE INTO plugin_code (url, version, body, fetched_at) VALUES (?1, ?2, ?3, ?4)",
+                "INSERT INTO plugin_code (url, version, body, fetched_at) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT (url) DO UPDATE SET
+                   spent_runs = CASE WHEN version = excluded.version THEN spent_runs ELSE 0 END,
+                   spent_at = CASE WHEN version = excluded.version THEN spent_at ELSE 0 END,
+                   version = excluded.version, body = excluded.body, fetched_at = excluded.fetched_at",
                 params![url, code.version, code.body, code.fetched_at],
+            )
+            .map(drop)
+        })
+    }
+
+    /// How the script at `url`, at `version`, last ran out of CPU time: its
+    /// runs out in a row and when the last ended so; `None` when it has not,
+    /// or for another version.
+    pub fn plugin_spent(
+        &self,
+        url: &str,
+        version: &str,
+    ) -> Result<Option<(u32, i64)>, LibraryError> {
+        self.read(|c| {
+            c.query_row(
+                "SELECT spent_runs, spent_at FROM plugin_code WHERE url = ?1 AND version = ?2 AND spent_runs > 0",
+                params![url, version],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+        })
+    }
+
+    /// One run of the script at `url`, at `version`: out of CPU time counts
+    /// one more in a row at `now`, an answer clears the count.
+    pub fn note_plugin_run(
+        &self,
+        url: &str,
+        version: &str,
+        out_of_cpu: bool,
+        now: i64,
+    ) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "UPDATE plugin_code SET
+                   spent_runs = CASE WHEN ?3 THEN spent_runs + 1 ELSE 0 END,
+                   spent_at = CASE WHEN ?3 THEN ?4 ELSE spent_at END
+                 WHERE url = ?1 AND version = ?2",
+                params![url, version, out_of_cpu, now],
             )
             .map(drop)
         })
@@ -242,6 +286,33 @@ mod tests {
             (back[1].manifest_json.as_deref(), back[1].off.len()),
             (None, 0)
         );
+    }
+
+    #[test]
+    fn a_script_keeps_its_runs_out_of_cpu_until_an_answer_or_a_new_version() {
+        let lib = Library::temporary().unwrap();
+        let code = |version: &str| crate::PluginCode {
+            version: version.into(),
+            body: "x".into(),
+            fetched_at: 1,
+        };
+        let url = "https://a/p.js";
+        lib.put_plugin_code(url, &code("1")).unwrap();
+        assert_eq!(lib.plugin_spent(url, "1").unwrap(), None);
+        lib.note_plugin_run(url, "1", true, 10).unwrap();
+        lib.note_plugin_run(url, "1", true, 20).unwrap();
+        assert_eq!(lib.plugin_spent(url, "1").unwrap(), Some((2, 20)));
+        // Fetched again at the same version, it keeps them; for another version it says nothing.
+        lib.put_plugin_code(url, &code("1")).unwrap();
+        assert_eq!(lib.plugin_spent(url, "1").unwrap(), Some((2, 20)));
+        assert_eq!(lib.plugin_spent(url, "2").unwrap(), None);
+        // An answer clears them.
+        lib.note_plugin_run(url, "1", false, 30).unwrap();
+        assert_eq!(lib.plugin_spent(url, "1").unwrap(), None);
+        // A new version starts clean.
+        lib.note_plugin_run(url, "1", true, 40).unwrap();
+        lib.put_plugin_code(url, &code("2")).unwrap();
+        assert_eq!(lib.plugin_spent(url, "2").unwrap(), None);
     }
 
     #[test]
