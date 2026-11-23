@@ -4,9 +4,11 @@ import android.os.Looper
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreTransport
 import app.marquee.core.session.CoreSession
+import app.marquee.core.session.CoreSessions
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -24,6 +26,9 @@ import kotlin.test.assertEquals
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class FirstRunWallAskTest {
+    @get:Rule
+    val sessions = CoreSessions()
+
     private val caps: CapsSource = { error("no Versions view opens here") }
 
     /** A core whose addons view says [fresh]; the wall's answers are [walls] in turn. */
@@ -32,7 +37,7 @@ class FirstRunWallAskTest {
         walls: List<String>,
         asks: AtomicInteger,
     ): Pair<CoreSession, AppState> {
-        val session = CoreSession(RuntimeEnvironment.getApplication())
+        val session = sessions.open(RuntimeEnvironment.getApplication())
         session.client.attach(
             CoreTransport { text ->
                 val request = CoreJson.parseToJsonElement(text).jsonObject

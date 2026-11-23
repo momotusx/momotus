@@ -4,9 +4,10 @@ import android.os.Looper
 import androidx.compose.runtime.snapshots.Snapshot
 import app.marquee.core.client.CoreError
 import app.marquee.core.client.CoreLog
-import app.marquee.core.session.CoreSession
+import app.marquee.core.session.CoreSessions
 import org.junit.After
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -26,6 +27,9 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class StartDecisionTest {
+    @get:Rule
+    val sessions = CoreSessions()
+
     private val logs = CopyOnWriteArrayList<String>()
     private val caps: CapsSource = { error("no Versions view opens here") }
 
@@ -41,7 +45,7 @@ class StartDecisionTest {
 
     @Test
     fun `the start hears the core open while the composition that builds it runs`() {
-        val session = CoreSession(RuntimeEnvironment.getApplication())
+        val session = sessions.open(RuntimeEnvironment.getApplication())
         val composition = Snapshot.takeMutableSnapshot()
         composition.enter {
             // The boot thread opens the core, and the change is sent before the start listens.
@@ -59,7 +63,7 @@ class StartDecisionTest {
 
     @Test
     fun `a core that cannot open sends the start Home at once`() {
-        val session = CoreSession(RuntimeEnvironment.getApplication())
+        val session = sessions.open(RuntimeEnvironment.getApplication())
         session.ready.completeExceptionally(CoreError("The core could not start"))
         val state = AppState(session, caps, shutsBefore = 0)
         shadowOf(Looper.getMainLooper()).idle()

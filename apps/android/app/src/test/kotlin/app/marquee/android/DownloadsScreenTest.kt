@@ -37,7 +37,7 @@ import app.marquee.core.model.DownloadStorage
 import app.marquee.core.model.DownloadTitle
 import app.marquee.core.model.DownloadsSnapshot
 import app.marquee.core.route.Route
-import app.marquee.core.session.CoreSession
+import app.marquee.core.session.CoreSessions
 import app.marquee.core.session.DownloadAction
 import app.marquee.core.session.DownloadTarget
 import app.marquee.core.views.DownloadsView
@@ -70,10 +70,13 @@ import kotlin.test.assertTrue
 @Config(sdk = [36], application = Application::class, qualifiers = "w411dp-h2400dp")
 class DownloadsScreenTest {
     @get:Rule
+    val sessions = CoreSessions()
+
+    @get:Rule
     val compose = createComposeRule()
 
     private val app = RuntimeEnvironment.getApplication()
-    private val session = CoreSession(app)
+    private val session = sessions.open(app)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val actions = DownloadActions(session, { error("no add here") }, scope)
     private val ops = CopyOnWriteArrayList<String>()
@@ -85,7 +88,6 @@ class DownloadsScreenTest {
     fun stop() {
         scope.cancel()
         session.scope.cancel()
-        session.client.close()
     }
 
     private fun row(

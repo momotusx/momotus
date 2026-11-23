@@ -39,7 +39,7 @@ import app.marquee.core.client.threadReport
 import app.marquee.core.model.ProfileInfo
 import app.marquee.core.model.ProfilesSnapshot
 import app.marquee.core.route.Route
-import app.marquee.core.session.CoreSession
+import app.marquee.core.session.CoreSessions
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import app.marquee.ui.phone.PhoneShell
@@ -65,9 +65,12 @@ import kotlin.test.assertFalse
 @Config(sdk = [36], application = Application::class, qualifiers = "w411dp-h2400dp")
 class EditProfileTest {
     @get:Rule
+    val sessions = CoreSessions()
+
+    @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private val session = CoreSession(RuntimeEnvironment.getApplication())
+    private val session = sessions.open(RuntimeEnvironment.getApplication())
     private val gate = ProfileGate(session)
     private val ops = CopyOnWriteArrayList<String>()
 
@@ -79,7 +82,6 @@ class EditProfileTest {
     @After
     fun stop() {
         session.scope.coroutineContext[kotlinx.coroutines.Job]?.cancel()
-        session.client.close()
     }
 
     private val ana = profile("p1", "Ana", owner = true, pin = false)

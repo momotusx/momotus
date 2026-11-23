@@ -12,13 +12,12 @@ import androidx.compose.ui.test.printToString
 import androidx.compose.ui.test.requestFocus
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.threadReport
-import app.marquee.core.session.CoreSession
+import app.marquee.core.session.CoreSessions
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
-import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -36,12 +35,12 @@ import org.robolectric.annotation.Config
 @Config(sdk = [36], application = Application::class)
 class CalendarRetryFocusTest {
     @get:Rule
+    val sessions = CoreSessions()
+
+    @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private val session = CoreSession(RuntimeEnvironment.getApplication())
-
-    @After
-    fun stop() = session.client.close()
+    private val session = sessions.open(RuntimeEnvironment.getApplication())
 
     private fun snapshot(failed: List<Pair<String, String>>): String {
         val lines = failed.joinToString(",") { (id, name) -> """{"itemId":"$id","name":"$name","reason":null}""" }

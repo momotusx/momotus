@@ -9,13 +9,12 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import app.marquee.core.client.CoreJson
-import app.marquee.core.session.CoreSession
+import app.marquee.core.session.CoreSessions
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
-import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -29,12 +28,12 @@ import kotlin.test.assertTrue
 @Config(sdk = [36], application = Application::class)
 class CalendarRetryTest {
     @get:Rule
+    val sessions = CoreSessions()
+
+    @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private val session = CoreSession(RuntimeEnvironment.getApplication())
-
-    @After
-    fun stop() = session.client.close()
+    private val session = sessions.open(RuntimeEnvironment.getApplication())
 
     @Test
     fun `each failed series retries on its own`() {

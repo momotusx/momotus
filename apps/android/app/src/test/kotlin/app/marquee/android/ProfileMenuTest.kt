@@ -30,13 +30,12 @@ import androidx.compose.ui.test.performClick
 import app.marquee.core.client.CoreJson
 import app.marquee.core.model.ProfileInfo
 import app.marquee.core.model.ProfilesSnapshot
-import app.marquee.core.session.CoreSession
+import app.marquee.core.session.CoreSessions
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
-import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -53,14 +52,14 @@ import kotlin.test.assertEquals
 @Config(sdk = [36], application = Application::class, qualifiers = "w960dp-h540dp")
 class ProfileMenuTest {
     @get:Rule
+    val sessions = CoreSessions()
+
+    @get:Rule
     val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private val session = CoreSession(RuntimeEnvironment.getApplication())
+    private val session = sessions.open(RuntimeEnvironment.getApplication())
     private val gate = ProfileGate(session)
     private val ops = mutableListOf<String>()
-
-    @After
-    fun stop() = session.client.close()
 
     private fun profile(
         id: String,
