@@ -270,6 +270,9 @@ struct MainShell: View {
             .task {
                 // `-MQInstallDefaults YES`: a fresh walk library takes every recommended addon, as first run's Skip.
                 if UserDefaults.standard.bool(forKey: "MQInstallDefaults") { await DefaultsStep(core: core, scope: .all).install() }
+                #if os(macOS)
+                NavWalk.sizeWindow()
+                #endif
                 guard NavWalk.on, (try? await Task.sleep(for: .seconds(20))) != nil else { return }
                 await NavWalk.run(NavWalk.Driver(
                     select: { select($0) }, search: { searchInput.text = $0 },
