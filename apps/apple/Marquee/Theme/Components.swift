@@ -597,48 +597,37 @@ struct Shelf<Content: View>: View {
         #endif
         .scrollIndicators(.hidden)
         .scrollClipDisabled()
-        .knownHeight()
+        .naturalHeight()
         .padding(.vertical, -room)
     }
 }
 
-/// A sideways strip measured once per width and kept: a page's lazy stack sizes every strip above and around the
-/// screen on each scroll step, and a horizontal scroll view measured its cards each time for its height. A change of
-/// its cards measures it again (`updateCache`).
-struct KnownHeight: Layout {
-    struct Cache {
-        var width: CGFloat?
-        var height: CGFloat = 0
-    }
-
-    func makeCache(subviews: Subviews) -> Cache { Cache() }
-
-    func updateCache(_ cache: inout Cache, subviews: Subviews) { cache = Cache() }
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
+/// A sideways strip at its own height, asked always the same way: a page's lazy stack sizes every strip above and
+/// around the screen on each scroll step at heights that change, and a horizontal scroll view measured its cards for
+/// each one. Asked at the width alone, the strip's size is SwiftUI's cached one until something in it changes (a
+/// larger text size, a taller card realized), which measures it again.
+struct NaturalHeight: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         guard let width = proposal.width else { return subviews.first?.sizeThatFits(proposal) ?? .zero }
-        if cache.width != width {
-            cache.height = subviews.first?.sizeThatFits(ProposedViewSize(width: width, height: nil)).height ?? 0
-            cache.width = width
-        }
-        return CGSize(width: width, height: cache.height)
+        let height = subviews.first?.sizeThatFits(ProposedViewSize(width: width, height: nil)).height ?? 0
+        return CGSize(width: width, height: height)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
     }
 
     // No alignment guides of its own: the default asks the strip for its guides, which measures its cards.
     func explicitAlignment(
-        of guide: HorizontalAlignment, in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache
+        of guide: HorizontalAlignment, in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
     ) -> CGFloat? { nil }
     func explicitAlignment(
-        of guide: VerticalAlignment, in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache
+        of guide: VerticalAlignment, in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()
     ) -> CGFloat? { nil }
 }
 
 extension View {
-    func knownHeight() -> some View { KnownHeight { self } }
+    func naturalHeight() -> some View { NaturalHeight { self } }
 }
 
 /// Lays children out left to right, wrapping onto new lines when they do not fit.
