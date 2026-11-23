@@ -92,6 +92,20 @@ impl Fixture {
                         .collect();
                     reply(200, "application/json", &m.to_string())
                 }
+                // A provider that never ends: it asks its host once, then spins.
+                "/repo/spin.json" => {
+                    let mut m: serde_json::Value = serde_json::from_str(MANIFEST).unwrap();
+                    m["scrapers"][0]["id"] = "spin-film".into();
+                    m["scrapers"][0]["filename"] = "spin.js".into();
+                    reply(200, "application/json", &m.to_string())
+                }
+                "/repo/spin.js" => reply(
+                    200,
+                    "text/javascript",
+                    &format!(
+                        "async function getStreams(id) {{ await fetch(\"{base}/spin/\" + id); for (;;) {{}} }}\nmodule.exports = {{ getStreams }};"
+                    ),
+                ),
                 "/repo/test-film.js" => {
                     reply(200, "text/javascript", &SCRIPT.replace("{{BASE}}", &base))
                 }
@@ -438,6 +452,28 @@ async fn play_stops_waiting_for_the_plugins_at_its_bound() {
     let s = view.snapshot();
     assert_eq!(s.recommended.unwrap().origin, RowOrigin::Plugin);
     assert!(s.empty.is_none());
+}
+
+/// A provider that runs out of its CPU time twice in a row is not asked
+/// again: a script that never ends would burn its 3 s on every title
+/// opened and answer nothing.
+#[tokio::test]
+async fn a_provider_out_of_cpu_twice_is_not_asked_again() {
+    let fixture = Fixture::start();
+    let core = core();
+    core.add_plugin_repo(&format!("{}/repo/spin.json", fixture.base))
+        .await
+        .unwrap();
+    let spins = || {
+        (fixture.asked().iter())
+            .filter(|p| p.starts_with("/spin/"))
+            .count()
+    };
+    for (n, film_id) in [(1, "tt0000011"), (2, "tt0000012"), (2, "tt0000013")] {
+        let view = settled(&core, film(film_id)).await;
+        assert_eq!(plugin_rows(&view), 0);
+        assert_eq!(spins(), n, "after {film_id}");
+    }
 }
 
 /// A provider turned off runs nothing; turned on again it runs.

@@ -262,6 +262,7 @@ pub fn call(
         .name("mq-plugin".into())
         .stack_size(THREAD_STACK)
         .spawn(move || {
+            background();
             HOST.with(|h| *h.borrow_mut() = Some(host));
             let Ok(rt) = tokio::runtime::Builder::new_current_thread()
                 .enable_time()
@@ -453,4 +454,21 @@ fn thread_cpu() -> Option<Duration> {
     // SAFETY: a valid pointer to a timespec the call fills.
     let rc = unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut t) };
     (rc == 0).then(|| Duration::new(t.tv_sec as u64, t.tv_nsec as u32))
+}
+
+/// The calling thread yields to the app's own: a plugin pass runs beside
+/// navigation on a 4-core TV, and its CPU waits for the UI's threads rather
+/// than competing with them (nice 10 on Linux and Android, the utility
+/// QoS class on Apple).
+fn background() {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    // SAFETY: a plain syscall; `who` 0 is the calling thread on Linux.
+    unsafe {
+        libc::setpriority(libc::PRIO_PROCESS, 0, 10);
+    }
+    #[cfg(target_vendor = "apple")]
+    // SAFETY: sets the calling thread's own QoS class.
+    unsafe {
+        libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_UTILITY, 0);
+    }
 }
