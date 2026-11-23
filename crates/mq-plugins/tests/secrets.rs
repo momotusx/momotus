@@ -128,6 +128,7 @@ fn no_app_secret_reaches_a_plugin() {
         fetches
     });
     let call_ = Call {
+        bytecode: None,
         script,
         plugin_id: "test".into(),
         tmdb_id: "603".into(),

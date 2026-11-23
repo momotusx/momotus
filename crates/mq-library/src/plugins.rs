@@ -184,8 +184,86 @@ impl Library {
                  ON CONFLICT (url) DO UPDATE SET
                    spent_runs = CASE WHEN version = excluded.version THEN spent_runs ELSE 0 END,
                    spent_at = CASE WHEN version = excluded.version THEN spent_at ELSE 0 END,
+                   bytecode = CASE WHEN body = excluded.body THEN bytecode END,
+                   bytecode_key = CASE WHEN body = excluded.body THEN bytecode_key END,
+                   source_only = CASE WHEN version = excluded.version THEN source_only ELSE 0 END,
+                   source_answered = CASE WHEN version = excluded.version THEN source_answered ELSE 0 END,
                    version = excluded.version, body = excluded.body, fetched_at = excluded.fetched_at",
                 params![url, code.version, code.body, code.fetched_at],
+            )
+            .map(drop)
+        })
+    }
+
+    /// The bytecode kept for the script at `url` under `key`; none for one
+    /// marked source only (`set_plugin_source_only`).
+    pub fn plugin_bytecode(&self, url: &str, key: &str) -> Result<Option<Vec<u8>>, LibraryError> {
+        self.read(|c| {
+            c.query_row(
+                "SELECT bytecode FROM plugin_code WHERE url = ?1 AND bytecode_key = ?2 AND source_only = 0",
+                params![url, key],
+                |r| r.get(0),
+            )
+            .optional()
+            .map(Option::flatten)
+        })
+    }
+
+    /// Keeps `bytecode` for the script at `url` under `key`.
+    pub fn put_plugin_bytecode(
+        &self,
+        url: &str,
+        key: &str,
+        bytecode: &[u8],
+    ) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "UPDATE plugin_code SET bytecode = ?3, bytecode_key = ?2 WHERE url = ?1 AND source_only = 0",
+                params![url, key, bytecode],
+            )
+            .map(drop)
+        })
+    }
+
+    /// Whether the last run of the script at `url`, at `version`, from its
+    /// source answered with streams.
+    pub fn plugin_source_answered(&self, url: &str, version: &str) -> Result<bool, LibraryError> {
+        self.read(|c| {
+            c.query_row(
+                "SELECT source_answered FROM plugin_code WHERE url = ?1 AND version = ?2",
+                params![url, version],
+                |r| r.get(0),
+            )
+            .optional()
+            .map(|answered| answered.unwrap_or(false))
+        })
+    }
+
+    /// A run of the script at `url`, at `version`, from its source: whether
+    /// it answered with streams.
+    pub fn note_plugin_source_run(
+        &self,
+        url: &str,
+        version: &str,
+        answered: bool,
+    ) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "UPDATE plugin_code SET source_answered = ?3 WHERE url = ?1 AND version = ?2",
+                params![url, version, answered],
+            )
+            .map(drop)
+        })
+    }
+
+    /// The script at `url`, at `version`, runs from its source from now on:
+    /// its bytecode failed where its source answered. A new version clears it.
+    pub fn set_plugin_source_only(&self, url: &str, version: &str) -> Result<(), LibraryError> {
+        self.write(|c| {
+            c.execute(
+                "UPDATE plugin_code SET source_only = 1, bytecode = NULL, bytecode_key = NULL
+                 WHERE url = ?1 AND version = ?2",
+                params![url, version],
             )
             .map(drop)
         })
@@ -313,6 +391,56 @@ mod tests {
         lib.note_plugin_run(url, "1", true, 40).unwrap();
         lib.put_plugin_code(url, &code("2")).unwrap();
         assert_eq!(lib.plugin_spent(url, "2").unwrap(), None);
+    }
+
+    #[test]
+    fn bytecode_is_read_under_its_key_and_goes_with_its_body() {
+        let lib = Library::temporary().unwrap();
+        let code = |body: &str| crate::PluginCode {
+            version: "1".into(),
+            body: body.into(),
+            fetched_at: 1,
+        };
+        let url = "https://a/p.js";
+        lib.put_plugin_code(url, &code("a")).unwrap();
+        assert_eq!(lib.plugin_bytecode(url, "k").unwrap(), None);
+        lib.put_plugin_bytecode(url, "k", &[1, 2, 3]).unwrap();
+        assert_eq!(lib.plugin_bytecode(url, "k").unwrap(), Some(vec![1, 2, 3]));
+        assert_eq!(lib.plugin_bytecode(url, "other").unwrap(), None);
+        // Fetched again unchanged, it stays; a new body drops it.
+        lib.put_plugin_code(url, &code("a")).unwrap();
+        assert_eq!(lib.plugin_bytecode(url, "k").unwrap(), Some(vec![1, 2, 3]));
+        lib.put_plugin_code(url, &code("b")).unwrap();
+        assert_eq!(lib.plugin_bytecode(url, "k").unwrap(), None);
+    }
+
+    #[test]
+    fn a_script_marked_source_only_keeps_no_bytecode_until_a_new_version() {
+        let lib = Library::temporary().unwrap();
+        let code = |version: &str| crate::PluginCode {
+            version: version.into(),
+            body: "a".into(),
+            fetched_at: 1,
+        };
+        let url = "https://a/p.js";
+        lib.put_plugin_code(url, &code("1")).unwrap();
+        assert!(!lib.plugin_source_answered(url, "1").unwrap());
+        lib.note_plugin_source_run(url, "1", true).unwrap();
+        assert!(lib.plugin_source_answered(url, "1").unwrap());
+        lib.put_plugin_bytecode(url, "k", &[1]).unwrap();
+        lib.set_plugin_source_only(url, "1").unwrap();
+        assert_eq!(lib.plugin_bytecode(url, "k").unwrap(), None);
+        lib.put_plugin_bytecode(url, "k", &[1]).unwrap();
+        assert_eq!(
+            lib.plugin_bytecode(url, "k").unwrap(),
+            None,
+            "not kept again"
+        );
+        // A new version: bytecode again, and its source has not answered yet.
+        lib.put_plugin_code(url, &code("2")).unwrap();
+        lib.put_plugin_bytecode(url, "k", &[2]).unwrap();
+        assert_eq!(lib.plugin_bytecode(url, "k").unwrap(), Some(vec![2]));
+        assert!(!lib.plugin_source_answered(url, "2").unwrap());
     }
 
     #[test]

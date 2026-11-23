@@ -21,6 +21,7 @@ pub unsafe extern "C" fn mq_probe(script: *const c_char, html: *const c_char) ->
     });
     let script = script.to_string_lossy().into_owned();
     let call = Call {
+        bytecode: None,
         script,
         plugin_id: String::new(),
         tmdb_id: String::new(),
