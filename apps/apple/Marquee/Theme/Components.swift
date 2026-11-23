@@ -192,15 +192,17 @@ private struct Interactive<S: InsettableShape>: View {
             .animation(Theme.Motion.focus, value: hovered)
             .animation(Theme.Motion.focus, value: configuration.isPressed)
             #if os(macOS)
-            .onHover { inside in
+            // Every move over the card, so a pointer that moves inside a card a scroll brought under it lights it.
+            .onContinuousHover { phase in
+                var inside = false
+                if case .active = phase { inside = true }
                 #if MARQUEE_WALK
                 NavWalk.hoverCalls += 1
                 if NavWalk.off(.hover) { return }
-                if NavWalk.off(.hoverfix) { hovered = inside; return }
+                if NavWalk.off(.hoverfix) { if hovered != inside { hovered = inside }; return }
                 #endif
-                // A card that a scroll carries under a resting pointer does not light up, only one the pointer moves
-                // onto: a trackpad scroll under the pointer lit and faded a card on every step.
-                if !inside || PointerRest.moved() { hovered = inside }
+                let next = CardHover.next(hovered: hovered, inside: inside, pointerMoved: inside && PointerRest.moved())
+                if next != hovered { hovered = next }
             }
             #elseif os(iOS)
             .onHover { hovered = $0 }
@@ -214,9 +216,18 @@ private struct Interactive<S: InsettableShape>: View {
     }
 }
 
+/// A card under the pointer lights only once the pointer moves over it: one a scroll carries under a resting pointer
+/// stays unlit (a trackpad scroll under the pointer lit and faded a card on every step), and lights at the pointer's
+/// next move. It goes out when the pointer leaves.
+enum CardHover {
+    static func next(hovered: Bool, inside: Bool, pointerMoved: Bool) -> Bool {
+        inside && (hovered || pointerMoved)
+    }
+}
+
 #if os(macOS)
-/// Whether the pointer moved since the last card that lit asked: a card entered under a pointer that stayed put came
-/// under it by scrolling.
+/// Whether the pointer moved since the last hover a card heard: a card under a pointer that stayed put came under it
+/// by scrolling.
 @MainActor enum PointerRest {
     private static var last: NSPoint?
 
