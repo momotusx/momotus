@@ -14,7 +14,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import app.marquee.core.LinkInstall
 import app.marquee.core.client.CoreJson
-import app.marquee.core.session.CoreSession
+import app.marquee.core.session.CoreSessions
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import kotlinx.coroutines.CoroutineScope
@@ -45,6 +45,9 @@ import kotlin.test.assertEquals
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class LinkSheetTest {
     @get:Rule
+    val sessions = CoreSessions()
+
+    @get:Rule
     val compose = createComposeRule()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -59,7 +62,7 @@ class LinkSheetTest {
 
     @Test
     fun `a check outlives its field scrolling out of the list, and its sheet shows on the page`() {
-        val session = CoreSession(RuntimeEnvironment.getApplication())
+        val session = sessions.open(RuntimeEnvironment.getApplication())
         val client = session.client
         // The preview is held until the field has gone.
         var previewId: Long? = null

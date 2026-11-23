@@ -10,7 +10,7 @@ import app.marquee.core.InstallCards
 import app.marquee.core.InstallSheetCopy
 import app.marquee.core.LinkInstall
 import app.marquee.core.client.CoreJson
-import app.marquee.core.session.CoreSession
+import app.marquee.core.session.CoreSessions
 import app.marquee.design.ARM_MS
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
@@ -39,6 +39,9 @@ import kotlin.test.assertEquals
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class FindAddonsSheetTest {
     @get:Rule
+    val sessions = CoreSessions()
+
+    @get:Rule
     val compose = createComposeRule()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -55,7 +58,7 @@ class FindAddonsSheetTest {
 
     /** The page on a session whose core answers the list above and every install. */
     private fun show() {
-        val session = CoreSession(RuntimeEnvironment.getApplication())
+        val session = sessions.open(RuntimeEnvironment.getApplication())
         val client = session.client
         client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject

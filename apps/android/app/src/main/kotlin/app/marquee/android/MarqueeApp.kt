@@ -108,6 +108,13 @@ class MarqueeApp :
         if (::lifecycle.isInitialized) lifecycle.trimMemory(level)
     }
 
+    // Only Robolectric ends an Application (a device never calls this): the test's session goes with it, its state thread
+    // and its scope included, instead of one more of each left running per test.
+    override fun onTerminate() {
+        if (::session.isInitialized) session.close()
+        super.onTerminate()
+    }
+
     override fun onCreate() {
         super.onCreate()
         val debuggable = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0

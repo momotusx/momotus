@@ -50,6 +50,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
@@ -88,7 +89,8 @@ class CoreSession(
     val metrics = BridgeMetrics()
 
     // One looped thread of its own; nothing but its dispatcher posts there (StateThread).
-    val client = CoreClient(StateThread("marquee-state").dispatcher, CoreJson, metrics)
+    private val state = StateThread("marquee-state")
+    val client = CoreClient(state.dispatcher, CoreJson, metrics)
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val ops = CoreOps(client)
     val secrets = SecretStore(File(context.noBackupFilesDir, "secrets.bin"), KeystoreKeySource())
@@ -193,6 +195,17 @@ class CoreSession(
 
     /** Opens the core again after it stopped. Does nothing while a boot is already running. */
     fun restart() = boot(announce = true)
+
+    /**
+     * Ends the session's work and its state thread. The app's session lives as long as its process; a test's must end
+     * with the test, or every test leaves a looping thread and a scope behind (107 of them in one JVM on CI).
+     */
+    fun close() {
+        scope.cancel()
+        client.close()
+        state.thread.quitSafely()
+        state.thread.join(CLOSE_WAIT_MS)
+    }
 
     private fun boot(announce: Boolean = false) {
         if (!booting.compareAndSet(false, true)) return
@@ -391,3 +404,6 @@ class CoreSession(
         }
     }
 }
+
+/** How long [CoreSession.close] waits for its state thread to end. */
+private const val CLOSE_WAIT_MS = 5_000L

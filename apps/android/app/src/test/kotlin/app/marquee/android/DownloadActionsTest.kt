@@ -6,7 +6,7 @@ import androidx.compose.runtime.snapshots.Snapshot
 import app.marquee.core.DownloadCopy
 import app.marquee.core.client.CoreJson
 import app.marquee.core.client.CoreTransport
-import app.marquee.core.session.CoreSession
+import app.marquee.core.session.CoreSessions
 import app.marquee.core.session.DownloadAction
 import app.marquee.core.session.DownloadTarget
 import kotlinx.coroutines.CoroutineScope
@@ -17,6 +17,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import org.junit.After
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -33,7 +34,10 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], application = Application::class)
 class DownloadActionsTest {
-    private val session = CoreSession(RuntimeEnvironment.getApplication())
+    @get:Rule
+    val sessions = CoreSessions()
+
+    private val session = sessions.open(RuntimeEnvironment.getApplication())
 
     // The main looper's clock: the line's 6 s pass at once.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -45,7 +49,6 @@ class DownloadActionsTest {
     fun stop() {
         scope.cancel()
         session.scope.cancel()
-        session.client.close()
     }
 
     private fun core() =

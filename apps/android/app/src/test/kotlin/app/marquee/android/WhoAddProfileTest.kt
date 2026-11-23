@@ -17,14 +17,13 @@ import app.marquee.core.SyncCopy
 import app.marquee.core.client.CoreJson
 import app.marquee.core.model.ProfileInfo
 import app.marquee.core.model.ProfilesSnapshot
-import app.marquee.core.session.CoreSession
+import app.marquee.core.session.CoreSessions
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
-import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -44,14 +43,14 @@ import kotlin.test.assertTrue
 @Config(sdk = [36], application = Application::class, qualifiers = "w390dp-h844dp-xxhdpi")
 class WhoAddProfileTest {
     @get:Rule
+    val sessions = CoreSessions()
+
+    @get:Rule
     val compose = createComposeRule()
 
-    private val session = CoreSession(RuntimeEnvironment.getApplication())
+    private val session = sessions.open(RuntimeEnvironment.getApplication())
     private val gate = ProfileGate(session)
     private val sent = CopyOnWriteArrayList<JsonObject>()
-
-    @After
-    fun stop() = session.client.close()
 
     private fun creates() = sent.filter { it.getValue("op").jsonPrimitive.content == "createProfile" }
 

@@ -10,7 +10,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.performClick
 import app.marquee.core.client.CoreJson
-import app.marquee.core.session.CoreSession
+import app.marquee.core.session.CoreSessions
 import app.marquee.design.Form
 import app.marquee.design.MarqueeTheme
 import kotlinx.serialization.json.jsonObject
@@ -31,6 +31,9 @@ import kotlin.test.assertTrue
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class PluginDirectoryTest {
     @get:Rule
+    val sessions = CoreSessions()
+
+    @get:Rule
     val compose = createComposeRule()
 
     private val directory =
@@ -44,7 +47,7 @@ class PluginDirectoryTest {
      */
     @Test
     fun `the empty search field says what it searches`() {
-        val session = CoreSession(RuntimeEnvironment.getApplication())
+        val session = sessions.open(RuntimeEnvironment.getApplication())
         session.client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach
@@ -65,7 +68,7 @@ class PluginDirectoryTest {
      */
     @Test
     fun `a card prints no host until Details is pressed`() {
-        val session = CoreSession(RuntimeEnvironment.getApplication())
+        val session = sessions.open(RuntimeEnvironment.getApplication())
         session.client.attach { text ->
             val msg = CoreJson.parseToJsonElement(text).jsonObject
             val id = msg["id"]?.jsonPrimitive?.longOrNull ?: return@attach

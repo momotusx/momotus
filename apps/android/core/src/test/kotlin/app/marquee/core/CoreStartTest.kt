@@ -3,7 +3,7 @@ package app.marquee.core
 import androidx.compose.runtime.snapshots.Snapshot
 import app.marquee.core.client.snapshotValues
 import app.marquee.core.session.CoreHealth
-import app.marquee.core.session.CoreSession
+import app.marquee.core.session.CoreSessions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -31,10 +32,13 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 class CoreStartTest {
+    @get:Rule
+    val sessions = CoreSessions()
+
     @Test
     fun `the start hears the core open while its first read is inside a composition's snapshot`() =
         runBlocking {
-            val session = CoreSession(RuntimeEnvironment.getApplication())
+            val session = sessions.open(RuntimeEnvironment.getApplication())
             val composition = Snapshot.takeMutableSnapshot()
             // The boot thread opens the core while the composition runs; the change is applied and sent at once.
             thread {
@@ -57,7 +61,7 @@ class CoreStartTest {
         runBlocking {
             // A fresh install on the Pixel (bench PGA12): the profiles gate waits on the health from the app's start,
             // before any composition, so nothing but the boot thread's own write can tell it the core runs.
-            val session = CoreSession(RuntimeEnvironment.getApplication())
+            val session = sessions.open(RuntimeEnvironment.getApplication())
             val waiting =
                 CoroutineScope(Dispatchers.Default).launch {
                     snapshotValues { session.health }.first { it == CoreHealth.Running }
@@ -69,7 +73,7 @@ class CoreStartTest {
 
     @Test
     fun `a core that died while it first opened keeps the start waiting for the next open`() {
-        val session = CoreSession(RuntimeEnvironment.getApplication())
+        val session = sessions.open(RuntimeEnvironment.getApplication())
         session.opened(running = false)
         assertFalse(session.ready.isCompleted, "the start waits for a core that runs")
         session.opened(running = true)
