@@ -19,6 +19,18 @@ struct ArtImage: View {
     @State private var art: DecodedArt?
     @State private var underArt: DecodedArt?
     @State private var missing = false
+    /// Decoded art this view drew from memory, held so a later eviction never blanks it. Not state: holding it redraws
+    /// nothing.
+    @State private var held = Held()
+
+    final class Held {
+        var art: DecodedArt?
+    }
+
+    /// The picture at `url` when it is decoded already.
+    private var cached: DecodedArt? {
+        url.flatMap(URL.init(string:)).flatMap { ArtLoader.shared.cached($0, maxPixels: maxPixels) }
+    }
 
     var body: some View {
         // The art is an overlay so its natural size never reaches layout: a
@@ -26,7 +38,7 @@ struct ArtImage: View {
         // the title page grow without end.
         Theme.Palette.surface
             .overlay(alignment: alignment) {
-                if let art {
+                if let art = art ?? held.art ?? cached {
                     Image(decorative: art.image, scale: 1)
                         .resizable()
                         .aspectRatio(contentMode: mode)
@@ -54,6 +66,15 @@ struct ArtImage: View {
                 underArt = await ArtLoader.shared.image(under, maxPixels: maxPixels)
             }
             .task(id: [url, fallbackURL]) {
+                // Already decoded: drawn from the first frame, with nothing to set (a scroll back used to load, set and
+                // fade every card again, one update each).
+                if let hit = cached {
+                    held.art = hit
+                    if art != nil, art !== hit { art = nil }
+                    if missing { missing = false }
+                    return
+                }
+                held.art = nil
                 missing = false
                 let start = ContinuousClock.now
                 let maxPixels = maxPixels
