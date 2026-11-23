@@ -69,12 +69,10 @@ class SearchIdleTest {
         while (compose.onAllNodesWithText(text, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
             // What the screen shows instead, so a hang says whether it is blank or on another state.
             check(System.currentTimeMillis() < deadline) {
-                "$text never drew; on screen: ${runCatching {
-                    compose
-                        .onRoot(
-                            useUnmergedTree = true,
-                        ).printToString()
-                }.getOrElse { "$it" }.take(1500)}; ${threadReport().take(3000)}"
+                // What the fake core was asked first (a subscribe that never left, or one answered and not drawn), then
+                // the threads, then the screen: CI cut the message inside the screen's print and lost the rest.
+                val screen = runCatching { compose.onRoot(useUnmergedTree = true).printToString() }.getOrElse { "$it" }
+                "$text never drew; sent $sent; ${threadReport().take(3000)}; on screen: ${screen.take(800)}"
             }
             Snapshot.sendApplyNotifications()
             compose.waitForIdle()
