@@ -38,7 +38,10 @@ pub(crate) fn punch_file(
     {
         use crate::bitv::sync_log::{Fail, failing};
         if failing(path, Fail::PunchRefused) {
+            #[cfg(unix)]
             return Err(io::Error::from_raw_os_error(libc::EOPNOTSUPP));
+            #[cfg(windows)]
+            return Err(io::Error::from(io::ErrorKind::Unsupported));
         }
         if failing(path, Fail::Punch) {
             sys_punch(file, start, block)?;
@@ -149,7 +152,9 @@ fn punch_once(file: &File, offset: u64, len: u64) -> io::Result<()> {
         FileOffset: off(offset)?,
         BeyondFinalZero: off(end)?,
     };
-    // SAFETY: a valid handle and an input struct of the size given; no output.
+    // A place for the byte count, even with no output (see sparse.rs).
+    let mut returned = 0u32;
+    // SAFETY: a valid handle, an input struct of the size given and a byte count; no output.
     unsafe {
         DeviceIoControl(
             HANDLE(file.as_raw_handle()),
@@ -158,7 +163,7 @@ fn punch_once(file: &File, offset: u64, len: u64) -> io::Result<()> {
             size_of::<FILE_ZERO_DATA_INFORMATION>() as u32,
             None,
             0,
-            None,
+            Some(&mut returned),
             None,
         )
     }

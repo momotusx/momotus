@@ -8,5 +8,20 @@ pub fn mark_file_sparse(f: &std::fs::File) -> bool {
 
     let handle = HANDLE(f.as_raw_handle());
 
-    unsafe { DeviceIoControl(handle, FSCTL_SET_SPARSE, None, 0, None, 0, None, None).is_ok() }
+    // Marquee fork: a place for the byte count, which Microsoft's DeviceIoControl page asks for
+    // whenever lpOverlapped is NULL.
+    let mut returned = 0u32;
+    unsafe {
+        DeviceIoControl(
+            handle,
+            FSCTL_SET_SPARSE,
+            None,
+            0,
+            None,
+            0,
+            Some(&mut returned),
+            None,
+        )
+        .is_ok()
+    }
 }
