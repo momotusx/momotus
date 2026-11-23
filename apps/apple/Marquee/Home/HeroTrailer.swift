@@ -249,9 +249,11 @@ final class TrailerPlayer: NSObject {
         run("halt()")
     }
 
-    /// Stops and lets the web view and its content process go: Home off screen, under the player or another
-    /// page, or gone. The next `play` makes a fresh one. Whoever played hears `why`: `stopped`, or `lost` when the
-    /// content process died (the full screen says it cannot play; a header does not replay this session).
+    /// Stops and lets the web view go: Home off screen, under the player or another page, or gone. A loaded one is
+    /// kept as the `spare` the next player takes (no new content process), until the film plays, the app goes to the
+    /// background or memory runs low (`dropSpare`). Whoever played hears `why`: `stopped`, or `lost` when the content
+    /// process died (the full screen says it cannot play; a header does not replay this session); a lost one is
+    /// never kept.
     func release(why: String = "stopped") {
         let done = onEnd
         stop()
@@ -397,6 +399,11 @@ extension TrailerPlayer: WKNavigationDelegate {
 extension TrailerPlayer {
     static func dropSpare(_ webView: WKWebView) {
         if spare === webView { spare = nil }
+    }
+
+    /// Lets the spare web view and its content process go.
+    static func dropSpare() {
+        spare = nil
     }
 }
 

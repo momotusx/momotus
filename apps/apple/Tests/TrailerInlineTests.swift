@@ -90,4 +90,14 @@ private func source(_ path: String) throws -> String {
     let fresh = TrailerPlayer()
     #expect(fresh.web !== web)
     fresh.release()
+    // A film playing, the app in the background or low memory let a kept spare go with its content process.
+    let kept = TrailerPlayer()
+    kept.play("abcdefghijk", into: TrailerState()) { _ in }
+    let keptWeb = kept.web
+    for _ in 0..<100 where !kept.loaded { try await Task.sleep(for: .milliseconds(50)) }
+    kept.release()
+    TrailerPlayer.dropSpare()
+    let after = TrailerPlayer()
+    #expect(after.web !== keptWeb)
+    after.release()
 }
