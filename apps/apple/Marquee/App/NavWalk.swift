@@ -139,6 +139,17 @@ import UIKit
     }
 
     #if os(macOS)
+    /// `-MQWindowSize 900x600` (or `min`, the window's content minimum): the walk window at that size, for a check of a
+    /// page at the narrowest window. It is resized where it stands, never brought in front.
+    static func sizeWindow() {
+        guard let asked = UserDefaults.standard.string(forKey: "MQWindowSize"),
+              let window = NSApp.windows.max(by: { $0.frame.height < $1.frame.height }) else { return }
+        let parts = asked.split(separator: "x").compactMap { Double($0) }
+        window.setContentSize(parts.count == 2 ? NSSize(width: parts[0], height: parts[1]) : window.contentMinSize)
+    }
+    #endif
+
+    #if os(macOS)
     /// The owner's windows cover the walk's on every screen: it sits at a screen's bottom right corner with only its top
     /// left part on screen, never in front and never taking focus, so it still gets frames.
     private static func cornered(_ window: NSWindow) async -> Bool {
