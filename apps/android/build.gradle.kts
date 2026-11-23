@@ -4,6 +4,8 @@
 buildscript {
     repositories {
         google()
+        // As in settings.gradle.kts: Google's mirror of Maven Central, then Central.
+        maven("https://maven-central.storage-download.googleapis.com/maven2/")
         mavenCentral()
     }
     dependencies {
