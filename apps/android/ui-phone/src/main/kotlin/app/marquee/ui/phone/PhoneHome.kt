@@ -104,6 +104,7 @@ import app.marquee.design.TrailerHost
 import app.marquee.design.TrailerPreviews
 import app.marquee.design.TrailerState
 import app.marquee.design.TrailerSurface
+import app.marquee.design.ViewerInput
 import app.marquee.design.WarmTrailerPage
 import app.marquee.design.describe
 import app.marquee.design.heroClockRuns
@@ -410,6 +411,7 @@ private fun PhoneHeroCarousel(
         val id = HeroTrailers.checkedId(page.trailer)
         if (!active || !visible() || id == null) return@LaunchedEffect
         delay(TRAILER_DELAY_MS)
+        ViewerInput.awaitIdle()
         val allowed =
             trailerAllowedLogged(
                 TrailerPreviews.signals(

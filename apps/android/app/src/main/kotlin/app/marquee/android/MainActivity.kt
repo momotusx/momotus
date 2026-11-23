@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -22,6 +23,7 @@ import app.marquee.core.ProfileCopy
 import app.marquee.core.client.snapshotValues
 import app.marquee.core.route.Route
 import app.marquee.design.MarqueeTheme
+import app.marquee.design.ViewerInput
 import app.marquee.design.formPalette
 import app.marquee.player.WalkLog
 import app.marquee.player.WalkMute
@@ -157,6 +159,12 @@ class MainActivity : ComponentActivity() {
     private fun applyBars() {
         val style = SystemBarStyle.dark(Color.TRANSPARENT)
         enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+    }
+
+    // Every key and every touch down says the viewer is busy: Home's and the title page's previews wait until input rests.
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        ViewerInput.at = SystemClock.uptimeMillis()
     }
 
     // Before Android 12 the activity enters picture-in-picture itself when the viewer leaves while
