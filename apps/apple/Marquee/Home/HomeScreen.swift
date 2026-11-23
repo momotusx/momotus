@@ -75,6 +75,9 @@ struct HomeScreen: View {
                 content
             }
             .padding(.bottom, Theme.Space.xl)
+            #if MARQUEE_WALK
+            .background { WalkPageTag() }
+            #endif
         }
         .scrollIndicators(.hidden)
         .background(Theme.Palette.bg)

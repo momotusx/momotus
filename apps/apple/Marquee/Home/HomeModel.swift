@@ -57,9 +57,19 @@ final class HomeModel {
         do {
             let view = try await core.open("home", as: (HomeSnapshot.self, HomeUpdate.self))
             sub = view.sub
+            #if MARQUEE_WALK
+            var held: [ViewEvent<HomeSnapshot, HomeUpdate>] = []
+            for await event in view.events {
+                if NavWalk.off(.pushes), NavWalk.scrolling { held.append(event); continue }
+                held.forEach(apply)
+                held = []
+                apply(event)
+            }
+            #else
             for await event in view.events {
                 apply(event)
             }
+            #endif
         } catch is CancellationError {
         } catch {
             phase = .failed(ErrorWords.of(error))

@@ -74,6 +74,9 @@ struct ArtImage: View {
                     if missing { missing = false }
                     return
                 }
+                #if MARQUEE_WALK
+                if NavWalk.off(.art) { return }
+                #endif
                 held.art = nil
                 missing = false
                 let start = ContinuousClock.now
@@ -188,6 +191,11 @@ private struct Interactive<S: InsettableShape>: View {
             .animation(Theme.Motion.focus, value: configuration.isPressed)
             #if os(macOS)
             .onHover { inside in
+                #if MARQUEE_WALK
+                NavWalk.hoverCalls += 1
+                if NavWalk.off(.hover) { return }
+                if NavWalk.off(.hoverfix) { hovered = inside; return }
+                #endif
                 // A card that a scroll carries under a resting pointer does not light up, only one the pointer moves
                 // onto: a trackpad scroll under the pointer lit and faded a card on every step.
                 if !inside || PointerRest.moved() { hovered = inside }
