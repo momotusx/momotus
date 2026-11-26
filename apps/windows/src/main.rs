@@ -37,7 +37,21 @@ mod win {
          --autoplay-policy=no-user-gesture-required --disable-background-timer-throttling";
     /// How long the core may take to open the library before the app says it could not start.
     const CORE_START: Duration = Duration::from_secs(60);
+    /// How often the window checks its core is still running.
+    const CORE_CHECK: Duration = Duration::from_secs(2);
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    /// The port the core asks for first. The page's storage belongs to its origin, port included, so the same
+    /// port every launch keeps it; another program on it moves the core to a free one, remembered in `data\port`.
+    const PORT: u16 = 47811;
+    /// What the core would read from the user's environment and must not: a token the page cannot send,
+    /// other origins, another profile or device id.
+    const NOT_PASSED: [&str; 5] = [
+        "MQ_BRIDGE_TOKEN",
+        "MQ_BRIDGE_ORIGINS",
+        "MQ_PROFILE",
+        "MQ_DEVICE_ID",
+        "MQ_BRIDGE_HEARTBEAT_MS",
+    ];
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain([0]).collect()
@@ -58,7 +72,14 @@ mod win {
     }
 
     pub fn main() {
-        if focus_running() {
+        // One Momotus at a time, held from launch (the window only exists once the core is up).
+        use windows_sys::Win32::Foundation::{ERROR_ALREADY_EXISTS, GetLastError};
+        use windows_sys::Win32::System::Threading::CreateMutexW;
+        // SAFETY: a NUL-terminated name and no security attributes; the handle lives as long as the process.
+        let _one = unsafe { CreateMutexW(std::ptr::null(), 0, wide("Local\\Momotus").as_ptr()) };
+        // SAFETY: read right after the call it reports on.
+        if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+            focus_running();
             return;
         }
         let env = |k: &str| std::env::var_os(k).map(PathBuf::from);
@@ -86,25 +107,65 @@ mod win {
         run(core, &data, &log);
     }
 
-    /// Starts mq-bridge.exe and waits for its ready line, which names the port it took.
+    /// The core on the remembered port (or PORT), else on a free one, which is remembered.
     fn start_core(dir: &Path, data: &Path, log: &Path) -> Result<Core, String> {
-        let err = std::fs::File::create(log)
-            .map_err(|e| format!("its log could not be written ({e})"))?;
-        let mut child = Command::new(dir.join("mq-bridge.exe"))
+        let saved = data.join("port");
+        let first = std::fs::read_to_string(&saved)
+            .ok()
+            .and_then(|p| p.trim().parse().ok())
+            .unwrap_or(PORT);
+        let core = match start_on(dir, data, log, first) {
+            Err(Start::Ended) => start_on(dir, data, log, 0),
+            other => other,
+        }
+        .map_err(|e| e.words().to_owned())?;
+        let _ = std::fs::write(&saved, core.port.to_string());
+        Ok(core)
+    }
+
+    enum Start {
+        Spawn,
+        /// The core ended before it was ready (its port taken, or a fault: the log says).
+        Ended,
+        Slow,
+    }
+
+    impl Start {
+        fn words(&self) -> &'static str {
+            match self {
+                Start::Spawn => "its core could not be started",
+                Start::Ended => "its core stopped while starting",
+                Start::Slow => "its core did not open the library in time",
+            }
+        }
+    }
+
+    /// Starts mq-bridge.exe on `port` and waits for its ready line, which names the port it took.
+    fn start_on(dir: &Path, data: &Path, log: &Path, port: u16) -> Result<Core, Start> {
+        let err = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log)
+            .map_err(|_| Start::Spawn)?;
+        let mut command = Command::new(dir.join("mq-bridge.exe"));
+        for name in NOT_PASSED {
+            command.env_remove(name);
+        }
+        let mut child = command
             .env("MQ_DATA", data)
             .env("MQ_STATIC", dir.join("web"))
-            .env("MQ_BRIDGE_PORT", "0")
+            .env("MQ_BRIDGE_PORT", port.to_string())
             .env("MQ_BRIDGE_EXIT_ON_EOF", "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(err)
             .creation_flags(CREATE_NO_WINDOW)
             .spawn()
-            .map_err(|e| format!("the core did not start ({e})"))?;
+            .map_err(|_| Start::Spawn)?;
         let (stdin, stdout) = (child.stdin.take(), child.stdout.take());
         let (Some(stdin), Some(stdout)) = (stdin, stdout) else {
             let _ = child.kill();
-            return Err("the core did not start".into());
+            return Err(Start::Spawn);
         };
         // The ready line arrives on a reader thread, so a core that never answers cannot hold the app.
         let (tx, rx) = mpsc::channel();
@@ -122,10 +183,13 @@ mod win {
                 child,
                 port,
             }),
-            Err(_) => {
+            Err(e) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                Err("the core did not open the library in time".into())
+                Err(match e {
+                    mpsc::RecvTimeoutError::Timeout => Start::Slow,
+                    mpsc::RecvTimeoutError::Disconnected => Start::Ended,
+                })
             }
         }
     }
@@ -302,9 +366,24 @@ mod win {
         };
         let mut core = Some(core);
         let mut closing: Option<Instant> = None;
+        let log = log.to_path_buf();
         event_loop.run(move |event, _, flow| {
-            *flow = closing.map_or(ControlFlow::Wait, ControlFlow::WaitUntil);
+            // The core is looked at every 2 s: if it ended, the window says so and closes.
+            *flow = ControlFlow::WaitUntil(closing.unwrap_or_else(|| Instant::now() + CORE_CHECK));
             match event {
+                Event::NewEvents(StartCause::ResumeTimeReached { .. }) if closing.is_none() => {
+                    if core
+                        .as_mut()
+                        .is_some_and(|c| !matches!(c.child.try_wait(), Ok(None)))
+                    {
+                        window.set_visible(false);
+                        alert(&format!(
+                            "Momotus stopped: its core ended. The details are in {}.",
+                            log.display()
+                        ));
+                        *flow = ControlFlow::Exit;
+                    }
+                }
                 // The player saves where it stopped on `pagehide`, given up to 500 ms; then the core ends.
                 Event::WindowEvent {
                     event: WindowEvent::CloseRequested,

@@ -5,9 +5,17 @@ Unicode true
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 
-!ifndef VERSION | STAGE | OUTFILE
-  !error "build.sh passes VERSION, STAGE and OUTFILE"
+!ifndef VERSION
+  !error "build.sh passes VERSION"
 !endif
+!ifndef STAGE
+  !error "build.sh passes STAGE"
+!endif
+!ifndef OUTFILE
+  !error "build.sh passes OUTFILE"
+!endif
+!insertmacro GetSize
+!insertmacro un.GetSize
 
 !define APP "Momotus"
 ; The window class of a running Momotus (apps/windows/src/main.rs CLASS).
@@ -94,5 +102,5 @@ Section "Uninstall"
   RMDir "$INSTDIR"
   Delete "$SMPROGRAMS\${APP}.lnk"
   DeleteRegKey HKCU "${UNINSTALL_KEY}"
-  ${GetSize} "$LOCALAPPDATA\${APP}" "/S=0M" $R9 $1 $2
+  ${un.GetSize} "$LOCALAPPDATA\${APP}" "/S=0M" $R9 $1 $2
 SectionEnd
