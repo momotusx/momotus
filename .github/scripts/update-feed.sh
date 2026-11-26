@@ -6,6 +6,7 @@
 # and its signature change in one upload. The body maps a role to {version, url, sha256, size}:
 #   momotus-android-arm64-phone.apk -> android-arm64    momotus-webos-*.ipk -> webos
 #   momotus-android-armv7-firetv.apk -> android-armv7   momotus-macos-*.zip -> macos
+#   momotus-windows-x64-*-setup.exe -> windows-x64
 # A role is replaced only when this release's version is higher than the one in the feed, so rebuilding an older tag
 # never lowers it, and a release without an asset leaves that role as it was. REPO (default momotusx/momotus) names
 # the repository the asset URLs point at.
@@ -43,6 +44,7 @@ for path in "$dir"/momotus-*; do
     momotus-android-armv7-firetv.apk) role=android-armv7 ;;
     momotus-webos-*.ipk) role=webos ;;
     momotus-macos-*.zip) role=macos ;;
+    momotus-windows-x64-*-setup.exe) role=windows-x64 ;;
     *) continue ;;
   esac
   found=1

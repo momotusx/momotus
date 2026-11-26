@@ -179,10 +179,53 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" "$RUNNER_TEMP"/ipk/momotus-webos-*.ipk --clobber --repo "$GITHUB_REPOSITORY"
 
-  # Once both have run: one SHA256SUMS over every APK and IPK of the release, then the draft goes public. A failed
-  # IPK does not hold back the APKs: its job shows red and the release goes out without it.
+  # The Windows installer (plans/windows-app.md), built from the tag on Windows with the same compile-time settings
+  # as the other cores, attached to the draft as momotus-windows-x64-<version>-setup.exe.
+  windows:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: windows-2025
+    environment: release
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      TAG: ${{ needs.release-please.outputs.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+      - run: rustup toolchain install 1.98.0 --profile minimal
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.13
+      - name: NSIS
+        run: |
+          command -v makensis || choco install nsis -y --no-progress
+          echo "C:\\Program Files (x86)\\NSIS" >>"$GITHUB_PATH"
+      - name: Build the installer
+        env:
+          MARQUEE_TMDB_READ_TOKEN: ${{ secrets.MARQUEE_TMDB_READ_TOKEN }}
+          MARQUEE_TRAKT_CLIENT_ID: ${{ secrets.MARQUEE_TRAKT_CLIENT_ID }}
+          MARQUEE_TRAKT_REDIRECT_URI: ${{ secrets.MARQUEE_TRAKT_REDIRECT_URI }}
+        run: |
+          for v in MARQUEE_TMDB_READ_TOKEN MARQUEE_TRAKT_CLIENT_ID MARQUEE_TRAKT_REDIRECT_URI; do
+            [ -n "${!v}" ] || { echo "::error::$v is not set"; exit 1; }
+          done
+          bash apps/windows/build.sh "$RUNNER_TEMP/win"
+          test -e "$RUNNER_TEMP/win/momotus-windows-x64-${TAG#v}-setup.exe"
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "$RUNNER_TEMP"/win/momotus-windows-x64-*-setup.exe --clobber --repo "$GITHUB_REPOSITORY"
+
+  # Once all have run: one SHA256SUMS over every APK, IPK and installer of the release, then the draft goes public.
+  # A failed IPK or installer does not hold back the APKs: its job shows red and the release goes out without it.
   publish:
-    needs: [release-please, apks, ipk]
+    needs: [release-please, apks, ipk, windows]
     if: ${{ always() && needs.apks.result == 'success' && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
     # The feed key lives in the release environment (main only).
@@ -200,7 +243,8 @@ jobs:
       - name: Checksums, then publish
         run: |
           mkdir -p "$RUNNER_TEMP/assets" && cd "$RUNNER_TEMP/assets"
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'momotus-*.apk' --pattern 'momotus-webos-*.ipk'
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'momotus-*.apk' --pattern 'momotus-webos-*.ipk' \
+            --pattern 'momotus-windows-*-setup.exe'
           sha256sum momotus-* >SHA256SUMS
           cat SHA256SUMS
           gh release upload "$TAG" SHA256SUMS --clobber --repo "$GITHUB_REPOSITORY"
