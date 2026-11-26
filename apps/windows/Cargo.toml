@@ -1,0 +1,29 @@
+[package]
+name = "momotus-win"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+# The Windows app (plans/windows-app.md): one WebView2 window over the web app, which mq-bridge.exe (the core,
+# started beside it) serves. Built on GitHub's Windows runner; off Windows main.rs is a stub, so the Mac and
+# Linux gates compile no WebView code.
+[[bin]]
+name = "Momotus"
+path = "src/main.rs"
+
+[target.'cfg(windows)'.dependencies]
+serde_json = { workspace = true }
+tao = "0.37"
+wry = "0.57"
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_System_Threading",
+  "Win32_UI_Controls",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+embed-resource = "3"

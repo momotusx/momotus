@@ -225,6 +225,8 @@ export interface ShellHost {
 declare global {
   interface Window extends ShellHost {
     __MQ_SHELL__?: ShellInfo;
+    /** The Windows launcher's core socket (plans/windows-app.md 2.1): the bridge serves this page on a port it picked. */
+    __MQ_BRIDGE_URL__?: string;
     webkit?: { messageHandlers?: { mq?: { postMessage(text: string): void } } };
     ipc?: { postMessage(text: string): void };
   }

@@ -462,6 +462,30 @@ fn thread_cpu() -> Option<Duration> {
     (rc == 0).then(|| Duration::new(t.tv_sec as u64, t.tv_nsec as u32))
 }
 
+/// Windows: the thread's kernel plus user time, in 100 ns units.
+#[cfg(windows)]
+fn thread_cpu() -> Option<Duration> {
+    use windows_sys::Win32::Foundation::FILETIME;
+    use windows_sys::Win32::System::Threading::{GetCurrentThread, GetThreadTimes};
+    let zero = || FILETIME {
+        dwLowDateTime: 0,
+        dwHighDateTime: 0,
+    };
+    let (mut created, mut exited, mut kernel, mut user) = (zero(), zero(), zero(), zero());
+    // SAFETY: the pseudo-handle of the calling thread and four FILETIMEs the call fills.
+    let ok = unsafe {
+        GetThreadTimes(
+            GetCurrentThread(),
+            &mut created,
+            &mut exited,
+            &mut kernel,
+            &mut user,
+        )
+    };
+    let ticks = |f: FILETIME| (u64::from(f.dwHighDateTime) << 32) | u64::from(f.dwLowDateTime);
+    (ok != 0).then(|| Duration::from_nanos((ticks(kernel) + ticks(user)) * 100))
+}
+
 /// The calling thread yields to the app's own: a plugin pass runs beside
 /// navigation on a 4-core TV, and its CPU waits for the UI's threads rather
 /// than competing with them (nice 10 on Linux and Android, the utility

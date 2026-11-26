@@ -33,7 +33,8 @@ import { startUpdates } from "./webos-update";
 import { isWebOS, nativeCore } from "../lib/webos";
 import type { ProbeAnswer } from "../lib/failover";
 
-export const bridgeUrl: string = import.meta.env.VITE_MQ_BRIDGE ?? `ws://${location.hostname || "127.0.0.1"}:7777/ws`;
+export const bridgeUrl: string =
+  import.meta.env.VITE_MQ_BRIDGE ?? window.__MQ_BRIDGE_URL__ ?? `ws://${location.hostname || "127.0.0.1"}:7777/ws`;
 
 // In a desktop shell the core runs in process and answers through the shell's
 // message handler (plans/m3-desktop.md section 3); in a browser it is the
