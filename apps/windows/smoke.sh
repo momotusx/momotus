@@ -41,7 +41,8 @@ sleep 20
 ps "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; \$b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds; \$i=New-Object System.Drawing.Bitmap \$b.Width,\$b.Height; [System.Drawing.Graphics]::FromImage(\$i).CopyFromScreen(\$b.Location,[System.Drawing.Point]::Empty,\$b.Size); \$i.Save('$shot')"
 running Momotus.exe || { echo "Momotus ended by itself"; exit 1; }
 taskkill //IM Momotus.exe >/dev/null
-for _ in $(seq 1 20); do running mq-bridge.exe || break; sleep 1; done
+# The core ends first; the app's own process follows once WebView2 has shut down.
+for _ in $(seq 1 20); do running mq-bridge.exe || running Momotus.exe || break; sleep 1; done
 running mq-bridge.exe && { echo "the core outlived the window"; exit 1; }
 running Momotus.exe && { echo "Momotus did not close"; exit 1; }
 
