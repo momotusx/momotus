@@ -329,6 +329,18 @@ class TvHomeShelfTest {
 
     private fun focused() = compose.onAllNodes(isFocused(), useUnmergedTree = true).fetchSemanticsNodes().single()
 
+    /**
+     * The hero's Play, once it is on screen (the shelf loads after `show` returns; asking a node not yet composed
+     * failed the run on 2026-11-26), then focused. A test's clock runs out the screen's own first-focus wait, so
+     * it is asked here.
+     */
+    private fun focusPlay() {
+        val play = hasContentDescription("Play Night of the Living Dead")
+        waitFor("Play is shown") { compose.onAllNodes(play).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(play).performSemanticsAction(SemanticsActions.RequestFocus)
+        waitFor("Play takes the focus") { focusedOn("Play Night of the Living Dead") }
+    }
+
     private fun focusedOn(description: String) =
         compose.onAllNodes(isFocused() and hasContentDescription(description)).fetchSemanticsNodes().isNotEmpty()
 
@@ -352,12 +364,7 @@ class TvHomeShelfTest {
     @Test
     fun `a Continue Watching card focused from Play is whole on the screen, with its line`() {
         show()
-        // The first focus is Play (FirstTargetTest); a test's clock runs out the screen's own wait, so it is asked here.
-        compose
-            .onNodeWithContentDescription(
-                "Play Night of the Living Dead",
-            ).performSemanticsAction(SemanticsActions.RequestFocus)
-        waitFor("Play takes the focus") { focusedOn("Play Night of the Living Dead") }
+        focusPlay()
         press(Key.DirectionDown)
         waitFor("the first card takes the focus") {
             focusedOn("Severance")
@@ -377,12 +384,7 @@ class TvHomeShelfTest {
     @Test
     fun `Up from Play reaches the bar and Down comes back to Play`() {
         show()
-        // The first focus is Play (FirstTargetTest); a test's clock runs out the screen's own wait, so it is asked here.
-        compose
-            .onNodeWithContentDescription(
-                "Play Night of the Living Dead",
-            ).performSemanticsAction(SemanticsActions.RequestFocus)
-        waitFor("Play takes the focus") { focusedOn("Play Night of the Living Dead") }
+        focusPlay()
         press(Key.DirectionUp)
         assertTrue(
             compose
@@ -403,11 +405,7 @@ class TvHomeShelfTest {
     @Test
     fun `Home shown again from the bar leaves the focus on its tab, and Down comes back to Play`() {
         show()
-        compose
-            .onNodeWithContentDescription(
-                "Play Night of the Living Dead",
-            ).performSemanticsAction(SemanticsActions.RequestFocus)
-        waitFor("Play takes the focus") { focusedOn("Play Night of the Living Dead") }
+        focusPlay()
         press(Key.DirectionUp)
         val homeTab = isFocused() and hasText("Home")
         assertTrue(compose.onAllNodes(homeTab).fetchSemanticsNodes().isNotEmpty(), "Up missed the bar")
