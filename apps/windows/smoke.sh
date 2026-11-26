@@ -31,6 +31,7 @@ code() { curl -s -o /dev/null -w '%{http_code}' --http1.1 -H 'Connection: Upgrad
 [[ $(code "http://127.0.0.1:$port") == 101 ]] || { echo "the app's own origin is refused"; exit 1; }
 [[ $(code "http://evil.example") != 101 ]] || { echo "another origin is let in"; exit 1; }
 kill "$core"
+for _ in $(seq 1 20); do running mq-bridge.exe || break; sleep 1; done
 
 echo "the app: window, core beside it, both end on close"
 ps "Start-Process -FilePath '$(cygpath -w "$dir/Momotus.exe")'"
@@ -45,7 +46,8 @@ running mq-bridge.exe && { echo "the core outlived the window"; exit 1; }
 running Momotus.exe && { echo "Momotus did not close"; exit 1; }
 
 echo "uninstall"
+# The uninstaller runs a copy of itself from the temp folder, so -Wait returns early: wait for the files to go.
 ps "Start-Process -Wait -FilePath '$(cygpath -w "$dir/Uninstall.exe")' -ArgumentList '/S'"
-sleep 3
+for _ in $(seq 1 30); do test -e "$dir/Momotus.exe" || break; sleep 1; done
 test ! -e "$dir/Momotus.exe" || { echo "uninstall left Momotus.exe"; exit 1; }
 echo "smoke ok"
