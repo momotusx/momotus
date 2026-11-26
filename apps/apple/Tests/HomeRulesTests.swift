@@ -124,35 +124,43 @@ private struct Refused: LocalizedError { var errorDescription: String? { "timed 
 
 @MainActor private final class Sent { var ids: [String] = []; var fail = false }
 
+/// Polls `done` on the main actor every 10 ms until it holds or `limit` passes: a loaded CI Mac runs the removal's
+/// tasks late, so a fixed sleep failed the release PR's run on 2026-11-26.
+@MainActor private func eventually(_ limit: Duration = .seconds(5), _ done: () -> Bool) async throws -> Bool {
+    let end = ContinuousClock.now + limit
+    while !done() {
+        if ContinuousClock.now >= end { return false }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    return true
+}
+
 @MainActor @Test func aRemovalWaitsForItsUndoThenGoesToTheCore() async throws {
     let sent = Sent()
-    let removal = ContinueRemoval(wait: .milliseconds(200)) { tile in
+    let removal = ContinueRemoval(wait: .seconds(1)) { tile in
         if sent.fail { throw Refused() }
         sent.ids.append(tile.id)
     }
     // Out of the row at once, nothing sent until the window ends; then sent once, and Undo is gone.
     removal.remove(card("a"))
     #expect(removal.removing == card("a") && removal.hides(card("a")) && sent.ids.isEmpty)
-    try await Task.sleep(for: .milliseconds(800))
-    #expect(sent.ids == ["a"] && removal.removing == nil && !removal.hides(card("a")))
-    // Undo: back, and nothing is sent.
+    #expect(try await eventually { sent.ids == ["a"] && removal.removing == nil && !removal.hides(card("a")) })
+    // Undo: back, and nothing is sent, also after the window.
     removal.remove(card("b"))
     removal.undo()
     #expect(!removal.hides(card("b")))
-    try await Task.sleep(for: .milliseconds(800))
+    try await Task.sleep(for: .milliseconds(1_500))
     #expect(sent.ids == ["a"])
-    // A second removal sends the first at once, never twice.
+    // A second removal sends the first at once (well inside the second's window), never twice.
     removal.remove(card("c"))
     removal.remove(card("d"))
-    try await Task.sleep(for: .milliseconds(50))
-    #expect(sent.ids == ["a", "c"] && removal.removing == card("d") && removal.hides(card("d")))
-    try await Task.sleep(for: .milliseconds(800))
-    #expect(sent.ids == ["a", "c", "d"])
+    #expect(try await eventually(.milliseconds(800)) { sent.ids == ["a", "c"] })
+    #expect(removal.removing == card("d") && removal.hides(card("d")))
+    #expect(try await eventually { sent.ids == ["a", "c", "d"] })
     // Refused: the title is back, and the line says why.
     sent.fail = true
     removal.remove(card("e"))
-    try await Task.sleep(for: .milliseconds(800))
-    #expect(removal.removing == nil && !removal.hides(card("e")) && removal.failed?.tile == card("e"))
+    #expect(try await eventually { removal.removing == nil && !removal.hides(card("e")) && removal.failed?.tile == card("e") })
     // In words, never the error's own text.
     #expect(removal.failed?.words == "Title e could not be removed from Continue Watching: \(ErrorWords.failed)")
     #expect(removedWords(name: "Title e") == "Title e was removed from Continue Watching.")
