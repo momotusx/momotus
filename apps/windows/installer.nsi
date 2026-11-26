@@ -55,12 +55,21 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 !insertmacro MUI_LANGUAGE "English"
 LangString KeptText ${LANG_ENGLISH} "Your library and settings stay in $LOCALAPPDATA\${APP} ($R9 MB), so installing Momotus again keeps them. Delete that folder to free the space."
 
-; A running copy holds its files: ask to close it, then check again.
+; A running copy holds its files: ask to close it, then check again. Silent (the app's own update, run as its
+; window closes): wait up to 10 s for that window to go.
 !macro CloseRunning
+  StrCpy $1 0
   close_check:
     FindWindow $0 "${CLASS}" ""
     StrCmp $0 0 close_done
-    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Close Momotus to continue." /SD IDCANCEL IDRETRY close_check
+    IfSilent 0 close_ask
+    IntOp $1 $1 + 1
+    IntCmp $1 40 close_give_up
+    Sleep 250
+    Goto close_check
+  close_ask:
+    MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "Close Momotus to continue." IDRETRY close_check
+  close_give_up:
     Abort
   close_done:
 !macroend

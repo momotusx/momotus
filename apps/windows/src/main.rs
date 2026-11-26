@@ -3,6 +3,9 @@
 //! this process: it holds the core's stdin, and the core exits when that closes.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+#[cfg_attr(not(windows), allow(dead_code))]
+mod feed;
+
 #[cfg(windows)]
 fn main() {
     win::main()
@@ -15,6 +18,7 @@ fn main() {
 
 #[cfg(windows)]
 mod win {
+    use crate::feed;
     use std::io::{BufRead, BufReader};
     use std::os::windows::process::CommandExt;
     use std::path::{Path, PathBuf};
@@ -24,7 +28,7 @@ mod win {
 
     use tao::dpi::LogicalSize;
     use tao::event::{Event, StartCause, WindowEvent};
-    use tao::event_loop::{ControlFlow, EventLoop};
+    use tao::event_loop::{ControlFlow, EventLoopBuilder, EventLoopProxy};
     use tao::platform::windows::{IconExtWindows, WindowBuilderExtWindows};
     use tao::window::{Icon, WindowBuilder};
     use wry::{NewWindowResponse, WebContext, WebViewBuilder, WebViewBuilderExtWindows};
@@ -39,6 +43,20 @@ mod win {
     const CORE_START: Duration = Duration::from_secs(60);
     /// How often the window checks its core is still running.
     const CORE_CHECK: Duration = Duration::from_secs(2);
+    /// This build's version (apps/web/package.json, through build.rs).
+    const VERSION: &str = env!("MOMOTUS_VERSION");
+    /// The signed update feed and the key it must be signed with (plans/auto-update.md).
+    const FEED: &str = "https://github.com/momotusx/momotus/releases/download/updates/latest.json";
+    const FEED_KEY: &str = include_str!("../../shared/update-feed-key.pub.pem");
+    /// Windows's own curl (Windows 10 1803 and later), named by path so no other curl on PATH is run.
+    const CURL: &str = r"C:\Windows\System32\curl.exe";
+    const DETACHED_PROCESS: u32 = 0x0000_0008;
+
+    /// A newer version, downloaded and checked, that installs when the window closes.
+    struct Ready {
+        version: String,
+        setup: PathBuf,
+    }
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     /// The port the core asks for first. The page's storage belongs to its origin, port included, so the same
     /// port every launch keeps it; another program on it moves the core to a free one, remembered in `data\port`.
@@ -308,7 +326,8 @@ mod win {
 
     fn run(core: Core, data: &Path, log: &Path) {
         let origin = format!("http://127.0.0.1:{}", core.port);
-        let event_loop = EventLoop::new();
+        let event_loop = EventLoopBuilder::<Ready>::with_user_event().build();
+        watch_updates(data.join("update"), event_loop.create_proxy());
         let window = WindowBuilder::new()
             .with_title("Momotus")
             .with_window_classname(CLASS)
@@ -366,11 +385,20 @@ mod win {
         };
         let mut core = Some(core);
         let mut closing: Option<Instant> = None;
+        let mut staged: Option<PathBuf> = None;
         let log = log.to_path_buf();
         event_loop.run(move |event, _, flow| {
             // The core is looked at every 2 s: if it ended, the window says so and closes.
             *flow = ControlFlow::WaitUntil(closing.unwrap_or_else(|| Instant::now() + CORE_CHECK));
             match event {
+                // The title says it, so the user knows a close brings the new version (nothing pops up).
+                Event::UserEvent(ready) => {
+                    window.set_title(&format!(
+                        "Momotus (version {} installs when you close it)",
+                        ready.version
+                    ));
+                    staged = Some(ready.setup);
+                }
                 Event::NewEvents(StartCause::ResumeTimeReached { .. }) if closing.is_none() => {
                     if core
                         .as_mut()
@@ -398,10 +426,77 @@ mod win {
                 }
                 Event::NewEvents(StartCause::ResumeTimeReached { .. }) if closing.is_some() => {
                     drop(core.take());
+                    // The installer waits for this window to go, replaces the app and keeps the library.
+                    if let Some(setup) = staged.take() {
+                        let _ = Command::new(setup)
+                            .arg("/S")
+                            .creation_flags(DETACHED_PROCESS | CREATE_NO_WINDOW)
+                            .spawn();
+                    }
                     *flow = ControlFlow::Exit;
                 }
                 _ => {}
             }
         });
+    }
+
+    /// Looks for a newer version 10 s after launch, then every 6 h, until one is ready.
+    fn watch_updates(dir: PathBuf, proxy: EventLoopProxy<Ready>) {
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(10));
+            loop {
+                if let Some(ready) = check_update(&dir) {
+                    let _ = proxy.send_event(ready);
+                    return;
+                }
+                std::thread::sleep(Duration::from_secs(6 * 3600));
+            }
+        });
+    }
+
+    /// The feed's newer installer, downloaded into `dir` and its SHA-256 checked, or None.
+    fn check_update(dir: &Path) -> Option<Ready> {
+        let envelope = curl(&["--max-filesize", "65536", FEED])?;
+        let offer = feed::offer(&envelope, FEED_KEY, VERSION)?;
+        std::fs::create_dir_all(dir).ok()?;
+        let setup = dir.join(format!("momotus-windows-x64-{}-setup.exe", offer.version));
+        let good = |path: &Path| {
+            std::fs::read(path)
+                .is_ok_and(|b| b.len() as u64 == offer.size && feed::sha256_hex(&b) == offer.sha256)
+        };
+        if !good(&setup) {
+            let part = setup.with_extension("part");
+            let cap = (offer.size + 1).to_string();
+            let out = part.to_string_lossy().into_owned();
+            curl(&["--max-filesize", &cap, "-o", &out, &offer.url])?;
+            if !good(&part) {
+                let _ = std::fs::remove_file(&part);
+                return None;
+            }
+            std::fs::rename(&part, &setup).ok()?;
+        }
+        Some(Ready {
+            version: offer.version,
+            setup,
+        })
+    }
+
+    /// `curl -fsSL <args>`, its output when it succeeds.
+    fn curl(args: &[&str]) -> Option<Vec<u8>> {
+        let out = Command::new(CURL)
+            .args([
+                "-fsSL",
+                "--proto",
+                "=https",
+                "--proto-redir",
+                "=https",
+                "--max-time",
+                "600",
+            ])
+            .args(args)
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .ok()?;
+        out.status.success().then_some(out.stdout)
     }
 }

@@ -13,8 +13,14 @@ publish = false
 name = "Momotus"
 path = "src/main.rs"
 
-[target.'cfg(windows)'.dependencies]
+# The update feed's check (src/feed.rs), on every platform so its tests run on every gate.
+[dependencies]
+base64 = "0.22"
+p256 = { version = "0.13", default-features = false, features = ["ecdsa", "pem", "std"] }
 serde_json = { workspace = true }
+sha2 = "0.10"
+
+[target.'cfg(windows)'.dependencies]
 tao = "0.37"
 wry = "0.57"
 windows-sys = { version = "0.61", features = [
