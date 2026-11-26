@@ -45,6 +45,20 @@ for _ in $(seq 1 20); do running mq-bridge.exe || break; sleep 1; done
 running mq-bridge.exe && { echo "the core outlived the window"; exit 1; }
 running Momotus.exe && { echo "Momotus did not close"; exit 1; }
 
+echo "update on close: the silent setup started as the window closes waits for it, then installs"
+ps "Start-Process -FilePath '$(cygpath -w "$dir/Momotus.exe")'"
+for _ in $(seq 1 60); do running mq-bridge.exe && break; sleep 1; done
+sleep 5
+# A file the update puts back shows it ran (NSIS keeps the files' own dates, so dates say nothing).
+rm "$dir/LICENSE.txt"
+taskkill //IM Momotus.exe >/dev/null
+ps "Start-Process -Wait -FilePath '$setup' -ArgumentList '/S'"
+test -e "$dir/LICENSE.txt" || { echo "the update did not install"; exit 1; }
+for _ in $(seq 1 20); do running Momotus.exe || break; sleep 1; done
+running Momotus.exe && { echo "Momotus did not close for the update"; exit 1; }
+test -e "$dir/Momotus.exe" || { echo "the update left no Momotus.exe"; exit 1; }
+running mq-bridge.exe && { echo "the core outlived the update"; exit 1; }
+
 echo "uninstall"
 # The uninstaller runs a copy of itself from the temp folder, so -Wait returns early: wait for the files to go.
 ps "Start-Process -Wait -FilePath '$(cygpath -w "$dir/Uninstall.exe")' -ArgumentList '/S'"

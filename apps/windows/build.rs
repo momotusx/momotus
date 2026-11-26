@@ -6,11 +6,13 @@ fn main() {
     println!("cargo:rerun-if-changed=Momotus.ico");
     println!("cargo:rerun-if-changed=Momotus.manifest");
     println!("cargo:rerun-if-changed=../web/package.json");
+    let package = std::fs::read_to_string("../web/package.json").expect("apps/web/package.json");
+    let version = serde_version(&package);
+    // The launcher compares it with the update feed's.
+    println!("cargo:rustc-env=MOMOTUS_VERSION={version}");
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
         return;
     }
-    let package = std::fs::read_to_string("../web/package.json").expect("apps/web/package.json");
-    let version = serde_version(&package);
     let parts: Vec<&str> = version.split('.').collect();
     assert_eq!(
         parts.len(),
