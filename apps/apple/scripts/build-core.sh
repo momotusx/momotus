@@ -5,7 +5,8 @@
 #   Core/marquee_core.swift        generated Swift bindings
 # Both are build outputs (not committed); run this before the first Xcode build.
 #
-# Usage: apps/apple/scripts/build-core.sh [--tvos | --dev]
+# Usage: apps/apple/scripts/build-core.sh [--tvos | --mac | --dev]
+#   --mac    the macOS slice only: for a Mac-only build (release-mac.sh), a third of the Rust build
 #   --tvos   also build the tvOS device slice (needed to build Marquee-tvOS)
 #   --dev    debug assertions on, which compiles the bridge's dev hooks in (Trakt from
 #            a local fake on this machine, `MQ_DEV_TRAKT`), in its own target dir, with
@@ -46,6 +47,8 @@ targets=(aarch64-apple-ios aarch64-apple-ios-sim)
 dev_assertions=false
 if [[ "${1:-}" == "--tvos" ]]; then
   targets+=(aarch64-apple-tvos)
+elif [[ "${1:-}" == "--mac" ]]; then
+  targets=()
 elif [[ "${1:-}" == "--dev" ]]; then
   targets=(aarch64-apple-ios-sim)
   dev_assertions=true
@@ -68,7 +71,7 @@ fi
 export MACOSX_DEPLOYMENT_TARGET=15.0 IPHONEOS_DEPLOYMENT_TARGET=18.0 TVOS_DEPLOYMENT_TARGET=18.0
 
 cd "$root"
-for target in aarch64-apple-darwin "${targets[@]}"; do
+for target in aarch64-apple-darwin ${targets[@]+"${targets[@]}"}; do
   echo "building mq-ffi for $target"
   # Panic locations, debug paths and C file names (assert, __FILE__) name ~ instead of this Mac's home folder.
   CARGO_TARGET_DIR="$target_dir" CARGO_INCREMENTAL=0 RUSTFLAGS="--remap-path-prefix=$HOME=~" \
@@ -80,13 +83,13 @@ done
 # are compiled in only with debug assertions (--dev). Checked on every library built here.
 # Every slice of an own build carries the engine; STORE=1 leaves it out and says so.
 engine_libs=()
-for target in aarch64-apple-darwin "${targets[@]}"; do
+for target in aarch64-apple-darwin ${targets[@]+"${targets[@]}"}; do
   engine_libs+=("$target_dir/$target/release/libmarquee_core.a")
 done
 "$apple/scripts/check-engine.sh" "${engine_libs[@]}"
 
 if [[ $dev_assertions == false ]]; then
-  for target in aarch64-apple-darwin "${targets[@]}"; do
+  for target in aarch64-apple-darwin ${targets[@]+"${targets[@]}"}; do
     lib="$target_dir/$target/release/libmarquee_core.a"
     if grep -aqE 'MQ_DEV_|set_dev_replay' "$lib"; then
       echo "build-core.sh: $lib carries a dev hook (MQ_DEV_ or set_dev_replay): debug assertions were on" >&2
@@ -108,7 +111,7 @@ cp "$gen/marquee_coreFFI.h" "$gen/include/marquee_coreFFI/"
 cp "$gen/marquee_coreFFI.modulemap" "$gen/include/marquee_coreFFI/module.modulemap"
 
 args=(-library "$mac/libmarquee_core.a" -headers "$gen/include")
-for target in "${targets[@]}"; do
+for target in ${targets[@]+"${targets[@]}"}; do
   args+=(-library "$target_dir/$target/release/libmarquee_core.a" -headers "$gen/include")
 done
 rm -rf "$out/MarqueeCore.xcframework"
