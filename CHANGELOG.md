@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.7.0](https://github.com/momotusx/momotus/compare/v0.6.1...v0.7.0) (2026-11-26)
+
+
+### Features
+
+* **apple:** the Mac app updates itself with Sparkle ([94ea075](https://github.com/momotusx/momotus/commit/94ea075bdc4d1ddd0c5db53dce2d759d0e8f3142))
+* **engine:** Windows network, disk and name support for the torrent core ([ae909e4](https://github.com/momotusx/momotus/commit/ae909e44403cee0e4a13b11209a147307101ab6b))
+* **windows:** a Windows app with its installer, built and smoke-tested in CI ([c5073b0](https://github.com/momotusx/momotus/commit/c5073b096f3ab70214eb1b07c183ea383fdcdf3f))
+* **windows:** Momotus updates itself on Windows from the signed feed ([6aa6a25](https://github.com/momotusx/momotus/commit/6aa6a25400b70fcdccfc16ab0b6ed1fef09d9594))
+
+
+### Bug Fixes
+
+* **engine:** NTFS allocation read from its allocated ranges ([cc03ecc](https://github.com/momotusx/momotus/commit/cc03ecc47023786724144236cc4e6af86d9717fa))
+* **engine:** Windows dials IPv4-mapped addresses as IPv4 ([c21833b](https://github.com/momotusx/momotus/commit/c21833b992e4d61e7fe4ae683fcc99a29e290ec3))
+* **windows:** one launch at a time, a steady port, and the core watched ([21339a5](https://github.com/momotusx/momotus/commit/21339a523aa9a54cba9de870291a957f7eb6b62a))
+* **windows:** the launcher's mutex has the Security feature it needs ([0bdd936](https://github.com/momotusx/momotus/commit/0bdd936d55e5bc9b2d1576cf376556e66090b550))
+
 ## [0.6.1](https://github.com/momotusx/momotus/compare/v0.6.0...v0.6.1) (2026-11-23)
 
 
