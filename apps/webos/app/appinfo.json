@@ -1,6 +1,6 @@
 {
   "id": "app.momotus.webos",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "vendor": "Momotus",
   "type": "web",
   "main": "index.html",
