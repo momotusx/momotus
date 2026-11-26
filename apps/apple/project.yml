@@ -12,11 +12,16 @@ options:
 packages:
   AetherEngine:
     path: Vendor/AetherEngine
+  # The Mac's self-update (plans/auto-update.md section 3).
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.10.1
 settings:
   base:
     SWIFT_VERSION: "6.0"
     MARKETING_VERSION: 0.6.1 # x-release-please-version
-    CURRENT_PROJECT_VERSION: 1
+    # Sparkle compares CFBundleVersion: the release's version, so it rises with every release.
+    CURRENT_PROJECT_VERSION: $(MARKETING_VERSION)
     GENERATE_INFOPLIST_FILE: YES
     INFOPLIST_KEY_CFBundleDisplayName: Momotus
     # Local and simulator runs only: ad hoc signing, no team.
@@ -28,6 +33,8 @@ settings:
     # link host (passkey RP ID, universal links). Empty keeps today's first run.
     MARQUEE_SYNC_SERVER: ""
     MARQUEE_LINK_HOST: ""
+    # The Mac's update feed: empty, so no build checks, except a release-mac.sh build that sets it.
+    MARQUEE_UPDATE_FEED: ""
     # The owner's App ID carries Sign in with Apple and associated domains only after
     # owner steps 1 and 3: until then no build asks for them (an ad hoc Mac build with
     # them would not launch). Set to Marquee/Marquee.entitlements once they exist.
@@ -159,6 +166,15 @@ targets:
         MarqueeSyncServer: $(MARQUEE_SYNC_SERVER)
         MarqueeLinkHost: $(MARQUEE_LINK_HOST)
         MarqueeCoreBuild: $(MARQUEE_CORE_BUILD)
+        MarqueeUpdateFeed: $(MARQUEE_UPDATE_FEED)
+        # Sparkle: checks daily, downloads quietly and installs on quit; the EdDSA public key of
+        # ~/.config/momotus/sparkle/ed25519.pem signs every update.
+        SUPublicEDKey: cvoMuSnkFO40kNNqMT4KKV/3xqHSuL94jQC/5+tm5/c=
+        SUEnableAutomaticChecks: true
+        SUAutomaticallyUpdate: true
+        SUVerifyUpdateBeforeExtraction: true
+    dependencies:
+      - package: Sparkle
     settings:
       base:
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.entertainment

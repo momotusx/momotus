@@ -561,6 +561,9 @@ struct SettingsScreen: View {
             if CoreBuild.missingEngine(field: CoreBuild.field, hasEngine: hasEngine()) {
                 Text(CoreBuild.aboutLine).modifier(Note())
             }
+            #if os(macOS)
+            macUpdate
+            #endif
             Text("Copyright 2026 the Momotus authors. Momotus is free software under the GNU Affero General Public License, version 3 or later, and comes with no warranty. Licence and source code: github.com/momotusx/momotus")
                 .modifier(Note())
             // The licences ship in the app: LICENSE-lucide.txt and each font's OFL.txt.
@@ -579,6 +582,21 @@ struct SettingsScreen: View {
             PrivacyLink()
         }
     }
+
+    #if os(macOS)
+    /// The Mac's update (plans/auto-update.md section 5): a waiting version and Restart, or the check.
+    @ViewBuilder private var macUpdate: some View {
+        let updater = MacUpdater.shared
+        if updater.enabled {
+            if let version = updater.ready {
+                Text("Version \(version) installs when you quit Momotus.").modifier(Note())
+                Button("Restart") { updater.restart() }.buttonStyle(PillButtonStyle())
+            } else {
+                Button("Check for updates") { updater.check() }.buttonStyle(PillButtonStyle())
+            }
+        }
+    }
+    #endif
 
     /// "Synced 14:02", or what is wrong or waits first.
     private var syncSummary: String {

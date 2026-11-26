@@ -64,6 +64,7 @@ struct MarqueeApp: App {
         #if os(macOS)
         // One window on one core: no tab bar, whose "+" would open a second copy.
         NSWindow.allowsAutomaticWindowTabbing = false
+        MacUpdater.shared.start()
         #endif
         #if DEBUG
         // Said at launch, before anything can play: a walk checks it first.

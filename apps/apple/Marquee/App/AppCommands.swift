@@ -56,6 +56,13 @@ struct AppCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {}
+        #if os(macOS)
+        if MacUpdater.shared.enabled {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { MacUpdater.shared.check() }
+            }
+        }
+        #endif
         CommandGroup(replacing: .appSettings) {
             Button("Settings…") { places?(.settings) }
                 .keyboardShortcut(",")
